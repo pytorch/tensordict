@@ -2828,22 +2828,40 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_end = self.stack_dim + 1
             if batch_size[:stack_end] != self._batch_size[:stack_end]:
                 # the members cannot give the leading dims or the stack dim:
-                # the result is a TensorDict
+                # the result is a TensorDict. Before 0.15, the members got the
+                # batch size without the stack dim when the dims before it were
+                # equal (a list never compared equal to them): until 0.17, keep
+                # that result where the TensorDict cannot be built.
+                stack_dim = self.stack_dim
+                members_before = (
+                    not stack_dim or given[:stack_dim] == self._batch_size[:stack_dim]
+                )
                 source = self
-                misfit = None
-                if recurse:
+                problem = None
+                if (
+                    members_before
+                    and names is not None
+                    and len(names) != len(batch_size)
+                ):
+                    problem = (
+                        f"cannot name the {len(batch_size)} dims of that batch size "
+                        f"with {len(names)} names",
+                        "a ValueError, as a list of names of another length does",
+                    )
+                elif recurse:
                     # a TensorDict with the sub-tensordicts of self
                     source = self._empty(True, None, NO_DEFAULT, None).to_tensordict()
-                    # before 0.15, the members got the batch size without the
-                    # stack dim when the dims before it were equal (a list
-                    # never compared equal to them)
-                    stack_dim = self.stack_dim
-                    if (
-                        not stack_dim
-                        or given[:stack_dim] == self._batch_size[:stack_dim]
-                    ):
-                        misfit = _empty_misfit(source, batch_size)
-                if misfit is None:
+                    misfit = (
+                        _empty_misfit(source, batch_size) if members_before else None
+                    )
+                    if misfit is not None:
+                        key, value = misfit
+                        problem = (
+                            f"cannot give that batch size to the entry {key!r}, whose "
+                            f"batch size {list(value.batch_size)} does not start with it",
+                            "a RuntimeError, as TensorDict.empty does",
+                        )
+                if problem is None:
                     return TensorDict.empty(
                         source,
                         recurse=recurse,
@@ -2851,15 +2869,16 @@ class LazyStackedTensorDict(TensorDictBase):
                         device=device if device is not NO_DEFAULT else self.device,
                         names=names if names is not None else NO_DEFAULT,
                     )
-                key, value = misfit
+                args = f"batch_size={list(batch_size)}"
+                if recurse:
+                    args = f"recurse=True, {args}"
+                if names is not None:
+                    args = f"{args}, names={list(names)}"
                 warnings.warn(
-                    "LazyStackedTensorDict.empty(recurse=True, batch_size="
-                    f"{list(batch_size)}) cannot give that batch size to the entry "
-                    f"{key!r}, whose batch size {list(value.batch_size)} does not "
-                    "start with it, and returns the empty stack of its members, "
-                    "which keeps the size of the stack dim. Starting with "
-                    "TensorDict 0.17, the default will change to raising a "
-                    "RuntimeError, as TensorDict.empty does.",
+                    f"LazyStackedTensorDict.empty({args}) {problem[0]}, and returns "
+                    "the empty stack of its members, which keeps the size of the "
+                    "stack dim. Starting with TensorDict 0.17, the default will "
+                    f"change to raising {problem[1]}.",
                     FutureWarning,
                     stacklevel=_user_stacklevel(),
                 )

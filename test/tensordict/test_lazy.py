@@ -1815,6 +1815,45 @@ class TestLazyStackedTensorDict:
             with pytest.raises(RuntimeError, match="cannot give the batch size"):
                 lazy_stack([member] * 2, 1).empty(True, batch_size=batch_size)
 
+    def test_lazy_empty_names_other_length(self):
+        # where the members took the batch size without the stack dim before
+        # 0.15, names of another length than the new batch size keep that
+        # result, with a FutureWarning, instead of a TensorDict with invalid names
+        member = TensorDict(a=torch.zeros(3), batch_size=[3])
+        for td, recurse, batch_size, names, expected, expected_names in (
+            (lazy_stack([member] * 2), False, [], ["a"], [2], ["a"]),
+            (lazy_stack([member] * 2), True, [], ["a"], [2], ["a"]),
+            (
+                lazy_stack([member] * 2, 1),
+                False,
+                torch.Size([3, 5]),
+                ["a"],
+                [3, 2],
+                ["a", None],
+            ),
+        ):
+            with pytest.warns(
+                FutureWarning,
+                match=r"cannot name the \d+ dims of that batch size with 1 names.*"
+                r"Starting with TensorDict 0\.17, the default will change to "
+                r"raising a ValueError",
+            ) as record:
+                empty = td.empty(recurse, batch_size=batch_size, names=names)
+            assert record[0].filename == __file__
+            assert type(empty) is LazyStackedTensorDict
+            assert empty.batch_size == torch.Size(expected)
+            assert empty.names == expected_names
+        # names that fit, and names=None, give the TensorDict
+        lazy = lazy_stack([member] * 2)
+        lazy.names = ["p", "q"]
+        for recurse in (False, True):
+            empty = lazy.empty(recurse, batch_size=[5, 3], names=["a", "b"])
+            assert type(empty) is TensorDict and empty.names == ["a", "b"]
+            empty = lazy.empty(recurse, batch_size=[5, 3])
+            assert type(empty) is TensorDict and empty.names == ["p", "q"]
+            empty = lazy.empty(recurse, batch_size=[])
+            assert type(empty) is TensorDict and empty.batch_size == torch.Size([])
+
     def test_lazy_stack_onto_non_stack_dim(self):
         # torch.stack(..., out=lazy) along another dim than the stack dim
         # writes into the members, which keep their storage
