@@ -31,9 +31,7 @@
  ],
  "memmap_td update": [],
  "nested_stacked_td apply": [],
- "nested_stacked_td empty": [
-  "empty(recurse=True, batch_size=[4, 3, 2, 1])"
- ],
+ "nested_stacked_td empty": [],
  "nested_stacked_td filling": [],
  "nested_stacked_td keys": [
   "is_contiguous()"
@@ -143,9 +141,7 @@
   "update(dense[0], update_batch_size=True)"
  ],
  "stacked_td apply": [],
- "stacked_td empty": [
-  "empty(recurse=True, batch_size=[4, 3, 2, 1])"
- ],
+ "stacked_td empty": [],
  "stacked_td filling": [],
  "stacked_td keys": [
   "is_contiguous()"
@@ -244,11 +240,7 @@
   "select(('my_nested_td', 'inner'), strict=False)"
  ],
  "td_h5 serialization": [],
- "td_h5 setitem": [
-  "td['a'] = zeros",
-  "td['new'] = zeros",
-  "td[('n', 'x')] = zeros"
- ],
+ "td_h5 setitem": [],
  "td_h5 shape": [
   "permute(3, 2, 1, 0)",
   "squeeze()",

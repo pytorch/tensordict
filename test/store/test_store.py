@@ -944,7 +944,6 @@ class TestTensorDictStore:
         assert empty.batch_size == torch.Size([10])
         assert len(list(empty.keys())) == 0
 
-    @pytest.mark.xfail(strict=True, reason="empty(recurse=True) reads every leaf")
     def test_store_empty_recurse_reads_no_leaf(self, store_td, monkeypatch):
         store_td["a"] = torch.zeros(10, 2)
         store_td["s"] = NonTensorData("text", batch_size=[10])
@@ -999,7 +998,7 @@ class TestTensorDictStore:
     def test_store_setitem_self_nesting(self, store_td):
         store_td["a"] = torch.zeros(10)
         with pytest.raises(
-            ValueError, match=r"Cannot set a tensordict inside itself \(key \('me',\)\)"
+            ValueError, match=r"Cannot set a tensordict inside itself \(key 'me'\)"
         ):
             store_td["me"] = store_td
         assert set(store_td.keys()) == {"a"}
@@ -2759,9 +2758,6 @@ class TestLazyStackedTensorDictStore:
         assert (store_td.to_tensordict() == lazy_td.to_tensordict()).all()
 
     @pytest.mark.parametrize("as_dict", [False, True])
-    @pytest.mark.xfail(
-        strict=True, reason="writing a part of the keys at an element raises TypeError"
-    )
     def test_lstore_setitem_partial_element(self, store_stack, as_dict):
         store_td, tds, lazy_td = store_stack
         value = TensorDict(a=torch.ones(4, 3), batch_size=[4])
@@ -2774,7 +2770,7 @@ class TestLazyStackedTensorDictStore:
         for td in (store_td, store_td[0]):
             with pytest.raises(
                 ValueError,
-                match=r"Cannot set a tensordict inside itself \(key \('me',\)\)",
+                match=r"Cannot set a tensordict inside itself \(key 'me'\)",
             ):
                 td["me"] = td
         assert set(store_td.keys()) == {"a", "b"}

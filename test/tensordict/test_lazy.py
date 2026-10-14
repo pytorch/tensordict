@@ -1745,26 +1745,40 @@ class TestLazyStackedTensorDict:
         assert list(empty.keys(True)) == (["sub"] if recurse else [])
 
     def test_lazy_empty_batch_size_list_vs_size(self):
-        # the same batch size as a list takes another route than as a torch.Size
+        # the same batch size as a list, a tuple or a torch.Size gives a lazy stack
         lazy = lazy_stack([TensorDict(a=torch.zeros(3), batch_size=[3])] * 2, 1)
-        assert type(lazy.empty(batch_size=[3, 2])) is TensorDict
-        for batch_size in (torch.Size([3, 2]), (3, 2)):
-            empty = lazy.empty(batch_size=batch_size)
-            assert type(empty) is LazyStackedTensorDict
-            assert empty.batch_size == torch.Size([3, 2])
-        assert type(lazy.empty(True, batch_size=torch.Size([3, 2]))) is (
-            LazyStackedTensorDict
-        )
-        with pytest.raises(TypeError, match=r"super\(type, obj\)"):
-            lazy.empty(True, batch_size=[3, 2])
+        for recurse in (False, True):
+            for batch_size in ([3, 2], torch.Size([3, 2]), (3, 2)):
+                empty = lazy.empty(recurse, batch_size=batch_size)
+                assert type(empty) is LazyStackedTensorDict
+                assert empty.batch_size == torch.Size([3, 2])
 
-    def test_lazy_empty_stack_dim_size_ignored(self):
-        # a new size of the stack dim is ignored
+    def test_lazy_empty_new_stack_dim_size(self):
+        # a new size of the stack dim, or fewer dims, gives a TensorDict of the
+        # requested size, as a new size of the leading dims does
         lazy = lazy_stack([TensorDict(a=torch.zeros(3), batch_size=[3])] * 2)
-        for batch_size in ([5, 3], torch.Size([5, 3])):
-            empty = lazy.empty(batch_size=batch_size)
-            assert type(empty) is LazyStackedTensorDict
-            assert empty.batch_size == torch.Size([2, 3])
+        for recurse in (False, True):
+            for batch_size in ([5, 3], torch.Size([5, 3]), [], [3, 3]):
+                empty = lazy.empty(recurse, batch_size=batch_size)
+                assert type(empty) is TensorDict
+                assert empty.batch_size == torch.Size(batch_size)
+        nested = lazy_stack(
+            [
+                TensorDict(
+                    b=TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2]), batch_size=[3]
+                )
+            ]
+            * 2,
+            1,
+        )
+        # as on the dense copy, a sub-tensordict must fit the new batch size
+        for td in (nested, nested.to_tensordict()):
+            with pytest.raises(RuntimeError, match="cannot give the batch size"):
+                td.empty(True, batch_size=[3, 4])
+        # the leading dims and the stack dim kept: a lazy stack
+        empty = nested.empty(True, batch_size=[3, 2])
+        assert type(empty) is LazyStackedTensorDict
+        assert empty["b"].batch_size == torch.Size([3, 2, 2])
 
     def test_lazy_stack_onto_non_stack_dim(self):
         # torch.stack(..., out=lazy) along another dim than the stack dim

@@ -1252,7 +1252,6 @@ class TestH5Indexing:
         assert (h5td["a"] == 2).all()
         assert h5td["s"] == b"a string!"
 
-    @pytest.mark.xfail(strict=True, reason="empty(recurse=True) reads every leaf")
     def test_h5_empty_reads_nothing(self, data, monkeypatch):
         td, h5td = data
         reads = []

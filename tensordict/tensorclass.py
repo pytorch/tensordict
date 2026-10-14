@@ -7395,6 +7395,10 @@ class NonTensorStack(LazyStackedTensorDict):
         # alias at once.
         return result.clone(recurse=False)
 
+    # Override: a NonTensorStack is a value: what it takes is wrapped in a
+    # NonTensorData (a list in a NonTensorStack), and a memory-mapped stack is
+    # written again after the write. (Not with _rewrite_memmap: a generator
+    # context manager costs about 10% of a write.)
     def __setitem__(self, index: IndexType, value: Any):
         memmap = False
         if self._is_memmap and hasattr(self, "_path_to_memmap"):

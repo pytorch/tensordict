@@ -1519,6 +1519,18 @@ class TestNonTensorData:
         stack[torch.tensor([False, True, True])] = "m"
         assert stack.tolist() == ["e", "m", "m"]
 
+    def test_nts_empty_batch_size_keeps_stack(self):
+        # the members of a NonTensorStack stay non-tensors: a batch size
+        # with other dims from the stack dim on is not given to them
+        stack = NonTensorStack(
+            *[NonTensorStack(*[f"s{i}{j}" for j in range(3)]) for i in range(4)]
+        )
+        for batch_size in ([4], [], [5, 3]):
+            empty = stack.empty(batch_size=batch_size, names=None)
+            assert type(empty) is NonTensorStack
+            assert empty.batch_size == torch.Size([4, 3])
+            assert empty.tolist() == stack.tolist()
+
     def test_nontensorstack_repr_and_to_tensordict(self):
         stack = NonTensorStack.from_list(["a", "b"])
         assert repr(stack) == (

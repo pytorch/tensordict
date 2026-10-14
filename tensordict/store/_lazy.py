@@ -33,8 +33,8 @@ from tensordict._td_functions import lazy_stack
 from tensordict.base import (
     _is_leaf_nontensor,
     _register_tensor_class,
+    BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
-    T,
     TensorDictBase,
 )
 from tensordict.store._connection import (
@@ -58,7 +58,6 @@ from tensordict.store._utils import (
     _compute_covering_range,
     _decode_meta,
     _dtype_to_str,
-    _expand_batch_ellipsis,
     _get_local_idx,
     _getitem_result_shape,
     _is_scattered_index,
@@ -72,7 +71,6 @@ from tensordict.store._utils import (
 )
 from tensordict.utils import (
     _as_context_manager,
-    _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
     _warn_nested_key_in_flat_keys,
@@ -94,6 +92,20 @@ def _empty_structure(key_paths: set[str]) -> dict:
         for part in key_path.split(_KEY_SEP)[:-1]:
             d = d.setdefault(part, {})
     return structure
+
+
+def _empty_from_key_registry(td, recurse, batch_size, device, names):
+    """The ``_empty`` of a ``LazyStackedTensorDictStore`` and of its element views.
+
+    The sub-tensordicts of the result come from the key registry, so no data
+    is read.
+    """
+    return TensorDict(
+        _empty_structure(td._get_all_keys()) if recurse else {},
+        device=td.device if device is NO_DEFAULT else device,
+        batch_size=td.batch_size if batch_size is None else batch_size,
+        names=td.names if names is None and td._has_names() else names,
+    )
 
 
 def _writes_existing_leaves(key_paths: set[str], key_path: str, value: Any) -> bool:
@@ -193,6 +205,8 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
+    # td[key] = value writes into an existing entry of the element
+    _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
     def __init__(self, parent, element_idx: int):
         self._parent = parent
@@ -398,13 +412,9 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
             )
         return self
 
-    def __setitem__(self, index, value):
-        index_unravel = _unravel_key_to_tuple(index)
-        if index_unravel:
-            return self.set(index_unravel, value, inplace=True)
-
+    # Override: writes each entry of the element back to the server.
+    def _setitem_index(self, index, value):
         _check_indexed_value(self, value)
-        index = _expand_batch_ellipsis(index, self.batch_size)
         if isinstance(value, Number):
             # a scalar is written to every entry, which casts it to its dtype
             items = [
@@ -459,19 +469,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
             validated=validated,
             non_blocking=non_blocking,
         )
-
-    def _convert_inplace(self, inplace, key):
-        if inplace is not False:
-            all_keys = self._get_all_keys()
-            has_key = key in all_keys or any(
-                k.startswith(key + _KEY_SEP) for k in all_keys
-            )
-            if inplace is True and not has_key:
-                raise KeyError(
-                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
-                )
-            inplace = has_key
-        return inplace
 
     # ---- keys ----
 
@@ -543,15 +540,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
         raise RuntimeError("Cannot popitem from a stack element view.")
 
     # Override: a TensorDict skeleton, built from the stored keys without reading data.
-    def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> T:
-        return TensorDict(
-            _empty_structure(self._get_all_keys()) if recurse else {},
-            device=self.device if device is NO_DEFAULT else device,
-            batch_size=self.batch_size if batch_size is None else batch_size,
-            names=self.names if names is None and self._has_names() else names,
-        )
+    _empty = _empty_from_key_registry
 
     # ---- pickling: materialize, don't try to serialize the view ----
 
@@ -745,6 +734,8 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
     _rename_key_lenient = True
+    # td[key] = value writes into an existing entry on the server
+    _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
     _global_key_suffixes = (
         "__type__",
@@ -1406,8 +1397,18 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     # ---- element access (writes) ----
 
     async def _aset_element(self, element_idx: int, value_td: TensorDictBase):
-        """Write all keys for a single stack element via pipelined SETRANGE."""
-        all_keys = sorted(await self._aget_all_keys())
+        """Write the keys of ``value_td`` for a single stack element via pipelined SETRANGE."""
+        value_paths = {
+            _KEY_SEP.join(_unravel_key_to_tuple(key))
+            for key in value_td.keys(
+                include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
+            )
+        }
+        all_keys = sorted(
+            key_path
+            for key_path in await self._aget_all_keys()
+            if key_path in value_paths
+        )
         pos = _normalize_index(element_idx, self._count)
 
         # Pipeline: fetch all metadata + offset tables in one round-trip
@@ -1735,15 +1736,11 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         # General indexing via _index_tensordict
         return self._index_tensordict(index)
 
-    def __setitem__(self, index, value):
-        index_unravel = _unravel_key_to_tuple(index)
-        if index_unravel:
-            return self.set(index_unravel, value, inplace=True)
-
+    # Override: writes the indexed entries on the server in one batch
+    # (SETRANGE), and an element at an int index along the stack dim.
+    def _setitem_index(self, index, value):
         if isinstance(index, list):
             index = torch.tensor(index)
-        index = _expand_batch_ellipsis(index, self.batch_size)
-
         _check_indexed_value(self, value)
         if isinstance(value, Number):
             # a scalar is written to every entry, in its dtype
@@ -2005,19 +2002,6 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 return default
             raise KeyError(f"key {key} not found in {type(self).__name__}")
         return tensor
-
-    def _convert_inplace(self, inplace, key):
-        if inplace is not False:
-            all_keys = self._get_all_keys()
-            has_key = key in all_keys or any(
-                k.startswith(key + _KEY_SEP) for k in all_keys
-            )
-            if inplace is True and not has_key:
-                raise KeyError(
-                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
-                )
-            inplace = has_key
-        return inplace
 
     def keys(
         self,
@@ -2504,15 +2488,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         return self
 
     # Override: a TensorDict skeleton, built from the stored keys without reading data.
-    def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> T:
-        return TensorDict(
-            _empty_structure(self._get_all_keys()) if recurse else {},
-            device=self.device if device is NO_DEFAULT else device,
-            batch_size=self.batch_size if batch_size is None else batch_size,
-            names=self.names if names is None and self._has_names() else names,
-        )
+    _empty = _empty_from_key_registry
 
     # Override: until 0.17, a mask that is not batch-shaped broadcasts from
     # the right, as before 0.15.

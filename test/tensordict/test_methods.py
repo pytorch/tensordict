@@ -997,10 +997,9 @@ class TestTensorDicts(TestTensorDictsBase):
         if isinstance(td, (TypedTensorDict, TensorDictParams)):
             # they write into their source, which is not the value
             return
-        key = "('me',)" if isinstance(td, PersistentTensorDict) else "'me'"
         with pytest.raises(
             ValueError,
-            match=re.escape(f"Cannot set a tensordict inside itself (key {key})"),
+            match=re.escape("Cannot set a tensordict inside itself (key 'me')"),
         ):
             td["me"] = td
         assert "me" not in td.keys()

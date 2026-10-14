@@ -50,7 +50,6 @@ from tensordict._indexing import (
     _NONE,
     _read_element,
     _SLICE,
-    convert_ellipsis_to_idx,
 )
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
@@ -65,13 +64,11 @@ from tensordict.base import (
     _raise_if_inplace_call,
     _READ_ONLY_CALL,
     _register_tensor_class,
-    _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _warn_read_only,
     _warn_set_at_cast,
     _write_back_members,
-    BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
     NO_DEFAULT,
@@ -2813,22 +2810,36 @@ class LazyStackedTensorDict(TensorDictBase):
         return result
 
     # Override: a lazy stack of the members' empty tensordicts.
-    def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> Self:
+    def _empty(self, recurse, batch_size, device, names):
         # names=None keeps the names of the stack and of its members
         name = self._td_dim_name
-        if batch_size is not None and (
-            self.stack_dim
-            and batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
-        ):
-            return TensorDict.empty(
-                self,
-                recurse=recurse,
-                batch_size=batch_size,
-                device=device if device is not NO_DEFAULT else self.device,
-                names=names if names is not None else NO_DEFAULT,
-            )
+        if batch_size is not None:
+            if self._is_non_tensor:
+                # the members of a NonTensorStack must stay non-tensors: only
+                # new leading dims give a TensorDict
+                dense = bool(self.stack_dim) and (
+                    batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
+                )
+            else:
+                if type(batch_size) is not torch.Size:
+                    batch_size = torch.Size(batch_size)
+                # also True for a batch size that ends before the stack dim
+                stack_end = self.stack_dim + 1
+                dense = batch_size[:stack_end] != self._batch_size[:stack_end]
+            if dense:
+                # the members cannot give the leading dims or the stack dim:
+                # the result is a TensorDict
+                source = self
+                if recurse:
+                    # a TensorDict with the sub-tensordicts of self
+                    source = self._empty(True, None, NO_DEFAULT, None).to_tensordict()
+                return TensorDict.empty(
+                    source,
+                    recurse=recurse,
+                    batch_size=batch_size,
+                    device=device if device is not NO_DEFAULT else self.device,
+                    names=names if names is not None else NO_DEFAULT,
+                )
         names_kwarg = {}
         if names is not None:
             name = names[self.stack_dim] if len(names) > self.stack_dim else None
@@ -3509,26 +3520,9 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return result
 
-    def __setitem__(self, index: IndexType, value: T) -> Self:
-        if isinstance(index, (tuple, str)):
-            # try:
-            index_unravel = _unravel_key_to_tuple(index)
-            if index_unravel:
-                if value is self:
-                    raise ValueError(_SELF_NESTING_ERROR.format(index))
-                self._set_tuple(
-                    index_unravel,
-                    value,
-                    inplace=(
-                        BEST_ATTEMPT_INPLACE
-                        if isinstance(self, _SubTensorDict)
-                        else False
-                    ),
-                    validated=False,
-                    non_blocking=False,
-                )
-                return
-
+    # Override: writes the part of the value that falls in each member into it,
+    # so a new key goes only into the members that the index touches.
+    def _setitem_index(self, index: IndexType, value: Any) -> None:
         if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
@@ -3551,9 +3545,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     self._setitem_member(member, member_index, piece)
         else:
-            # the Ellipsis covers the batch dims, where set_at_ would read it on
-            # the entries
-            index = convert_ellipsis_to_idx(index, self.batch_size)
             _set_at_each_key(self, value, index)
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:

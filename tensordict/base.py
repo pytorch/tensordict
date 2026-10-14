@@ -50,6 +50,7 @@ from tensordict._deprecation import (
 )
 from tensordict._indexing import (
     _entry_index,
+    _expand_batch_ellipsis,
     _getitem_batch_size,
     _getitem_names,
     _is_new_dim_index,
@@ -1676,6 +1677,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by PersistentTensorDict, which writes a constant without reading the
     # array: zero_ fills each entry through _fill_ instead of reading copies.
     _fills_without_reading: bool = False
+    # The inplace argument with which td[key] = value writes the key: False
+    # replaces the entry. BEST_ATTEMPT_INPLACE (_SubTensorDict, the files and
+    # stores) writes into an existing entry and adds a new one.
+    _setitem_key_inplace = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -1871,26 +1876,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
-            # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
-                from tensordict._td import _SubTensorDict
-
                 if value is self:
                     raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
                     index_unravel,
                     value,
-                    inplace=(
-                        BEST_ATTEMPT_INPLACE
-                        if isinstance(self, _SubTensorDict)
-                        else False
-                    ),
+                    inplace=self._setitem_key_inplace,
                     validated=False,
                     non_blocking=False,
                 )
                 return
+        # we must use any and because using Ellipsis in index can break with some indices
+        if index is Ellipsis or (istuple and any(idx is Ellipsis for idx in index)):
+            index = _expand_batch_ellipsis(index, self.batch_size)
+        self._setitem_index(index, value)
 
+    def _setitem_index(self, index: IndexType, value: Any) -> None:
+        """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.
+
+        ``__setitem__`` has written the keys (a str or a tuple of str), and has
+        replaced an ``Ellipsis`` in ``index`` by the batch dims that it covers
+        (see :func:`~tensordict._indexing._expand_batch_ellipsis`). ``value`` is
+        a tensor collection, a dict, a tensor or a scalar. The base reads the
+        index as ``__getitem__`` does, writes the entries of a tensor
+        collection or a dict key by key (a new key through a sub-tensordict of
+        ``self``), and writes any other value into every entry.
+        """
         if (
             # is_tensorclass reads this class attribute: skip the call for the
             # values whose class does not have it, such as tensordicts
@@ -1902,11 +1915,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # NonTensorData keeps the leaf path (its _tensordict is empty)
             value = value._tensordict
 
-        # we must use any and because using Ellipsis in index can break with some indices
-        if index is Ellipsis or (
-            isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
-        ):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
         if (
@@ -3704,9 +3712,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 del self[key]
         return self
 
+    def _contains_str(self, key: str) -> bool:
+        """Returns whether ``key`` is a key of ``self`` (not of a sub-tensordict), without reading data.
+
+        The base checks ``key in self.keys()``; a file or a store asks its
+        storage.
+        """
+        return key in self.keys()
+
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
-            has_key = key in self.keys()
+            has_key = self._contains_str(key)
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
                     _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
@@ -8103,6 +8119,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> list(td.empty(recurse=True).keys(include_nested=True))
             ['b']
 
+        """
+        return self._empty(recurse, batch_size, device, names)
+
+    def _empty(self, recurse, batch_size, device, names) -> TensorDictBase:
+        """Builds the result of :meth:`empty`.
+
+        The arguments are those of :meth:`empty`, as given: ``batch_size`` is
+        ``None`` or the new batch size, ``device`` is ``NO_DEFAULT`` to keep the
+        device, and ``names=None`` keeps the names. Returns a new, unlocked
+        tensordict without leaves (with ``recurse=True``, with the
+        sub-tensordicts of ``self``, without their leaves). A file or a store
+        builds it without reading its data.
         """
         if not recurse:
             result = self._select(set_shared=False)

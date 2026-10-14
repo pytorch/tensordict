@@ -38,6 +38,7 @@ from tensordict.base import (
     _normalize_from_dict_args,
     _PACKAGE_DIR,
     _register_tensor_class,
+    BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
     T,
     TensorDictBase,
@@ -46,7 +47,6 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
-    _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
@@ -1071,6 +1071,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
     _fills_without_reading = True
+    # td[key] = value writes into an existing array of the file
+    _setitem_key_inplace = BEST_ATTEMPT_INPLACE
     # _change_batch_size raises, so an in-place shape method that changes the
     # batch size raises before it rewrites the datasets
     _inplace_batch_size_change = False
@@ -1590,11 +1592,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     __getitems__ = __getitem__
 
-    def __setitem__(self, index: IndexType, value: Any):
-        index_unravel = _unravel_key_to_tuple(index)
-        if index_unravel:
-            return self.set(index_unravel, value, inplace=True)
-
+    # Override: writes through a sub-tensordict of the file, and a number into
+    # the tensor entries only.
+    def _setitem_index(self, index: IndexType, value: Any) -> None:
         if isinstance(index, list):
             # convert to tensor
             index = torch.tensor(index)
@@ -1729,15 +1729,20 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             )
         return self
 
-    # Override: a TensorDict skeleton, built without reading the data.
-    def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> T:
+    # Override: a TensorDict skeleton, built without reading the tensors: only
+    # the sub-tensordicts and the non-tensor entries are read.
+    def _empty(self, recurse, batch_size, device, names):
+        out = TensorDict(
+            {},
+            device=self.device if device is NO_DEFAULT else device,
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            names=self.names if names is None and self._has_names() else names,
+        )
         if recurse:
-            out = self.empty(
-                recurse=False, batch_size=batch_size, device=device, names=names
-            )
-            for key, val in self.items():
+            for key in self.keys():
+                if self.entry_class(key) is torch.Tensor:
+                    continue
+                val = self._get_str(key, NO_DEFAULT)
                 if is_tensor_collection(val):
                     out._set_str(
                         key,
@@ -1751,13 +1756,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                         validated=True,
                         non_blocking=False,
                     )
-            return out
-        return TensorDict(
-            {},
-            device=self.device if device is NO_DEFAULT else device,
-            batch_size=self.batch_size if batch_size is None else batch_size,
-            names=self.names if names is None and self._has_names() else names,
-        )
+        return out
 
     # Override: walk the cached sub-tensordicts, without reading the file.
     def _lock_sub_tensordicts(self):
@@ -2270,16 +2269,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 self._get_tuple((first_key, *subkey[:-1]), default=NO_DEFAULT)
         return self
 
-    def _convert_inplace(self, inplace, key):
-        key = self._process_key(key)
-        if inplace is not False:
-            has_key = self._backend.contains(self.file, key)
-            if inplace is True and not has_key:  # inplace could be None
-                raise KeyError(
-                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
-                )
-            inplace = has_key
-        return inplace
+    # Override: asks the file, without listing the keys.
+    def _contains_str(self, key):
+        return self._backend.contains(self.file, self._process_key(key))
 
     def _set_str(
         self,
