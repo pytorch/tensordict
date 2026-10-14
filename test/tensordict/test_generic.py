@@ -167,6 +167,10 @@ def device_fixture():
     torch.set_default_device(device)
 
 
+# a namedtuple of numbers nested in a tuple (test_set_tuple_of_numbers_dtype)
+_Pair = namedtuple("_Pair", ["x", "y"])
+
+
 class TestGeneric:
     # Generic, type-insensitive teests
 
@@ -7326,6 +7330,7 @@ class TestGeneric:
             (),
             (1, 2),
             (True, False),
+            (_Pair(1.0, 2.0), _Pair(3.0, 4.0)),
         ],
     )
     def test_set_tuple_of_numbers_dtype(self, value, default_dtype):

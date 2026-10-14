@@ -1150,9 +1150,23 @@ _NUMBER_TYPES = frozenset((bool, int, float, complex))
 
 
 def _is_tuple_of_numbers(value: tuple) -> bool:
+    # a flat tuple is checked at C speed; nested tuples item by item
+    types = set(map(type, value))
+    if types <= _NUMBER_TYPES:
+        return True
+    if not any(issubclass(cls, tuple) for cls in types):
+        return False
     return all(
         type(item) in _NUMBER_TYPES
-        or (type(item) is tuple and _is_tuple_of_numbers(item))
+        or (isinstance(item, tuple) and _is_nested_tuple_of_numbers(item))
+        for item in value
+    )
+
+
+def _is_nested_tuple_of_numbers(value: tuple) -> bool:
+    return all(
+        type(item) in _NUMBER_TYPES
+        or (isinstance(item, tuple) and _is_nested_tuple_of_numbers(item))
         for item in value
     )
 
