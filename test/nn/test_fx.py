@@ -61,6 +61,26 @@ def test_tensordictmodule_trace_single_out_key():
     assert (module_out["y"] == graph_module_out["y"]).all()
 
 
+def test_tensordictmodule_trace_underscore_sentinel():
+    class Net(nn.Module):
+        def forward(self, x):
+            return x + 1, x - 1
+
+    module = TensorDictModule(Net(), in_keys=["x"], out_keys=["y", "_"])
+    graph_module = symbolic_trace(module)
+
+    tensordict = TensorDict({"x": torch.randn(4, 3)}, [4])
+    module_out = TensorDict()
+    graph_module_out = TensorDict()
+
+    module(tensordict, tensordict_out=module_out)
+    graph_module(tensordict, tensordict_out=graph_module_out)
+
+    assert set(graph_module_out.keys()) == set(module_out.keys())
+    assert "_" not in graph_module_out.keys()
+    assert (module_out["y"] == graph_module_out["y"]).all()
+
+
 def test_tensordictsequential_trace_consistency():
     class Net(nn.Module):
         def __init__(self, input_size=100, hidden_size=50, output_size=10):
