@@ -132,6 +132,52 @@ _add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
     "_add_batch_dim", "_remove_batch_dim"
 )
 
+# Device inputs of TensorDict(device=...) -> (indexed device, is_cuda). Only
+# inputs whose meaning does not depend on the current CUDA device are kept, and
+# a process sees few distinct devices, so the dict stays small.
+_PARSED_DEVICES: dict = {}
+_PARSED_DEVICES_MAX = 64
+
+# torch.backends.mps.is_available() does not change during a process; read on
+# first eager use by _mps_available().
+_MPS_AVAILABLE = None
+
+
+def _parse_device(device: DeviceType, memoize: bool) -> tuple[torch.device, bool]:
+    """Parses a ``device`` argument and gives it an index if it has none.
+
+    Returns the device and whether it is a CUDA device. With ``memoize``, the
+    result is remembered for ``str`` and ``torch.device`` inputs, except for a
+    CUDA device without index, which means the current CUDA device.
+    """
+    memoize = memoize and (type(device) is str or type(device) is torch.device)
+    if memoize:
+        parsed = _PARSED_DEVICES.get(device)
+        if parsed is not None:
+            return parsed
+    parsed_device = torch.device(device)
+    device_type = parsed_device.type
+    is_cuda = device_type == "cuda"
+    if parsed_device.index is None:
+        if is_cuda:
+            return (
+                torch.device(device_type, index=torch.cuda.current_device()),
+                True,
+            )
+        if device_type not in ("cpu", "meta"):
+            parsed_device = torch.device(device_type, index=0)
+    parsed = (parsed_device, is_cuda)
+    if memoize and len(_PARSED_DEVICES) < _PARSED_DEVICES_MAX:
+        _PARSED_DEVICES[device] = parsed
+    return parsed
+
+
+def _mps_available() -> bool:
+    global _MPS_AVAILABLE
+    if _MPS_AVAILABLE is None:
+        _MPS_AVAILABLE = torch.backends.mps.is_available()
+    return _MPS_AVAILABLE
+
 
 class TensorDict(TensorDictBase):
     """A dictionary of tensors that share a batch size.
@@ -255,6 +301,18 @@ class TensorDict(TensorDictBase):
         source = source if not kwargs else kwargs
 
         self._tensordict = _StringOnlyDict()
+        is_eager = not is_compiling()
+        is_empty = source is None or (type(source) is dict and not source)
+
+        if is_empty and names is None and not lock and type(self) is TensorDict:
+            # Nothing to validate, move, sync or rename: this ends in the
+            # state the general path below gives an empty source.
+            if device is not None:
+                device = _parse_device(device, is_eager)[0]
+            self._device = device
+            self._batch_size = self._parse_batch_size(source, batch_size)
+            self._td_dim_names = None
+            return
 
         has_device = device is not None
         sub_non_blocking = False
@@ -264,20 +322,14 @@ class TensorDict(TensorDictBase):
                 sub_non_blocking = True
             else:
                 sub_non_blocking = non_blocking
-            device = torch.device(device)
             # Auto-index the device
-            if device.index is None:
-                if device.type == "cuda":
-                    device = torch.device(
-                        device.type, index=torch.cuda.current_device()
-                    )
-                elif device.type not in ("cpu", "meta"):
-                    device = torch.device(device.type, index=0)
-            if device.type == "cuda":
+            device, is_cuda = _parse_device(device, is_eager)
+            if is_cuda:
                 # CUDA does its sync by itself
                 call_sync = False
             else:
-                call_sync = non_blocking is None
+                # An empty source has no transfer to record.
+                call_sync = non_blocking is None and not is_empty
                 if call_sync:
                     _device_recorder.mark()
         try:
@@ -285,7 +337,9 @@ class TensorDict(TensorDictBase):
 
             if source is None:
                 source = {}
-            if not isinstance(source, (TensorDictBase, dict)):
+            if type(source) is not dict and not isinstance(
+                source, (TensorDictBase, dict)
+            ):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "
                     f"sub-type or a dictionary, found type(source)={type(source)}."
@@ -298,9 +352,9 @@ class TensorDict(TensorDictBase):
             # avoids per-key dict mutations that trigger Dynamo
             # DICT_KEYS_MATCH guards and graph breaks.
             _tensordict = self._tensordict
-            _validate_value = self._validate_value
+            # Read on first use: exact tensors that match need no validation.
+            _validate_value = None
             _tensordict.update(source)
-            is_eager = not is_compiling()
             # Exact tensors need neither conversion nor collection dispatch.
             # Keep subclasses (including TensorDict subclasses with custom
             # validation), nested tensors and device moves on the general path.
@@ -323,6 +377,8 @@ class TensorDict(TensorDictBase):
                         and (device is None or value.device == device)
                     ):
                         continue
+                    if _validate_value is None:
+                        _validate_value = self._validate_value
                     _tensordict[key] = _validate_value(
                         value,
                         check_shape=True,
@@ -360,7 +416,8 @@ class TensorDict(TensorDictBase):
         is_memmap: bool = False,
         **kwargs: Any,
     ) -> TensorDict:
-        if is_compiling() and cls is TensorDict:
+        is_eager = not is_compiling()
+        if not is_eager and cls is TensorDict:
             # If the cls is not TensorDict, we must escape this to keep the same class.
             # That's unfortunate because as of now it graph breaks but that's the best we can do.
             td = TensorDict(
@@ -387,8 +444,9 @@ class TensorDict(TensorDictBase):
                 non_blocking = False
             else:
                 sub_non_blocking = non_blocking
-            device = torch.device(device) if device is not None else None
-            if self._has_mps:
+            if type(device) is not torch.device:
+                device = torch.device(device)
+            if _mps_available() if is_eager else self._has_mps:
                 # With MPS, an explicit sync is required
                 sub_non_blocking = True
         self._device = device

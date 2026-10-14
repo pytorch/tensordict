@@ -1379,6 +1379,61 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="batch dimension mismatch"):
             TensorDict({"x": x, "bad": torch.zeros(2, 4)}, [3], device=device)
 
+    @pytest.mark.parametrize("source", [None, {}])
+    @pytest.mark.parametrize("device", [None, "cpu", torch.device("cpu"), "meta"])
+    @pytest.mark.parametrize(
+        "names, lock", [(None, False), (["b"], False), (None, True)]
+    )
+    def test_construct_empty_source(self, source, device, names, lock, monkeypatch):
+        # An empty source has nothing to validate or transfer (#2623).
+        recorder = tensordict_base._device_recorder
+        calls = []
+        mark = recorder.mark
+        monkeypatch.setattr(recorder, "mark", lambda: (calls.append("mark"), mark())[1])
+        validate_value = TensorDictBase._validate_value
+        monkeypatch.setattr(
+            TensorDict,
+            "_validate_value",
+            property(lambda td: (calls.append("validate"), validate_value.fget(td))[1]),
+        )
+        td = TensorDict(source, [3], device=device, names=names, lock=lock)
+        assert calls == []
+        assert type(td) is TensorDict and td.is_empty()
+        assert td.batch_size == (3,)
+        assert td.device == (None if device is None else torch.device(device))
+        assert td.names == (names or [None])
+        assert td.is_locked is lock
+        td = TensorDict({"a": torch.zeros(3)}, [3], device=device)
+        assert calls.count("mark") == (device is not None)
+        assert td["a"].device == torch.device(device or "cpu")
+
+    def test_construct_cuda_device_follows_current_device(self, monkeypatch):
+        # A device without index is not remembered from one call to the next.
+        for index in (1, 0):
+            monkeypatch.setattr(torch.cuda, "current_device", lambda index=index: index)
+            for device in ("cuda", torch.device("cuda")):
+                for names in (None, []):
+                    td = TensorDict(device=device, names=names)
+                    assert td.device == torch.device("cuda", index)
+
+    def test_new_unsafe_keeps_device(self, monkeypatch):
+        # A torch.device is reused, and MPS availability is read once (#2623).
+        calls = []
+        is_available = torch.backends.mps.is_available
+        monkeypatch.setattr(
+            torch.backends.mps,
+            "is_available",
+            lambda: (calls.append(None), is_available())[1],
+        )
+        td = TensorDict(
+            a=torch.zeros(3), nested={"b": torch.zeros(3)}, batch_size=[3], device="cpu"
+        )
+        for _ in range(3):
+            clone = td.clone()
+            assert clone.device is td.device
+            assert clone["nested"].device is td["nested"].device
+        assert len(calls) <= 1
+
     @pytest.mark.parametrize(
         "ellipsis_index, expectation",
         [
