@@ -3650,12 +3650,12 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.share_memory_() is td
         assert td.is_shared()
         if (
-            type(td) is TensorDict
+            (type(td) is TensorDict or isinstance(td, TypedTensorDict))
             and td.device is not None
             and td.device.type == "cuda"
         ):
             # CUDA tensors are shared already: TensorDict returns without
-            # locking
+            # locking, and so does a TypedTensorDict, through its TensorDict
             assert not td.is_locked
         else:
             assert td.is_locked is not isinstance(td, TensorDictParams)
