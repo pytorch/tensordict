@@ -1166,6 +1166,16 @@ class TensorDict(TensorDictBase):
                     if "_consolidated" in self.__dict__:
                         self._mark_consolidated_stale()
                     return self
+                # The entry that failed the tensor checks may be a nested
+                # TensorDict. Plan that merge, and write only when every
+                # entry can take it; otherwise the general path still owns
+                # the partial writes and the errors.
+                if (
+                    type(key) is str
+                    and type(value) is TensorDict
+                    and self._update_nested_entries(source)
+                ):
+                    return self
         return super().update(
             input_dict_or_td,
             clone=clone,
@@ -1177,6 +1187,98 @@ class TensorDict(TensorDictBase):
             ignore_lock=ignore_lock,
             **kwargs,
         )
+
+    def _update_nested_entries(self, source: dict) -> bool:
+        """Merge tensors and nested :class:`TensorDict` values in place.
+
+        ``source`` is a plain dict (often another tensordict's entry dict).
+        Returns ``False`` without writing when an entry is not a plain tensor
+        or a :class:`TensorDict` merged into an existing :class:`TensorDict`,
+        so :meth:`TensorDictBase.update` can keep its partial writes and errors.
+        """
+        plan: list[tuple[TensorDict, dict]] = []
+        if not self._plan_nested_update(source, plan):
+            return False
+        for dest, items in plan:
+            dest._tensordict.update(items)
+            if "_consolidated" in dest.__dict__:
+                dest._mark_consolidated_stale()
+        if "_consolidated" in self.__dict__:
+            self._mark_consolidated_stale()
+        return True
+
+    def _plan_nested_update(
+        self, source: dict, plan: list, *, trusted: bool = False
+    ) -> bool:
+        # Nothing is written here. A rejected entry leaves ``plan`` unused.
+        # ``trusted`` means every plain tensor was checked against this batch
+        # size and device when it was set, so the per-leaf checks are skipped.
+        batch_size = self._batch_size
+        batch_dims = len(batch_size)
+        device = self._device
+        nested = None
+        dest = self._tensordict
+        for key, value in source.items():
+            if type(value) is Tensor:
+                if type(key) is not str or (
+                    not trusted
+                    and (
+                        (
+                            batch_dims
+                            and (
+                                value.is_nested
+                                or value.shape[:batch_dims] != batch_size
+                            )
+                        )
+                        or (device is not None and value.device != device)
+                    )
+                ):
+                    return False
+                continue
+            if type(value) is TensorDict and type(key) is str:
+                cur = dest.get(key)
+                if type(cur) is not TensorDict or cur._is_locked:
+                    return False
+                cur_batch = cur._batch_size
+                value_batch = value._batch_size
+                # Equal batch and a device that will not move the leaves: those
+                # leaves were checked when they were set. A prefix-only match
+                # still checks each leaf. A real mismatch falls through so
+                # TensorDictBase.update can raise.
+                if cur_batch == value_batch and (
+                    cur._device is None or cur._device == value._device
+                ):
+                    child_trusted = True
+                elif cur_batch[: len(value_batch)] != value_batch[: len(cur_batch)]:
+                    return False
+                else:
+                    child_trusted = False
+                if nested is None:
+                    nested = []
+                nested.append((cur, value, child_trusted))
+                continue
+            return False
+        if nested is None:
+            plan.append((self, source))
+            return True
+        if len(nested) != len(source):
+            # Keep the nested tensordicts in place: dict.update would replace them.
+            plan.append(
+                (
+                    self,
+                    {
+                        key: value
+                        for key, value in source.items()
+                        if type(value) is Tensor
+                    },
+                )
+            )
+        for cur, value, child_trusted in nested:
+            if not cur._plan_nested_update(
+                value._tensordict, plan, trusted=child_trusted
+            ):
+                return False
+        return True
 
     def _set_str(
         self,

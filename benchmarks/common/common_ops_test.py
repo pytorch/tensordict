@@ -863,6 +863,39 @@ def test_exclude_nested(benchmark):
     benchmark(func)
 
 
+@pytest.mark.parametrize("n", [1, 10])
+def test_update_flat_tensor_keys(benchmark, n):
+    # Guard: the nested fast path must not slow a flat tensor update.
+    dest = TensorDict({f"k{i}": torch.zeros(8) for i in range(n)}, [8])
+    src = TensorDict({f"k{i}": torch.ones(8) for i in range(n)}, [8])
+    benchmark(dest.update, src)
+
+
+def test_update_nested_tensordict(benchmark):
+    # The update half of the step_mdp composition in #2558.
+    def leaf(dtype=torch.float32):
+        return torch.zeros(3, 1, dtype=dtype)
+
+    dest = TensorDict(
+        data=TensorDict(
+            states=leaf(torch.int32),
+            action=leaf(),
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+    src = TensorDict(
+        data=TensorDict(
+            states=leaf(torch.int32),
+            done=leaf(torch.bool),
+            terminated=leaf(torch.bool),
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+    benchmark(dest.update, src)
+
+
 @pytest.mark.parametrize("op", ["exclude", "select", "step"])
 def test_exclude_select_update_step(benchmark, op):
     # One env step of a nested (multi-agent style) env turned into the next

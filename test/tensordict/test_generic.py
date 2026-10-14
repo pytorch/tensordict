@@ -8605,6 +8605,30 @@ class TestGeneric:
         assert fresh.batch_size == torch.Size([3])
         assert set(fresh.keys()) == {"keep", "n"}
 
+        # Fewer batch dims on the source still require the leaves to match.
+        wide = torch.ones(3, 4)
+        dest_w = TensorDict(
+            {"n": TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4])},
+            [3, 4],
+        )
+        dest_w.update(TensorDict({"n": TensorDict(x=wide, batch_size=[3])}, [3]))
+        assert dest_w.get(("n", "x")) is wide
+        assert dest_w.batch_size == torch.Size([3, 4])
+        assert dest_w.get("n").batch_size == torch.Size([3, 4])
+
+        # Matching devices keep the leaf object.
+        on_cpu = torch.ones(3)
+        dest_c = TensorDict(
+            {"n": TensorDict(x=torch.zeros(3), batch_size=[3])},
+            [3],
+            device="cpu",
+        )
+        dest_c.update(
+            TensorDict({"n": TensorDict(x=on_cpu, batch_size=[3])}, [3], device="cpu")
+        )
+        assert dest_c.get(("n", "x")) is on_cpu
+        assert dest_c.get("n").device.type == "cpu"
+
     def test_exclude_nested_tuple_key(self):
         states = torch.zeros(3, 1, dtype=torch.int32)
         action = torch.ones(3, 1)
@@ -8750,11 +8774,10 @@ class TestGeneric:
         assert "z" not in td.keys()
         assert td.get(("n", "b")) is held_b
 
-        # A leaf whose shape disagrees with its tensordict is still rejected.
-        # _new_unsafe skips the check the constructor would have done.
-        bad = TensorDict._new_unsafe({"b": torch.ones(4)}, batch_size=torch.Size([3]))
+        # A nested dict is validated on the general path, so a bad leaf raises
+        # and does not replace the existing tensor.
         with pytest.raises(RuntimeError, match="batch dimension mismatch"):
-            td.update({"a": torch.ones(3), "n": bad})
+            td.update({"n": {"b": torch.ones(4)}})
         assert td.get(("n", "b")) is held_b
 
         # keys_to_update does not create or replace the other entries.
