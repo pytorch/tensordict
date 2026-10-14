@@ -1233,18 +1233,36 @@ class LazyStackedTensorDict(TensorDictBase):
                 td.names = None
             self._td_dim_name = None
             self._empty_stack_names = None
-        else:
-            names_c = list(names)
-            name = names_c[self.stack_dim]
-            self._td_dim_name = name
-            del names_c[self.stack_dim]
-            if not self.tensordicts:
-                self._empty_stack_names = names_c
+            return
+        # An empty stack has no members, so any list that reaches the stack
+        # dim is kept. With members, rename_ takes the other names and needs
+        # one per member dim: reject a bad length, or a stack dim name any
+        # member already uses, before the stack dim or a member is written.
+        names_list = list(names)
+        if self.tensordicts and len(names_list) != self.batch_dims:
+            raise ValueError(
+                "the length of the dimension names must equate the tensordict batch_dims attribute. "
+                f"Got {names_list} for batch_dims {self.batch_dims}."
+            )
+        stack_name = names_list.pop(self.stack_dim)
+        for td in self.tensordicts:
+            if td._check_dim_name(stack_name):
+                raise ValueError(f"The dimension name {stack_name} is already taken.")
+        previous_stack_name = self._td_dim_name
+        previous_empty_names = self._empty_stack_names
+        previous_member_names = [list(td.names) for td in self.tensordicts]
+        self._td_dim_name = stack_name
+        if not self.tensordicts:
+            self._empty_stack_names = names_list
+        try:
             for td in self.tensordicts:
-                if td._check_dim_name(name):
-                    # TODO: should reset names here
-                    raise ValueError(f"The dimension name {name} is already taken.")
-                td.rename_(*names_c)
+                td.rename_(*names_list)
+        except Exception:
+            self._td_dim_name = previous_stack_name
+            self._empty_stack_names = previous_empty_names
+            for td, old_names in zip(self.tensordicts, previous_member_names):
+                td.names = old_names
+            raise
 
     def _rename_subtds(self, names):
         # remove the name of the stack dim
