@@ -47,7 +47,7 @@ from tensordict import (
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
-from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
+from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.tensorclass import NonTensorData, NonTensorStack
@@ -3327,21 +3327,46 @@ class TestGeneric:
         assert td["tc", "x"] is leaf
         assert not calls
 
+        sub_calls = []
+
         class SubStr(TensorDict):
             def _get_str(self, key, default, **kwargs):
-                calls.append(key)
+                sub_calls.append(key)
                 return get_str(self, key, default, **kwargs)
 
-        # a subclass that overrides _get_str is read through it
+        # a subclass that overrides _get_str is read through it, as on main
         sub_str = SubStr({"a": {"b": leaf}}, [3])
         assert sub_str.get(("a", "b")) is leaf
         assert sub_str.get(("z", "b"), None) is None
-        assert calls == ["a", "z"]
+        assert sub_calls == ["a", "z"]
         calls.clear()
+
+        class Plain(TensorDict):
+            pass
+
+        # a subclass that overrides neither takes the dict reads
+        plain = Plain({"a": {"b": leaf}}, [3])
+        assert plain.get(("a", "b")) is leaf
+        assert plain["a", "b"] is leaf
+        assert plain.get(("z", "b"), None) is None
+        assert not calls
+
+        class AutoTD(TensorDict):
+            def _default_get(self, key, default=NO_DEFAULT):
+                return TensorDict()
+
+        # a subclass that overrides _default_get: a miss goes on with the rest
+        # of the key, in the returned value
+        auto = AutoTD({"a": leaf}, [3])
+        with pytest.raises(KeyError, match='key "y" not found in TensorDict'):
+            auto["zz", "y"]
+        assert auto.get(("zz", "y"), None) is None
+        assert TensorDict({"x": auto}, [3]).get(("x", "zz", "y"), None) is None
+        assert auto.get("zz").is_empty()
         # a default that is the value on the path is returned, as before
         sub = td["a", "b"]
         assert td.get(("a", "b", "c"), sub) is sub
-        # a lazy stack on the path takes the generic walk
+        # a lazy stack on the path reads the rest itself
         assert (td.get(("l", "q")) == 1).all()
         assert td.get(("l", "z"), None) is None
         with pytest.raises(
