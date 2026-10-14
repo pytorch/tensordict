@@ -4627,6 +4627,36 @@ class TestTensorDictParams:
         assert isinstance(params["a"], nn.Parameter)
         assert sorted(dict(params.named_parameters())) == ["a", "n.c"]
 
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda p: p.rename_key_("a", "z")._param_td.get("z"),
+            lambda p: p.unbind(0)[1]["a"],
+            lambda p: list(p)[1]["a"],
+            lambda p: p.contiguous()["a"],
+            lambda p: p.reshape(2, 2, inplace=True)._param_td.get("a"),
+            lambda p: p.repeat_interleave(1, dim=0, inplace=True)._param_td.get("a"),
+        ],
+        ids=[
+            "rename_key_",
+            "unbind",
+            "iter",
+            "contiguous",
+            "reshape",
+            "repeat_interleave",
+        ],
+    )
+    def test_get_post_hook_not_written(self, op):
+        # the operations read the wrapped tensordict without the get hooks,
+        # and the stored values stay unchanged
+        params = self._params()
+        a = params["a"].detach().clone()
+        params.register_get_post_hook(lambda self, value: value + 100)
+        result = op(params)
+        assert (result < 50).all()
+        stored = params._param_td.get("z" if "z" in params.keys() else "a")
+        torch.testing.assert_close(stored.detach().reshape(4, 3), a)
+
     @pytest.mark.parametrize("lock", [False, True])
     def test_comparisons_reductions(self, lock):
         params = self._params(lock=lock)
@@ -4678,14 +4708,15 @@ class TestTensorDictParams:
             with torch.no_grad():
                 params.update(params.data * 0, inplace=True)
 
-    @pytest.mark.xfail(
-        strict=True, reason="TensorDictParams.update drops update_batch_size"
-    )
     def test_update_update_batch_size(self):
         params = self._params()
-        result = params.update(
-            TensorDict(a=torch.zeros(5, 3), batch_size=[5]), update_batch_size=True
+        source = TensorDict(
+            a=torch.zeros(5, 3),
+            b=torch.zeros(5, dtype=torch.long),
+            n=TensorDict(c=torch.zeros(5, 3), batch_size=[5]),
+            batch_size=[5],
         )
+        result = params.update(source, update_batch_size=True)
         assert result is params
         assert params.batch_size == (5,)
         assert isinstance(params["a"], nn.Parameter)
@@ -4759,8 +4790,8 @@ class TestTensorDictParams:
     @pytest.mark.parametrize("lock", [False, True])
     @pytest.mark.parametrize("op", list(_NON_TENSOR_OPS))
     def test_inplace_writes_non_tensor(self, op, lock):
-        # #2263: the in-place methods run on .data, which builds new
-        # non-tensor leaves: the writes to them are lost
+        # #2263: the in-place methods write the non-tensor leaves, as on the
+        # wrapped tensordict
         fn = self._NON_TENSOR_OPS[op]
         params = self._params_non_tensor(lock)
         with torch.no_grad():
@@ -4769,8 +4800,8 @@ class TestTensorDictParams:
         with torch.no_grad():
             fn(dense, self._non_tensor_source())
         assert dense["s"] == "new"
-        assert params["s"] == "old"
-        assert params.get("ns").tolist() == ["x", "y", "z"]
+        assert params["s"] == "new"
+        assert params.get("ns").tolist() == dense.get("ns").tolist()
         torch.testing.assert_close(params["a"].data, dense["a"])
         assert isinstance(params["a"], nn.Parameter)
 

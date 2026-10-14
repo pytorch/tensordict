@@ -259,10 +259,7 @@
  "td_params select": [],
  "td_params serialization": [],
  "td_params shape": [],
- "td_params update": [
-  "update(dense[0], update_batch_size=True)",
-  "update(new=zeros)"
- ],
+ "td_params update": [],
  "td_reset_bs apply": [],
  "td_reset_bs filling": [],
  "td_reset_bs keys": [],
