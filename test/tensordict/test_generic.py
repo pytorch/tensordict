@@ -3595,6 +3595,12 @@ class TestGeneric:
             "b",
             "nt",
         ]
+        # The view stays lazy until it is read: a key added after keys() is
+        # listed. len() on its own matches the list.
+        fresh = td.keys(True, True)
+        td.set("c", torch.zeros(2))
+        assert list(fresh)[-1] == "c"
+        assert len(td.keys(True, True)) == len(list(td.keys(True, True)))
 
     @pytest.mark.parametrize("stack", [False, True])
     def test_items_nested_deep(self, stack):

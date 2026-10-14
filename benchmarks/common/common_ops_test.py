@@ -1068,6 +1068,53 @@ def test_chunk(benchmark):
     benchmark(lambda td: td.chunk(10, dim=1), td)
 
 
+def _td_ten_nested_leaves():
+    # Ten tensor leaves over three levels. Same shape of tree as a small
+    # nested tensordict whose leaf keys are listed on every call (#2618).
+    leaf = torch.zeros(32)
+    return TensorDict(
+        {
+            "a": leaf,
+            "b": leaf,
+            "c": leaf,
+            "nest": {"d": leaf, "e": leaf, "f": {"g": leaf, "h": leaf}},
+            "p": leaf,
+            "q": {"r": leaf, "s": leaf},
+        },
+        [32],
+    )
+
+
+def time_list_nested_keys(number: int = 200, repeat: int = 5) -> None:
+    """Print stdlib timings for listing nested and flat TensorDict keys.
+
+    ``python benchmarks/common/common_ops_test.py --time-keys`` from the repo
+    root, with ``PYTHONPATH`` set to it.
+    """
+    import timeit
+
+    nested = _td_ten_nested_leaves()
+    flat = TensorDict({f"k{i}": torch.zeros(32) for i in range(10)}, [32])
+    assert len(list(nested.keys(True, True))) == 10
+    cases = (
+        ("nested list(keys(True, True))", lambda: list(nested.keys(True, True))),
+        ("nested list(items(True, True))", lambda: list(nested.items(True, True))),
+        ("nested len(keys(True, True))", lambda: len(nested.keys(True, True))),
+        ("flat list(keys(False, False))", lambda: list(flat.keys(False, False))),
+        ("flat list(keys())", lambda: list(flat.keys())),
+        ("flat list(keys(True, True))", lambda: list(flat.keys(True, True))),
+    )
+    for name, fn in cases:
+        fn()
+        best = min(timeit.repeat(fn, number=number, repeat=repeat)) / number
+        print(f"{name:36s} {best * 1e6:8.2f} us")
+
+
 if __name__ == "__main__":
-    args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    import sys
+
+    if "--time-keys" in sys.argv:
+        time_list_nested_keys()
+    else:
+        args, unknown = argparse.ArgumentParser().parse_known_args()
+        pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

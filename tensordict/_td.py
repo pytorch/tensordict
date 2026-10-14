@@ -3538,12 +3538,14 @@ class _TensorDictKeysView:
     def __iter__(self) -> Iterator[str | tuple[str, ...]]:
         # Not a generator: iterating returns the underlying iterator directly,
         # which saves a generator frame per key.
+        if _exact_tensordict_keys(self):
+            # CPython's list() and tuple() build the iterator and then ask for
+            # the length. Keep that list so __len__ does not walk again.
+            keys = _listed_tensordict_keys(self)
+            self._listed_keys = keys
+            return iter(keys)
         if self.sort:
-
-            def keyfunc(key):
-                return ".".join(key) if isinstance(key, tuple) else key
-
-            return iter(sorted(self._iter(), key=keyfunc))
+            return iter(sorted(self._iter(), key=_nested_key_name))
         return self._iter()
 
     def _iter(self) -> Iterator[str | tuple[str, ...]]:
@@ -3586,6 +3588,12 @@ class _TensorDictKeysView:
                 yield key if prefix is None else full_key
 
     def __len__(self) -> int:
+        if _exact_tensordict_keys(self):
+            # Reuse the list __iter__ just built. A bare len() walks once.
+            keys = self.__dict__.pop("_listed_keys", None)
+            if keys is None:
+                keys = _listed_tensordict_keys(self)
+            return len(keys)
         return sum(1 for _ in self)
 
     def _items(
@@ -3683,6 +3691,128 @@ class _TensorDictKeysView:
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
         return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
+
+
+def _nested_key_name(key: str | tuple) -> str:
+    return ".".join(key) if isinstance(key, tuple) else key
+
+
+def _exact_tensordict_keys(view: _TensorDictKeysView) -> bool:
+    # Lazy stacks and tensorclasses keep their own key iteration.
+    return (
+        type(view) is _TensorDictKeysView
+        and type(view.tensordict) is TensorDict
+        and not is_compiling()
+    )
+
+
+def _listed_tensordict_keys(view: _TensorDictKeysView) -> list:
+    """Keys that ``view`` yields, built in one walk of an exact TensorDict."""
+    td = view.tensordict
+    out: list = []
+    if view.include_nested:
+        if view.leaves_only and view.is_leaf is _default_is_leaf:
+            _collect_default_leaves(td, out, view)
+        else:
+            _collect_nested_keys(td, None, out, view.leaves_only, view.is_leaf, view)
+    elif view.leaves_only:
+        is_leaf = view.is_leaf
+        for key, value in td._tensordict.items():
+            if is_leaf(type(value)):
+                out.append(key)
+    else:
+        out.extend(td._tensordict.keys())
+    if view.sort:
+        out.sort(key=_nested_key_name)
+    return out
+
+
+def _collect_default_leaves(
+    td: TensorDict, out: list, view: _TensorDictKeysView
+) -> None:
+    # include_nested and leaves_only, with the default is_leaf: a tensor is a
+    # leaf and a TensorDict is not. Nested keys are yielded before their node,
+    # and the node itself is skipped.
+    for key, value in td._tensordict.items():
+        cls = type(value)
+        if cls is Tensor:
+            out.append(key)
+            continue
+        if cls is TensorDict:
+            _collect_default_leaves_at(value, (key,), out, view)
+            continue
+        _collect_other_key(view, key, value, cls, None, out, True, _default_is_leaf)
+
+
+def _collect_default_leaves_at(
+    td: TensorDict,
+    prefix: tuple,
+    out: list,
+    view: _TensorDictKeysView,
+) -> None:
+    for key, value in td._tensordict.items():
+        cls = type(value)
+        if cls is Tensor:
+            out.append(prefix + (key,))
+            continue
+        if cls is TensorDict:
+            _collect_default_leaves_at(value, prefix + (key,), out, view)
+            continue
+        _collect_other_key(view, key, value, cls, prefix, out, True, _default_is_leaf)
+
+
+def _collect_nested_keys(
+    td: TensorDict,
+    prefix: tuple | None,
+    out: list,
+    leaves_only: bool,
+    is_leaf: Callable[[Type], bool],
+    view: _TensorDictKeysView,
+) -> None:
+    default_leaf = is_leaf is _default_is_leaf
+    for key, value in td._tensordict.items():
+        cls = type(value)
+        if cls is Tensor:
+            if not leaves_only or default_leaf or is_leaf(cls):
+                out.append(key if prefix is None else prefix + (key,))
+            continue
+        full_key = (key,) if prefix is None else prefix + (key,)
+        if cls is TensorDict:
+            _collect_nested_keys(value, full_key, out, leaves_only, is_leaf, view)
+            if not leaves_only or is_leaf(cls):
+                out.append(key if prefix is None else full_key)
+            continue
+        _collect_other_key(view, key, value, cls, prefix, out, leaves_only, is_leaf)
+
+
+def _collect_other_key(
+    view: _TensorDictKeysView,
+    key: str,
+    value,
+    cls: type,
+    prefix: tuple | None,
+    out: list,
+    leaves_only: bool,
+    is_leaf: Callable[[Type], bool],
+) -> None:
+    # One entry of _iter_helper, for a value that is not a tensor or TensorDict.
+    full_key = (key,) if prefix is None else prefix + (key,)
+    while cls is list:
+        value = value[0]
+        cls = type(value)
+    if cls is TensorDict:
+        if leaves_only and is_leaf is _default_is_leaf:
+            _collect_default_leaves_at(value, full_key, out, view)
+        else:
+            _collect_nested_keys(value, full_key, out, leaves_only, is_leaf, view)
+    elif (
+        _is_tensor_collection(cls)
+        and not is_non_tensor(cls)
+        and not _pass_through(value)
+    ):
+        out.extend(view._iter_helper(value, prefix=full_key))
+    if not leaves_only or is_leaf(cls):
+        out.append(key if prefix is None else full_key)
 
 
 def _is_stack_of_batchless_non_tensors(dest) -> bool:
