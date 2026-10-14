@@ -944,6 +944,40 @@ class TestTensorClass:
         assert obj.X.shape == (2, 3)
         assert (obj.X == 1).all()
 
+    @pytest.mark.parametrize(
+        "shape,op,args",
+        [((2, 3, 4), "flatten", (0, 1)), ((6, 4), "unflatten", (0, (2, 3)))],
+    )
+    def test_shape_op_context_manager_inplace(self, shape, op, args):
+        # with inplace=True, the shape is restored on exit too (gh-2700)
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            y: TensorDict
+
+        obj = MyClass(
+            X=torch.zeros(shape), y=TensorDict(z=torch.zeros(shape)), batch_size=shape
+        )
+        with getattr(obj, op)(*args, inplace=True) as obj_op:
+            assert obj_op is obj
+            obj_op.X = obj_op.X + 1
+        assert obj.batch_size == shape
+        assert obj.X.shape == shape
+        assert obj.y.batch_size == shape
+        assert (obj.X == 1).all()
+
+    def test_flatten_keys_context_manager_inplace(self):
+        # with inplace=True, the nested keys are restored on exit too (gh-2700)
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            y: TensorDict
+
+        obj = MyClass(X=torch.zeros(2), y=TensorDict(z=torch.zeros(2)), batch_size=[2])
+        with obj.flatten_keys(inplace=True):
+            pass
+        assert set(obj._tensordict.keys(True, True)) == {"X", ("y", "z")}
+
     def test_lock_context_manager_restores_on_error(self):
         # lock_() and unlock_() undo their change also when the body raises
         @tensorclass

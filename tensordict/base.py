@@ -1671,6 +1671,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # method (notably under ``torch.compile`` where that decorator
     # short-circuits and never writes the attribute).
     _last_op = None
+    # Set by flatten(inplace=True): (start_dim, merged sizes), which a
+    # with-block around the call reads on exit.
+    _inplace_flatten_sizes = None
     # Class-level default; instances populate this on lock_() so locked-
     # fast-paths can avoid iterating ``_tensordict`` (which would emit
     # DICT_KEYS_MATCH guards under Dynamo). Cleared on unlock_().

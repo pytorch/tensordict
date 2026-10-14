@@ -2562,9 +2562,14 @@ class _ShapeOps:
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
 
+            # the sizes that a with-block restores on exit
+            sizes = self.batch_size[start_dim : end_dim + 1]
             self._inplace_rebind_leaves(flatten, nested_fn, torch.Size(batch_size))
             if names is not None:
                 self.names = names
+            self._inplace_flatten_sizes = (
+                None if past_batch_dims else (start_dim, sizes)
+            )
             return self
         if not past_batch_dims and start_dim != end_dim:
             return self._reshape(torch.Size(batch_size), names, flatten)

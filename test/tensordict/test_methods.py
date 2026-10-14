@@ -1292,6 +1292,29 @@ class TestTensorDicts(TestTensorDictsBase):
         if not td.is_locked:
             assert (td["new", "data"] == 0).all()
 
+    def test_flatten_keys_decorator_inplace(self, td_name, device):
+        # with inplace=True, the nested keys are restored on exit too (gh-2700)
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        keys = set(td.keys(True, True, is_leaf=_is_leaf_nontensor))
+        if td_name in (
+            "sub_td",
+            "sub_td2",
+            "squeezed_td",
+            "unsqueezed_td",
+            "permute_td",
+            "td_h5",
+        ):
+            with pytest.raises((RuntimeError, ValueError)):
+                td.flatten_keys(",", inplace=True)
+            return
+        with td.flatten_keys(",", inplace=True) as tdflat:
+            assert tdflat is td
+            assert set(tdflat.keys(True, True, is_leaf=_is_leaf_nontensor)) == set(
+                tdflat.keys(is_leaf=_is_leaf_nontensor)
+            )
+        assert set(td.keys(True, True, is_leaf=_is_leaf_nontensor)) == keys
+
     def test_flatten_unflatten(self, td_name, device):
         td = getattr(self, td_name)(device)
         shape = td.shape[:3]
@@ -1350,6 +1373,59 @@ class TestTensorDicts(TestTensorDictsBase):
                 td_flat.apply(lambda x: x.data.mul_(0).add_(1))
         assert td.batch_size == batch_size
         assert (td == 1).all()
+
+    @pytest.mark.parametrize(
+        "op,args", [("flatten", (0, 1)), ("unflatten", (0, (2, 2)))]
+    )
+    def test_shape_decorator_inplace(self, td_name, device, op, args):
+        # with inplace=True, the shape is restored on exit too (gh-2700)
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        batch_size = td.batch_size
+        shapes = {key: val.shape for key, val in td.items(True, True)}
+        if td_name in (
+            "nested_stacked_td",
+            "permute_td",
+            "squeezed_td",
+            "stacked_td",
+            "sub_td",
+            "sub_td2",
+            "td_h5",
+            "unsqueezed_td",
+        ):
+            with pytest.raises(NotImplementedError):
+                getattr(td, op)(*args, inplace=True)
+            return
+        with getattr(td, op)(*args, inplace=True) as tdt:
+            assert tdt is td
+            assert tdt.batch_size != batch_size
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        assert td.batch_size == batch_size
+        assert {key: val.shape for key, val in td.items(True, True)} == shapes
+        assert (td == 1).all()
+
+    def test_flatten_decorator_inplace_to_last_dim(self, td_name, device):
+        # this block kept the flat shape before gh-2700: it still does, and warns
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        if td_name in (
+            "nested_stacked_td",
+            "permute_td",
+            "squeezed_td",
+            "stacked_td",
+            "sub_td",
+            "sub_td2",
+            "td_h5",
+            "unsqueezed_td",
+        ):
+            return
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            with td.flatten(0, -1, inplace=True):
+                pass
+        assert td.batch_size == (24,)
 
     def test_flatten_unflatten_bis(self, td_name, device):
         td = getattr(self, td_name)(device)
