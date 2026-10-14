@@ -4550,13 +4550,12 @@ def _get(self, key: NestedKey, *args, **kwargs):
 
     try:
         if len(key) > 1:
-            if not passed_default:
+            entry = _getattr(self, key[0], **kwargs)
+            if not passed_default and _is_tensor_collection(type(entry)):
                 # the entry's get returns its own default, and keeps raising
                 # for a key that runs through a leaf, as get does without one
-                return _getattr(self, key[0], **kwargs).get(key[1:], **kwargs)
-            return _getattr(self, key[0], **kwargs).get(
-                key[1:], default=default, **kwargs
-            )
+                return entry.get(key[1:], **kwargs)
+            return entry.get(key[1:], default=default, **kwargs)
         if kwargs:
             return _getattr(self, key[0], **kwargs)
         return getattr(self, key[0])

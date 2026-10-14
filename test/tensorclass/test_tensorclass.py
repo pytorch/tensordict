@@ -853,6 +853,15 @@ class TestTensorClass:
         assert data.get(("td", "missing"), "else") == "else"
         assert data.get(("td", "missing")) is None
 
+        # a field that is not a tensor collection gets the default passed on,
+        # as before #2678 (dict.get takes no keyword arguments)
+        @tensorclass
+        class Meta:
+            meta: dict
+
+        with pytest.raises(TypeError, match="keyword arguments"):
+            Meta(meta={"k": 1}).get(("meta", "k"))
+
         data = data.expand(10)
         assert data.get_at("a", 0) is not None
         assert data.get_at("b", 0) is None
