@@ -16,6 +16,7 @@ from tensordict._pytree import _register_td_node
 from tensordict._td import _StateFromSource, TensorDict
 from tensordict.base import (
     _is_tensor_collection,
+    _PACKAGE_DIR,
     _register_tensor_class,
     NO_DEFAULT,
     TensorDictBase,
@@ -26,6 +27,7 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
 )
+from torch.compiler import is_compiling
 
 try:
     # Python 3.11+ (PEP 681)
@@ -187,6 +189,31 @@ def _collect_fields(
     return frozenset(expected), frozenset(required), frozenset(optional), defaults
 
 
+def _warn_missing_required(cls: type, td: TensorDict, call: str, opt_out: str) -> None:
+    """Warns if ``td``, the backend of a new ``cls`` built by ``call``, lacks a required field.
+
+    ``call`` names the call, with ``{}`` for the class name.
+    """
+    # the backing dict: a keys() view costs about 2 us more per call
+    missing = cls.__required_keys__.difference(td._tensordict)
+    # Dynamo cannot trace warnings.warn: a compiled call stays silent.
+    if not missing or is_compiling():
+        return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"{call.format(cls.__name__)} returns an instance of {cls.__name__} that "
+        f"misses the required field(s) {', '.join(sorted(missing))}. Starting "
+        "with TensorDict 0.17, the default will change to raising the TypeError "
+        f"that the constructor raises. Pass these fields, or {opt_out} to keep "
+        "the instance without them.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 def _make_init(cls: type) -> Callable:
     """Generate an __init__ for a TypedTensorDict subclass.
 
@@ -216,6 +243,12 @@ def _make_init(cls: type) -> Callable:
                 names=names,
                 non_blocking=non_blocking,
                 lock=lock,
+            )
+            _warn_missing_required(
+                cls,
+                self._source,
+                "{}(dict)",
+                "use from_dict(..., check=False)",
             )
             return
         missing = required_keys - kwargs.keys()
@@ -851,7 +884,34 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         device=None,
         batch_dims=None,
         names=None,
+        check: bool = True,
     ):
+        """Builds an instance of the class from a dictionary of its fields.
+
+        Keys of ``input_dict`` that the class does not declare are kept, as
+        :meth:`from_tensordict` and :meth:`~tensordict.TensorDictBase.set`
+        keep them.
+
+        Args:
+            input_dict (dict): the values of the fields. Nested dictionaries
+                become :class:`~tensordict.TensorDict` instances.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): whether to infer the batch size.
+            batch_size (torch.Size, optional): the batch size.
+            device (torch.device, optional): the device.
+            batch_dims (int, optional): the number of batch dimensions to infer.
+            names (list of str, optional): the names of the batch dimensions.
+            check (bool): If ``True`` (default), warn with a
+                :class:`FutureWarning` when ``input_dict`` misses a required
+                field. Starting with TensorDict 0.17, the default will change
+                to raising the ``TypeError`` that the constructor raises. Set
+                it to ``False`` to build an instance without these fields;
+                reading one then raises ``AttributeError``.
+
+        Returns:
+            A new instance of the class.
+        """
         td = TensorDict.from_dict(
             input_dict,
             auto_batch_size=auto_batch_size,
@@ -860,6 +920,8 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             batch_dims=batch_dims,
             names=names,
         )
+        if check:
+            _warn_missing_required(cls, td, "{}.from_dict()", "pass check=False")
         return cls._wrap_td(td)
 
     def from_dict_instance(
@@ -872,6 +934,17 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         batch_dims=None,
         names=None,
     ):
+        """Builds an instance of the same class from a dictionary, keeping the types of the existing entries.
+
+        Unlike :meth:`from_dict`, it does not check the declared fields: the
+        result can miss required fields and hold undeclared keys. tensordict
+        calls it with the entries that a nested write changes, as in
+        ``outer[0:2] = {"inner": {"eta": value}}`` where ``outer["inner"]``
+        is a ``TypedTensorDict``.
+
+        The arguments are those of
+        :meth:`~tensordict.TensorDictBase.from_dict_instance`.
+        """
         result = self._source.from_dict_instance(
             input_dict,
             auto_batch_size=auto_batch_size,

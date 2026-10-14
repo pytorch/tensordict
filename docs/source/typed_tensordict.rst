@@ -274,6 +274,17 @@ The declared fields describe a valid instance. They do not change what the
 ``AttributeError``. If the key set must not change, use
 ``TypedTensorDict["frozen"]``.
 
+Only the keyword constructor rejects keys that the class does not declare.
+``from_dict``, the positional form ``PredictorState({...}, batch_size=...)``,
+``from_tensordict``, ``set``, and ``__setitem__`` keep them. ``from_dict`` and
+the positional form warn with a ``FutureWarning`` when a required field is
+missing, and return an instance without it. Starting with TensorDict 0.17, the
+default will change to raising the ``TypeError`` that the keyword constructor
+raises. ``from_dict(..., check=False)`` builds the instance without the
+warning. ``from_dict_instance`` checks no fields, because tensordict calls it
+with the entries that a nested write such as
+``outer[0:2] = {"inner": {"eta": value}}`` changes.
+
 Type checking
 -------------
 
@@ -297,8 +308,8 @@ Performance
 tensordict reads the fields and makes the attribute accessors once, when a
 ``TypedTensorDict`` subclass is defined. A plain ``TensorDict`` runs no code
 of ``TypedTensorDict``. On a typed instance, attribute access goes through a
-property, and the required keys are checked only at construction and in
-``from_tensordict(check=True)``.
+property, and the required keys are checked only at construction, in
+``from_tensordict(check=True)``, and in ``from_dict(check=True)``.
 ``benchmarks/tensorclass/test_tensorclass_speed.py`` measures construction and
 access, and ``benchmarks/compile/compile_td_test.py`` measures attribute
 access under ``torch.compile``.
