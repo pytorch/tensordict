@@ -310,6 +310,57 @@ def test_where_non_tensor_data():
     assert result.get("s").tolist() == ["a", "b", "a", "b"]
 
 
+@pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+@pytest.mark.parametrize("value", [3, [1, 2]], ids=type)
+@pytest.mark.parametrize("setitem", [False, True], ids=["set_at_", "setitem"])
+def test_set_at_cast_non_tensor(setitem, value, lazy):
+    # The FutureWarning for a value cast to a tensor in a non-tensor entry
+    # (gh-2522) is skipped under compile, which traces no warnings.warn
+    def fn(td):
+        if setitem:
+            td[:2] = value
+        else:
+            td.set_at_("a", value, slice(0, 2))
+        return td["b"] + 1
+
+    td = TensorDict(
+        a=NonTensorData("s", batch_size=[3]), b=torch.zeros(3), batch_size=[3]
+    )
+    if lazy:
+        td = lazy_stack(td.unbind(0))
+    torch.compile(fn, fullgraph=True, backend="eager")(td)
+    assert torch.equal(td[1]["a"], torch.as_tensor(value))
+
+
+@pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+@pytest.mark.parametrize("non_tensor", [False, True], ids=["tensors", "non-tensor"])
+@pytest.mark.parametrize("value", ["number", "tensordict"])
+def test_setitem_compiles(value, non_tensor, lazy):
+    # td[index] = value decides from Python types whether to warn of a cast
+    # in a non-tensor entry (gh-2522), which adds no graph break
+    def make(batch_size):
+        td = TensorDict(b=torch.zeros(batch_size), n={"e": torch.zeros(batch_size, 2)})
+        td.batch_size = [batch_size]
+        if non_tensor:
+            td["a"] = NonTensorData("s", batch_size=[batch_size])
+        return td
+
+    def fn(td, other):
+        td[:2] = 0.5 if value == "number" else other
+        return td["b"] + 1
+
+    td = make(3)
+    if lazy:
+        td = lazy_stack(td.unbind(0))
+    other = make(2)
+    other["b"] = torch.full((2,), 2.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        out = torch.compile(fn, fullgraph=True, backend="eager")(td, other)
+    expected = 1.5 if value == "number" else 3.0
+    assert out.tolist() == [expected, expected, 1.0]
+
+
 @pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )

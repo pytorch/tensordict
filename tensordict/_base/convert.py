@@ -114,6 +114,16 @@ def _holds_empty(value) -> bool:
     return not value or any(_holds_empty(val) for val in value.values())
 
 
+def _pytree_field(value) -> bool:
+    # a namedtuple field (or tuple element) that from_pytree converts so that
+    # to_pytree can rebuild it, and that from_any would convert to the same
+    # entries, without the _pytree_type ones
+    return (
+        (isinstance(value, dict) and not _dict_holds_sequence(value))
+        or _is_namedtuple(value)
+    ) and not _holds_empty(value)
+
+
 def _dict_to_namedtuple(dictionary: dict, dest_cls: type | None, root: bool = False):
     # the conversion of to_namedtuple(dest_cls=...), at a nested level unless root
     for key, value in dictionary.items():
@@ -528,6 +538,25 @@ class _Conversion:
             Note that this transformation is surjective: transforming back the tensordict to a pytree will not
             recover the original types.
 
+        .. note::
+            The list fields of a named tuple, and some of its dict and tuple
+            fields, are converted with :meth:`~.from_any` and do not
+            round-trip through :meth:`~.to_pytree`:
+
+            - a list of numbers comes back as a tensor;
+            - a dict holding a str, list or tuple, and an empty dict or named
+              tuple (or a dict or named tuple holding one), come back as a
+              ``GenericDict`` named tuple;
+            - a tuple subclass, such as a ``torch.return_types`` result, and
+              a plain tuple holding anything but tensors, Python ints and
+              floats, dicts and named tuples (such as a str, a list or a NumPy
+              number), or holding one of the dicts or named tuples above, make
+              :meth:`~.to_pytree` raise a ``ValueError``, and an empty tuple
+              comes back as an empty ``GenericDict``.
+
+            The other dict, named tuple and plain tuple fields come back with
+            their own type.
+
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict
@@ -571,17 +600,23 @@ class _Conversion:
 
         result = None
         if _is_namedtuple(pytree):
-            # Dict and namedtuple fields go through from_pytree, so that
+            # Dict, namedtuple and tuple fields go through from_pytree, so that
             # to_pytree can rebuild them. The other fields, the dicts that hold
-            # a list or tuple, the fields that hold an empty dict or namedtuple,
-            # and the fields that from_pytree does not take (such as a dict
-            # holding a str) go through from_any, as on main.
+            # a list or tuple, the tuples that hold a list, tuple or str, the
+            # fields that hold an empty dict, namedtuple or tuple, and the
+            # fields that from_pytree does not take (such as a dict holding a
+            # str) go through from_any, as on main.
             nested = {}
             for key, value in pytree._asdict().items():
-                if (
-                    (isinstance(value, dict) and not _dict_holds_sequence(value))
-                    or _is_namedtuple(value)
-                ) and not _holds_empty(value):
+                if _pytree_field(value) or (
+                    type(value) is tuple
+                    and value
+                    and all(
+                        isinstance(elt, (torch.Tensor, int, float))
+                        or _pytree_field(elt)
+                        for elt in value
+                    )
+                ):
                     try:
                         nested[key] = cls.from_pytree(value)
                     except NotImplementedError:
