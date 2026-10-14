@@ -52,7 +52,8 @@ The `non_blocking` argument controls how the leaves are copied:
 
 - `None` (the default): the leaves are copied with `non_blocking=True`.
 If the target device is not a CUDA device (for example, the CPU), `to()`
-then synchronizes once, after all the copies.
+then synchronizes once, after all the copies. If the target is the CPU,
+`to()` synchronizes only if a leaf comes from another device.
 Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), these copies are blocking.
 - `True`: the copies are non-blocking and `to()` does not synchronize.
 You must synchronize before you read the data.

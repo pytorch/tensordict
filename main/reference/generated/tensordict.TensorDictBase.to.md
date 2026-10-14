@@ -21,7 +21,8 @@ Keyword Arguments:
 If `None` (default), the leaves are copied with `non_blocking=True`
 and, when the target device is not a CUDA device (e.g. device-to-host
 copies), the tensordict synchronizes once after all the copies have been
-issued (under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), these copies are blocking instead).
+issued; for a CPU target, only if a leaf comes from another device.
+Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), these copies are blocking instead.
 If `True`, the copies are non-blocking and no synchronization
 is performed: the caller is responsible for synchronizing before reading
 the results. If `False`, the copies are blocking.
