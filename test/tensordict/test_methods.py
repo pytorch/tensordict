@@ -5711,6 +5711,45 @@ def test_add_sub_cuda_scalar_tensor_no_sync(op):
         torch.testing.assert_close(out.get(key), val, rtol=0, atol=0)
 
 
+@pytest.mark.parametrize("mode", [None, "cpu"])
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda x, t: x.sub(t, alpha=2),
+        lambda x, t: x.clone().sub_(t, alpha=2),
+        lambda x, t: x.sub(t, alpha=-0.5),
+    ],
+    ids=["sub-alpha", "sub_-alpha", "sub-float-alpha"],
+)
+def test_sub_tensor_alpha(op, mode):
+    # torch._foreach_sub has no overload for one tensor with alpha (#2709)
+    td = TensorDict(
+        a=torch.rand(3, 2),
+        nested=TensorDict(b=torch.rand(3, 2, dtype=torch.float64), batch_size=[3]),
+        batch_size=[3],
+    )
+    t = torch.tensor(0.75)
+    expected = td.apply(lambda x: op(x, t))
+    with torch.device(mode) if mode else contextlib.nullcontext():
+        out = op(td, t)
+    for key, val in expected.items(True, True):
+        assert out.get(key).dtype == val.dtype
+        torch.testing.assert_close(out.get(key), val, rtol=0, atol=0)
+
+
+def test_sub_tensor_alpha_int_leaves():
+    # An integer leaf gets the dtype that Tensor.sub gives it (#2709)
+    td = TensorDict(a=torch.arange(3), b=torch.ones(3))
+    t = torch.tensor(0.5)
+    out = td.sub(t, alpha=2)
+    assert out["a"].dtype == torch.arange(3).sub(t, alpha=2).dtype
+    torch.testing.assert_close(out["a"], torch.arange(3).sub(t, alpha=2))
+    torch.testing.assert_close(out["b"], torch.zeros(3))
+    # A bool alpha keeps raising, as torch._foreach_sub did
+    with pytest.raises(TypeError):
+        td.exclude("a").sub(t, alpha=True)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
 def test_add_cuda_scalar_tensor_other_leaves():
     # Integer and CPU leaves keep the result of torch._foreach_add(vals, t)
