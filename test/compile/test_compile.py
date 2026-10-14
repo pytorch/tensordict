@@ -939,6 +939,24 @@ class TestTD:
         assert result.names == expected.names
         assert result["nested", "b"].device == torch.device("meta")
 
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    def test_to_dtype_batch_size_locked_nested_lazy(self, mode, batch_size):
+        # #2374
+        def to_double(td):
+            return td.to(torch.float64, batch_size=batch_size)
+
+        td = TensorDict(
+            lazy=lazy_stack([TensorDict(x=torch.zeros(3)) for _ in range(2)]),
+            y=torch.zeros(2, 3),
+            batch_size=[2],
+        ).lock_()
+        to_double_c = torch.compile(to_double, fullgraph=True, mode=mode)
+        result = to_double_c(td)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result.is_locked
+        assert result["lazy", "x"].dtype == torch.float64
+        assert result["y"].dtype == torch.float64
+
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
         def to_cpu(td):
