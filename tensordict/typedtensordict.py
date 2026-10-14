@@ -1140,10 +1140,12 @@ _WRAP_DELEGATES = [
     "_view",
     "_transpose",
     "_permute",
+    "_repeat",
     "_repeat_interleave",
     "contiguous",
     "masked_fill",
     "masked_select",
+    "_index_tensordict",
 ]
 
 # In-place: delegate to _source, return self

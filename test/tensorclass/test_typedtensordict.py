@@ -1278,6 +1278,7 @@ class TestBackends:
             lambda s: s.chunk(2, 0),
             lambda s: (s.where(_BACKEND_MASK, 0.0),),
             lambda s: (s.masked_select(_BACKEND_MASK[:, 0]),),
+            lambda s: (s.repeat(2, 1),),
         ],
         ids=[
             "expand",
@@ -1287,6 +1288,7 @@ class TestBackends:
             "chunk",
             "where",
             "masked_select",
+            "repeat",
         ],
     )
     def test_shape_ops_keep_source_class(self, source, op):
