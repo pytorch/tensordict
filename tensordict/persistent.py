@@ -1071,6 +1071,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    _leaves_built_on_read = True
+    _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
     _fills_without_reading = True
     # _change_batch_size raises, so an in-place shape method that changes the
@@ -1756,6 +1758,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             self._batch_size = _batch_size
             raise RuntimeError(str(err)) from err
 
+    # Override: a nested name that clashes with the new names warns and is
+    # dropped until 0.17, where it raises as on TensorDict.
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
@@ -1780,14 +1784,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                         None if n in clash else n for n in td_names[self.ndim :]
                     ]
                 item.rename_(*td_names)
-
-    # Override: materializes with one read of the file.
-    def contiguous(self, *, canonical: bool = False):
-        """Materializes a PersistentTensorDict on a regular TensorDict."""
-        out = self.to_tensordict()
-        if canonical:
-            out = out.contiguous(canonical=True)
-        return out
 
     @_lock_blocked
     def del_(self, key):
@@ -1862,10 +1858,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 return NonTensorStack
             return NonTensorData
         return torch.Tensor
-
-    # Override: entries live in a file.
-    def is_contiguous(self):
-        return False
 
     # Override: the file reads give copies, so the fill is written to the
     # arrays directly, without reading them.
@@ -2003,12 +1995,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                     executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
                 )
         return dest
-
-    # Override: file-backed entries cannot be pinned.
-    def pin_memory(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
-        )
 
     def _popped_value(self, value):
         # Override: a zarr group reads from the store: copy it before deleting it

@@ -6912,6 +6912,41 @@ class TestTensorOnly:
         assert isinstance(tc.data["nested"], TensorDict)
         assert tc.data["nested", "tensor"] == 1
 
+    def test_tensor_only_setattr_mapping(self):
+        class TensorOnlyMapping(TensorClass["tensor_only"]):
+            data: TensorDict
+            meta: NonTensorData
+            x: torch.Tensor
+
+        x = torch.zeros(2)
+        tc = TensorOnlyMapping(data={}, meta="a", x=x, batch_size=[2])
+        tc.data = UserDict({"nested": UserDict({"tensor": x})})
+        assert isinstance(tc.data["nested"], TensorDict)
+        assert tc.data["nested", "tensor"] is x
+        assert tc.data.batch_size == (2,)
+        tc.data = {}
+        assert tc.data.is_empty() and tc.data.batch_size == (2,)
+        # A Mapping in a field that is not a TensorDict is not normalized
+        meta = UserDict({"metadata": "value"})
+        tc.meta = meta
+        assert tc.meta.data is meta
+        y = torch.ones(2)
+        tc.x = y
+        assert tc.x is y
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            tc.x = torch.ones(3)
+        assert tc.x is y
+
+    def test_non_tensor_data_set(self):
+        data = NonTensorData("a", batch_size=[2])
+        data.data = NonTensorData("b", batch_size=[2])
+        assert data.data == "b"
+        with pytest.raises(KeyError, match="only 'data' keys are supported"):
+            data._set_str("other", "c", inplace=False, validated=False)
+        with pytest.raises(KeyError, match="only 'data' keys are supported"):
+            data._set_at_str("other", "c", 0, validated=False)
+        assert data.data == "b"
+
     @pytest.mark.parametrize("set_method", ["constructor", "attribute", "set"])
     def test_tensor_only_preserves_tensordict(self, set_method):
         class TensorOnlyMapping(TensorClass["tensor_only"]):

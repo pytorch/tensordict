@@ -29,6 +29,7 @@ import tensordict.base as tensordict_base
 import torch
 from tensordict import (
     is_memmap_archive,
+    is_tensorclass,
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
@@ -38,6 +39,7 @@ from tensordict import (
     refresh_archive_checksums,
     TensorClass,
     TensorDict,
+    TypedTensorDict,
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
@@ -441,8 +443,16 @@ class TestTensorDicts(TestTensorDictsBase):
         except Exception as err:
             error = err
         if error is not None:
+            # a lazy tensordict cannot change its batch size: auto_batch_size_
+            # finds the batch size that it has and returns, and raises for a
+            # smaller one
+            assert isinstance(
+                td, (LazyStackedTensorDict, _SubTensorDict, _CustomOpTensorDict)
+            )
+            td.auto_batch_size_()
+            assert td.batch_size == batch_size
             with pytest.raises(type(error)):
-                td.auto_batch_size_()
+                td.auto_batch_size_(1)
             return
         td.auto_batch_size_()
         assert td.batch_size[: len(batch_size)] == batch_size
@@ -775,6 +785,24 @@ class TestTensorDicts(TestTensorDictsBase):
             assert tdc.is_empty()
             assert tdc is td
 
+    def test_clear_device_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        leaf_devices = [leaf.device for leaf in td.values(True, True)]
+        assert td.clear_device_() is td
+        if not isinstance(td, PersistentTensorDict):
+            # the leaves are not moved (a file reads its leaves onto the device
+            # of the tensordict, so without one they come back as stored)
+            assert [leaf.device for leaf in td.values(True, True)] == leaf_devices
+        if isinstance(td, (_SubTensorDict, _CustomOpTensorDict, TypedTensorDict)):
+            # a view reports the device of the tensordict it reads, which
+            # clear_device_ leaves alone
+            assert td.device == torch.device(device)
+            return
+        assert td.device is None
+        for value in td.values(True):
+            if is_tensor_collection(value):
+                assert value.device is None
+
     def test_clone_td(self, td_name, device, tmp_path):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -801,6 +829,37 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.clone(recurse=False).get("a") is not td.get("a")
         else:
             assert td.clone(recurse=False).get("a") is td.get("a")
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("named", [False, True])
+    def test_contiguous_result_state(self, td_name, device, locked, named):
+        td = getattr(self, td_name)(device)
+        if (
+            named
+            and td_name != "td_with_unbatched"
+            and not isinstance(td, _CustomOpTensorDict)
+        ):
+            # an UnbatchedTensor has no batch dims to name, and the names of a
+            # legacy lazy view cannot be set
+            if isinstance(td, _SubTensorDict):
+                td._source.names = [f"n{i}" for i in range(td._source.ndim)]
+            else:
+                td.names = ["n0", "n1", "n2", "n3"]
+        if locked:
+            (td._source if isinstance(td, _SubTensorDict) else td).lock_()
+        result = td.contiguous()
+        if isinstance(td, TypedTensorDict):
+            assert type(result) is type(td)
+        else:
+            assert type(result) is TensorDict
+        assert result.batch_size == td.batch_size
+        assert result.names == td.names
+        assert (result == td).all()
+        for key, value in td.items():
+            if is_tensorclass(value):
+                assert type(result.get(key)) is type(value)
+        # only the legacy lazy views keep the lock
+        assert result.is_locked is (locked and isinstance(td, _CustomOpTensorDict))
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0 and npu_device_count == 0,
@@ -1463,6 +1522,19 @@ class TestTensorDicts(TestTensorDictsBase):
                 else:
                     assert td.view(*new_shape) is td
                     assert td.view(-1).view(*new_shape) is td
+
+    def test_is_contiguous_per_type(self, td_name, device, monkeypatch):
+        td = getattr(self, td_name)(device)
+        if isinstance(td, (LazyStackedTensorDict, PersistentTensorDict)):
+            # each read builds a new tensor: False, without reading the leaves
+            def no_read(*args, **kwargs):
+                raise AssertionError("is_contiguous() read a leaf")
+
+            monkeypatch.setattr(type(td), "_get_str", no_read)
+            monkeypatch.setattr(type(td), "_get_tuple", no_read)
+            assert td.is_contiguous() is False
+            return
+        assert td.is_contiguous() is all(value.is_contiguous() for value in td.values())
 
     def test_isfinite(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -2735,6 +2807,17 @@ class TestTensorDicts(TestTensorDictsBase):
         _device_cast = torch.device(device_cast)
         assert td_device.device == _device_cast
 
+    def test_pin_memory_unsupported(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if not isinstance(td, (_SubTensorDict, PersistentTensorDict)):
+            pytest.skip("pin_memory pins the leaves")
+        with pytest.raises(
+            RuntimeError,
+            match=rf"^Cannot pin memory of a {type(td).__name__}\. Call to_tensordict\(\) "
+            r"before making this call\.$",
+        ):
+            td.pin_memory()
+
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert "a" in td.keys()
@@ -3545,6 +3628,39 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_shape(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert td.shape == td.batch_size
+
+    def test_share_memory_per_type(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if isinstance(td, _SubTensorDict):
+            with pytest.raises(
+                RuntimeError,
+                match="Casting a sub-tensordict values to shared memory cannot be done",
+            ):
+                td.share_memory_()
+            return
+        if isinstance(td, PersistentTensorDict):
+            with pytest.raises(
+                NotImplementedError,
+                match="Cannot call share_memory_ on a PersistentTensorDict",
+            ):
+                td.share_memory_()
+            return
+        if td.is_memmap():
+            with pytest.raises(RuntimeError, match="mutually exclusive"):
+                td.share_memory_()
+            return
+        assert td.share_memory_() is td
+        assert td.is_shared()
+        if (
+            (type(td) is TensorDict or isinstance(td, TypedTensorDict))
+            and td.device is not None
+            and td.device.type == "cuda"
+        ):
+            # CUDA tensors are shared already: TensorDict returns without
+            # locking, and so does a TypedTensorDict, through its TensorDict
+            assert not td.is_locked
+        else:
+            assert td.is_locked is not isinstance(td, TensorDictParams)
 
     @pytest.mark.parametrize("dim", [0, -1, 3])
     def test_softmax(self, td_name, device, dim):

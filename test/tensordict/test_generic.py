@@ -46,7 +46,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
-from tensordict._td import _TensorDictKeysView, is_tensor_collection
+from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
@@ -72,6 +72,7 @@ from torch.utils._pytree import tree_leaves
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
     from pytorch.tensordict.test._utils_internal import (
+        _TypedTD,
         decompose,
         DummyPicklableClass,
         get_available_devices,
@@ -82,6 +83,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
 else:
     IS_FB = False
     from _utils_internal import (
+        _TypedTD,
         decompose,
         DummyPicklableClass,
         get_available_devices,
@@ -169,6 +171,11 @@ class TestGeneric:
         td = TensorDict(
             {"a": torch.randn(3, 4, 5, 6), "b": torch.randn(3, 4, 5)}, batch_size=[3, 4]
         )
+        # a generator, read once
+        td.batch_size = (size for size in [3])
+        assert td.batch_size == torch.Size([3])
+        td.batch_size = [3, 4]
+
         # smoke-test
         td.batch_size = torch.Size([3])
 
@@ -236,8 +243,10 @@ class TestGeneric:
                 "Modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
             ),
         ):
-            subtd.batch_size = [3, 2]
-        subtd.to_tensordict(retain_none=True).batch_size = [3, 2]
+            subtd.batch_size = [3]
+        # an unchanged batch size returns, also as a list
+        subtd.batch_size = [3, 2]
+        subtd.to_tensordict(retain_none=True).batch_size = [3]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
         with legacy_lazy_mode():
@@ -6015,6 +6024,39 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="contiguous"):
             lst.contiguous(inplace=True)
 
+    def test_contiguous_inplace_locked(self):
+        # A locked tensordict whose leaves are contiguous keeps them; one with a
+        # leaf to rebind raises
+        td = TensorDict(
+            {"a": torch.zeros(4, 3), "nested": {"b": torch.zeros(4, 3)}},
+            batch_size=[4, 3],
+        ).lock_()
+        a = td["a"]
+        assert td.contiguous(inplace=True) is td
+        assert td.contiguous(canonical=True, inplace=True) is td
+        assert td["a"] is a
+        # an inplace op that returns the same leaves writes nothing either
+        assert td.flatten(0, 0, inplace=True) is td
+        assert td["a"] is a
+        memmap_td = TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3]).memmap_()
+        assert memmap_td.flatten(0, 0, inplace=True) is memmap_td
+        td = TensorDict(a=torch.zeros(3, 4).T, batch_size=[4]).lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            td.contiguous(inplace=True)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_contiguous_inplace_persistent(self, tmp_path):
+        h5 = PersistentTensorDict.from_dict(
+            TensorDict(a=torch.zeros(3, 2), batch_size=[3]),
+            filename=tmp_path / "file.h5",
+        )
+        with pytest.raises(
+            NotImplementedError,
+            match=r"contiguous\(inplace=True\) is not supported on PersistentTensorDict",
+        ):
+            h5.contiguous(inplace=True)
+        h5.close()
+
     def test_pad_sequence_nontensor(self):
         d1 = TensorDict({"a": torch.tensor([1, 1]), "b": "asd"})
         d2 = TensorDict({"a": torch.tensor([2]), "b": "efg"})
@@ -6760,6 +6802,147 @@ class TestGeneric:
         assert td["agents"].names[-1] == "other"
         td["agents"] = torch.cat((td["agents"], td["agents"]), dim=2)
         assert td["agents"].names[-1] == "other"
+
+    def test_batch_dims_setter_raises(self):
+        td = TensorDict(batch_size=[3, 2])
+        lazy = lazy_stack([td, td.clone()])
+        for value in (td, lazy):
+            # Python 3.10 says "can't set attribute", later versions "has no setter"
+            with pytest.raises(
+                AttributeError, match="has no setter|can't set attribute"
+            ):
+                value.batch_dims = 1
+        assert td.batch_dims == 2
+
+    def test_subtd_lock_unlock_raise(self):
+        # A _SubTensorDict has the lock of its source: lock_ and unlock_ raise
+        # when they would change it, and return the view otherwise.
+        source = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2])
+        sub = _SubTensorDict(source, (slice(0, 2),))
+        with pytest.raises(
+            RuntimeError,
+            match="^Cannot lock a _SubTensorDict. Lock the parent tensordict instead.$",
+        ):
+            sub.lock_()
+        assert not sub.is_locked
+        assert not source.is_locked
+        assert sub.unlock_() is sub
+        source.lock_()
+        assert sub.is_locked
+        assert sub.lock_() is sub
+        with pytest.raises(
+            RuntimeError,
+            match="^Cannot unlock a _SubTensorDict. Unlock the parent tensordict "
+            "instead.$",
+        ):
+            sub.unlock_()
+        with pytest.raises(RuntimeError, match="Unlock the parent tensordict"):
+            sub.is_locked = False
+        assert sub.is_locked
+        assert source.is_locked
+        source.unlock_()
+        assert not sub.is_locked
+
+    def test_unlock_holding_subtd(self):
+        # unlock_ of a tensordict that holds a _SubTensorDict leaves the view,
+        # whose lock is its source's, alone
+        source = TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3])
+        td = TensorDict(batch_size=[2])
+        td.set("s", _SubTensorDict(source, (slice(0, 2),)))
+        for locked in (False, True):
+            if locked:
+                source.lock_()
+            assert td.unlock_() is td
+            assert not td.is_locked
+            assert td.get("s").is_locked is locked
+            with pytest.raises(RuntimeError, match="Cannot lock a _SubTensorDict"):
+                td.lock_()
+
+    def test_typed_unlock_in_locked_graph_raises(self):
+        source = TensorDict(
+            a=torch.zeros(3, 5),
+            b=torch.zeros(3, 10),
+            c=torch.zeros(3, 3, dtype=torch.long),
+            batch_size=[3],
+        )
+        typed = _TypedTD.from_tensordict(source)
+        # lock_ and unlock_ reach the source
+        assert typed.lock_() is typed
+        assert source.is_locked
+        assert typed.unlock_() is typed
+        assert not source.is_locked
+        parent = TensorDict(s=source, batch_size=[3]).lock_()
+        assert parent.get("s") is source
+        assert typed.is_locked
+        with pytest.raises(RuntimeError, match="part of a locked graph"):
+            typed.unlock_()
+        assert source.is_locked
+        assert typed.is_locked
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_view_state_mirrors_source(self, tmp_path):
+        # _SubTensorDict and TypedTensorDict report the state of their source
+        data = TensorDict(
+            a=torch.zeros(3, 5),
+            b=torch.zeros(3, 10),
+            c=torch.zeros(3, 3, dtype=torch.long),
+            batch_size=[3],
+            device="cpu",
+        )
+        PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5").close()
+        source = PersistentTensorDict(
+            filename=tmp_path / "file.h5", mode="r", batch_size=[3], device="cpu"
+        )
+        source.names = ["n"]
+        views = [
+            _SubTensorDict(source, (slice(0, 2),)),
+            _TypedTD.from_tensordict(source),
+        ]
+        for view in views:
+            assert view.device == torch.device("cpu")
+            assert view._has_names()
+            assert view._storage_is_read_only()
+            assert not view.is_locked
+            assert not view._is_shared
+            assert not view._is_memmap
+            assert not view._has_non_tensor
+            with pytest.raises(RuntimeError, match="device cannot be set"):
+                view.device = "cpu"
+        source.lock_()
+        assert all(view.is_locked for view in views)
+        source.unlock_()
+        assert not any(view.is_locked for view in views)
+        source.close()
+
+        source = data.clone().share_memory_()
+        source.unlock_()
+        source._is_shared = True
+        source.set_non_tensor("s", "a string")
+        views = [
+            _SubTensorDict(source, (slice(0, 2),)),
+            _TypedTD.from_tensordict(source),
+        ]
+        for view in views:
+            assert view._is_shared
+            assert not view._is_memmap
+            assert view._has_non_tensor
+            assert not view._storage_is_read_only()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_persistent_names_reach_cached_nested(self, tmp_path):
+        data = TensorDict(
+            a=torch.zeros(3, 2),
+            nested=TensorDict(x=torch.zeros(3, 2, 4), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        h5 = PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5")
+        nested = h5.get("nested")
+        h5.names = ["n"]
+        assert nested.names == ["n", None]
+        assert h5.get("nested").names == ["n", None]
+        h5.rename_(None)
+        assert nested.names == [None, None]
+        h5.close()
 
     def test_rename_key_nested(self):
         td = TensorDict(a={"b": {"c": 0}})
@@ -9552,6 +9735,38 @@ class TestGeneric:
         td.set("x", value)
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
+
+    def test_eager_set_validation(self):
+        # Only exact tensors that match the batch size and device are stored
+        # without validation; every other value is validated as before.
+        value = torch.zeros(2, 3)
+        for td in (
+            TensorDict(batch_size=[2]),
+            TensorDict(batch_size=[2], device="cpu"),
+            TensorDict({"x": value}, batch_size=[2]),
+        ):
+            td.set("x", value)
+            param = nn.Parameter(value.clone())
+            td.set("p", param)
+            nested = torch.nested.nested_tensor([torch.zeros(3), torch.zeros(4)])
+            td.set("n", nested)
+            assert td["x"] is value and td["p"] is param and td["n"] is nested
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                td.set("bad", torch.zeros(3))
+            assert "bad" not in td.keys()
+            td.set("s", "abc")
+            assert td["s"] == "abc" and is_non_tensor(td.get("s"))
+            # a tensordict value gives its leading dim names to its parent
+            sub = TensorDict({"a": value}, [2, 3], names=["a", "b"])
+            td.set("sub", sub)
+            assert td["sub"].batch_size == (2, 3) and td.names == ["a"]
+            assert td["sub", "a"] is value
+        meta = TensorDict(batch_size=[2], device="meta")
+        meta.set("x", value)
+        assert meta["x"].device.type == "meta"
+        batch_free = TensorDict()
+        batch_free.set("x", value)
+        assert batch_free["x"] is value
 
     @pytest.mark.parametrize("operand", [None, "abc"])
     def test_comparison_unsupported_operand(self, operand):

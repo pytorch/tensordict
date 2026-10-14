@@ -747,6 +747,7 @@ class LazyStackedTensorDict(TensorDictBase):
     _empty_stack_names = None
     _safe = False
     _lazy = True
+    _leaves_built_on_read = True
     _inplace_shape_ops_unsupported = True
     _flatten_lenient = True
     _get_ignores_kwargs = False
@@ -953,15 +954,17 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     # These attributes should never be set
-    # Override: the flag holds when it holds for every member.
+    # Override: the flag holds when the stack has members and it holds for
+    # every member.
     @property
     def _is_shared(self):
-        return all(td._is_shared for td in self.tensordicts)
+        return bool(self.tensordicts) and all(td._is_shared for td in self.tensordicts)
 
-    # Override: the flag holds when it holds for every member.
+    # Override: the flag holds when the stack has members and it holds for
+    # every member.
     @property
     def _is_memmap(self):
-        return all(td._is_memmap for td in self.tensordicts)
+        return bool(self.tensordicts) and all(td._is_memmap for td in self.tensordicts)
 
     @property
     @_cache_while_locked  # noqa: B019
@@ -1215,11 +1218,6 @@ class LazyStackedTensorDict(TensorDictBase):
         for t in self.tensordicts:
             t.device = value
 
-    def clear_device_(self) -> Self:
-        for td in self.tensordicts:
-            td.clear_device_()
-        return self
-
     def _set_device(self, device: torch.device) -> Self:
         # The device property reads the members, or _device if there are none.
         self._device = device
@@ -1228,7 +1226,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     # Override: the names come from the members and the stack dim.
-    @property
+    @TensorDictBase.names.getter
     @_cache_while_locked  # noqa
     def names(self):
         if not self.tensordicts:
@@ -1245,14 +1243,10 @@ class LazyStackedTensorDict(TensorDictBase):
         names.insert(self.stack_dim, self._td_dim_name)
         return names
 
-    @names.setter
-    @_erase_cache_first  # a nested lazy stacked tensordict is not apparent to the root
-    def names(self, value):
-        self._set_names(value)
-        self._update_consolidated_metadata()
-
     # Override: the names are stored on the members and the stack dim.
     def _set_names(self, names: Sequence[str] | None):
+        # the names getter caches its result while the stack is locked
+        self._erase_cache()
         if names is None:
             for td in self.tensordicts:
                 td.names = None
@@ -1294,6 +1288,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: the names are stored on the members and the stack dim.
     def _erase_names(self):
+        self._erase_cache()
         self._td_dim_name = None
         self._empty_stack_names = None
         for td in self.tensordicts:
@@ -1339,7 +1334,7 @@ class LazyStackedTensorDict(TensorDictBase):
         are_shared = [td.is_shared() for td in self.tensordicts]
         are_shared = [value for value in are_shared if value is not None]
         if not len(are_shared):
-            return None
+            return False
         if any(are_shared) and not all(are_shared):
             raise RuntimeError(
                 f"tensordicts shared status mismatch, got {sum(are_shared)} "
@@ -1357,7 +1352,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"memmap tensordicts and "
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
-        return are_memmap[0]
+        return bool(are_memmap) and are_memmap[0]
 
     def _reset_batch_size(
         self,
@@ -2708,78 +2703,6 @@ class LazyStackedTensorDict(TensorDictBase):
             return default
         return torch.nested.nested_tensor(tensors, layout=layout)
 
-    # Override: a lazy stack is never one contiguous block.
-    def is_contiguous(self) -> bool:
-        return False
-
-    # Override: returns a dense TensorDict, locked like the stack.
-    def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
-        """Returns a dense :class:`~tensordict.TensorDict` copy of the lazy stack.
-
-        The result owns its data and is locked if the stack is locked.
-
-        Args:
-            canonical (bool, optional): if ``True``, every dense tensor leaf
-                whose strides are not the C-row-major strides of its shape is
-                copied into a new contiguous tensor, even if
-                :meth:`torch.Tensor.is_contiguous` returns ``True`` (e.g.
-                because of size-1 dimensions). Defaults to ``False``.
-            inplace (bool, optional): not supported on a lazy stack, which
-                cannot become a TensorDict in place. ``True`` raises a
-                ``NotImplementedError``. Defaults to ``False``.
-
-        .. note::
-            If the stacked tensordicts have no names, the result has no
-            names either, even when the stack dimension has a name (from
-            ``stack_dim_name`` or the ``names`` setter). :meth:`densify` and
-            :meth:`clone` keep that name. To keep it here, name the
-            dimension again with :meth:`refine_names`.
-
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict, lazy_stack
-            >>> stack = lazy_stack(
-            ...     [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)],
-            ...     stack_dim_name="s",
-            ... )
-            >>> stack.names, stack.contiguous().names
-            (['s', None], [None, None])
-            >>> stack.contiguous().refine_names("s", ...).names
-            ['s', None]
-            >>> stack.densify().names
-            ['s', None]
-
-        """
-        if inplace:
-            raise NotImplementedError(
-                "contiguous(inplace=True) is not supported on "
-                "LazyStackedTensorDict because the operation materializes the "
-                "stack into a plain TensorDict, which would change the "
-                "object's type. Call .to_tensordict() first or use "
-                "inplace=False."
-            )
-        if canonical:
-            source = {
-                key: (
-                    value.contiguous(canonical=True)
-                    if is_tensor_collection(value)
-                    else _canonicalize_tensor(value.contiguous())
-                )
-                for key, value in self.items()
-            }
-        else:
-            source = {key: value.contiguous() for key, value in self.items()}
-        batch_size = self.batch_size
-        device = self.device
-        out = TensorDict._new_unsafe(
-            source=source,
-            batch_size=batch_size,
-            device=device,
-            names=self.names if self._has_names() else None,
-            lock=self.is_locked,
-        )
-        return out
-
     # Override: stack the entries of the members, padding the exclusive keys.
     def _densify(self, layout: torch.layout) -> TensorDictBase:
         try:
@@ -2921,15 +2844,6 @@ class LazyStackedTensorDict(TensorDictBase):
         if kwargs.get("batch_size") is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
         return super().to(*args, **kwargs)
-
-    def _check_new_batch_size(self, new_size: torch.Size) -> None:
-        if len(new_size) <= self.stack_dim:
-            raise RuntimeError(
-                "Changing the batch_size of a LazyStackedTensorDicts can only "
-                "be done with sizes that are at least as long as the "
-                "stacking dimension."
-            )
-        super()._check_new_batch_size(new_size)
 
     def keys(
         self,
@@ -3946,11 +3860,10 @@ class LazyStackedTensorDict(TensorDictBase):
         return super().pop(key, default)
 
     # Override: shares each member.
-    def share_memory_(self) -> Self:
+    def _share_memory_(self) -> None:
         for td in self.tensordicts:
             td.share_memory_()
         self.lock_()
-        return self
 
     # Override: detaches each member.
     def _detach_(self) -> None:
@@ -5019,10 +4932,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for tds in _zip_strict(*tds)
         )
-
-    lock_ = TensorDictBase.lock_
-
-    unlock_ = TensorDictBase.unlock_
 
 
 class _CustomOpTensorDict(TensorDictBase):
