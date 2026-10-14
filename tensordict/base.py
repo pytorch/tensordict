@@ -1541,8 +1541,9 @@ def _stored_value(source, dest):
 def _update_at_aliases(update_at_: Callable) -> Callable:
     """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
 
-    ``LazyStackedTensorDict`` and ``NonTensorStack`` called the index
-    ``index``. ``_SubTensorDict`` called the input ``input_dict``, and took
+    ``LazyStackedTensorDict``, ``NonTensorStack``, ``NonTensorData`` and the
+    tensorclass ``update_at_`` called the index ``index``. ``_SubTensorDict``
+    called the input ``input_dict``, and took
     ``discard_idx_attr=True`` to write into its source at an index of the
     source: classes with a ``_update_source_at_`` method still take it.
     Each of these names warns, and goes in 0.17.
