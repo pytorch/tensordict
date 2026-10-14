@@ -3224,7 +3224,8 @@ class TestLazyStackedTensorDict:
         lazy = lazy_stack(tds)
         key, val = lazy.popitem()
         assert key == "b"
-        assert type(val) is TensorDict
+        # popitem pops as pop does: a sub-tensordict is a lazy stack
+        assert type(val) is LazyStackedTensorDict
         assert (val["c"] == torch.tensor([[0.0], [1.0]])).all()
         key, val = lazy.popitem()
         assert key == "a"
@@ -3240,51 +3241,57 @@ class TestLazyStackedTensorDict:
         assert (lazy.pop(("n", "x"), None) == 1).all()
         assert list(lazy.keys(True)) == ["a", "n"]
 
-    @pytest.mark.parametrize("failure", ["ragged", "missing"])
-    def test_popitem_error_keeps_entries(self, failure):
-        # popitem takes "a" from the first member; the error must leave every
-        # member with the same entries, in the same order.
+    def test_popitem_error_keeps_entries(self):
+        # popitem pops the last key of keys(), "a"; the error of the ragged
+        # stack must leave every member with the same entries, in the same
+        # order.
         tds = [
             TensorDict(b=torch.ones(1), a=torch.zeros(2)),
             TensorDict(a=torch.zeros(2), b=torch.ones(1)),
-            TensorDict(b=torch.ones(1), a=torch.zeros(2)),
+            TensorDict(b=torch.ones(1), a=torch.zeros(3)),
         ]
-        if failure == "ragged":
-            tds[2]["a"] = torch.zeros(3)
-            match = "stack expects each tensor to be equal size"
-        else:
-            del tds[2]["a"]
-            match = "Could not find key a in all tensordicts"
         entries = [list(td.items()) for td in tds]
-        with pytest.raises(RuntimeError, match=match):
+        with pytest.raises(RuntimeError, match="Failed to stack tensors"):
             lazy_stack(tds).popitem()
         for td, td_entries in zip(tds, entries):
             assert list(td.keys()) == [key for key, _ in td_entries]
             assert all(td[key] is value for key, value in td_entries)
 
+    def test_popitem_key_missing_from_a_member(self):
+        # popitem pops the last key that every member has
+        tds = [
+            TensorDict(b=torch.ones(1), a=torch.zeros(2)),
+            TensorDict(a=torch.zeros(2), b=torch.ones(1)),
+            TensorDict(b=torch.ones(1)),
+        ]
+        key, val = lazy_stack(tds).popitem()
+        assert key == "b"
+        assert (val == 1).all()
+        assert [list(td.keys()) for td in tds] == [["a"], ["a"], []]
+
     def test_popitem_repeated_member(self):
-        # A member that is stacked twice has no "a" left after it is popped the
-        # first time, so popitem raises as for a missing key.
+        # A member that is stacked twice is popped once
         td0 = TensorDict(b=torch.ones(1), a=torch.zeros(2))
         td1 = TensorDict(b=torch.ones(1), a=torch.ones(2))
-        with pytest.raises(RuntimeError, match="Could not find key a in all"):
-            lazy_stack([td0, td1, td1]).popitem()
-        assert list(td0.keys()) == ["b", "a"]
-        assert list(td1.keys()) == ["b", "a"]
+        key, val = lazy_stack([td0, td1, td1]).popitem()
+        assert key == "a"
+        assert val.tolist() == [[0.0, 0.0], [1.0, 1.0], [1.0, 1.0]]
+        assert list(td0.keys()) == ["b"]
+        assert list(td1.keys()) == ["b"]
 
     def test_popitem_shared_source(self):
         # Two rows of one tensordict share its entries: deleting "a" from the
-        # first row deletes it from the second, so popitem raises as for a
-        # missing key and puts the values back.
+        # first row deletes it from the second
         td0 = TensorDict(b=torch.ones(1), a=torch.zeros(2))
         src = TensorDict(b=torch.ones(2, 1), a=torch.ones(2, 2), batch_size=[2])
         lazy = LazyStackedTensorDict(
             td0, src._get_sub_tensordict(0), src._get_sub_tensordict(1)
         )
-        with pytest.raises(RuntimeError, match="Could not find key a in all"):
-            lazy.popitem()
-        assert list(td0.keys()) == ["b", "a"]
-        assert (src["a"][0] == 1).all()
+        key, val = lazy.popitem()
+        assert key == "a"
+        assert val.tolist() == [[0.0, 0.0], [1.0, 1.0], [1.0, 1.0]]
+        assert list(td0.keys()) == ["b"]
+        assert list(src.keys()) == ["b"]
 
     def test_items_values_as_lists_member_prefix(self):
         # with _NESTED_TENSORS_AS_LISTS, items() and values() walk each member

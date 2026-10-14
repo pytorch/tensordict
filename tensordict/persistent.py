@@ -17,17 +17,20 @@ import tempfile
 import warnings
 from numbers import Number
 from pathlib import Path
-from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
+from typing import Any, Callable, overload, Type, TYPE_CHECKING
 
 import numpy as np
 import torch
-from tensordict._base.unsupported import _NoSetNonTensor, _NoShapeOps, _NoVmap
+from tensordict._base.unsupported import (
+    _NoSelectExclude,
+    _NoSetNonTensor,
+    _NoShapeOps,
+    _NoVmap,
+)
 from tensordict._deprecation import deprecated
-from tensordict._indexing import _entry_index
 from tensordict._td import (
     _TensorDictKeysView,
     _unravel_key_to_tuple,
-    CompatibleType,
     NO_DEFAULT,
     TensorDict,
 )
@@ -47,7 +50,6 @@ from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _KEY_ERROR,
-    _lock_blocked,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
     expand_right,
@@ -969,7 +971,9 @@ _BACKENDS: dict[str, Type[_PersistentBackend]] = {
 }
 
 
-class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase):
+class PersistentTensorDict(
+    _NoShapeOps, _NoVmap, _NoSetNonTensor, _NoSelectExclude, TensorDictBase
+):
     """A tensordict whose entries live in an HDF5 file or a Zarr store.
 
     The HDF5 backend (``backend="h5"``) needs ``h5py``. The Zarr backend
@@ -1459,23 +1463,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     _get_tuple = _get_str
 
-    def get_at(
-        self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
-        """Gets the value of the entry ``key`` at the index ``idx``.
-
-        Args:
-            key (str, tuple of str): key to be retrieved.
-            idx (int, slice, torch.Tensor, iterable): index of the entry.
-            default (torch.Tensor, optional): default value to return if the key is
-                not present in the tensordict. If not provided, a missing key
-                raises a ``KeyError``.
-
-        See :meth:`~tensordict.TensorDictBase.get_at`.
-        """
-        # Unlike TensorDictBase.get_at, a missing key raises unless a default is given
-        return self._get_at_tuple(key, _entry_index(idx), default)
-
     def _read_array_at(self, array, idx):
         """Reads ``array[idx]``, loading only the required part of the array when possible.
 
@@ -1708,26 +1695,26 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                     ]
                 item.rename_(*td_names)
 
-    @_lock_blocked
-    def del_(self, key):
+    # Override: deletes the node in the file.
+    def _del(self, key: tuple[str, ...]) -> None:
         path = self._process_key(key)
         # h5py raises a KeyError for a missing key, zarr does not
         missing = self.backend == "zarr" and not self._backend.contains(self.file, path)
         self._backend.delete(self.file, path)
         # a sub-tensordict read before keeps the deleted group: drop it, so that
         # a new entry at this key gets a fresh one
-        self._forget_nested(_unravel_key_to_tuple(key))
+        self._forget_nested(key)
         if missing:
-            # stacklevel 3: skip the _lock_blocked wrapper
+            # stacklevel 4: skip del_ and its _lock_blocked wrapper
             warnings.warn(
-                f"{type(self).__name__}.del_ of a missing key {key!r} does "
+                f"{type(self).__name__}.del_ of a missing key "
+                f"{key[0] if len(key) == 1 else key!r} does "
                 "nothing today with the zarr backend. Starting with TensorDict "
                 "0.17, the default will change to raising a KeyError, as "
                 "TensorDict does.",
                 FutureWarning,
-                stacklevel=3,
+                stacklevel=4,
             )
-        return self
 
     # Override: a TensorDict skeleton, built without reading the data.
     def empty(
@@ -1959,13 +1946,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             return value.to_tensordict()
         return value
 
-    # Override: not supported.
-    @_lock_blocked
-    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
-        raise NotImplementedError(
-            f"popitem not implemented for class {type(self).__name__}."
-        )
-
     # Override: moves the node in the file, without reading the data.
     def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
         old = _unravel_key_to_tuple(old_key)
@@ -2038,27 +2018,14 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
 
-    # Override: not supported: it would load the file.
-    def _select(
-        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
-    ) -> PersistentTensorDict:
-        raise NotImplementedError(
-            "Cannot call select on a PersistentTensorDict. "
-            "Create a regular tensordict first using the `to_tensordict` method."
-        )
-
-    # Override: not supported: it would load the file.
-    def _exclude(
-        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
-    ) -> PersistentTensorDict:
-        raise NotImplementedError(
-            "Cannot call exclude on a PersistentTensorDict. "
-            "Create a regular tensordict first using the `to_tensordict` method."
-        )
-
     # Override: works on an in-memory copy; inplace would rename in the file.
     @_as_context_manager()
-    def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+    def flatten_keys(
+        self,
+        separator: str = ".",
+        inplace: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
+    ) -> T:
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
 
         The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
@@ -2067,6 +2034,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             separator (str, optional): the separator between the nested items. Defaults to ``"."``.
             inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
                 Defaults to ``False``.
+            is_leaf (callable, optional): see
+                :meth:`~tensordict.TensorDictBase.flatten_keys`.
 
         See :meth:`~tensordict.TensorDictBase.flatten_keys`.
         """
@@ -2074,7 +2043,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             raise ValueError(
                 "Cannot call flatten_keys in_place with a PersistentTensorDict."
             )
-        return self.to_tensordict().flatten_keys(separator=separator)
+        return self.to_tensordict().flatten_keys(separator=separator, is_leaf=is_leaf)
 
     # Override: works on an in-memory copy; inplace would rename in the file.
     @_as_context_manager()

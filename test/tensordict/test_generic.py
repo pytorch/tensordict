@@ -3719,8 +3719,7 @@ class TestGeneric:
         assert [key for key, _ in td.items(sort=True)] == ["a", "b"]
         assert [value.item() for value in td.values(sort=True)] == [0.0, 1.0]
         assert list(TensorDict().items(sort=True)) == []
-        with pytest.raises(IndexError):
-            TensorDict().values(sort=True)
+        assert TensorDict().values(sort=True) == ()
 
     @pytest.mark.parametrize(
         "make",
@@ -3739,9 +3738,9 @@ class TestGeneric:
                 batch_size=[2, 3],
             )
         )
-        with pytest.raises(IndexError):
+        with pytest.raises(KeyError, match="Only NestedKeys are supported"):
             td.del_(())
-        with pytest.raises((AttributeError, KeyError)):
+        with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
             td.del_(("a", "x"))
         with pytest.raises(KeyError):
             td.del_("zz")
@@ -3761,7 +3760,7 @@ class TestGeneric:
     )
     def test_rename_key_empty_new_key(self, make):
         td = make(TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]))
-        with pytest.raises(IndexError):
+        with pytest.raises(KeyError, match="Only NestedKeys are supported"):
             td.rename_key_("a", ())
         assert list(td.keys()) == ["a"]
         with pytest.raises(KeyError, match="Only NestedKeys are supported"):

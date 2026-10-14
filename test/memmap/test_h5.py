@@ -1310,15 +1310,14 @@ class TestH5Indexing:
         assert h5td.get_at("s", slice(2, 5)).batch_size == (3,)
         assert h5td.get_at(("nested", "c"), 3).shape == (2,)
         assert h5td.get_at("missing", 0, None) is None
-        with pytest.raises(KeyError):
-            h5td.get_at("missing", 0)
+        # a missing key returns None, as on TensorDict
+        assert h5td.get_at("missing", 0) is None
 
     def test_get_at_index_kwarg(self, data):
         td, h5td = data
-        with pytest.raises(TypeError, match="unexpected keyword argument 'index'"):
-            h5td.get_at("a", index=1)
-        with pytest.raises(KeyError):
-            h5td.get_at(("a", "x"), 0)
+        assert (h5td.get_at("a", index=1) == td["a"][1]).all()
+        with pytest.raises(TypeError, match="index argument missing"):
+            h5td.get_at("a")
 
     def test_get_nested_through_tensor_default(self, data):
         # unlike TensorDict, which raises a ValueError, a path through a
@@ -1345,8 +1344,12 @@ class TestH5Indexing:
         flat = h5td.flatten_keys()
         assert type(flat) is TensorDict
         assert set(flat.keys()) == {"a", "b", "nested.c", "s"}
-        with pytest.raises(TypeError, match="unexpected keyword argument 'is_leaf'"):
-            h5td.flatten_keys(is_leaf=lambda cls: False)
+
+        def is_leaf(cls):
+            return cls is TensorDict
+
+        flat = h5td.flatten_keys(is_leaf=is_leaf)
+        assert list(flat.keys()) == list(td.flatten_keys(is_leaf=is_leaf).keys())
 
     def test_subtd_rename_on_locked_h5(self, data):
         # a sub-tensordict renames in its locked h5 source, with the source's
@@ -1367,20 +1370,20 @@ class TestH5Indexing:
         td, h5td = data
         with pytest.raises(
             NotImplementedError,
-            match="Cannot call select on a PersistentTensorDict. Create a regular",
+            match="Cannot call select on a PersistentTensorDict. Call to_tensordict",
         ):
             h5td.select("a")
         with pytest.raises(
             NotImplementedError,
-            match="Cannot call exclude on a PersistentTensorDict. Create a regular",
+            match="Cannot call exclude on a PersistentTensorDict. Call to_tensordict",
         ):
             h5td.exclude("a")
 
     def test_popitem(self, data):
         td, h5td = data
-        with pytest.raises(NotImplementedError, match="popitem not implemented"):
-            h5td.popitem()
-        assert list(h5td.keys()) == list(td.keys())
+        key, value = h5td.popitem()
+        assert key == "s"
+        assert list(h5td.keys()) == ["a", "b", "nested"]
 
     def test_tensorclass_iter(self, tmp_path):
         class H5Data(TensorClass):

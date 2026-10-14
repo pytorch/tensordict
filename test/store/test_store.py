@@ -4206,12 +4206,8 @@ class TestLazyStackedTensorDictStore:
             node = store.get_at("n", 0)
             assert type(node) is TensorDict
             assert (node["x"] == 1).all()
-            if kind == "lstds":
-                with pytest.raises(ValueError, match="not a tensordict"):
-                    store.get_at(("a", "x"), 0)
-            else:
-                with pytest.raises(AttributeError, match="_get_at_tuple"):
-                    store.get_at(("a", "x"), 0)
+            with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+                store.get_at(("a", "x"), 0)
         finally:
             for store in owned:
                 store.clear_redis()
@@ -4225,8 +4221,9 @@ class TestLazyStackedTensorDictStore:
             store = stores[kind]
             keys = list(store.keys(True, True))
             if kind == "view":
-                # the view ignores inplace and returns a copy
-                out = getattr(store, op)(inplace=True)
+                # the view ignores inplace and returns a copy, until 0.17
+                with pytest.warns(DeprecationWarning, match="inplace=True"):
+                    out = getattr(store, op)(inplace=True)
                 assert type(out) is TensorDict
             else:
                 with mock.patch.object(
@@ -4241,8 +4238,13 @@ class TestLazyStackedTensorDictStore:
             flat = store.flatten_keys()
             assert type(flat) is TensorDict
             assert set(flat.keys()) == {"a", "n.x"}
-            with pytest.raises(TypeError, match="unexpected keyword argument"):
-                store.flatten_keys(is_leaf=lambda cls: False)
+
+            def is_leaf(cls):
+                return cls is TensorDict
+
+            flat = store.flatten_keys(is_leaf=is_leaf)
+            dense = td[0] if kind == "view" else td
+            assert list(flat.keys()) == list(dense.flatten_keys(is_leaf=is_leaf).keys())
         finally:
             for store in owned:
                 store.clear_redis()
@@ -4274,7 +4276,7 @@ class TestLazyStackedTensorDictStore:
                     store.del_("a")
                 with pytest.raises(RuntimeError, match="Cannot rename keys"):
                     store.rename_key_("a", "a")
-                with pytest.raises(RuntimeError, match="Cannot popitem"):
+                with pytest.raises(RuntimeError, match="Cannot delete keys"):
                     store.popitem()
             elif kind == "tds":
                 with pytest.raises(IndexError):

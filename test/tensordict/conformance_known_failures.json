@@ -30,9 +30,7 @@
  "memmap_td update": [],
  "nested_stacked_td apply": [],
  "nested_stacked_td filling": [],
- "nested_stacked_td key_edits": [
-  "del_(('a', 'x'))"
- ],
+ "nested_stacked_td key_edits": [],
  "nested_stacked_td keys": [
   "is_contiguous()"
  ],
@@ -138,9 +136,7 @@
  ],
  "stacked_td apply": [],
  "stacked_td filling": [],
- "stacked_td key_edits": [
-  "del_(('a', 'x'))"
- ],
+ "stacked_td key_edits": [],
  "stacked_td keys": [
   "is_contiguous()"
  ],
@@ -156,8 +152,7 @@
   "detach_()"
  ],
  "sub_td key_edits": [
-  "flatten_keys(inplace=True)",
-  "popitem()"
+  "flatten_keys(inplace=True)"
  ],
  "sub_td keys": [
   "clear_device_()"
@@ -184,8 +179,7 @@
   "detach_()"
  ],
  "sub_td2 key_edits": [
-  "flatten_keys(inplace=True)",
-  "popitem()"
+  "flatten_keys(inplace=True)"
  ],
  "sub_td2 keys": [
   "clear_device_()",
@@ -226,9 +220,7 @@
   "del_(())",
   "flatten_keys(inplace=True)",
   "get(('a', 'x'), None)",
-  "get_at(('a', 'x'), 0)",
-  "popitem()",
-  "rename_key_('a', ())"
+  "get_at(('a', 'x'), 0)"
  ],
  "td_h5 keys": [
   "is_contiguous()",
