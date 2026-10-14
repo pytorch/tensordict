@@ -219,7 +219,6 @@
   "del_(('a', 'x'))",
   "del_(())",
   "flatten_keys(inplace=True)",
-  "get(('a', 'x'), None)",
   "get_at(('a', 'x'), 0)"
  ],
  "td_h5 keys": [
