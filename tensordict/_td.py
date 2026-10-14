@@ -2315,21 +2315,25 @@ class TensorDict(TensorDictBase):
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
                     entry = source[key]
-                    if not _is_tensor_collection(type(entry)):
+                    try:
+                        source[key] = entry._select(
+                            *val, strict=strict, inplace=inplace, set_shared=set_shared
+                        )
+                    except AttributeError:
+                        # Checked only on failure, so that the common path pays
+                        # nothing for it.
+                        if _is_tensor_collection(type(entry)):
+                            raise
                         # The path runs through a leaf: the nested key is missing.
                         if strict:
                             rest = val[0][0] if len(val[0]) == 1 else val[0]
                             raise KeyError(
                                 f"{key!r} is a {type(entry).__name__}, not a "
                                 f"tensordict, so it has no entry {rest!r}."
-                            )
+                            ) from None
                         # Nested calls pass the key alone as a 1-tuple.
                         if key not in keys and (key,) not in keys:
                             del source[key]
-                        continue
-                    source[key] = entry._select(
-                        *val, strict=strict, inplace=inplace, set_shared=set_shared
-                    )
 
         names = self._td_dim_names
         if names is not None:
@@ -2382,11 +2386,16 @@ class TensorDict(TensorDictBase):
         if keys_to_exclude is not None:
             for key, cur_keys in keys_to_exclude.items():
                 val = _tensordict.get(key)
-                # A path that runs through a leaf is missing: keep the leaf.
-                if _is_tensor_collection(type(val)):
-                    val = val._exclude(
-                        *cur_keys, inplace=inplace, set_shared=set_shared
-                    )
+                if val is not None:
+                    try:
+                        val = val._exclude(
+                            *cur_keys, inplace=inplace, set_shared=set_shared
+                        )
+                    except AttributeError:
+                        if _is_tensor_collection(type(val)):
+                            raise
+                        # A path that runs through a leaf is missing: keep the leaf.
+                        continue
                     if not inplace:
                         _tensordict[key] = val
         if inplace:
