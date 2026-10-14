@@ -26,6 +26,26 @@ Tensor-castable types (such as int, float or np.ndarray) will be converted to to
 Note that this transformation is surjective: transforming back the tensordict to a pytree will not
 recover the original types.
 
+Note
+
+The list fields of a named tuple, and some of its dict and tuple
+fields, are converted with [`from_any()`](tensordict.TensorDictBase.from_any.html#tensordict.TensorDictBase.from_any) and do not
+round-trip through [`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree):
+
+- a list of numbers comes back as a tensor;
+- a dict holding a str, list or tuple, and an empty dict or named
+tuple (or a dict or named tuple holding one), come back as a
+`GenericDict` named tuple;
+- a tuple subclass, such as a `torch.return_types` result, and
+a plain tuple holding anything but tensors, Python ints and
+floats, dicts and named tuples (such as a str, a list or a NumPy
+number), or holding one of the dicts or named tuples above, make
+[`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree) raise a `ValueError`, and an empty tuple
+comes back as an empty `GenericDict`.
+
+The other dict, named tuple and plain tuple fields come back with
+their own type.
+
 Examples
 
 ```
