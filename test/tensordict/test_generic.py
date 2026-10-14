@@ -8386,15 +8386,23 @@ class TestGeneric:
     )
     @pytest.mark.parametrize("filter_empty", [False, True, None])
     @pytest.mark.parametrize("drop", [False, True])
+    @pytest.mark.parametrize("mixed", [False, True])
     def test_fast_apply_dense_tree(
-        self, named, nested_keys, filter_empty, drop, monkeypatch
+        self, named, nested_keys, filter_empty, drop, mixed, monkeypatch
     ):
         # A tree of TensorDict nodes and tensors is rebuilt without the
-        # generic _apply_nest walker, with the same result.
+        # generic _apply_nest walker, with the same result. Other entries
+        # (here a NonTensorData and a lazy stack) take _apply_nest.
         b = TensorDict(
             c=torch.ones(3, 2), d={"e": torch.ones(3, 2, 1)}, batch_size=[3, 2]
         )
         td = TensorDict(a=torch.zeros(3), b=b, empty={}, batch_size=[3], device="cpu")
+        if mixed:
+            td["b", "s"] = NonTensorData("s", batch_size=[3, 2])
+            td["b", "l"] = lazy_stack(
+                [TensorDict(f=torch.ones(2, 4), batch_size=[2], device="cpu")] * 3
+            )
+            assert type(td["b", "l"]) is LazyStackedTensorDict
         td.lock_()
         calls = []
 
@@ -8413,20 +8421,33 @@ class TestGeneric:
         expected_calls, calls[:] = list(calls), []
         neg, mul, add = -td, td * 2, td + td
 
-        def no_apply_nest(*args, **kwargs):
-            raise AssertionError("_apply_nest called")
+        prefixes = []
 
-        monkeypatch.setattr(TensorDictBase, "_apply_nest", no_apply_nest)
+        def record(cls):
+            apply_nest = cls._apply_nest
+
+            def record_apply_nest(self, *args, **kwargs):
+                prefixes.append(kwargs.get("prefix", ()))
+                return apply_nest(self, *args, **kwargs)
+
+            monkeypatch.setattr(cls, "_apply_nest", record_apply_nest)
+
+        record(TensorDictBase)
+        record(LazyStackedTensorDict)
         result = td._fast_apply(fn, **kwargs)
         assert calls == expected_calls
         if expected is None:
             assert result is None
             result = expected = td.empty()
-        for res, exp in [(result, expected), (-td, neg), (td * 2, mul), (td + td, add)]:
+        results = [(result, expected), (-td, neg), (td * 2, mul), (td + td, add)]
+        # only the lazy stack took _apply_nest
+        assert bool(prefixes) is mixed
+        assert all(prefix[:2] == ("b", "l") for prefix in prefixes)
+        for res, exp in results:
             assert list(res.keys(True)) == list(exp.keys(True))
             nodes = [k for k in res.keys(True) if is_tensor_collection(res[k])]
             for r, e in [(res, exp)] + [(res[k], exp[k]) for k in nodes]:
-                assert type(r) is type(e) is TensorDict
+                assert type(r) is type(e)
                 assert r.batch_size == e.batch_size
                 assert r.device == e.device
                 assert r.names == e.names

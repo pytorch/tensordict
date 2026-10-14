@@ -6080,8 +6080,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
-    def _is_dense_tree(self) -> bool:
-        # Whether _fast_apply can use _dense_apply: see TensorDict._is_dense_tree.
+    def _is_dense_node(self) -> bool:
+        # Whether _fast_apply can use _dense_apply: see TensorDict._is_dense_node.
         return False
 
     def _fast_apply(
@@ -6136,11 +6136,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 or is_leaf is _default_is_leaf
                 or is_leaf is _NESTED_TENSORS_AS_LISTS
             )
-            and self._is_dense_tree()
+            and self._is_dense_node()
         ):
-            # The tree holds only TensorDict nodes and tensors: build the
-            # result directly, as _apply_nest would, without its generic steps.
-            result = self._dense_apply(fn, named, nested_keys, (), filter_empty)
+            # An exact TensorDict without dim names: build the result
+            # directly, as _apply_nest would, without its generic steps.
+            result = self._dense_apply(
+                fn,
+                named,
+                nested_keys,
+                (),
+                filter_empty,
+                _default_is_leaf if is_leaf is None else is_leaf,
+            )
             if propagate_lock and self.is_locked and result is not None:
                 result.lock_()
             return result
