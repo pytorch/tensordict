@@ -1320,12 +1320,10 @@ class TestH5Indexing:
             h5td.get_at("a")
 
     def test_get_nested_through_tensor_default(self, data):
-        # unlike TensorDict, which raises a ValueError, a path through a
-        # tensor is a missing key
+        # a path through a tensor gives the default, as on TensorDict (#2701)
         td, h5td = data
         assert h5td.get(("a", "x"), None) is None
-        with pytest.raises(ValueError, match="not a tensordict"):
-            td.get(("a", "x"), None)
+        assert td.get(("a", "x"), None) is None
 
     @pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
     def test_flatten_inplace_raises_before_read(self, data, op, monkeypatch):
