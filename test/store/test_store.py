@@ -622,8 +622,11 @@ class TestTensorDictStore:
             FutureWarning, match=rf"^TensorDictStore\.{method} {_MISSING_KEY_WARNING}"
         ) as record:
             assert getattr(store_td, method)(*args) is store_td
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        # count only FutureWarnings: under xdist on free-threaded Python, the
+        # record once held 12 other warnings from code outside the call
+        warned = [w for w in record if issubclass(w.category, FutureWarning)]
+        assert len(warned) == 1, [str(w.message) for w in record]
+        assert warned[0].filename == __file__
         assert set(store_td.keys(True, True)) == {("nested", "a")}
 
     def test_locking(self, store_td):
@@ -1072,7 +1075,9 @@ class TestTensorDictStore:
         with pytest.raises(RuntimeError):
             store_td.unsqueeze(0)
         with pytest.raises(RuntimeError):
-            store_td.squeeze(0)
+            store_td.squeeze()
+        # squeezing a dim of size != 1 is a no-op, as on TensorDict
+        assert store_td.squeeze(0) is store_td
 
         # Escape hatch: materialize first, then shape ops work
         local = store_td.to_tensordict()
@@ -1196,8 +1201,11 @@ class TestTensorDictStore:
             r"tensordict today\. Starting with TensorDict 0\.17",
         ) as record:
             assert store_td.rename_key_("obs", "renamed") is store_td
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        # count only FutureWarnings: under xdist on free-threaded Python, the
+        # record once held 12 other warnings from code outside the call
+        warned = [w for w in record if issubclass(w.category, FutureWarning)]
+        assert len(warned) == 1, [str(w.message) for w in record]
+        assert warned[0].filename == __file__
         assert set(store_td.keys()) == {"renamed"}
 
     def test_rename_key_bad_new_key(self, store_td):
@@ -2727,6 +2735,182 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    @staticmethod
+    def _layout_store(store_kwargs, lazy_td, written, legacy):
+        """A store of ``lazy_td`` written by ``from_lazy_stack`` or by ``set``.
+
+        With ``legacy``, the ``layout`` field is removed, as in the metadata
+        that versions before #2030 wrote; their data bytes are the same.
+        """
+        if written == "upload":
+            store_td = LazyStackedTensorDictStore.from_lazy_stack(
+                lazy_td.clone(), **store_kwargs
+            )
+        else:
+            store_td = LazyStackedTensorDictStore(
+                count=len(lazy_td.tensordicts),
+                stack_dim=lazy_td.stack_dim,
+                inner_batch_size=lazy_td.tensordicts[0].batch_size,
+                **store_kwargs,
+            )
+            for key in lazy_td.keys(True, True):
+                store_td.set(key, lazy_td.get(key).clone())
+        if legacy:
+            for kp in store_td._run_sync(store_td._aget_all_keys()):
+                store_td._run_sync(
+                    store_td._client.hdel(store_td._meta_key(kp), "layout")
+                )
+        store_td.close()
+        return LazyStackedTensorDictStore.from_store(
+            td_id=store_td._td_id, **store_kwargs
+        )
+
+    @staticmethod
+    def _layout_lazy_td(stack_dim, count, inner):
+        n = torch.Size(inner).numel()
+        return lazy_stack(
+            [
+                TensorDict(
+                    a=torch.arange(float(n)).view(inner) + 100 * i,
+                    n=TensorDict(
+                        b=torch.arange(2 * n).view(*inner, 2) + 100 * i,
+                        batch_size=inner,
+                    ),
+                    batch_size=inner,
+                )
+                for i in range(count)
+            ],
+            stack_dim,
+        )
+
+    @pytest.mark.parametrize("legacy", [False, True])
+    @pytest.mark.parametrize("written", ["upload", "set"])
+    @pytest.mark.parametrize("stack_dim", [1, 2])
+    def test_stack_dim_nonzero(self, store_kwargs, stack_dim, written, legacy):
+        """A store stacked along a dim other than 0 reads and writes as the lazy stack (#2030).
+
+        from_lazy_stack stores an entry stack dim first and set in the batch
+        layout. Before, the indexed reads and writes took every entry to be
+        in the batch layout, and the element views every entry to be stack
+        dim first. Each entry is now read in its own layout, with or without
+        the layout field.
+        """
+        lazy_td = self._layout_lazy_td(stack_dim, 2, [3, 4][:stack_dim])
+        store_td = self._layout_store(store_kwargs, lazy_td, written, legacy)
+        try:
+            assert store_td.batch_size == lazy_td.batch_size
+            for read in (
+                lambda td: td["a"],
+                lambda td: td["n", "b"],
+                lambda td: td.to_tensordict()["a"],
+                lambda td: td[0]["a"],
+                lambda td: td[:, 1]["n", "b"],
+                lambda td: td[1:, ::2]["a"],
+                lambda td: td.get_at("a", (0, 1)),
+            ):
+                torch.testing.assert_close(read(store_td), read(lazy_td))
+            view = _StoreStackElementView(store_td, 1)
+            assert (view.to_tensordict() == lazy_td.tensordicts[1]).all()
+            mask = torch.zeros(lazy_td.batch_size, dtype=torch.bool)
+            mask[0, 1] = True
+            for td, element in (
+                (store_td, view),
+                (lazy_td, lazy_td.tensordicts[1]),
+            ):
+                td.set_at_("a", -1.0, (1, 1))
+                td[2, 0] = 5.0
+                td.masked_fill_(mask, -2.0)
+                element.fill_(("n", "b"), -3)
+            reader = LazyStackedTensorDictStore.from_store(
+                td_id=store_td._td_id, **store_kwargs
+            )
+            try:
+                assert (reader.to_tensordict() == lazy_td).all()
+            finally:
+                reader.close()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("stack_dim", [1, 2])
+    def test_stack_dim_nonzero_round_trips(self, store_kwargs, stack_dim, monkeypatch):
+        """A write that gives the same bytes in both layouts takes as many round trips on either (#2030).
+
+        A scalar written over the dims up to the stack dim, or a write at one
+        index repeated on each of those dims, costs no more on an entry
+        stored stack dim first than on one stored in the batch layout.
+        """
+        import redis.asyncio as aioredis
+
+        calls = []
+        execute = aioredis.client.Pipeline.execute
+        execute_command = aioredis.Redis.execute_command
+
+        async def counting_execute(pipe, *args, **kwargs):
+            if pipe.command_stack:
+                calls.append(None)
+            return await execute(pipe, *args, **kwargs)
+
+        async def counting_execute_command(client, *args, **kwargs):
+            if not isinstance(client, aioredis.client.Pipeline):
+                calls.append(None)
+            return await execute_command(client, *args, **kwargs)
+
+        monkeypatch.setattr(aioredis.client.Pipeline, "execute", counting_execute)
+        monkeypatch.setattr(aioredis.Redis, "execute_command", counting_execute_command)
+        lazy_td = self._layout_lazy_td(stack_dim, 2, [3, 4][:stack_dim])
+        element = torch.tensor([6, 5])
+        writes = (
+            lambda td: td.__setitem__(slice(None), 7.0),
+            lambda td: td.set_at_("a", 8.0, slice(None)),
+            lambda td: td.set_at_("a", 9.0, (1, 1)),
+            lambda td: td.set_at_(("n", "b"), element, (1,) * (stack_dim + 1)),
+        )
+        counts = {}
+        for written in ("upload", "set"):
+            store_td = self._layout_store(store_kwargs, lazy_td, written, False)
+            try:
+                store_td["a"]
+                counts[written] = []
+                for write in writes:
+                    calls.clear()
+                    write(store_td)
+                    counts[written].append(len(calls))
+                expected = lazy_td.clone()
+                for write in writes:
+                    write(expected)
+                assert (store_td.to_tensordict() == expected).all()
+            finally:
+                store_td.clear_redis()
+                store_td.close()
+        assert counts["upload"] == counts["set"]
+
+    @pytest.mark.parametrize("legacy", [False, True])
+    @pytest.mark.parametrize("written", ["upload", "set"])
+    def test_stack_dim_nonzero_square(self, store_kwargs, written, legacy):
+        """The layout of an entry whose shape fits both layouts comes from the layout field (#2030).
+
+        Without the field, as written before #2030, the indexed reads take
+        the entry to be in the batch layout and the element views stack dim
+        first, as they did then.
+        """
+        lazy_td = self._layout_lazy_td(1, 3, [3])
+        store_td = self._layout_store(store_kwargs, lazy_td, written, legacy)
+        try:
+            # the data as written: stack dim first, or in the batch layout
+            stored = lazy_td["a"].movedim(1, 0) if written == "upload" else lazy_td["a"]
+            indexed = stored if legacy else lazy_td["a"]
+            torch.testing.assert_close(store_td["a"], indexed)
+            torch.testing.assert_close(store_td[:, 1]["a"], indexed[:, 1])
+            torch.testing.assert_close(store_td.get_at("a", (0, 1)), indexed[0, 1])
+            element = stored[1] if legacy else lazy_td.tensordicts[1]["a"]
+            torch.testing.assert_close(
+                _StoreStackElementView(store_td, 1)["a"], element
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     @pytest.mark.parametrize(
         "index", [slice(0, 2), slice(None, None, -1), (slice(None), 1)]
     )
@@ -2886,8 +3070,11 @@ class TestLazyStackedTensorDictStore:
             r"locked tensordict today\. Starting with TensorDict 0\.17",
         ) as record:
             assert store_td.rename_key_("a", "c") is store_td
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        # count only FutureWarnings: under xdist on free-threaded Python, the
+        # record once held 12 other warnings from code outside the call
+        warned = [w for w in record if issubclass(w.category, FutureWarning)]
+        assert len(warned) == 1, [str(w.message) for w in record]
+        assert warned[0].filename == __file__
         assert set(store_td.keys()) == {"b", "c"}
 
     def test_rename_key_leaf_kinds(self, store_kwargs):
@@ -3433,6 +3620,40 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_lstore_update__heterogeneous_missing_key(self, store_kwargs):
+        """update_ of a store whose elements differ in shape, with keys that the store lacks."""
+        tds = [
+            TensorDict(a=torch.zeros(3), h=torch.zeros(3, 2 + i), batch_size=[3])
+            for i in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            # a key that the store lacks raises, as on every other class,
+            # unless another key matches and keys_to_update is not given
+            with pytest.raises(KeyError, match="zz"):
+                store_td.update_({"zz": torch.ones(2, 3)})
+            assert "zz" not in store_td.keys()
+            store_td.update_({"a": torch.ones(2, 3), "zz": torch.ones(2, 3)})
+            torch.testing.assert_close(store_td["a"], torch.ones(2, 3))
+            store_td.update_(
+                {"a": torch.full((2, 3), 2.0), "zz": torch.ones(2, 3)},
+                keys_to_update=["a"],
+            )
+            torch.testing.assert_close(store_td["a"], torch.full((2, 3), 2.0))
+            store_td.update_(
+                TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]),
+                a=torch.full((2, 3), 3.0),
+            )
+            torch.testing.assert_close(store_td["a"], torch.full((2, 3), 3.0))
+            with pytest.raises(KeyError, match="zz"):
+                store_td.update_({"zz": torch.ones(2, 3)}, keys_to_update=["zz"])
+            assert "zz" not in store_td.keys()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_inplace_methods_write(self, store_kwargs):
         """The in-place methods and update_ write to the server, as on a lazy stack (#2242).
 
@@ -3662,6 +3883,22 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_element_view_index_and_chunk(self, store_stack):
+        """An element view reads one element for indexing and chunk, with the values of its dense copy."""
+        store_td, tds, lazy_td = store_stack
+        view = store_td[1]
+        assert isinstance(view, _StoreStackElementView)
+        dense = view.to_tensordict()
+        for index in (0, slice(1, 3), torch.tensor([3, 0]), (Ellipsis,)):
+            out = view[index]
+            assert (out == dense[index]).all()
+            assert out.batch_size == dense[index].batch_size
+        pieces = view.chunk(3)
+        ref = dense.chunk(3)
+        assert [p.batch_size for p in pieces] == [r.batch_size for r in ref]
+        for piece, r in zip(pieces, ref):
+            assert (piece == r).all()
+
     def test_view_set_new_key_last_element(self, store_kwargs):
         """A new key set on any element view, the last one too, reads back exactly."""
         lazy_td = self._nested_lazy_td()
@@ -3791,8 +4028,11 @@ class TestLazyStackedTensorDictStore:
                 match=rf"^LazyStackedTensorDictStore\.{method} {_MISSING_KEY_WARNING}",
             ) as record:
                 assert getattr(store_td, method)(*args) is store_td
-            assert len(record) == 1
-            assert record[0].filename == __file__
+            # count only FutureWarnings: under xdist on free-threaded Python, the
+            # record once held 12 other warnings from code outside the call
+            warned = [w for w in record if issubclass(w.category, FutureWarning)]
+            assert len(warned) == 1, [str(w.message) for w in record]
+            assert warned[0].filename == __file__
             assert set(store_td.keys(True, True)) == set(lazy_td.keys(True, True))
         finally:
             store_td.clear_redis()

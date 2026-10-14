@@ -1695,6 +1695,30 @@ class TestMemmap:
         loaded = TensorDict.load_memmap(prefix, robust_key=True)
         assert key not in loaded
 
+    def test_memmap_load_stats_each_path_once(self, tmp_path, monkeypatch):
+        # Loading tests each leaf file and nested directory for existence once:
+        # on a network file system every stat is a metadata-server round trip.
+        td = TensorDict(
+            a=torch.randn(3),
+            empty=torch.zeros(0),
+            nested=TensorDict(b=torch.randn(3), deeper=TensorDict(c=torch.randn(3))),
+        )
+        td.memmap(tmp_path)
+        n_leaves = len(list(td.keys(True, True)))
+        n_nested = 2
+        stats = []
+        stat = os.stat
+
+        def counted_stat(path, *args, **kwargs):
+            stats.append(path)
+            return stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "stat", counted_stat)
+        loaded = TensorDict.load_memmap(tmp_path)
+        monkeypatch.undo()
+        assert len(stats) <= n_leaves + n_nested, [str(p) for p in stats]
+        assert_allclose_td(loaded, td)
+
     def test_memmap_robust_key_pathlike_legacy_fails(self, tmpdir):
         """Test that path-like keys still fail with robust_key=False."""
         td = TensorDict({"a/b/c": torch.randn(3, 4)})

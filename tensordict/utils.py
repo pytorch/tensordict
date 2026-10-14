@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
+import contextvars
 import functools
 import itertools
 import logging
@@ -656,6 +657,13 @@ def is_tensorclass(obj: type | Any) -> bool:
 
 
 _TENSORCLASS_MEMO = {}
+
+# Set while the archive writer stages placeholder leaves (see
+# ``_write_archive_from_td``): tensorclass ``__post_init__`` must not run on
+# that data, which is uninitialized or zero until the real bytes are written.
+_SKIP_TENSORCLASS_POST_INIT = contextvars.ContextVar(
+    "_SKIP_TENSORCLASS_POST_INIT", default=False
+)
 
 
 def _is_tensorclass(cls: type) -> bool:
@@ -3310,19 +3318,35 @@ _LIBRARY_DIRS = (
 )
 
 
-def _warn_dim_past_batch_dims(op: str) -> None:
-    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
-    # point to the first frame outside tensordict and torch: the user's call
-    frame, stacklevel = sys._getframe(1), 2
+def _user_stacklevel() -> int:
+    """The ``stacklevel`` of the first frame outside tensordict and torch, for a warning emitted by the caller."""
+    frame, stacklevel = sys._getframe(2), 2
     while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
         frame, stacklevel = frame.f_back, stacklevel + 1
+    return stacklevel
+
+
+def _warn_dim_past_batch_dims(op: str) -> None:
+    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
     warnings.warn(
         f"{op} got a dim outside the batch dims, and uses it on the dims of "
         "the leaves instead. Starting with TensorDict 0.17, the default will "
         "change to raising an IndexError, as torch does for a tensor of the "
         "batch size.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _warn_lazy_shape_args(op: str, args: str) -> None:
+    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17."""
+    warnings.warn(
+        f"LazyStackedTensorDict.{op} got {args}, which TensorDict.{op} "
+        "rejects, and returns the result of its members. Starting with "
+        "TensorDict 0.17, the default will change to raising a ValueError, "
+        f"as TensorDict.{op} does.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
     )
 
 

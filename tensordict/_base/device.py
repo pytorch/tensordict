@@ -488,7 +488,23 @@ class _DeviceOps:
             threads.append(thread)
         try:
             while len(items) < lkeys:
-                keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                try:
+                    keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                except queue.Empty:
+                    # A large or file-backed leaf can take longer than the
+                    # timeout to pin: wait as long as a thread is working.
+                    if any(thread.is_alive() for thread in threads):
+                        continue
+                    # A thread may have put its last leaf after the wait
+                    # timed out.
+                    try:
+                        keyval = q_out.get_nowait()
+                    except queue.Empty:
+                        raise RuntimeError(
+                            "The pin_memory threads of to(device, "
+                            "non_blocking_pin=True) exited without returning "
+                            f"{lkeys - len(items)} of the {lkeys} leaves."
+                        ) from None
                 if not isinstance(keyval, tuple):
                     raise keyval
                 key, val = keyval
@@ -531,7 +547,8 @@ class _DeviceOps:
                 If ``None`` (default), the leaves are copied with ``non_blocking=True``
                 and, when the target device is not a CUDA device (e.g. device-to-host
                 copies), the tensordict synchronizes once after all the copies have been
-                issued (under :func:`torch.compile`, these copies are blocking instead).
+                issued; for a CPU target, only if a leaf comes from another device.
+                Under :func:`torch.compile`, these copies are blocking instead.
                 If ``True``, the copies are non-blocking and no synchronization
                 is performed: the caller is responsible for synchronizing before reading
                 the results. If ``False``, the copies are blocking.
@@ -780,6 +797,24 @@ class _DeviceOps:
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
 
+        # A copy to the CPU needs the sync at the end only if a leaf comes from
+        # another device: a CPU leaf is copied synchronously, and the sync would
+        # wait for all the work queued on the GPU.
+        needs_d2h_sync = True
+        if (
+            device is not None
+            and device.type == "cpu"
+            and sub_non_blocking
+            and not non_blocking
+        ):
+            needs_d2h_sync = False
+
+            def to(tensor, _to=to):
+                nonlocal needs_d2h_sync
+                if not tensor.is_cpu:
+                    needs_d2h_sync = True
+                return _to(tensor)
+
         apply_kwargs = {}
         if device is not None or dtype is not None or convert_to_format is not None:
             if non_blocking_pin and num_threads != 0:
@@ -874,6 +909,7 @@ class _DeviceOps:
             and sub_non_blocking
             and not non_blocking
             and device.type != "cuda"
+            and needs_d2h_sync
         ):
             self._sync_all()
         return result
