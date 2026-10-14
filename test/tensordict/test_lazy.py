@@ -658,6 +658,46 @@ class TestLazyStackedTensorDict:
         expected = list(_TensorDictKeysView(stack, True, False))
         assert list(stack.keys(True)) == expected
 
+    @pytest.mark.parametrize("include_nested", [False, True])
+    def test_non_tensor_items_listed_keys(self, include_nested):
+        # non_tensor_items() gives the non-tensor entries of the keys that the
+        # stack lists, which none of these stacks has (#2705)
+        stacks = [
+            NonTensorStack("a", "b"),
+            lazy_stack(
+                [TensorDict(s=NonTensorData("x")), TensorDict(t=NonTensorData("y"))]
+            ),
+            lazy_stack(
+                [
+                    TensorDict(s=NonTensorData("x"), a=torch.zeros(())),
+                    TensorDict(a=torch.ones(())),
+                ]
+            ),
+            lazy_stack(
+                [
+                    TensorDict(n=TensorDict(s=NonTensorData("x"))),
+                    TensorDict(n=TensorDict(t=NonTensorData("y"))),
+                ]
+            ),
+        ]
+        for stack in stacks:
+            assert stack.non_tensor_items(include_nested=include_nested) == ()
+        # A key that every member holds is stacked
+        stack = lazy_stack(
+            [
+                TensorDict(s=NonTensorData("x"), n=TensorDict(u=NonTensorData("u"))),
+                TensorDict(s=NonTensorData("y"), n=TensorDict(u=NonTensorData("v"))),
+            ]
+        )
+        items = stack.non_tensor_items(include_nested=include_nested)
+        expected = {"s": ["x", "y"]}
+        if include_nested:
+            expected["n", "u"] = ["u", "v"]
+        assert [key for key, _ in items] == list(expected)
+        for (_, val), data in zip(items, expected.values()):
+            assert isinstance(val, NonTensorStack)
+            assert val.tolist() == data
+
     @pytest.mark.parametrize("filter_empty", [True, None])
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_apply_member_without_result(self, filter_empty, num_threads):

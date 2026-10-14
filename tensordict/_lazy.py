@@ -3040,16 +3040,21 @@ class LazyStackedTensorDict(TensorDictBase):
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
         items = self.tensordicts[0].non_tensor_items(include_nested=include_nested)
-        return tuple(
-            (
-                key,
-                torch.stack(
-                    [val0, *[td.get(key) for td in self.tensordicts[1:]]],
-                    self.stack_dim,
-                ),
-            )
-            for (key, val0) in items
-        )
+        # Only the keys that the stack lists, which every member holds. The
+        # members of a NonTensorStack list their fields, which keys() omits.
+        keys = self._key_list()
+        result = []
+        for key, val0 in items:
+            nested = not isinstance(key, str)
+            if (key[0] if nested else key) not in keys:
+                continue
+            vals = [td.get(key) for td in self.tensordicts[1:]]
+            # A nested key that a member lacks. keys(include_nested=True) would
+            # leave it out too, but listing it costs more than this call.
+            if nested and any(val is None for val in vals):
+                continue
+            result.append((key, torch.stack([val0, *vals], self.stack_dim)))
+        return tuple(result)
 
     @_cache_while_locked  # noqa: B019
     def _key_list(self):
