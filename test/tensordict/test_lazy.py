@@ -53,10 +53,16 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         decompose,
         get_available_devices,
         is_npu_available,
+        streaming_dataset,
     )
 else:
     IS_FB = False
-    from _utils_internal import decompose, get_available_devices, is_npu_available
+    from _utils_internal import (
+        decompose,
+        get_available_devices,
+        is_npu_available,
+        streaming_dataset,
+    )
 
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -371,11 +377,8 @@ class TestLazyStackedTensorDict:
         tmpdir = str(tmpdir)
         td.to_mds(out=tmpdir)
 
-        # Create a dataloader
-        from streaming import StreamingDataset
-
         # Load the dataset
-        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=2)
         dl = torch.utils.data.DataLoader(  # noqa: TOR401
             dataset=dataset, batch_size=2, collate_fn=LazyStackedTensorDict.from_list
         )

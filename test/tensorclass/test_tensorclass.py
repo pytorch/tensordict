@@ -80,10 +80,13 @@ _has_mypy = importlib.util.find_spec("mypy") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
-    from pytorch.tensordict.test._utils_internal import get_available_devices
+    from pytorch.tensordict.test._utils_internal import (
+        get_available_devices,
+        streaming_dataset,
+    )
 else:
     IS_FB = False
-    from _utils_internal import get_available_devices
+    from _utils_internal import get_available_devices, streaming_dataset
 
 # Capture all warnings
 pytestmark = [
@@ -3714,11 +3717,8 @@ class TestTensorClass:
         tmpdir = str(tmpdir)
         td.to_mds(out=tmpdir)
 
-        # Create a dataloader
-        from streaming import StreamingDataset
-
         # Load the dataset
-        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=2)
         dl = torch.utils.data.DataLoader(  # noqa: TOR401
             dataset=dataset, batch_size=2, collate_fn=MC.from_list
         )
