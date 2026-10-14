@@ -104,3 +104,14 @@ class TestCpuTransferSync:
         for _ in range(3):
             run()
         benchmark(run)
+
+    def test_cpu_to_cpu_default(self, benchmark, td_cuda_many_tensors):
+        """Default .to('cpu') of a tensordict already on the CPU (no sync)."""
+        td = td_cuda_many_tensors.to("cpu")
+
+        def run():
+            return td.to("cpu")
+
+        for _ in range(3):
+            run()
+        benchmark(run)

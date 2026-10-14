@@ -4272,6 +4272,35 @@ class TestGeneric:
             TensorDict(td_dict, device="cpu", non_blocking=False)
             assert _SYNC_COUNTER == 0
 
+    def test_to_cpu_syncs_only_from_device(self, _path_td_sync):
+        """to("cpu") syncs only if a leaf comes from another device (#2607)."""
+
+        def make(nested_device="cpu"):
+            return TensorDict(
+                a=torch.randn(3),
+                b=TensorDict(c=torch.randn(3, device=nested_device), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        def count_syncs(td, *args, **kwargs):
+            global _SYNC_COUNTER
+            _SYNC_COUNTER = 0
+            td.to(*args, **kwargs)
+            return _SYNC_COUNTER
+
+        # Every leaf is on the CPU: nothing to wait for
+        for td in (make(), make().lock_()):
+            assert count_syncs(td, "cpu") == 0
+            assert count_syncs(td, "cpu", torch.float64) == 0
+        if torch.cuda.is_available():
+            assert count_syncs(make(), "cpu", non_blocking_pin=True) == 0
+            # One leaf comes from the GPU: the copies must be awaited, once
+            for td in (make("cuda"), make("cuda").lock_()):
+                assert count_syncs(td, "cpu") == 1
+                assert count_syncs(td, "cpu", torch.float64) == 1
+                assert count_syncs(td, "cpu", non_blocking=True) == 0
+                assert count_syncs(td, "cpu", non_blocking=False) == 0
+
     def test_device_recorder_per_thread_state(self):
         """``_device_recorder`` must keep ``marked`` per-thread (see #1700)."""
         recorder = tensordict_base._device_recorder
