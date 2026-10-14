@@ -4657,6 +4657,15 @@ class TestTensorDictParams:
         stored = params._param_td.get("z" if "z" in params.keys() else "a")
         torch.testing.assert_close(stored.detach().reshape(4, 3), a)
 
+    @pytest.mark.parametrize("key", ["a", ("n", "c")])
+    def test_get_post_hook_get_at(self, key):
+        # get_at runs the hooks on the indexed value, as main does; a hook
+        # that is not elementwise shows where it runs
+        params = self._params()
+        params.register_get_post_hook(lambda self, value: value - value.mean())
+        value = params._param_td.get(key)[0]
+        torch.testing.assert_close(params.get_at(key, 0), value - value.mean())
+
     @pytest.mark.parametrize("lock", [False, True])
     def test_comparisons_reductions(self, lock):
         params = self._params(lock=lock)
@@ -4778,6 +4787,10 @@ class TestTensorDictParams:
         assert type(result) is TensorDict
         assert result.batch_size == (4,)
         assert result.is_locked is lock
+        with pytest.raises(TypeError, match="both parameters and source"):
+            type(params)._new_unsafe(
+                {"a": torch.zeros(4)}, source={"a": torch.zeros(4)}
+            )
 
     @staticmethod
     def _params_non_tensor(lock):

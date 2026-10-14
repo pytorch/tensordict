@@ -480,7 +480,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         **kwargs,
     ):
         # ``source`` is the name that the base code uses for ``parameters``
-        if parameters is None:
+        if source is not None:
+            if parameters is not None:
+                raise TypeError(
+                    "TensorDictParams._new_unsafe() got both parameters and source."
+                )
             parameters = source
         if is_compiling():
             return TensorDictParams(parameters, no_convert="skip", lock=lock)
@@ -866,6 +870,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_get_post_hook
     @_fallback
     def _get_at_str(self, key, idx, default, **kwargs): ...
+
+    # Override: the get hooks run on the indexed value, as get_at reads it;
+    # the base would run them on the whole entry.
+    @_get_post_hook
+    @_fallback
+    def _get_at_tuple(self, key, idx, default, **kwargs): ...
 
     @_fallback
     def _add_batch_dim(self, *args, **kwargs): ...
