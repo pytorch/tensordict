@@ -166,48 +166,6 @@ Parameters:
 
 **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The TensorDict to be appended onto the stack.
 
-contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
-
-Returns a dense [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) copy of the lazy stack.
-
-The result owns its data and is locked if the stack is locked.
-
-Parameters:
-
-- **canonical** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, every dense tensor leaf
-whose strides are not the C-row-major strides of its shape is
-copied into a new contiguous tensor, even if
-[`torch.Tensor.is_contiguous()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.is_contiguous.html#torch.Tensor.is_contiguous) returns `True` (e.g.
-because of size-1 dimensions). Defaults to `False`.
-- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - not supported on a lazy stack, which
-cannot become a TensorDict in place. `True` raises a
-`NotImplementedError`. Defaults to `False`.
-
-Note
-
-If the stacked tensordicts have no names, the result has no
-names either, even when the stack dimension has a name (from
-`stack_dim_name` or the `names` setter). [`densify()`](tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify) and
-[`clone()`](tensordict.TensorDictBase.clone.html#tensordict.TensorDictBase.clone) keep that name. To keep it here, name the
-dimension again with [`refine_names()`](tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names).
-
-Examples
-
-```
->>> import torch
->>> from tensordict import TensorDict, lazy_stack
->>> stack = lazy_stack(
-... [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)],
-... stack_dim_name="s",
-... )
->>> stack.names, stack.contiguous().names
-(['s', None], [None, None])
->>> stack.contiguous().refine_names("s", ...).names
-['s', None]
->>> stack.densify().names
-['s', None]
-```
-
 extend(*tensordict: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[T] | T*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Extends the lazy stack with new tensordicts.

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5634+g6acfb0ae6.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5635+g57fd210f0.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5634+g6acfb0ae6.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5635+g57fd210f0.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1664,6 +1664,32 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </ul>
 </dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>On a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, a
+<a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> (h5, zarr) or a store,
+the result is a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. If the tensordicts
+of a lazy stack have no names, the result has no names either,
+even when the stack dimension has a name (from <code class="docutils literal notranslate"><span class="pre">stack_dim_name</span></code>
+or the <code class="docutils literal notranslate"><span class="pre">names</span></code> setter). <a class="reference internal" href="tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify" title="tensordict.LazyStackedTensorDict.densify"><code class="xref py py-meth docutils literal notranslate"><span class="pre">densify()</span></code></a> and
+<a class="reference internal" href="tensordict.TensorDictBase.clone.html#tensordict.TensorDictBase.clone" title="tensordict.TensorDictBase.clone"><code class="xref py py-meth docutils literal notranslate"><span class="pre">clone()</span></code></a> keep that name. To keep it here, name the dimension
+again with <a class="reference internal" href="tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names" title="tensordict.TensorDictBase.refine_names"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refine_names()</span></code></a>.</p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">lazy_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">)],</span>
+<span class="gp">... </span>    <span class="n">stack_dim_name</span><span class="o">=</span><span class="s2">"s"</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span><span class="o">.</span><span class="n">names</span><span class="p">,</span> <span class="n">stack</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">names</span>
+<span class="go">(['s', None], [None, None])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="s2">"s"</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['s', None]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span><span class="o">.</span><span class="n">densify</span><span class="p">()</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['s', None]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2024,7 +2050,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.contiguous",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.contiguous",
        "url": "/reference/generated/tensordict.TensorDictBase.contiguous.html",
-       "articleBody": "TensorDictBase.contiguous# TensorDictBase.contiguous(*, canonical: bool = False, inplace: bool = False) \u2192 Self# Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous). Parameters: canonical (bool, optional) \u2013 if True, every dense tensor leaf whose strides do not match the canonical C-row-major strides for its shape is rematerialized into a freshly allocated contiguous tensor (using torch.contiguous_format), even if torch.Tensor.is_contiguous() returns True (e.g. because of size-1 dimensions). When False (the default), the historical behavior of torch.Tensor.contiguous() is preserved. Defaults to False. inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each non-contiguous leaf is replaced by its contiguous counterpart one at a time. Tensor.contiguous() returns self when a leaf is already contiguous, so for fully-contiguous tensordicts the operation is effectively a no-op aside from the key walk. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.contiguous# TensorDictBase.contiguous(*, canonical: bool = False, inplace: bool = False) \u2192 Self# Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous). Parameters: canonical (bool, optional) \u2013 if True, every dense tensor leaf whose strides do not match the canonical C-row-major strides for its shape is rematerialized into a freshly allocated contiguous tensor (using torch.contiguous_format), even if torch.Tensor.is_contiguous() returns True (e.g. because of size-1 dimensions). When False (the default), the historical behavior of torch.Tensor.contiguous() is preserved. Defaults to False. inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each non-contiguous leaf is replaced by its contiguous counterpart one at a time. Tensor.contiguous() returns self when a leaf is already contiguous, so for fully-contiguous tensordicts the operation is effectively a no-op aside from the key walk. Defaults to False. Note On a LazyStackedTensorDict, a PersistentTensorDict (h5, zarr) or a store, the result is a TensorDict. If the tensordicts of a lazy stack have no names, the result has no names either, even when the stack dimension has a name (from stack_dim_name or the names setter). densify() and clone() keep that name. To keep it here, name the dimension again with refine_names(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, lazy_stack \u003e\u003e\u003e stack = lazy_stack( ... [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)], ... stack_dim_name=\"s\", ... ) \u003e\u003e\u003e stack.names, stack.contiguous().names ([\u0027s\u0027, None], [None, None]) \u003e\u003e\u003e stack.contiguous().refine_names(\"s\", ...).names [\u0027s\u0027, None] \u003e\u003e\u003e stack.densify().names [\u0027s\u0027, None] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

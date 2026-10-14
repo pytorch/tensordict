@@ -106,10 +106,6 @@ close()
 
 Closes the persistent tensordict.
 
-contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
-
-Materializes a PersistentTensorDict on a regular TensorDict.
-
 flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T
 
 Returns an in-memory copy where the nested keys are joined by `separator`.

@@ -111,16 +111,6 @@ Note
 Tensors are stored as CPU contiguous bytes. The `device` attribute
 controls the device tensors are cast to upon retrieval.
 
-contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
-
-Materialize into a regular TensorDict (see `to_tensordict()`).
-
-Keyword Arguments:
-
-**canonical** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, also call
-`contiguous(canonical=True)` on the result. Defaults to
-`False`.
-
 flatten_keys(*separator='.'*, *inplace=False*)
 
 Returns an in-memory copy where the nested keys are joined by `separator`.

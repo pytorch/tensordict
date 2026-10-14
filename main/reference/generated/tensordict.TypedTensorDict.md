@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.TypedTensorDict(**args*, ***kwargs*)
 
-Bases: [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_StateFromSource`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A TensorDictBase subclass with typed field declarations and backend composition.
 

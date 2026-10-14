@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5634+g6acfb0ae6.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5635+g57fd210f0.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5634+g6acfb0ae6.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5635+g57fd210f0.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1697,7 +1697,7 @@ tensordicts. A new key goes to each of them.</p></li>
 </div>
 <p>Each read of an entry stacks the values again, and allocates a new tensor. If
 you read the same keys many times, call
-<a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.contiguous" title="tensordict.LazyStackedTensorDict.contiguous"><code class="xref py py-meth docutils literal notranslate"><span class="pre">contiguous()</span></code></a> once and read from its
+<a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous" title="tensordict.LazyStackedTensorDict.contiguous"><code class="xref py py-meth docutils literal notranslate"><span class="pre">contiguous()</span></code></a> once and read from its
 result. <code class="docutils literal notranslate"><span class="pre">contiguous()</span></code> returns a regular TensorDict that owns its data, so a
 write to it does not change the original tensordicts:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dense</span> <span class="o">=</span> <span class="n">stacked</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>

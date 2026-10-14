@@ -95,7 +95,7 @@ tensor(10.)
 
 Each read of an entry stacks the values again, and allocates a new tensor. If
 you read the same keys many times, call
-[`contiguous()`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.contiguous) once and read from its
+[`contiguous()`](../reference/generated/tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) once and read from its
 result. `contiguous()` returns a regular TensorDict that owns its data, so a
 write to it does not change the original tensordicts:
 
