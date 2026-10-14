@@ -261,6 +261,11 @@ arguments to :meth:`~tensordict.LazyStackedTensorDict.get`:
 - ``as_nested_tensor=True`` returns a nested tensor (:mod:`torch.nested`). The
   default layout is ``torch.jagged``. Set another one with ``layout``.
 
+A dense tensordict returns the stored tensor for ``as_list=True`` and
+``as_nested_tensor=True``, and warns. Starting with TensorDict 0.17, the
+default will change to returning ``list(tensor.unbind(0))`` and a nested
+tensor, as a lazy stack does.
+
 For example, with three graphs of 2, 3, and 1 nodes, and 2 features for each
 node:
 

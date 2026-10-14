@@ -573,6 +573,18 @@ class TestTD:
         assert "a" not in data_c.keys()
         assert (data_c == data).all()
 
+    @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor"])
+    def test_dense_get_ignored_kwargs(self, kwarg, mode):
+        # a dense get warns about these keywords in eager mode only (#2551)
+        def get(td):
+            return td.get("x", **{kwarg: True}) + 1
+
+        get_c = torch.compile(get, fullgraph=True, mode=mode)
+        data = torch.stack([TensorDict(x=torch.arange(4.0) + i) for i in range(2)])
+        with pytest.warns(FutureWarning):
+            x = get(data)
+        torch.testing.assert_close(get_c(data), x)
+
     def test_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)

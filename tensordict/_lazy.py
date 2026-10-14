@@ -744,6 +744,7 @@ class LazyStackedTensorDict(TensorDictBase):
     _empty_stack_names = None
     _safe = False
     _lazy = True
+    _get_ignores_kwargs = False
 
     def __init__(
         self,
