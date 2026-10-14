@@ -2323,7 +2323,8 @@ class TensorDict(TensorDictBase):
                                 f"{key!r} is a {type(entry).__name__}, not a "
                                 f"tensordict, so it has no entry {rest!r}."
                             )
-                        if key not in keys:
+                        # Nested calls pass the key alone as a 1-tuple.
+                        if key not in keys and (key,) not in keys:
                             del source[key]
                         continue
                     source[key] = entry._select(

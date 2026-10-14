@@ -6331,6 +6331,8 @@ class TestGeneric:
         assert set(out.keys(True)) == {"n", ("n", "y")}
         out = make().select("x", ("x", "q"), strict=False, inplace=inplace)
         assert set(out.keys(True)) == {"x"}
+        out = make().select(("n", "y"), ("n", "y", "q"), strict=False, inplace=inplace)
+        assert set(out.keys(True)) == {"n", ("n", "y")}
         td = make()
         out = td.exclude(("x", "q"), ("n", "y", "q"), inplace=inplace)
         assert set(out.keys(True)) == {"x", "n", ("n", "y")}
