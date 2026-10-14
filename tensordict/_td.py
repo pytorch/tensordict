@@ -2006,6 +2006,7 @@ class TensorDict(TensorDictBase):
             result = result_tmp
         return result
 
+    # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap(
         self,
         key: NestedKey,
@@ -2061,6 +2062,7 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
+    # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap_from_storage(
         self,
         key: NestedKey,
@@ -2121,6 +2123,7 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
+    # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap_from_tensor(
         self,
         key: NestedKey,
@@ -3184,6 +3187,7 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
             propagate_lock=True,
         )
 
+    # Override: a view of another tensordict cannot be built from a dict.
     @classmethod
     def from_dict(
         cls,

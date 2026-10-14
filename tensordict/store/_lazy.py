@@ -532,6 +532,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     # ---- not-supported stubs (same as parent) ----
 
+    # Override: an element of a store cannot be built from a dict.
     @classmethod
     def from_dict(cls, *args, **kwargs):
         raise NotImplementedError(f"{cls.__name__} cannot be created from a dict.")
@@ -2112,6 +2113,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             **kwargs,
         )
 
+    # Override: raises; a lazy store is built with from_lazy_stack.
     @classmethod
     def from_dict(
         cls,

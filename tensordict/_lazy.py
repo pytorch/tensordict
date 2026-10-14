@@ -1126,6 +1126,7 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim_name=stack_dim_name,
         )
 
+    # Override: stacks one tensordict per element; batch_size is the members' (#1955).
     @classmethod
     def from_list(
         cls,
@@ -3604,6 +3605,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @overload
     def __getitem__(self, index: IndexType) -> TensorDictBase: ...
 
+    # Override: indexes the members, so the result is a lazy stack sharing their storage.
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)

@@ -2090,6 +2090,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         out.update(td)
         return out
 
+    # Override: takes the connection arguments of the store.
     @classmethod
     def from_schema(
         cls,

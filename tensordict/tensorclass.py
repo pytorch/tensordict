@@ -6827,6 +6827,7 @@ class NonTensorStack(LazyStackedTensorDict):
         if not all(is_non_tensor(item) for item in self.tensordicts):
             raise RuntimeError("All tensordicts must be non-tensors.")
 
+    # Override: lists the stored values, not dicts of the members.
     def tolist(
         self,
         *,
@@ -6878,6 +6879,7 @@ class NonTensorStack(LazyStackedTensorDict):
             stack_dim=self.stack_dim,
         )
 
+    # Override: builds the stack from raw values, not from dicts.
     @classmethod
     def from_list(cls, non_tensors: List[Any]):
         # Use local function because refers to cls
@@ -6957,6 +6959,7 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return result
 
+    # Override: returns the stacked values as a list, as NonTensorData.to_dict returns its data.
     def to_dict(
         self,
         *,

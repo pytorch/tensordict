@@ -1492,6 +1492,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     @overload
     def __getitem__(self, item: IndexType) -> TensorDictBase: ...
 
+    # Override: an index gives a writable view of the file.
     def __getitem__(self, item: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
