@@ -3550,6 +3550,52 @@ class TestGeneric:
         if not stack:
             assert len(keys) == len(expected)
 
+    def test_list_nested_leaf_keys(self):
+        # list(keys(True, True)) is the leaves in insertion order. A nested
+        # tensordict and a non-tensor are members of that view even though
+        # iteration does not yield them (#2060). sort=True orders by the
+        # joined name.
+        td = TensorDict(
+            {
+                "z": torch.zeros(2),
+                "nested": TensorDict(
+                    {
+                        "m": torch.zeros(2),
+                        "a": TensorDict({"q": torch.zeros(2)}, [2]),
+                    },
+                    [2],
+                ),
+                "b": torch.ones(2),
+                "nt": "a string",
+            },
+            [2],
+        )
+        assert isinstance(td.get("nt"), NonTensorData)
+        leaves = ["z", ("nested", "m"), ("nested", "a", "q"), "b"]
+        view = td.keys(True, True)
+        assert list(view) == leaves
+        assert list(view) == [key for key in view]  # noqa: C416
+        assert "nested" in td.keys(True, True)
+        assert "nt" in td.keys(True, True)
+        assert ("nested", "a") in td.keys(True, True)
+        assert "missing" not in td.keys(True, True)
+        assert len(view) == len(list(view)) == len(leaves)
+        assert list(td.keys(True, True, sort=True)) == [
+            "b",
+            ("nested", "a", "q"),
+            ("nested", "m"),
+            "z",
+        ]
+        assert list(td.keys(True)) == [
+            "z",
+            ("nested", "m"),
+            ("nested", "a", "q"),
+            ("nested", "a"),
+            "nested",
+            "b",
+            "nt",
+        ]
+
     @pytest.mark.parametrize("stack", [False, True])
     def test_items_nested_deep(self, stack):
         # items(True) builds each key from the keys of the level below.
