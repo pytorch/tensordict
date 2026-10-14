@@ -804,6 +804,13 @@ def test_get_by_key(benchmark, kind):
     benchmark(td.get, _KEYS[kind])
 
 
+@pytest.mark.parametrize("key", [("nest", "c"), ("nest", "zz")], ids=["hit", "miss"])
+def test_get_nested_with_default(benchmark, key):
+    # reading an optional nested entry, such as a cached value
+    td = TensorDict({"a": torch.zeros(3), "nest": {"c": torch.zeros(3)}}, [3])
+    benchmark(td.get, key, None)
+
+
 def test_select(benchmark, td, c):
     def exec_select():
         tdc = td.clone()

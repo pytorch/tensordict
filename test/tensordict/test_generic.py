@@ -3296,6 +3296,48 @@ class TestGeneric:
         assert sub_tensordict.shape == torch.Size([4, 5])
         assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
 
+    def test_get_nested_reads_dicts(self, monkeypatch):
+        # A nested get through TensorDicts reads their dicts, without a
+        # _get_str call per level, and keeps the results and errors of the
+        # generic walk.
+        leaf = torch.zeros(3)
+        td = TensorDict({"a": {"b": {"c": leaf}}, "t": leaf}, [3])
+        td["l"] = lazy_stack([TensorDict({"q": torch.ones(())})] * 3)
+        calls = []
+        get_str = TensorDict._get_str
+
+        def counting_get_str(self, key, default, **kwargs):
+            calls.append(key)
+            return get_str(self, key, default, **kwargs)
+
+        monkeypatch.setattr(TensorDict, "_get_str", counting_get_str)
+        assert td.get(("a", "b", "c")) is leaf
+        assert td["a", "b", "c"] is leaf
+        assert td.get(("a", "b", "z"), "default") == "default"
+        assert td.get(("a", "z", "c"), None) is None
+        assert td.get("a") is td._tensordict["a"]
+        assert not calls
+        # a default that is the value on the path is returned, as before
+        sub = td["a", "b"]
+        assert td.get(("a", "b", "c"), sub) is sub
+        # a lazy stack on the path takes the generic walk
+        assert (td.get(("l", "q")) == 1).all()
+        assert td.get(("l", "z"), None) is None
+        with pytest.raises(
+            KeyError, match=r'key "z" not found in TensorDict with keys \[\W*c\W*\]'
+        ):
+            td["a", "b", "z"]
+        with pytest.raises(
+            ValueError,
+            match="'c' is a Tensor, not a tensordict, so it has no entry 'z'",
+        ):
+            td.get(("a", "b", "c", "z"), None)
+        with pytest.raises(
+            ValueError,
+            match=r"'t' is a Tensor, not a tensordict, so it has no entry \('y', 'z'\)",
+        ):
+            td.get(("t", "y", "z"))
+
     @legacy_lazy_mode()
     def test_inferred_view_size(self):
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])

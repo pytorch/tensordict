@@ -1619,6 +1619,34 @@ class TensorDict(TensorDictBase):
         except KeyError:
             return self._default_get(key, default)
 
+    # Override: reads the levels that are exact TensorDicts from their dicts,
+    # without a _get_str and a _get_tuple call per level. A subclass that keeps
+    # TensorDict's _get_str is read the same way at the root.
+    def _get_tuple(self, key, default, **kwargs):
+        if (
+            type(self) is not TensorDict
+            and type(self)._get_str is not TensorDict._get_str
+        ):
+            return TensorDictBase._get_tuple(self, key, default, **kwargs)
+        try:
+            value = self._tensordict[key[0]]
+        except KeyError:
+            return self._default_get(key[0], default)
+        if len(key) == 1:
+            return value
+        td = self
+        for i in range(1, len(key)):
+            if value is default:
+                return value
+            if type(value) is not TensorDict:
+                # a lazy stack, a tensorclass, a tensor...: the generic walk
+                return TensorDictBase._get_tuple(td, key[i - 1 :], default, **kwargs)
+            td = value
+            value = td._tensordict.get(key[i], NO_DEFAULT)
+            if value is NO_DEFAULT:
+                return td._default_get(key[i], default)
+        return value
+
     # Override: shares the dense leaves and marks the tensordict shared.
     def share_memory_(self) -> Self:
         if self.is_memmap():
