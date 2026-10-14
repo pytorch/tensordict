@@ -13,7 +13,8 @@ Parameters:
 
 - **old_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - key to be renamed. A missing key raises
 `KeyError`.
-- **new_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new name of the entry. A key inside
+- **new_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new name of the entry. An empty key raises
+`KeyError`. A key inside
 `old_key`, such as `("a", "b")` for `"a"`, moves the
 entry there, as `td.set(new_key, td.pop(old_key))` does.
 - **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `KeyError` is raised when

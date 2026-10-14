@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5720+g430f369a2.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5721+g7f547743d.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5720+g430f369a2.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5721+g7f547743d.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1652,7 +1652,8 @@ warns instead.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>old_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – key to be renamed. A missing key raises
 <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
-<li><p><strong>new_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – new name of the entry. A key inside
+<li><p><strong>new_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – new name of the entry. An empty key raises
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. A key inside
 <code class="docutils literal notranslate"><span class="pre">old_key</span></code>, such as <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code>, moves the
 entry there, as <code class="docutils literal notranslate"><span class="pre">td.set(new_key,</span> <span class="pre">td.pop(old_key))</span></code> does.</p></li>
 <li><p><strong>safe</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> is raised when
@@ -2043,7 +2044,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.rename_key",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.rename_key",
        "url": "/reference/generated/tensordict.TensorDictBase.rename_key_.html",
-       "articleBody": "TensorDictBase.rename_key# TensorDictBase.rename_key_(old_key: NestedKey, new_key: NestedKey, safe: bool = False) \u2192 Self# Renames a key with a new string and returns the same tensordict with the updated key name. The value is not copied. A locked tensordict raises RuntimeError (see lock_()). Until 0.17, a locked PersistentTensorDict or store renames the key and warns instead. Parameters: old_key (NestedKey) \u2013 key to be renamed. A missing key raises KeyError. new_key (NestedKey) \u2013 new name of the entry. A key inside old_key, such as (\"a\", \"b\") for \"a\", moves the entry there, as td.set(new_key, td.pop(old_key)) does. safe (bool, optional) \u2013 if True, a KeyError is raised when the new key is already present in the TensorDict, unless it lies inside old_key, which moves with the entry. If False, the existing entry is overwritten. Defaults to False. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3), \"b\": {\"c\": torch.ones(3)}}, [3]) \u003e\u003e\u003e td = td.rename_key_(\"a\", \"x\") \u003e\u003e\u003e td = td.rename_key_((\"b\", \"c\"), (\"b\", \"y\")) \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [(\u0027b\u0027, \u0027y\u0027), \u0027x\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use rename_key_# Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.rename_key# TensorDictBase.rename_key_(old_key: NestedKey, new_key: NestedKey, safe: bool = False) \u2192 Self# Renames a key with a new string and returns the same tensordict with the updated key name. The value is not copied. A locked tensordict raises RuntimeError (see lock_()). Until 0.17, a locked PersistentTensorDict or store renames the key and warns instead. Parameters: old_key (NestedKey) \u2013 key to be renamed. A missing key raises KeyError. new_key (NestedKey) \u2013 new name of the entry. An empty key raises KeyError. A key inside old_key, such as (\"a\", \"b\") for \"a\", moves the entry there, as td.set(new_key, td.pop(old_key)) does. safe (bool, optional) \u2013 if True, a KeyError is raised when the new key is already present in the TensorDict, unless it lies inside old_key, which moves with the entry. If False, the existing entry is overwritten. Defaults to False. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3), \"b\": {\"c\": torch.ones(3)}}, [3]) \u003e\u003e\u003e td = td.rename_key_(\"a\", \"x\") \u003e\u003e\u003e td = td.rename_key_((\"b\", \"c\"), (\"b\", \"y\")) \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True)) [(\u0027b\u0027, \u0027y\u0027), \u0027x\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use rename_key_# Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

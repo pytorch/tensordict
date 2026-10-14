@@ -48,7 +48,7 @@ In-place changes to that tensor do not reach the inputs. Writes through
 the lazy stack (`td_stack["a"] = value`, [`apply_()`](tensordict.TensorDictBase.apply_.html#tensordict.TensorDictBase.apply_))
 do reach them.
 - If the entry shapes differ, `td_stack["a"]` raises an error. Pass
-`as_nested_tensor`, `as_padded_tensor` or `as_list` to `get()`
+`as_nested_tensor`, `as_padded_tensor` or `as_list` to [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get)
 to read the entries as a nested tensor, a padded tensor or a list.
 These arguments apply even when the shapes match.
 - [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys) lists only the keys that every
@@ -71,7 +71,7 @@ tensordicts are stacked. It must be between `-td.ndim - 1` and
 `td.ndim`, where `td` is one of the inputs. Defaults to `0`.
 - **hook_out** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - 
 
-a callable to execute after `get()`.
+a callable to execute after [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get).
 
 Deprecated since version 0.15: `hook_out` belongs to the [`vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) support of lazy
 stacks and has no replacement.
@@ -248,76 +248,6 @@ Examples
 torch.Size([2, -1])
 ```
 
-get(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, **args*, *as_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_padded_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_nested_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *padding_side: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'right'*, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) = None*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) | [int](https://docs.python.org/3/builtins/functions.html#int) | [bool](https://docs.python.org/3/builtins/functions.html#bool) = 0.0*, ***kwargs*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
-
-Gets the value stored with the input key.
-
-The lazy stack reads the entry of every stacked tensordict and stacks
-the results into a new tensor. If the entry shapes differ, the plain
-call raises a `RuntimeError`: pass `as_list`, `as_padded_tensor`
-or `as_nested_tensor` to get a list, a padded tensor or a nested
-tensor instead.
-
-Parameters:
-
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be queried. If tuple of str it is
-equivalent to chained calls of getattr.
-- **default** - 
-
-default value if the key is not found in the tensordict. Defaults to `None`.
-
-Warning
-
-If the key is missing and no default is given, `get`
-returns `None`, as `dict.get` does. Use `td[key]` to
-raise a `KeyError` for a missing key. Restoring the old
-behavior (a `KeyError`) with `TD_GET_DEFAULTS_TO_NONE=0`
-or `set_get_defaults_to_none(False)` is deprecated and
-will be removed in TensorDict 0.17.
-
-Keyword Arguments:
-
-- **as_list** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are returned as
-a list, one item per stacked tensordict.
-Exclusive with `as_padded_tensor` and `as_nested_tensor`.
-Defaults to `False`.
-- **as_padded_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are
-padded to the largest shape and returned as one tensor: each
-dim is padded to its largest size, also across the levels of
-a lazy stack of lazy stacks. `padding_value` sets the
-padding value and `padding_side` sets the side of every
-padded dim.
-Exclusive with `as_list` and `as_nested_tensor`.
-Defaults to `False`.
-- **as_nested_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are
-returned as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
-sets its layout. A lazy stack of lazy stacks raises a
-`ValueError`, as a nested tensor has a single nested level.
-Exclusive with `as_list` and `as_padded_tensor`.
-Defaults to `False`.
-- **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor
-when `as_nested_tensor=True`: `torch.jagged` or
-`torch.strided`. Defaults to `torch.jagged`.
-- **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - The side of padding. Must be "left" or "right". Defaults to "right".
-- **padding_value** (*scalar**or*[*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - The padding value. Defaults to 0.0.
-
-Examples
-
-```
->>> from tensordict import TensorDict, lazy_stack
->>> import torch
->>> td = lazy_stack([
-... TensorDict({"x": torch.ones(1,)}),
-... TensorDict({"x": torch.ones(2,) * 2}),
-... ])
->>> nested = td.get("x", as_nested_tensor=True)
->>> nested.is_nested, nested.offsets()
-(True, tensor([0, 1, 3]))
->>> td.get("x", as_padded_tensor=True)
-tensor([[1., 0.],
- [2., 2.]])
-```
-
 get_item_shape(*key*)
 
 Gets the shape of an item in the lazy stack.
@@ -441,7 +371,7 @@ Defaults to `False`.
 The following keyword arguments apply only when `items` is a list of
 tensors. With tensordicts, they have no effect. To read padded or
 nested entries from a lazy stack of tensordicts, pass them to
-`get()` instead.
+[`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) instead.
 
 Keyword Arguments:
 

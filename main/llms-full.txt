@@ -3154,7 +3154,7 @@ TensorDict cannot hold it, because each entry is one tensor.
 A lazy stack holds tensordicts whose entries have different shapes. The shape
 of such an entry shows `-1` for each dimension that differs. `stacked[key]`
 then raises a `RuntimeError`. To read the entry, pass one of these keyword
-arguments to [`get()`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get):
+arguments to [`get()`](../reference/generated/tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get):
 
 - `as_list=True` returns a list with one tensor for each element.
 - `as_padded_tensor=True` returns one tensor, padded to the longest element.
@@ -6716,7 +6716,7 @@ In-place changes to that tensor do not reach the inputs. Writes through
 the lazy stack (`td_stack["a"] = value`, [`apply_()`](tensordict.TensorDictBase.apply_.html#tensordict.TensorDictBase.apply_))
 do reach them.
 - If the entry shapes differ, `td_stack["a"]` raises an error. Pass
-`as_nested_tensor`, `as_padded_tensor` or `as_list` to `get()`
+`as_nested_tensor`, `as_padded_tensor` or `as_list` to [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get)
 to read the entries as a nested tensor, a padded tensor or a list.
 These arguments apply even when the shapes match.
 - [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys) lists only the keys that every
@@ -6739,7 +6739,7 @@ tensordicts are stacked. It must be between `-td.ndim - 1` and
 `td.ndim`, where `td` is one of the inputs. Defaults to `0`.
 - **hook_out** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - 
 
-a callable to execute after `get()`.
+a callable to execute after [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get).
 
 Deprecated since version 0.15: `hook_out` belongs to the [`vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) support of lazy
 stacks and has no replacement.
@@ -6916,76 +6916,6 @@ Examples
 torch.Size([2, -1])
 ```
 
-get(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, **args*, *as_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_padded_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_nested_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *padding_side: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'right'*, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) = None*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) | [int](https://docs.python.org/3/builtins/functions.html#int) | [bool](https://docs.python.org/3/builtins/functions.html#bool) = 0.0*, ***kwargs*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
-
-Gets the value stored with the input key.
-
-The lazy stack reads the entry of every stacked tensordict and stacks
-the results into a new tensor. If the entry shapes differ, the plain
-call raises a `RuntimeError`: pass `as_list`, `as_padded_tensor`
-or `as_nested_tensor` to get a list, a padded tensor or a nested
-tensor instead.
-
-Parameters:
-
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be queried. If tuple of str it is
-equivalent to chained calls of getattr.
-- **default** - 
-
-default value if the key is not found in the tensordict. Defaults to `None`.
-
-Warning
-
-If the key is missing and no default is given, `get`
-returns `None`, as `dict.get` does. Use `td[key]` to
-raise a `KeyError` for a missing key. Restoring the old
-behavior (a `KeyError`) with `TD_GET_DEFAULTS_TO_NONE=0`
-or `set_get_defaults_to_none(False)` is deprecated and
-will be removed in TensorDict 0.17.
-
-Keyword Arguments:
-
-- **as_list** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are returned as
-a list, one item per stacked tensordict.
-Exclusive with `as_padded_tensor` and `as_nested_tensor`.
-Defaults to `False`.
-- **as_padded_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are
-padded to the largest shape and returned as one tensor: each
-dim is padded to its largest size, also across the levels of
-a lazy stack of lazy stacks. `padding_value` sets the
-padding value and `padding_side` sets the side of every
-padded dim.
-Exclusive with `as_list` and `as_nested_tensor`.
-Defaults to `False`.
-- **as_nested_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the entries are
-returned as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
-sets its layout. A lazy stack of lazy stacks raises a
-`ValueError`, as a nested tensor has a single nested level.
-Exclusive with `as_list` and `as_padded_tensor`.
-Defaults to `False`.
-- **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor
-when `as_nested_tensor=True`: `torch.jagged` or
-`torch.strided`. Defaults to `torch.jagged`.
-- **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - The side of padding. Must be "left" or "right". Defaults to "right".
-- **padding_value** (*scalar**or*[*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - The padding value. Defaults to 0.0.
-
-Examples
-
-```
->>> from tensordict import TensorDict, lazy_stack
->>> import torch
->>> td = lazy_stack([
-... TensorDict({"x": torch.ones(1,)}),
-... TensorDict({"x": torch.ones(2,) * 2}),
-... ])
->>> nested = td.get("x", as_nested_tensor=True)
->>> nested.is_nested, nested.offsets()
-(True, tensor([0, 1, 3]))
->>> td.get("x", as_padded_tensor=True)
-tensor([[1., 0.],
- [2., 2.]])
-```
-
 get_item_shape(*key*)
 
 Gets the shape of an item in the lazy stack.
@@ -7109,7 +7039,7 @@ Defaults to `False`.
 The following keyword arguments apply only when `items` is a list of
 tensors. With tensordicts, they have no effect. To read padded or
 nested entries from a lazy stack of tensordicts, pass them to
-`get()` instead.
+[`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) instead.
 
 Keyword Arguments:
 
@@ -8536,7 +8466,7 @@ documentation.
 
 *class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
 
-Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, `_NoSelectExclude`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A tensordict whose entries live in an HDF5 file or a Zarr store.
 
@@ -8635,7 +8565,7 @@ close()
 
 Closes the persistent tensordict.
 
-flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T
+flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → T
 
 Returns an in-memory copy where the nested keys are joined by `separator`.
 
@@ -8646,6 +8576,8 @@ Parameters:
 - **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the separator between the nested items. Defaults to `"."`.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - must be `False`; `True` raises a `ValueError`.
 Defaults to `False`.
+- **is_leaf** (*callable**,**optional*) - see
+[`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
@@ -8700,20 +8632,6 @@ Examples
 ... ptd.close()
 torch.Size([3]) tensor([1., 1., 1.])
 ```
-
-get_at(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection = NO_DEFAULT*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
-
-Gets the value of the entry `key` at the index `idx`.
-
-Parameters:
-
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be retrieved.
-- **idx** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**iterable*) - index of the entry.
-- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - default value to return if the key is
-not present in the tensordict. If not provided, a missing key
-raises a `KeyError`.
-
-See [`get_at()`](tensordict.TensorDictBase.get_at.html#tensordict.TensorDictBase.get_at).
 
 *property*kwargs*: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]*
 
@@ -11975,17 +11893,34 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.del
 
-*abstract*TensorDictBase.del_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*) → Self
+TensorDictBase.del_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*) → Self
 
 Deletes a key of the tensordict.
 
+A locked tensordict raises `RuntimeError` (see [`lock_()`](tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)).
+
 Parameters:
 
-**key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - key to be deleted
+**key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - key to be deleted. A missing key raises
+`KeyError`, and a key whose path runs through an entry that
+is not a tensordict raises `ValueError`. Until 0.17, the
+stores and the zarr backend of
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) warn and do nothing
+for a missing key.
 
 Returns:
 
 self
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3)))
+>>> list(td.del_(("b", "c")).keys(True))
+['a', 'b']
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).
@@ -14446,14 +14381,44 @@ Changed in version 0.7: A missing key returns `None` instead of raising `KeyErro
 restore the old behavior. They are deprecated and will be removed
 in 0.17.
 
+Keyword Arguments:
+
+- **as_list** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a lazy stack returns the
+entries as a list, one item per stacked tensordict.
+Exclusive with `as_padded_tensor` and `as_nested_tensor`.
+Defaults to `False`.
+- **as_padded_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a lazy stack pads
+the entries to the largest shape and returns them as one
+tensor: each dim is padded to its largest size, also across
+the levels of a lazy stack of lazy stacks. `padding_value`
+sets the padding value and `padding_side` sets the side of
+every padded dim.
+Exclusive with `as_list` and `as_nested_tensor`.
+Defaults to `False`.
+- **as_nested_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a lazy stack returns
+the entries as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
+sets its layout. A lazy stack of lazy stacks raises a
+`ValueError`, as a nested tensor has a single nested level.
+Exclusive with `as_list` and `as_padded_tensor`.
+Defaults to `False`.
+- **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor
+when `as_nested_tensor=True`: `torch.jagged` or
+`torch.strided`. Defaults to `torch.jagged`.
+- **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - The side of padding. Must be "left" or "right". Defaults to "right".
+- **padding_value** (*scalar**or*[*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - The padding value. Defaults to 0.0.
+
+A lazy stack reads the entry of every stacked tensordict and stacks
+the results into a new tensor. If the entry shapes differ, the plain
+call raises a `RuntimeError`: pass `as_list`, `as_padded_tensor`
+or `as_nested_tensor` to get a list, a padded tensor or a nested
+tensor instead.
+
 Note
 
-Keyword arguments can be passed to `get()` when dealing with ragged tensors.
-See [`get()`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get) for a complete overview.
-A dense tensordict ignores them today and warns for `as_list=True`
-and `as_nested_tensor=True`. Starting with TensorDict 0.17, the
-default will change to returning a list or a nested tensor, as a
-lazy stack does.
+A dense tensordict ignores the keyword arguments today and
+warns for `as_list=True` and `as_nested_tensor=True`. Starting
+with TensorDict 0.17, the default will change to returning a list
+or a nested tensor, as a lazy stack does.
 
 Examples
 
@@ -14468,6 +14433,21 @@ tensor(2)
 None
 >>> td.get("z", 0)
 0
+```
+
+```
+>>> import torch
+>>> from tensordict import lazy_stack
+>>> td = lazy_stack([
+... TensorDict({"x": torch.ones(1,)}),
+... TensorDict({"x": torch.ones(2,) * 2}),
+... ])
+>>> nested = td.get("x", as_nested_tensor=True)
+>>> nested.is_nested, nested.offsets()
+(True, tensor([0, 1, 3]))
+>>> td.get("x", as_padded_tensor=True)
+tensor([[1., 0.],
+ [2., 2.]])
 ```
 
 Every tensordict class and every tensorclass has this method. For the
@@ -19004,7 +18984,8 @@ Parameters:
 
 - **old_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - key to be renamed. A missing key raises
 `KeyError`.
-- **new_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new name of the entry. A key inside
+- **new_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new name of the entry. An empty key raises
+`KeyError`. A key inside
 `old_key`, such as `("a", "b")` for `"a"`, moves the
 entry there, as `td.set(new_key, td.pop(old_key))` does.
 - **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `KeyError` is raised when
@@ -27418,7 +27399,7 @@ written into it, whatever the value of `inplace`.
 - **strict** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the module will raise an exception if any of the inputs is missing from
 the input tensordict. Otherwise, a None value will be used as placeholder. Defaults to `False`.
 - **get_kwargs** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*[*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**Any**]**,**optional*) - additional keyword arguments to be passed to the [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get)
-method. This is particularly useful when dealing with ragged tensors (see [`get()`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get)).
+method. This is particularly useful when dealing with ragged tensors (see [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get)).
 Defaults to `{}`.
 
 To wrap a neural network, give it the input and output keys:
@@ -31513,7 +31494,7 @@ tensor([1., 1., 1., 1., 1.])
 >>> store.close()
 ```
 
-flatten_keys(*separator='.'*, *inplace=False*)
+flatten_keys(*separator='.'*, *inplace=False*, *is_leaf=None*)
 
 Returns an in-memory copy where the nested keys are joined by `separator`.
 
@@ -31524,6 +31505,8 @@ Parameters:
 - **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the separator between the nested items. Defaults to `"."`.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - must be `False`; `True` raises a `ValueError`.
 Defaults to `False`.
+- **is_leaf** (*callable**,**optional*) - see
+[`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
@@ -31715,7 +31698,7 @@ Note
 Tensors are stored as CPU contiguous bytes. The `device` attribute
 controls the device tensors are cast to upon retrieval.
 
-flatten_keys(*separator='.'*, *inplace=False*)
+flatten_keys(*separator='.'*, *inplace=False*, *is_leaf=None*)
 
 Returns an in-memory copy where the nested keys are joined by `separator`.
 
@@ -31726,6 +31709,8 @@ Parameters:
 - **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the separator between the nested items. Defaults to `"."`.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - must be `False`; `True` raises a `ValueError`.
 Defaults to `False`.
+- **is_leaf** (*callable**,**optional*) - see
+[`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
@@ -33038,7 +33023,7 @@ Methods
 | [`TensorDictBase.create_nested`](generated/tensordict.TensorDictBase.create_nested.html#tensordict.TensorDictBase.create_nested)(key) | Creates a nested tensordict of the same shape, device and dim names as the current tensordict. |
 | [`TensorDictBase.depth`](generated/tensordict.TensorDictBase.depth.html#tensordict.TensorDictBase.depth) | the maximum number of levels of sub-tensordicts. |
 | [`TensorDictBase.entry_class`](generated/tensordict.TensorDictBase.entry_class.html#tensordict.TensorDictBase.entry_class)(key) | Returns the class of an entry, possibly without reading the entry. |
-| [`TensorDictBase.get_item_shape`](generated/tensordict.TensorDictBase.get_item_shape.html#tensordict.TensorDictBase.get_item_shape)(key) | Returns the shape of the entry, without reading it with [`get()`](generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get) when possible. |
+| [`TensorDictBase.get_item_shape`](generated/tensordict.TensorDictBase.get_item_shape.html#tensordict.TensorDictBase.get_item_shape)(key) | Returns the shape of the entry, without reading it with [`get()`](generated/tensordict.TensorClass.html#tensordict.TensorClass.get) when possible. |
 | [`TensorDictBase.is_empty`](generated/tensordict.TensorDictBase.is_empty.html#tensordict.TensorDictBase.is_empty)() | Returns `True` if the tensordict has no leaf. |
 | [`TensorDictBase.fill_`](generated/tensordict.TensorDictBase.fill_.html#tensordict.TensorDictBase.fill_)(key, value) | Fills a tensor pointed by the key with a given scalar value. |
 | [`TensorDictBase.set_non_tensor`](generated/tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor)(key, value) | Registers a non-tensor value in the tensordict using [`tensordict.tensorclass.NonTensorData`](generated/tensordict.NonTensorData.html#tensordict.NonTensorData). |
@@ -34324,20 +34309,20 @@ it between processes.
 
 # Computation times
 
-**01:24.469** total execution time for 14 files **from all galleries**:
+**01:25.387** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:39.970 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.539 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.529 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:40.113 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.807 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.839 | 0.0 |
 | [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.019 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.604 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.476 | 0.0 |
-| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.161 | 0.0 |
-| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.130 | 0.0 |
-| [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.009 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.673 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.588 | 0.0 |
+| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.174 | 0.0 |
+| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.133 | 0.0 |
 | [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.009 | 0.0 |
+| [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.009 | 0.0 |
 | [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
 | [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`reference/generated/tutorials/tensordict_memory.py`) | 00:00.006 | 0.0 |
 | [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.005 | 0.0 |
@@ -35646,28 +35631,30 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:14, 356kB/s]
- 1%| | 229k/26.4M [00:00<00:39, 669kB/s]
- 3%|▎ | 918k/26.4M [00:00<00:12, 2.07MB/s]
- 14%|█▍ | 3.67M/26.4M [00:00<00:03, 7.14MB/s]
- 35%|███▌ | 9.31M/26.4M [00:00<00:00, 18.7MB/s]
- 56%|█████▌ | 14.7M/26.4M [00:00<00:00, 27.3MB/s]
- 71%|███████ | 18.7M/26.4M [00:01<00:00, 28.7MB/s]
- 87%|████████▋ | 23.0M/26.4M [00:01<00:00, 31.2MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 21.6MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:15, 347kB/s]
+ 1%| | 197k/26.4M [00:00<00:47, 550kB/s]
+ 2%|▏ | 655k/26.4M [00:00<00:18, 1.41MB/s]
+ 9%|▉ | 2.49M/26.4M [00:00<00:04, 5.17MB/s]
+ 19%|█▉ | 5.08M/26.4M [00:00<00:02, 9.36MB/s]
+ 37%|███▋ | 9.76M/26.4M [00:00<00:00, 18.5MB/s]
+ 55%|█████▌ | 14.5M/26.4M [00:01<00:00, 25.0MB/s]
+ 71%|███████ | 18.7M/26.4M [00:01<00:00, 29.4MB/s]
+ 85%|████████▍ | 22.4M/26.4M [00:01<00:00, 29.9MB/s]
+100%|█████████▉| 26.3M/26.4M [00:01<00:00, 28.8MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 18.4MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 319kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 302kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:12, 355kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:07, 564kB/s]
- 14%|█▍ | 623k/4.42M [00:00<00:02, 1.36MB/s]
- 56%|█████▋ | 2.49M/4.42M [00:00<00:00, 4.82MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 5.96MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:12, 339kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:07, 536kB/s]
+ 16%|█▌ | 688k/4.42M [00:00<00:02, 1.45MB/s]
+ 56%|█████▋ | 2.49M/4.42M [00:00<00:00, 5.62MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 5.67MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 39.5MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 48.3MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -35787,7 +35774,7 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 1.96 s
+torchvision DataLoader: 1.97 s
 TensorDict DataLoader: 0.09 s
 ```
 
@@ -35950,7 +35937,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 2.3621 s
+TensorDict training done! time: 2.2215 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -35960,7 +35947,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.6699 s
+Training done! time: 4.7159 s
 ```
 
 ## Conclusion
@@ -35989,7 +35976,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.529 seconds)
+**Total running time of the script:** (0 minutes 15.839 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -36348,7 +36335,7 @@ built on `torch.export`.
 [AOTInductor](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html)
 documentation.
 
-**Total running time of the script:** (0 minutes 0.130 seconds)
+**Total running time of the script:** (0 minutes 0.133 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 
@@ -37206,7 +37193,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 39.970 seconds)
+**Total running time of the script:** (0 minutes 40.113 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -37220,20 +37207,20 @@ layouts, and read timings.
 
 # Computation times
 
-**01:24.469** total execution time for 14 files **from tutorials**:
+**01:25.387** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:39.970 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.539 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.529 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:40.113 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.807 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.839 | 0.0 |
 | [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.019 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.604 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.476 | 0.0 |
-| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.161 | 0.0 |
-| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.130 | 0.0 |
-| [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.009 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.673 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.588 | 0.0 |
+| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.174 | 0.0 |
+| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.133 | 0.0 |
 | [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.009 | 0.0 |
+| [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.009 | 0.0 |
 | [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
 | [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`tensordict_memory.py`) | 00:00.006 | 0.0 |
 | [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.005 | 0.0 |
@@ -37341,8 +37328,8 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 TensorDict(
  fields={
- stream0: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False),
- stream1: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False)},
+ stream0: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False),
+ stream1: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False)},
  batch_size=torch.Size([2]),
  device=None,
  is_shared=False)
@@ -37802,7 +37789,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.2628 s
+Tensorclass training done! time: 2.2931 s
 ```
 
 ## Conclusion
@@ -37823,7 +37810,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.604 seconds)
+**Total running time of the script:** (0 minutes 4.673 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -38189,8 +38176,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 1071 images per second, 0.21 s
-train, tensorclass DataLoader: 4326 images per second, 0.05 s
+train, regular DataLoader: 942 images per second, 0.23 s
+train, tensorclass DataLoader: 4436 images per second, 0.05 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -38207,8 +38194,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 620 images per second, 0.21 s
-val, tensorclass DataLoader: 16784 images per second, 0.01 s
+val, regular DataLoader: 554 images per second, 0.23 s
+val, tensorclass DataLoader: 17550 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -38255,7 +38242,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.476 seconds)
+**Total running time of the script:** (0 minutes 1.588 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -39346,13 +39333,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 134.8 us
- TDM: 148.0 us
- Sequential: 206.6 us
+ Regular: 136.9 us
+ TDM: 151.3 us
+ Sequential: 211.5 us
 Compiled
- Regular: 154.3 us
- TDM: 167.5 us
- Sequential: 173.9 us
+ Regular: 154.4 us
+ TDM: 167.3 us
+ Sequential: 171.4 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -39505,7 +39492,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.539 seconds)
+**Total running time of the script:** (0 minutes 16.807 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -39707,7 +39694,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f59fc9f02f0>
+<torch._C.Generator object at 0x7f4c919cc2f0>
 ```
 
 ## Indexing
@@ -40526,7 +40513,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.161 seconds)
+**Total running time of the script:** (0 minutes 0.174 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

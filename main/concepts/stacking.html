@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5720+g430f369a2.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5721+g7f547743d.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5720+g430f369a2.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5721+g7f547743d.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1857,7 +1857,7 @@ TensorDict cannot hold it, because each entry is one tensor.</p>
 <p>A lazy stack holds tensordicts whose entries have different shapes. The shape
 of such an entry shows <code class="docutils literal notranslate"><span class="pre">-1</span></code> for each dimension that differs. <code class="docutils literal notranslate"><span class="pre">stacked[key]</span></code>
 then raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. To read the entry, pass one of these keyword
-arguments to <a class="reference internal" href="../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get" title="tensordict.LazyStackedTensorDict.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>:</p>
+arguments to <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">as_list=True</span></code> returns a list with one tensor for each element.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">as_padded_tensor=True</span></code> returns one tensor, padded to the longest element.

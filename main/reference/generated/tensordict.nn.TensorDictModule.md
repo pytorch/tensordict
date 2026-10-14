@@ -59,7 +59,7 @@ written into it, whatever the value of `inplace`.
 - **strict** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the module will raise an exception if any of the inputs is missing from
 the input tensordict. Otherwise, a None value will be used as placeholder. Defaults to `False`.
 - **get_kwargs** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*[*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**Any**]**,**optional*) - additional keyword arguments to be passed to the [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get)
-method. This is particularly useful when dealing with ragged tensors (see [`get()`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get)).
+method. This is particularly useful when dealing with ragged tensors (see [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get)).
 Defaults to `{}`.
 
 To wrap a neural network, give it the input and output keys:

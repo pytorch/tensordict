@@ -111,7 +111,7 @@ Note
 Tensors are stored as CPU contiguous bytes. The `device` attribute
 controls the device tensors are cast to upon retrieval.
 
-flatten_keys(*separator='.'*, *inplace=False*)
+flatten_keys(*separator='.'*, *inplace=False*, *is_leaf=None*)
 
 Returns an in-memory copy where the nested keys are joined by `separator`.
 
@@ -122,6 +122,8 @@ Parameters:
 - **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the separator between the nested items. Defaults to `"."`.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - must be `False`; `True` raises a `ValueError`.
 Defaults to `False`.
+- **is_leaf** (*callable**,**optional*) - see
+[`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 

@@ -216,7 +216,7 @@ TensorDict cannot hold it, because each entry is one tensor.
 A lazy stack holds tensordicts whose entries have different shapes. The shape
 of such an entry shows `-1` for each dimension that differs. `stacked[key]`
 then raises a `RuntimeError`. To read the entry, pass one of these keyword
-arguments to [`get()`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get):
+arguments to [`get()`](../reference/generated/tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get):
 
 - `as_list=True` returns a list with one tensor for each element.
 - `as_padded_tensor=True` returns one tensor, padded to the longest element.

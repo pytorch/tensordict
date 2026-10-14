@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
 
-Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, `_NoSelectExclude`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 A tensordict whose entries live in an HDF5 file or a Zarr store.
 
@@ -106,7 +106,7 @@ close()
 
 Closes the persistent tensordict.
 
-flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T
+flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → T
 
 Returns an in-memory copy where the nested keys are joined by `separator`.
 
@@ -117,6 +117,8 @@ Parameters:
 - **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the separator between the nested items. Defaults to `"."`.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - must be `False`; `True` raises a `ValueError`.
 Defaults to `False`.
+- **is_leaf** (*callable**,**optional*) - see
+[`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
@@ -171,20 +173,6 @@ Examples
 ... ptd.close()
 torch.Size([3]) tensor([1., 1., 1.])
 ```
-
-get_at(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection = NO_DEFAULT*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
-
-Gets the value of the entry `key` at the index `idx`.
-
-Parameters:
-
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be retrieved.
-- **idx** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**iterable*) - index of the entry.
-- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - default value to return if the key is
-not present in the tensordict. If not provided, a missing key
-raises a `KeyError`.
-
-See [`get_at()`](tensordict.TensorDictBase.get_at.html#tensordict.TensorDictBase.get_at).
 
 *property*kwargs*: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]*
 
