@@ -302,7 +302,11 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
         is_eager = not is_compiling()
-        is_empty = source is None or (type(source) is dict and not source)
+        # Eager only: under compile, Dynamo does not guard on the emptiness
+        # read here, and would reuse the empty-source graph for a full source.
+        is_empty = is_eager and (
+            source is None or (type(source) is dict and not source)
+        )
 
         if is_empty and names is None and not lock and type(self) is TensorDict:
             # Nothing to validate, move, sync or rename: this ends in the
@@ -327,6 +331,11 @@ class TensorDict(TensorDictBase):
             if is_cuda:
                 # CUDA does its sync by itself
                 call_sync = False
+            elif non_blocking is None and not is_eager:
+                # Under compile, copy with blocking calls instead of marking
+                # the device recorder and syncing: the sync breaks the graph,
+                # and a mark nested in another TensorDict() raises.
+                sub_non_blocking = False
             else:
                 # An empty source has no transfer to record.
                 call_sync = non_blocking is None and not is_empty
