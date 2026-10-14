@@ -833,6 +833,48 @@ def test_exclude_nested(benchmark):
     benchmark(func)
 
 
+@pytest.mark.parametrize("op", ["exclude", "select", "step"])
+def test_exclude_select_update_step(benchmark, op):
+    # One env step of a nested (multi-agent style) env turned into the next
+    # root, as TorchRL's step_mdp does (#2558).
+    def leaf(dtype=torch.float32):
+        return torch.zeros(3, 1, dtype=dtype)
+
+    td = TensorDict(
+        data=TensorDict(
+            states=leaf(torch.int32),
+            action=leaf(),
+            done=leaf(torch.bool),
+            terminated=leaf(torch.bool),
+            batch_size=[3],
+        ),
+        next=TensorDict(
+            data=TensorDict(
+                states=leaf(torch.int32),
+                done=leaf(torch.bool),
+                terminated=leaf(torch.bool),
+                reward=leaf(),
+                batch_size=[3],
+            )
+        ),
+    )
+    excl = [
+        ("next",),
+        ("data", "done"),
+        ("data", "terminated"),
+        ("data", "_reset"),
+        ("data", "reward"),
+    ]
+    keep = [("data", "states"), ("data", "done"), ("data", "terminated")]
+    nxt = td.get("next")
+    func = {
+        "exclude": lambda: td.exclude(*excl),
+        "select": lambda: nxt.select(*keep, strict=False),
+        "step": lambda: td.exclude(*excl).update(nxt.select(*keep, strict=False)),
+    }[op]
+    benchmark(func)
+
+
 @pytest.mark.parametrize("recurse", [True, False])
 def test_empty(benchmark, recurse):
     td = big_nested_td()[0][0]
@@ -841,6 +883,23 @@ def test_empty(benchmark, recurse):
         td.empty(recurse=recurse)
 
     benchmark(func)
+
+
+def test_to_same_device(benchmark):
+    # A device-less env step whose leaves are already on the CPU
+    td = TensorDict(
+        observation=torch.randn(4),
+        action=torch.randn(2),
+        done=torch.zeros(1, dtype=torch.bool),
+        next=TensorDict(
+            observation=torch.randn(4),
+            reward=torch.randn(1),
+            done=torch.zeros(1, dtype=torch.bool),
+            terminated=torch.zeros(1, dtype=torch.bool),
+        ),
+        collector=TensorDict(traj_ids=torch.zeros((), dtype=torch.long)),
+    )
+    benchmark(td.to, "cpu")
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")

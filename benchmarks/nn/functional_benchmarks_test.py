@@ -337,6 +337,26 @@ def test_to_module_eager(benchmark, module_transfer_model, mode):
         benchmark(params.to_module, module_transfer_model, return_swap=mode == "swap")
 
 
+@pytest.mark.parametrize("preserve_module_state", [True, False])
+@pytest.mark.parametrize("as_module", [False, True])
+def test_to_module_context_small(benchmark, as_module, preserve_module_state):
+    # A functional call of a small critic, as the losses of TorchRL make it
+    module = nn.Sequential(
+        nn.Linear(32, 64),
+        nn.ReLU(),
+        nn.Linear(64, 64),
+        nn.ReLU(),
+        nn.Linear(64, 1),
+    )
+    params = TensorDict.from_module(deepcopy(module), as_module=as_module)
+
+    def run():
+        with params.to_module(module, preserve_module_state=preserve_module_state):
+            pass
+
+    benchmark(run)
+
+
 @pytest.mark.parametrize(
     "num_fields,width",
     [(16, 8), (256, 8), (16, 8192)],

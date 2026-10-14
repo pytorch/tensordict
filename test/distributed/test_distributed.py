@@ -1220,6 +1220,61 @@ class TestSendConsolidated:
         td["c"] = torch.full((2, 3), 2.0)
         td.send(dst=1, consolidated=True)
 
+    @classmethod
+    def client_async(cls, queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29525"
+        dist.init_process_group("gloo", rank=rank, world_size=2)
+
+        td_recv = TensorDict.from_remote_init(src=0)
+        futures = td_recv.irecv(src=0, consolidated=True, return_premature=True)
+        assert len(futures) == 1
+        for fut in futures:
+            fut.wait()
+        assert (td_recv["a", "b"] == 2).all()
+        assert (td_recv["c"] == 2).all()
+        assert td_recv.irecv(src=0, consolidated=True) is None
+        assert (td_recv["a", "b"] == 3).all()
+        assert (td_recv["c"] == 3).all()
+        queue.put("yuppie")
+
+    @classmethod
+    def server_async(cls, queue):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29525"
+        dist.init_process_group("gloo", rank=0, world_size=2)
+
+        td = TensorDict({("a", "b"): torch.ones(2), "c": torch.ones(2, 3)}, [2])
+        td.init_remote(dst=1)
+
+        # A non-consolidated sender is consolidated on the fly
+        td["a", "b"] = torch.full((2,), 2.0)
+        td["c"] = torch.full((2, 3), 2.0)
+        works = td.isend(dst=1, consolidated=True, return_early=True)
+        assert len(works) == 1
+        for work in works:
+            work.wait()
+        # A consolidated sender is sent as is
+        td_c = td.consolidate(metadata=True)
+        td_c.update_({("a", "b"): torch.full((2,), 3.0), "c": torch.full((2, 3), 3.0)})
+        assert td_c.isend(dst=1, consolidated=True) is None
+
+    def test_isend_irecv_consolidated(self, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server_async, args=(queue,))
+        secondary_worker = mp.Process(target=type(self).client_async, args=(queue, 1))
+
+        main_worker.start()
+        secondary_worker.start()
+        out = None
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
+
     def test_send_consolidated(self, set_context, tmp_path):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=type(self).server, args=(queue,))
@@ -1282,6 +1337,8 @@ class TestRawGroupSendRecv:
             td.isend(group=pg, group_dst=0, pseudo_rand=pseudo_rand)
         elif mode == "consolidated":
             td.send(group=pg, group_dst=0, consolidated=True)
+        elif mode == "isend_consolidated":
+            td.isend(group=pg, group_dst=0, consolidated=True)
         else:
             td.send(group=pg, group_dst=0, pseudo_rand=pseudo_rand)
 
@@ -1292,6 +1349,18 @@ class TestRawGroupSendRecv:
         if mode == "consolidated":
             td = td.consolidate(metadata=True)
             td.recv(group=pg, group_src=1, consolidated=True)
+        elif mode == "irecv_consolidated":
+            td = td.consolidate(metadata=True)
+            out = td.irecv(
+                group=pg,
+                group_src=1,
+                consolidated=True,
+                return_premature=return_premature,
+            )
+            if return_premature:
+                assert len(out) == 1
+                for fut in out:
+                    fut.wait()
         elif mode == "irecv":
             out = td.irecv(
                 group=pg,
@@ -1344,6 +1413,15 @@ class TestRawGroupSendRecv:
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_consolidated_raw(self, set_context):
         self._run("consolidated", "consolidated")
+
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    @pytest.mark.parametrize("return_premature", [True, False])
+    def test_isend_irecv_consolidated_raw(self, return_premature, set_context):
+        self._run(
+            "isend_consolidated",
+            "irecv_consolidated",
+            return_premature=return_premature,
+        )
 
 
 class TestRegisteredGroupSendRecv:

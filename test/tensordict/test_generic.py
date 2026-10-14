@@ -10,6 +10,7 @@ import gc
 import importlib.util
 import inspect
 import io
+import json
 import os
 import pickle
 import platform
@@ -981,6 +982,58 @@ class TestGeneric:
         assert td.to("cpu", batch_size=[2]) is td
         assert td.to("cpu", batch_size=torch.Size([2])) is td
 
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_to_device_walks_once(self, monkeypatch, locked):
+        # to() walks an unlocked tree once. A locked tree caches its leaves,
+        # so it keeps the cheap first walk through _items_list.
+        td = TensorDict(
+            a=torch.zeros(2, device="meta"),
+            b=torch.zeros(2),
+            nested=TensorDict(c=torch.zeros(2, 3), batch_size=[2]),
+            batch_size=[2],
+            names=["x"],
+        )
+        if locked:
+            td.lock_()
+        else:
+
+            def items_list(*args, **kwargs):
+                raise AssertionError("to() should walk an unlocked tree once")
+
+            monkeypatch.setattr(type(td), "_items_list", items_list)
+        result = td.to("meta")
+        assert result.device == torch.device("meta")
+        assert result["nested"].device == torch.device("meta")
+        assert result.is_locked is locked
+        assert result["nested"].is_locked is locked
+        assert result.names == ["x"]
+        assert result["b"].device == torch.device("meta")
+        assert result["nested", "c"].device == torch.device("meta")
+
+    def test_to_cpu_skips_leaves_already_there(self, monkeypatch):
+        # A device-less tree whose leaves are on the CPU already: to("cpu")
+        # returns them as they are, without calling Tensor.to
+        td = TensorDict(
+            a=torch.zeros(2),
+            nested=TensorDict(c=torch.zeros(2, 3), batch_size=[2]),
+            batch_size=[2],
+        )
+        assert td.device is None
+        moved = []
+        tensor_to = torch.Tensor.to
+
+        def counting_to(tensor, *args, **kwargs):
+            moved.append(tensor.device.type)
+            return tensor_to(tensor, *args, **kwargs)
+
+        monkeypatch.setattr(torch.Tensor, "to", counting_to)
+        result = td.to("cpu")
+        assert moved == []
+        assert result.device == torch.device("cpu")
+        assert result["nested"].device == torch.device("cpu")
+        assert result["a"] is td["a"]
+        assert result["nested", "c"] is td["nested", "c"]
+
     def test_sub_to_batch_size_same_device(self):
         source = TensorDict(a=torch.zeros(4, 2, 3), batch_size=[4, 2], device="cpu")
         td = source._get_sub_tensordict(0)
@@ -1700,6 +1753,47 @@ class TestGeneric:
         # excluding "nested" should exclude all subkeys also
         excluded2 = tensordict2.exclude("nested", inplace=inplace)
         assert set(excluded2.keys(include_nested=True)) == {"a", "b", "c"}
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_exclude_nested_unravels_keys_once(self, inplace, monkeypatch):
+        # exclude unravels the keys once; the sub-tensordicts get sub-keys
+        # that are already unravelled (#2558).
+        def leaf():
+            return torch.zeros(3, 1)
+
+        td = TensorDict(
+            a=leaf(),
+            data=TensorDict(
+                done=leaf(),
+                states=leaf(),
+                deep=TensorDict(x=leaf(), y=leaf(), batch_size=[3]),
+                batch_size=[3],
+            ),
+            stack=lazy_stack([TensorDict(u=leaf(), v=leaf()) for _ in range(3)]),
+            next=TensorDict(b=leaf()),
+            batch_size=[3],
+        )
+
+        def unravel_key(key):
+            raise AssertionError(f"exclude unravelled {key} again")
+
+        monkeypatch.setattr(tensordict._td, "unravel_key", unravel_key)
+        monkeypatch.setattr(tensordict_base, "unravel_key", unravel_key)
+        excluded = td.exclude(
+            ("next",),
+            ("data", ("done",)),
+            ("data", "deep", "x"),
+            ("data", "missing"),
+            ("stack", "u"),
+            inplace=inplace,
+        )
+        assert (excluded is td) is inplace
+        assert set(excluded.keys(True, True)) == {
+            "a",
+            ("data", "states"),
+            ("data", "deep", "y"),
+            ("stack", "v"),
+        }
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_expand(self, device):
@@ -2575,8 +2669,7 @@ class TestGeneric:
         for td_other in (
             torch.stack([td, td.clone()]),
             td.unsqueeze(0),
-            # _pytree_type is a class, so it is pickled
-            TensorDict.load_memmap(tmpdir, allow_pickle=True),
+            TensorDict.load_memmap(tmpdir, allow_pickle=False),
         ):
             assert key_types(td_other.to_pytree()) == key_types(pytree)
         # The keys take no part in the batch size
@@ -2763,6 +2856,70 @@ class TestGeneric:
             assert (v1 == v2).all()
 
         torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+
+    def test_from_pytree_memmap_without_pickle(self, tmpdir):
+        # https://github.com/pytorch/tensordict/issues/2550
+        # dict, OrderedDict, list and tuple are pickled for older versions,
+        # and saved by name for load_memmap
+        pytree = {
+            "model": nn.Linear(2, 3).state_dict(),
+            "seq": [torch.zeros(2), (torch.ones(1), {"x": torch.ones(2)})],
+        }
+        td = TensorDict.from_pytree(pytree)
+        assert td["model", "_pytree_type"] is OrderedDict
+        td.memmap(tmpdir)
+        prefix = Path(tmpdir) / "model" / "_pytree_type"
+        # meta.json and other.pickle are those that older versions write
+        assert set(json.loads((prefix / "meta.json").read_text())) == {
+            "_type",
+            "_metadata",
+            "_is_non_tensor",
+        }
+        assert pickle.loads((prefix / "other.pickle").read_bytes()) == {
+            "data": OrderedDict
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            loaded = TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        assert loaded["_pytree_type"] is dict
+        assert loaded["model", "_pytree_type"] is OrderedDict
+        assert loaded["seq", "_pytree_type"] is list
+        assert loaded["seq", "1", "_pytree_type"] is tuple
+        pytree_recon = loaded.to_pytree()
+        assert torch.utils._pytree.tree_structure(
+            pytree_recon
+        ) == torch.utils._pytree.tree_structure(pytree)
+        torch.utils._pytree.tree_map(
+            lambda v1, v2: torch.testing.assert_close(v1, v2), pytree, pytree_recon
+        )
+        # an unknown name raises
+        types_file = prefix / "json_types.json"
+        saved = json.loads(types_file.read_text())
+        types_file.write_text(json.dumps({**saved, "types": {"data": "set"}}))
+        with pytest.raises(ValueError, match="Unknown type name 'set'.*json_types"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        # without the names (as older versions write), or with names of
+        # another other.pickle, the pickle is loaded
+        types_file.write_text(json.dumps({**saved, "pickle_sha256": "0"}))
+        with pytest.raises(RuntimeError, match="Refusing to load pickled"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        types_file.unlink()
+        with pytest.raises(RuntimeError, match="Refusing to load pickled"):
+            TensorDict.load_memmap(tmpdir, allow_pickle=False)
+        assert (
+            TensorDict.load_memmap(tmpdir, allow_pickle=True)["model"]["_pytree_type"]
+            is OrderedDict
+        )
+        # other classes are still pickled only
+        pytree = defaultdict(list, a=torch.zeros(2))
+        TensorDict.from_pytree(pytree).memmap(tmpdir / "other")
+        with pytest.raises(RuntimeError, match="Refusing to load pickled"):
+            TensorDict.load_memmap(tmpdir / "other", allow_pickle=False)
+        loaded = TensorDict.load_memmap(tmpdir / "other", allow_pickle=True)
+        assert loaded["_pytree_type"] is defaultdict
+        assert not (
+            Path(tmpdir) / "other" / "_pytree_type" / "json_types.json"
+        ).exists()
 
     def test_from_struct_array(self):
         x = np.array(
@@ -4816,6 +4973,40 @@ class TestGeneric:
         )
         with pytest.raises(NotImplementedError, match="gather"):
             lst.gather(dim=0, index=torch.zeros(3, 4, dtype=torch.long), inplace=True)
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_detach__unbatched(self, locked, lazy):
+        # A tensordict stores an UnbatchedTensor as an alias, which torch
+        # cannot detach in place: detach_ replaces it with its detach(), which
+        # shares the storage (#2565)
+        x = torch.ones(5, requires_grad=True) * 2
+
+        def build():
+            return TensorDict(
+                a=torch.zeros(3, requires_grad=True) * 1,
+                u=tensordict.UnbatchedTensor(x),
+                nested=TensorDict(u=tensordict.UnbatchedTensor(x), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        td = lazy_stack([build(), build()]) if lazy else build()
+        if locked:
+            td.lock_()
+        members = td.tensordicts if lazy else [td]
+        ptrs = [
+            (m.get("u").data_ptr(), m.get(("nested", "u")).data_ptr()) for m in members
+        ]
+        assert td.detach_() is td
+        assert td.is_locked is locked
+        for member, (ptr, nested_ptr) in zip(members, ptrs):
+            u, nested_u = member.get("u"), member.get(("nested", "u"))
+            assert isinstance(u, tensordict.UnbatchedTensor)
+            assert isinstance(nested_u, tensordict.UnbatchedTensor)
+            assert not u.requires_grad and not nested_u.requires_grad
+            assert not member["a"].requires_grad
+            assert u.data_ptr() == ptr and nested_u.data_ptr() == nested_ptr
+            assert u.shape == (5,)
 
     @pytest.mark.parametrize("inplace", [True, False])
     @pytest.mark.parametrize("mask_dims", [1, 2])

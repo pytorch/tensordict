@@ -630,7 +630,8 @@ class _Distributed:
         init_tag: int = 0,
         pseudo_rand: bool = False,
         return_early: bool = False,
-    ) -> int | List["Work"]:  # noqa: D417, F821
+        consolidated: bool = False,
+    ) -> int | List["Work"] | None:  # noqa: D417, F821
         """Sends the content of the tensordict asynchronously.
 
         Args:
@@ -663,6 +664,18 @@ class _Distributed:
                 Defaults to ``False``.
             return_early (bool, optional): if True, a list of futures
                 will be returned instead of the tag of the last tensor sent.
+                Defaults to ``False``.
+            consolidated (bool): if True, sends the consolidated storage as a
+                single tensor (1 message), as :meth:`send` does. The tensordict
+                is consolidated first if needed, which copies every leaf on
+                each call: a sender that keeps a consolidated copy and
+                refreshes it with :meth:`~.update_` avoids that copy. The
+                receiver must use ``irecv(consolidated=True)`` or
+                ``recv(consolidated=True)`` and must already hold a
+                consolidated tensordict with matching schema. With
+                ``return_early=True``, the returned list holds the single
+                future; otherwise ``None`` is returned once the message is
+                sent. ``init_tag`` and ``pseudo_rand`` are ignored.
                 Defaults to ``False``.
 
         Example:
@@ -728,6 +741,19 @@ class _Distributed:
 
         """
         _check_p2p_peer(dst, group_dst, group, "dst", "group_dst")
+        if consolidated:
+            from torch import distributed as dist
+
+            td_c = self if self.is_consolidated() else self.consolidate(metadata=True)
+            storage = td_c._consolidated["storage"]
+            if group_dst is not None:
+                work = group.send([storage], group_dst, 0)
+            else:
+                work = dist.isend(storage, dst=dst, group=group)
+            if return_early:
+                return [work]
+            work.wait()
+            return
         return self._isend(
             dst,
             _tag=init_tag - 1,
@@ -797,6 +823,7 @@ class _Distributed:
         return_premature: bool = False,
         init_tag: int = 0,
         pseudo_rand: bool = False,
+        consolidated: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
         """Receives the content of a tensordict and updates content with it asynchronously.
 
@@ -832,12 +859,32 @@ class _Distributed:
                 slow down the runtime of your algorithm.
                 This value must match the one passed to :func:`isend`.
                 Defaults to ``False``.
+            consolidated (bool): if True, receives a single consolidated storage
+                tensor directly into ``self._consolidated["storage"]``, as
+                :meth:`recv` does. The tensordict must already be consolidated
+                (e.g. from a prior :meth:`~.from_remote_init` call), and all
+                leaf tensor views update in-place. With
+                ``return_premature=True``, the returned list holds the single
+                future. ``init_tag`` and ``pseudo_rand`` are ignored.
+                Defaults to ``False``.
 
         Returns:
             if ``return_premature=True``, a list of futures to wait
                 upon until the tensordict is updated.
         """
         _check_p2p_peer(src, group_src, group, "src", "group_src")
+        if consolidated:
+            from torch import distributed as dist
+
+            storage = self._consolidated["storage"]
+            if group_src is not None:
+                work = group.recv([storage], group_src, 0)
+            else:
+                work = dist.irecv(storage, src=src, group=group)
+            if return_premature:
+                return [work]
+            work.wait()
+            return
         return self._irecv(
             src,
             return_premature=return_premature,

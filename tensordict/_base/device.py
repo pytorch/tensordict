@@ -753,8 +753,10 @@ class _DeviceOps:
                     result = result._fast_apply(
                         to_pinmem, propagate_lock=True, **apply_kwargs
                     )
-                else:
-                    # result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+                elif self.is_locked:
+                    # A locked tensordict caches its leaves, so the first walk
+                    # is nearly free: keep the two-pass form, which is faster
+                    # there than one walk that calls to() on each leaf.
                     keys, tensors = self._items_list(True, True)
                     tensors = [to(t) for t in tensors]
                     items = dict(zip(keys, tensors))
@@ -766,6 +768,29 @@ class _DeviceOps:
                         get,
                         named=True,
                         nested_keys=True,
+                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                        propagate_lock=True,
+                        **apply_kwargs,
+                    )
+                else:
+                    # walk the tree once
+                    if (
+                        device is not None
+                        and device.type == "cpu"
+                        and dtype is None
+                        and convert_to_format is None
+                    ):
+
+                        def to(tensor, _to=to):
+                            # Tensor.to would return the leaf as it is: skip
+                            # the call. is_cpu costs less than a device
+                            # comparison, which would slow down moves.
+                            if tensor.is_cpu:
+                                return tensor
+                            return _to(tensor)
+
+                    result = self._fast_apply(
+                        to,
                         is_leaf=_NESTED_TENSORS_AS_LISTS,
                         propagate_lock=True,
                         **apply_kwargs,
