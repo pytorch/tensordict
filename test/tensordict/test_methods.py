@@ -5957,6 +5957,24 @@ def test_add_sub_cuda_scalar_tensor_forward_ad(op, number):
                 torch.testing.assert_close(tangent, expected_tangent, rtol=0, atol=0)
 
 
+def test_flatten_keys_context_manager_inplace_separator_in_key():
+    # A key that holds the separator before the block cannot be told apart
+    # from a flattened nested key on exit, so the with-block keeps every key
+    # that main keeps (gh-2700).
+    td = TensorDict({"a.b": torch.zeros(2), "c": {"d": torch.ones(2)}}, [2])
+    with td.flatten_keys(inplace=True):
+        pass
+    keys = set(td.keys(True, True))
+    assert "a.b" in keys
+    assert ("c", "d") in keys
+    assert (td["a.b"] == 0).all()
+    # without the separator in a key, the nested keys come back exactly
+    td = TensorDict({"a": torch.zeros(2), "c": {"d": torch.ones(2)}}, [2])
+    with td.flatten_keys(inplace=True):
+        pass
+    assert set(td.keys(True, True)) == {"a", ("c", "d")}
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_cat_tensors_shape_mismatch_preserves_entries(device):
     # Last dims differ, and dim=1 is not that dim, so cat raises.

@@ -214,13 +214,18 @@ def _reverse_flatten_keys(self, args, kwargs, out):
     sep = args[0] if args else "."
     if _changed_in_place(self, out):
         separator = kwargs.get("separator", sep)
+        # flatten_keys(inplace=True) records whether unflatten_keys undoes it
+        exact, out._inplace_flatten_keys_exact = out._inplace_flatten_keys_exact, None
         if separator != sep:
             # the reversal below reads a positional separator only, and
             # leaves these keys flat
             if any(separator in key for key in out.keys()):
                 _warn_kept_in_place("flatten_keys", "its keys flat")
             return out
-        return out.unflatten_keys(sep, inplace=True)
+        if exact:
+            return out.unflatten_keys(sep, inplace=True)
+        # A key held the separator before the block, so unflatten_keys
+        # cannot tell it from a flattened nested key: keep main's result.
     if not out.is_locked:
         return out.update(self.unflatten_keys(sep), inplace=False)
     else:
