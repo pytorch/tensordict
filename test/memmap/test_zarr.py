@@ -378,6 +378,26 @@ class TestZarrWriteOps:
         ztd.copy_(other)
         torch.testing.assert_close(reopened.to_tensordict(), other)
 
+    def test_inplace_methods_write_lazy_stack(self, ztd, tmp_path):
+        # #2570: the in-place methods of a lazy stack write to its zarr members
+        expected = ztd.to_tensordict()
+        dense = expected.clone()
+        stack = lazy_stack([ztd, dense])
+        assert stack.add_(1.0) is stack
+        assert stack.lerp_(stack.to_tensordict() * 0, 0.5) is stack
+        expected.add_(1.0).lerp_(expected * 0, 0.5)
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), expected)
+        torch.testing.assert_close(dense, expected)
+        assert stack.zero_() is stack
+        assert (reopened["a"] == 0).all()
+        assert (reopened["b", "c"] == 0).all()
+        # a read-only member is left unchanged, with a warning
+        stack = lazy_stack([ztd, PersistentTensorDict.from_zarr(tmp_path / "s.zarr")])
+        with pytest.warns(FutureWarning, match="add_.*leaves the file unchanged"):
+            stack.add_(1.0)
+        assert (reopened["a"] == 1).all()
+
     def test_inplace_read_only_warns(self, ztd, tmp_path):
         # The in-place methods leave a read-only store unchanged, as before
         # they wrote to stores, and warn that this will raise
