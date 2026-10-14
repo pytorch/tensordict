@@ -29,6 +29,7 @@ import tensordict.base as tensordict_base
 import torch
 from tensordict import (
     is_memmap_archive,
+    is_tensorclass,
     lazy_legacy,
     lazy_stack,
     LazyStackedTensorDict,
@@ -38,6 +39,7 @@ from tensordict import (
     refresh_archive_checksums,
     TensorClass,
     TensorDict,
+    TypedTensorDict,
     unpack_memmap,
 )
 from tensordict._archive import _ArchiveReader
@@ -58,6 +60,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch._subclasses import FakeTensor, FakeTensorMode
+from torch.autograd import forward_ad as fwAD
+from torch.overrides import TorchFunctionMode
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -439,8 +443,16 @@ class TestTensorDicts(TestTensorDictsBase):
         except Exception as err:
             error = err
         if error is not None:
+            # a lazy tensordict cannot change its batch size: auto_batch_size_
+            # finds the batch size that it has and returns, and raises for a
+            # smaller one
+            assert isinstance(
+                td, (LazyStackedTensorDict, _SubTensorDict, _CustomOpTensorDict)
+            )
+            td.auto_batch_size_()
+            assert td.batch_size == batch_size
             with pytest.raises(type(error)):
-                td.auto_batch_size_()
+                td.auto_batch_size_(1)
             return
         td.auto_batch_size_()
         assert td.batch_size[: len(batch_size)] == batch_size
@@ -773,6 +785,24 @@ class TestTensorDicts(TestTensorDictsBase):
             assert tdc.is_empty()
             assert tdc is td
 
+    def test_clear_device_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        leaf_devices = [leaf.device for leaf in td.values(True, True)]
+        assert td.clear_device_() is td
+        if not isinstance(td, PersistentTensorDict):
+            # the leaves are not moved (a file reads its leaves onto the device
+            # of the tensordict, so without one they come back as stored)
+            assert [leaf.device for leaf in td.values(True, True)] == leaf_devices
+        if isinstance(td, (_SubTensorDict, _CustomOpTensorDict, TypedTensorDict)):
+            # a view reports the device of the tensordict it reads, which
+            # clear_device_ leaves alone
+            assert td.device == torch.device(device)
+            return
+        assert td.device is None
+        for value in td.values(True):
+            if is_tensor_collection(value):
+                assert value.device is None
+
     def test_clone_td(self, td_name, device, tmp_path):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -799,6 +829,37 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.clone(recurse=False).get("a") is not td.get("a")
         else:
             assert td.clone(recurse=False).get("a") is td.get("a")
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("named", [False, True])
+    def test_contiguous_result_state(self, td_name, device, locked, named):
+        td = getattr(self, td_name)(device)
+        if (
+            named
+            and td_name != "td_with_unbatched"
+            and not isinstance(td, _CustomOpTensorDict)
+        ):
+            # an UnbatchedTensor has no batch dims to name, and the names of a
+            # legacy lazy view cannot be set
+            if isinstance(td, _SubTensorDict):
+                td._source.names = [f"n{i}" for i in range(td._source.ndim)]
+            else:
+                td.names = ["n0", "n1", "n2", "n3"]
+        if locked:
+            (td._source if isinstance(td, _SubTensorDict) else td).lock_()
+        result = td.contiguous()
+        if isinstance(td, TypedTensorDict):
+            assert type(result) is type(td)
+        else:
+            assert type(result) is TensorDict
+        assert result.batch_size == td.batch_size
+        assert result.names == td.names
+        assert (result == td).all()
+        for key, value in td.items():
+            if is_tensorclass(value):
+                assert type(result.get(key)) is type(value)
+        # only the legacy lazy views keep the lock
+        assert result.is_locked is (locked and isinstance(td, _CustomOpTensorDict))
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0 and npu_device_count == 0,
@@ -1461,6 +1522,19 @@ class TestTensorDicts(TestTensorDictsBase):
                 else:
                     assert td.view(*new_shape) is td
                     assert td.view(-1).view(*new_shape) is td
+
+    def test_is_contiguous_per_type(self, td_name, device, monkeypatch):
+        td = getattr(self, td_name)(device)
+        if isinstance(td, (LazyStackedTensorDict, PersistentTensorDict)):
+            # each read builds a new tensor: False, without reading the leaves
+            def no_read(*args, **kwargs):
+                raise AssertionError("is_contiguous() read a leaf")
+
+            monkeypatch.setattr(type(td), "_get_str", no_read)
+            monkeypatch.setattr(type(td), "_get_tuple", no_read)
+            assert td.is_contiguous() is False
+            return
+        assert td.is_contiguous() is all(value.is_contiguous() for value in td.values())
 
     def test_isfinite(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -2733,6 +2807,17 @@ class TestTensorDicts(TestTensorDictsBase):
         _device_cast = torch.device(device_cast)
         assert td_device.device == _device_cast
 
+    def test_pin_memory_unsupported(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if not isinstance(td, (_SubTensorDict, PersistentTensorDict)):
+            pytest.skip("pin_memory pins the leaves")
+        with pytest.raises(
+            RuntimeError,
+            match=rf"^Cannot pin memory of a {type(td).__name__}\. Call to_tensordict\(\) "
+            r"before making this call\.$",
+        ):
+            td.pin_memory()
+
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert "a" in td.keys()
@@ -3543,6 +3628,39 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_shape(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert td.shape == td.batch_size
+
+    def test_share_memory_per_type(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if isinstance(td, _SubTensorDict):
+            with pytest.raises(
+                RuntimeError,
+                match="Casting a sub-tensordict values to shared memory cannot be done",
+            ):
+                td.share_memory_()
+            return
+        if isinstance(td, PersistentTensorDict):
+            with pytest.raises(
+                NotImplementedError,
+                match="Cannot call share_memory_ on a PersistentTensorDict",
+            ):
+                td.share_memory_()
+            return
+        if td.is_memmap():
+            with pytest.raises(RuntimeError, match="mutually exclusive"):
+                td.share_memory_()
+            return
+        assert td.share_memory_() is td
+        assert td.is_shared()
+        if (
+            (type(td) is TensorDict or isinstance(td, TypedTensorDict))
+            and td.device is not None
+            and td.device.type == "cuda"
+        ):
+            # CUDA tensors are shared already: TensorDict returns without
+            # locking, and so does a TypedTensorDict, through its TensorDict
+            assert not td.is_locked
+        else:
+            assert td.is_locked is not isinstance(td, TensorDictParams)
 
     @pytest.mark.parametrize("dim", [0, -1, 3])
     def test_softmax(self, td_name, device, dim):
@@ -5421,6 +5539,231 @@ def test_pointwise_unary_vmap(op):
     assert_allclose_td(
         torch.vmap(lambda t: getattr(t.clone(), op + "_")())(td), expected
     )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda x, t: x + t,
+        lambda x, t: t + x,
+        lambda x, t: x - t,
+        lambda x, t: t - x,
+        lambda x, t: x.add(t, alpha=2),
+        lambda x, t: x.sub(t, alpha=2),
+        lambda x, t: x.clone().add_(t),
+        lambda x, t: x.clone().sub_(t),
+        lambda x, t: x.clone().sub_(t, alpha=2),
+        lambda x, t: x.add(t, alpha=np.float32(2)),
+        lambda x, t: x.clone().add_(t, alpha=torch.tensor(2.0)),
+    ],
+    ids=[
+        "add",
+        "radd",
+        "sub",
+        "rsub",
+        "add-alpha",
+        "sub-alpha",
+        "add_",
+        "sub_",
+        "sub_-alpha",
+        "add-alpha-numpy",
+        "add_-alpha-tensor",
+    ],
+)
+def test_add_sub_cuda_scalar_tensor_no_sync(op):
+    # Python passes a 0-dim tensor to the overload of _foreach_add or
+    # _foreach_sub that takes a number, which synchronizes the device (#2616)
+    td = TensorDict(
+        a=torch.rand(3, 2, device="cuda"),
+        nested=TensorDict(b=torch.rand(3, device="cuda", dtype=torch.float64)),
+        batch_size=[3],
+    )
+    t = torch.tensor(0.75, device="cuda")
+    expected = td.apply(lambda x: op(x, t))
+    op(td, t)  # warm up outside the check
+    torch.cuda.synchronize()
+    try:
+        with warnings.catch_warnings():
+            # "Synchronization debug mode is a prototype feature"
+            warnings.simplefilter("ignore", UserWarning)
+            torch.cuda.set_sync_debug_mode("error")
+        out = op(td, t)
+    finally:
+        torch.cuda.set_sync_debug_mode(0)
+    for key, val in expected.items(True, True):
+        assert out.get(key).dtype == val.dtype
+        torch.testing.assert_close(out.get(key), val, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+def test_add_cuda_scalar_tensor_other_leaves():
+    # Integer and CPU leaves keep the result of torch._foreach_add(vals, t)
+    t = torch.tensor(0.5, device="cuda", dtype=torch.float64)
+    td = TensorDict(a=torch.arange(3, device="cuda"), b=torch.ones(3, device="cuda"))
+    assert (td + t)["a"].dtype == torch.float32
+    assert (td.cpu() + t)["a"].device == torch.device("cpu")
+    with pytest.raises((NotImplementedError, RuntimeError), match="bool tensor"):
+        td.exclude("a") - torch.tensor(True, device="cuda")
+    with pytest.raises((NotImplementedError, RuntimeError), match="bool tensor"):
+        torch.tensor(True, device="cuda") - td.exclude("a")
+    # A bool alpha keeps the path of main, where sub takes no alpha
+    with pytest.raises(TypeError):
+        td.exclude("a").sub(torch.tensor(0.5, device="cuda"), alpha=True)
+
+    class SubTensor(torch.Tensor):
+        pass
+
+    # A subclass of Tensor does not turn the leaves into that subclass
+    out = td.exclude("a") + t.float().as_subclass(SubTensor)
+    assert type(out["b"]) is torch.Tensor
+
+    class LoggedTensor(torch.Tensor):
+        funcs = []
+
+        @classmethod
+        def __torch_function__(cls, func, types, args=(), kwargs=None):
+            cls.funcs.append(func)
+            return super().__torch_function__(func, types, args, kwargs or {})
+
+    # Leaves of such a subclass still see the _foreach op of the method
+    leaves = TensorDict(b=torch.ones(3, device="cuda").as_subclass(LoggedTensor))
+    leaves.sub(t.float())
+    assert LoggedTensor.funcs == [torch._foreach_sub]
+
+    class LoggingMode(TorchFunctionMode):
+        def __init__(self):
+            super().__init__()
+            self.funcs = set()
+
+        def __torch_function__(self, func, types, args=(), kwargs=None):
+            self.funcs.add(getattr(func, "__name__", str(func)))
+            return func(*args, **(kwargs or {}))
+
+    # A torch function mode sees the _foreach op of the method, and nothing else
+    for op, name in [("sub", "_foreach_sub"), ("add_", "_foreach_add_")]:
+        leaves = TensorDict(b=torch.ones(3, device="cuda"))
+        with torch.device("cuda"), LoggingMode() as mode:
+            out = getattr(leaves, op)(t.float())
+        torch.testing.assert_close(out["b"], getattr(torch.ones(3), op)(0.5).cuda())
+        assert name in mode.funcs
+        assert not mode.funcs & {"get_device", "clone", "_foreach_add"}
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize(
+    "dtype,other_dtype,value",
+    [
+        (torch.bfloat16, torch.float32, 0.1234567),
+        (torch.bfloat16, torch.float16, 0.1234567),
+        (torch.float16, torch.float64, 0.1234567),
+        (torch.bfloat16, torch.int64, 257),
+    ],
+)
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda x, t: x + t,
+        lambda x, t: x - t,
+        lambda x, t: t - x,
+        lambda x, t: x.clone().add_(t),
+        lambda x, t: x.clone().sub_(t),
+    ],
+    ids=["add", "sub", "rsub", "add_", "sub_"],
+)
+def test_add_sub_cuda_scalar_tensor_half_leaves(op, dtype, other_dtype, value):
+    # Half-precision leaves with a wider 0-dim tensor keep the values they get
+    # with the number, which differ from those of the 0-dim tensor overload
+    td = TensorDict(a=torch.linspace(0, 3, 1000, device="cuda", dtype=dtype))
+    t = torch.tensor(value, device="cuda", dtype=other_dtype)
+    expected = op(td, t.item())
+    torch.testing.assert_close(op(td, t)["a"], expected["a"], rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize("op", ["add_", "sub_"])
+@pytest.mark.parametrize("view", [True, False], ids=["element", "leaf"])
+def test_add_sub_cuda_scalar_tensor_inplace_alias(op, view):
+    # A 0-dim tensor held by a leaf is read before any leaf is written, as with
+    # the number. Only CUDA leaves take the 0-dim tensor overload; with this
+    # many elements its kernels read the 0-dim tensor after writing ``a``.
+    a = torch.full((1,) if view else (), 0.5, device="cuda")
+    td = TensorDict(
+        a=a, **{f"b{i}": torch.ones(200_000, device="cuda") for i in range(20)}
+    )
+    t = a[0] if view else a
+    expected = getattr(td.clone(), op)(t.item())
+    getattr(td, op)(t)
+    for key, val in expected.items():
+        torch.testing.assert_close(td[key], val, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize("inference", [False, True], ids=["changed", "inference"])
+@pytest.mark.parametrize(
+    "op",
+    [lambda x, t: x + t, lambda x, t: x - t, lambda x, t: t - x],
+    ids=["add", "sub", "rsub"],
+)
+def test_add_sub_cuda_scalar_tensor_backward(op, inference):
+    # As with the number, the 0-dim tensor is not saved for backward: it can be
+    # changed in place before backward, or come from inference mode
+    if inference:
+        with torch.inference_mode():
+            t = torch.tensor(0.25, device="cuda")
+    else:
+        t = torch.tensor(0.25, device="cuda")
+    x = torch.ones(3, device="cuda", requires_grad=True)
+    out = op(TensorDict(a=x * 2), t)
+    if not inference:
+        t.add_(1)
+    out["a"].sum().backward()
+    y = torch.ones(3, device="cuda", requires_grad=True)
+    op(y * 2, 0.25).sum().backward()
+    torch.testing.assert_close(x.grad, y.grad, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize(
+    "op,number",
+    [
+        (lambda x, t: x + t, True),
+        (lambda x, t: x.sub(t), True),
+        (lambda x, t: t - x, True),
+        (lambda x, t: x.clone().add_(t), True),
+        (lambda x, t: x.clone().sub_(t), True),
+        (lambda x, t: x.add(t, alpha=2), False),
+    ],
+    ids=["add", "sub", "rsub", "add_", "sub_", "add-alpha"],
+)
+def test_add_sub_cuda_scalar_tensor_forward_ad(op, number):
+    # Without alpha, the number drops the tangent of a dual 0-dim tensor; with
+    # alpha, the 0-dim tensor overload keeps it, as Tensor.add does
+    with fwAD.dual_level():
+        with warnings.catch_warnings():
+            # make_dual loads its decompositions with torch.jit.script once,
+            # which warns that it is deprecated
+            warnings.simplefilter("ignore", FutureWarning)
+            warnings.simplefilter("ignore", DeprecationWarning)
+            t = fwAD.make_dual(
+                torch.tensor(0.25, device="cuda"), torch.tensor(1.0, device="cuda")
+            )
+        td = TensorDict(
+            a=fwAD.make_dual(
+                torch.ones(3, device="cuda"), torch.full((3,), 2.0, device="cuda")
+            ),
+            b=torch.ones(3, device="cuda"),
+        )
+        out = op(td, t)
+        expected = op(td, t.item()) if number else td.apply(lambda x: op(x, t))
+        for key in ("a", "b"):
+            primal, tangent = fwAD.unpack_dual(out[key])
+            expected_primal, expected_tangent = fwAD.unpack_dual(expected[key])
+            torch.testing.assert_close(primal, expected_primal, rtol=0, atol=0)
+            if expected_tangent is None:
+                assert tangent is None
+            else:
+                torch.testing.assert_close(tangent, expected_tangent, rtol=0, atol=0)
 
 
 class TestEmptyTensorMemmapRoundtrip:

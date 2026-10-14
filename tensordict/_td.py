@@ -41,10 +41,12 @@ from tensordict.base import (
     _foreach_copy_compiled,
     _holds_its_tensors,
     _is_accepted_class,
+    _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
+    _raise_if_not_a_tensordict,
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
@@ -302,7 +304,11 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
         is_eager = not is_compiling()
-        is_empty = source is None or (type(source) is dict and not source)
+        # Eager only: under compile, Dynamo does not guard on the emptiness
+        # read here, and would reuse the empty-source graph for a full source.
+        is_empty = is_eager and (
+            source is None or (type(source) is dict and not source)
+        )
 
         if is_empty and names is None and not lock and type(self) is TensorDict:
             # Nothing to validate, move, sync or rename: this ends in the
@@ -327,6 +333,11 @@ class TensorDict(TensorDictBase):
             if is_cuda:
                 # CUDA does its sync by itself
                 call_sync = False
+            elif non_blocking is None and not is_eager:
+                # Under compile, copy with blocking calls instead of marking
+                # the device recorder and syncing: the sync breaks the graph,
+                # and a mark nested in another TensorDict() raises.
+                sub_non_blocking = False
             else:
                 # An empty source has no transfer to record.
                 call_sync = non_blocking is None and not is_empty
@@ -358,7 +369,7 @@ class TensorDict(TensorDictBase):
             # Exact tensors need neither conversion nor collection dispatch.
             # Keep subclasses (including TensorDict subclasses with custom
             # validation), nested tensors and device moves on the general path.
-            validate_tensor = is_eager and type(self) is TensorDict
+            validate_tensor = type(self) is TensorDict
             batch_size = self._batch_size
             batch_dims = len(batch_size)
             for key in list(_tensordict):
@@ -1141,16 +1152,6 @@ class TensorDict(TensorDictBase):
                 return source.batch_size
             raise ValueError(ERR)
 
-    @property
-    def batch_dims(self) -> int:
-        return len(self.batch_size)
-
-    @batch_dims.setter
-    def batch_dims(self, value: int) -> None:
-        raise RuntimeError(
-            f"Setting batch dims on {type(self).__name__} instances is not allowed."
-        )
-
     def _rename_subtds(self, names):
         """Propagates names to nested tensordicts.
 
@@ -1216,7 +1217,8 @@ class TensorDict(TensorDictBase):
             self._mark_consolidated_stale()
         return item
 
-    # Override: a dict of valid tensors goes into the dict of entries in one call.
+    # Override: a dict of valid tensors goes into the dict of entries in one
+    # call. With sub-tensordicts or dicts among them, see _update_fast_merge.
     def _update_fast(self, source: dict[str, CompatibleType] | T) -> bool:
         if type(self) is not TensorDict or self._is_locked:
             return False
@@ -1247,7 +1249,61 @@ class TensorDict(TensorDictBase):
                 if "_consolidated" in self.__dict__:
                     self._mark_consolidated_stale()
                 return True
+            if type(key) is str and (type(value) is TensorDict or type(value) is dict):
+                self._update_fast_merge(source)
+                return True
         return False
+
+    def _update_fast_merge(self, source: dict[str, CompatibleType]) -> None:
+        """Writes ``source`` into ``self`` key by key, in the order of the general path of :meth:`update`.
+
+        :meth:`_update_fast` calls it for a ``source`` dict that holds a
+        sub-tensordict or a dict. A valid tensor is written as the general
+        path writes it, and a :class:`TensorDict` or dict whose key holds a
+        :class:`TensorDict` in ``self`` is merged into it with the same
+        ``update`` call. Any other entry goes through the general path, one
+        key at a time, so the result, the errors and the entries written
+        before an error are those of the general path.
+        """
+        batch_size = self._batch_size
+        batch_dims = len(batch_size)
+        device = self._device
+        entries = self._tensordict
+        consolidated = "_consolidated" in self.__dict__
+        # Iterate over source itself, as the general path does: a merge that
+        # writes into source (if source is a sub-tensordict of self) shows.
+        for key, value in source.items():
+            if type(key) is str:
+                if type(value) is Tensor:
+                    if not (
+                        (
+                            batch_dims
+                            and (
+                                value.is_nested
+                                or value.shape[:batch_dims] != batch_size
+                            )
+                        )
+                        or (device is not None and value.device != device)
+                    ):
+                        entries[key] = value
+                        if consolidated:
+                            self._mark_consolidated_stale()
+                        continue
+                elif type(value) is TensorDict or type(value) is dict:
+                    child = entries.get(key)
+                    if type(child) is TensorDict:
+                        child.update(value)
+                        continue
+            self._update_entries(
+                {key: value},
+                clone=False,
+                inplace=False,
+                non_blocking=False,
+                keys_to_update=None,
+                is_leaf=_is_leaf_nontensor,
+                update_batch_size=False,
+                ignore_lock=False,
+            )
 
     def _set_str(
         self,
@@ -1262,16 +1318,12 @@ class TensorDict(TensorDictBase):
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
-        if (
-            not validated
-            and type(value) is Tensor
-            and type(self) is TensorDict
-            and not is_compiling()
-        ):
+        if not validated and type(value) is Tensor and type(self) is TensorDict:
             batch_size = self._batch_size
             device = self._device
+            # len(): `not` on a torch.Size makes Dynamo specialize its sizes
             validated = (
-                not batch_size
+                not len(batch_size)
                 or (
                     not value.is_nested and value.shape[: len(batch_size)] == batch_size
                 )
@@ -1703,15 +1755,50 @@ class TensorDict(TensorDictBase):
         except KeyError:
             return self._default_get(key, default)
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Subclasses keep the generic walk, which calls their _get_str and
+        # _default_get, without going through the _get_tuple below.
+        if cls._get_tuple is TensorDict._get_tuple:
+            cls._get_tuple = TensorDictBase._get_tuple
+
+    # Override: reads the levels that are exact TensorDicts from their dicts,
+    # without a _get_str and a _get_tuple call per level.
+    def _get_tuple(self, key, default, **kwargs):
+        if type(self) is not TensorDict:
+            # a subclass's own _get_tuple calling super()._get_tuple
+            return TensorDictBase._get_tuple(self, key, default, **kwargs)
+        try:
+            value = self._tensordict[key[0]]
+        except KeyError:
+            return self._default_get(key[0], default)
+        if len(key) == 1:
+            return value
+        for i in range(1, len(key)):
+            if value is default:
+                return value
+            if type(value) is not TensorDict:
+                # a lazy stack, a tensorclass, a tensor...: it reads the rest
+                try:
+                    return value._get_tuple(key[i:], default=default, **kwargs)
+                except AttributeError as err:
+                    _raise_if_not_a_tensordict(err, key, i, value)
+                    return None
+            td = value
+            value = td._tensordict.get(key[i], NO_DEFAULT)
+            if value is NO_DEFAULT:
+                return td._default_get(key[i], default)
+        return value
+
     # Override: shares the dense leaves and marks the tensordict shared.
-    def share_memory_(self) -> Self:
+    def _share_memory_(self) -> None:
         if self.is_memmap():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
         if self.device is not None and self.device.type == "cuda":
             # cuda tensors are shared by default
-            return self
+            return
         for value in self.values():
             if (
                 isinstance(value, Tensor)
@@ -1721,7 +1808,6 @@ class TensorDict(TensorDictBase):
                 value.share_memory_()
         self._is_shared = True
         self.lock_()
-        return self
 
     def _memmap_(
         self,
@@ -2708,13 +2794,60 @@ class TensorDict(TensorDictBase):
             )
 
 
-class _SubTensorDict(_NoShapeOps, TensorDictBase):
+class _StateFromSource:
+    """State of a view that reads another tensordict, ``self._source``.
+
+    The view keeps no lock, device, shared or memmap flag, or names flag of its
+    own: it reports those of its source, and a device assignment goes to the
+    source. Subclasses set ``_source``.
+    """
+
+    # Override: the lock state lives on the source.
+    @TensorDictBase.is_locked.getter
+    def is_locked(self) -> bool:
+        return self._source.is_locked
+
+    # Override: the device is the source's.
+    @property
+    def device(self) -> torch.device | None:
+        return self._source.device
+
+    @device.setter
+    def device(self, value: DeviceType) -> None:
+        self._source.device = value
+
+    # Override: the flag lives on the source.
+    @property
+    def _is_shared(self):
+        return self._source._is_shared
+
+    # Override: the flag lives on the source.
+    @property
+    def _is_memmap(self):
+        return self._source._is_memmap
+
+    # Override: the names are the source's.
+    def _has_names(self):
+        return self._source._has_names()
+
+    # Override: the storage is the source's.
+    def _storage_is_read_only(self) -> bool:
+        return self._source._storage_is_read_only()
+
+    # Override: the entries are the source's.
+    @property
+    def _has_non_tensor(self):
+        return self._source._has_non_tensor
+
+
+class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
     _inplace_set = True
     _safe = False
     _masking_on_dense_copy = True
+    _pin_memory_unsupported = True
 
     def __init__(
         self,
@@ -2747,17 +2880,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
-    # These attributes should never be set
-    # Override: the flag lives on the source.
-    @property
-    def _is_shared(self):
-        return self._source._is_shared
-
-    # Override: the flag lives on the source.
-    @property
-    def _is_memmap(self):
-        return self._source._is_memmap
-
     @property
     def _reads_return_copies(self):
         # the entries are views only for a basic index of the tensors that the
@@ -2770,9 +2892,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
                 for idx in self.idx
             )
         )
-
-    def _storage_is_read_only(self) -> bool:
-        return self._source._storage_is_read_only()
 
     # Override: the names come from the source, at the index of the view.
     @TensorDictBase.names.getter
@@ -2792,10 +2911,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
             "Names of a subtensordict cannot be modified. Instantiate it as a TensorDict first."
         )
 
-    # Override: the names are the source's.
-    def _has_names(self):
-        return self._source._has_names()
-
     # Override: a view cannot erase the names of its source.
     def _erase_names(self):
         raise RuntimeError(
@@ -2806,15 +2921,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
-
-    # Override: the device is the source's.
-    @property
-    def device(self) -> None | torch.device:
-        return self._source.device
-
-    @device.setter
-    def device(self, value: DeviceType) -> None:
-        self._source.device = value
 
     def _preallocate(self, key: NestedKey, value: CompatibleType) -> Self:
         return self._source.set(key, value)
@@ -3291,26 +3397,12 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
     ):
         raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
-    # Override: defers to the source.
-    def is_shared(self) -> bool:
-        return self._source.is_shared()
-
-    # Override: defers to the source.
-    def is_memmap(self) -> bool:
-        return self._source.is_memmap()
-
     # Override: the source checks its lock and the keys, and renames.
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _SubTensorDict:
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
-
-    # Override: a view over another tensordict cannot be pinned.
-    def pin_memory(self, *args, **kwargs) -> Self:
-        raise RuntimeError(
-            f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
-        )
 
     # Override: a view over another tensordict cannot detach in place.
     def _detach_(self) -> None:
@@ -3429,26 +3521,14 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         )
 
     # Override: a view over another tensordict cannot be shared.
-    def share_memory_(self) -> Self:
+    def _share_memory_(self) -> None:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
 
-    # Override: the lock state lives on the source.
-    @TensorDictBase.is_locked.getter
-    def is_locked(self) -> bool:
-        return self._source.is_locked
-
-    @_as_context_manager("is_locked")
-    def lock_(self) -> Self:
-        # we can't lock sub-tensordicts because that would mean that the
-        # parent tensordict cannot be modified either.
-        if not self.is_locked:
-            raise RuntimeError(
-                "Cannot lock a _SubTensorDict. Lock the parent tensordict instead."
-            )
-        return self
-
+    # Override: only the parent tensordict can be unlocked, so a raise in
+    # _propagate_unlock would also stop the unlock_ of a tensordict that
+    # holds this view.
     @_as_context_manager("is_locked")
     def unlock_(self) -> Self:
         if self.is_locked:
@@ -3456,6 +3536,10 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
                 "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
             )
         return self
+
+    # Override: the lock is the source's; a view holds nothing to unlock.
+    def _propagate_unlock(self):
+        return []
 
     def _remove_lock(self, lock_id):
         raise RuntimeError(

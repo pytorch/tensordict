@@ -243,11 +243,7 @@ class _DeviceOps:
             device(type='cpu')
 
         """
-        self._device = None
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                value.clear_device_()
-        return self
+        return self._set_device(None)
 
     def _set_device(self, device: torch.device) -> Self:
         self._device = device
@@ -367,6 +363,11 @@ class _DeviceOps:
                 Defaults to ``False``.
 
         """
+        if self._pin_memory_unsupported:
+            raise RuntimeError(
+                f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() "
+                "before making this call."
+            )
         nodes = _pin_memory_nodes(self) if inplace else None
         if nodes is not None:
             # Replace each leaf by its pinned copy. Keys that hold one tensor
