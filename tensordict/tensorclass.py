@@ -950,11 +950,12 @@ def tensorclass(
             ``__post_init__`` runs in the generated ``__init__``,
             ``from_tensordict``, ``from_dict``, the other constructors such
             as ``from_any`` or ``fromkeys``, and when the data is loaded or
-            received from another process, but not when tensordict makes a new instance from the data of an
-            existing one, as in indexing, ``clone``, ``to``, ``apply`` or
-            ``torch.stack``. Defaults to ``False``: ``__post_init__`` also
-            runs on these rebuilds, except on the shells that ``empty()``
-            builds. On a lazy stack it runs on each stacked instance.
+            received from another process, but not when tensordict makes a
+            new instance from the data of an existing one, as in indexing,
+            ``clone``, ``to``, ``apply`` or ``torch.stack``. Defaults to
+            ``False``: ``__post_init__`` also runs on these rebuilds, except
+            on the shells that ``empty()`` builds. On a lazy stack it runs on
+            each stacked instance.
 
     Returns:
         the tensorclass, or a decorator if the flags are given without a

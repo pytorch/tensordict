@@ -2655,7 +2655,6 @@ class TestTensorClass:
         assert shell["mesh"].points is None
         assert calls == [(4, 3)]
         calls.clear()
-        assert calls == []
         padded = pad_sequence([small, large])
         assert isinstance(padded, _ValidatingMesh)
         assert padded.points.shape == (2, 6, 3)
