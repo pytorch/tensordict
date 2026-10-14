@@ -95,16 +95,27 @@ class PackLayout:
     :meth:`unpack`. It is frozen, hashable and compares by value, so a module
     can cache it and ``torch.compile`` can treat it as a constant.
 
+    Only tensorclasses are rebuilt with their class. Other subclasses of
+    :class:`~tensordict.TensorDictBase`, such as
+    :class:`~tensordict.TypedTensorDict` or
+    :class:`~tensordict.nn.TensorDictParams`, come back as a
+    :class:`~tensordict.TensorDict`.
+
     Attributes:
         keys (tuple of NestedKey): the leaf keys in column order.
         shapes (tuple of torch.Size): the feature shape of each leaf, that is
             its shape after the batch dimensions of the packed tensordict.
             Lists and tuples of ints are converted to ``torch.Size``.
         dim (int): the position of the packed dimension in the packed tensor.
+            :meth:`~tensordict.TensorDictBase.pack` stores it counted from the
+            end (a negative int), so ``td.pack(1)`` and ``td.pack(-1)`` give
+            equal layouts when ``td`` has one batch dimension, and ``flat``
+            may have extra leading batch dimensions.
         nested (tuple): one ``(key, batch_shape, cls)`` entry per nested tensor
             collection, where ``batch_shape`` is its batch shape after the
             batch dimensions of the root and ``cls`` is its tensorclass, or
-            ``None`` for a tensordict.
+            ``None`` for a tensordict. Batch shapes given as lists or tuples
+            of ints are converted to ``torch.Size``.
         device (torch.device or None): the device of the packed tensordict.
         cls (type or None): the tensorclass of the packed tensordict, or ``None``.
         offsets (tuple of int): the first column of each leaf.
@@ -135,6 +146,14 @@ class PackLayout:
     def __post_init__(self):
         object.__setattr__(
             self, "shapes", tuple(torch.Size(shape) for shape in self.shapes)
+        )
+        object.__setattr__(
+            self,
+            "nested",
+            tuple(
+                (key, torch.Size(batch_shape), cls)
+                for key, batch_shape, cls in self.nested
+            ),
         )
         offsets = []
         numel = 0
@@ -1209,6 +1228,12 @@ class _ShapeOps:
         contiguous for any ``dim``. :meth:`PackLayout.unpack
         <tensordict.PackLayout.unpack>` inverts it.
 
+        Packing along the last dim copies the data once, with one
+        :func:`torch.cat`. Along another dim the result can take a second
+        copy: :func:`torch.cat` keeps the channels-last strides that moving
+        the feature dim gives a 4-d or 5-d result, and the result is then made
+        contiguous.
+
         All the leaves must share one dtype and one device. Non-tensor data
         cannot be packed: drop it with :meth:`filter_non_tensor_data` first.
         A lazy stack packs like its dense equivalent if all its members have
@@ -1341,7 +1366,7 @@ class _ShapeOps:
         return flat, PackLayout(
             keys=keys,
             shapes=shapes,
-            dim=dim,
+            dim=pos - batch_dims - 1,
             nested=tuple(nested),
             device=self.device,
             cls=cls if _is_tensorclass(cls) else None,

@@ -400,6 +400,9 @@ class TestGeneric:
         assert flat.shape == (2, 4, 4)[:pos] + (3,) + (2, 4, 4)[pos:]
         assert flat.is_contiguous()
         assert (layout.unpack(flat) == td).all()
+        # the dim is stored counted from the end, so both spellings agree
+        assert layout.dim == pos - 4
+        assert layout == td.pack(dim=pos - 4)[1] == td.pack(dim=pos)[1]
         with pytest.raises(IndexError, match="out of range"):
             layout.unpack(torch.zeros(()))
 
@@ -430,6 +433,15 @@ class TestGeneric:
         assert by_hand == reverse
         assert hash(by_hand) == hash(reverse)
         assert (td.pack(layout=by_hand)[0] == flat_reverse).all()
+        nested = TensorDict(n=TensorDict(x=torch.zeros(4, 2), batch_size=[4, 2]))
+        nested.batch_size = [4]
+        _, layout_nested = nested.pack()
+        by_hand = PackLayout(
+            keys=(("n", "x"),), shapes=([2],), nested=(("n", [2], None),)
+        )
+        assert by_hand == layout_nested
+        assert hash(by_hand) == hash(layout_nested)
+        assert by_hand.unpack(torch.ones(3, 2))["n"].batch_size == (3, 2)
 
         with pytest.raises(KeyError, match="differ from the keys of the layout"):
             td.exclude("a").pack(layout=layout)
