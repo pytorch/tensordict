@@ -2263,6 +2263,50 @@ class TensorDict(TensorDictBase):
             recurse=recurse, batch_size=batch_size, device=device, names=names
         )
 
+    # Override: builds each new sub-tensordict once instead of renaming the
+    # keys one by one. It handles only keys that hold a plain tensor or
+    # TensorDict and meet neither an existing key nor one another, on an
+    # unlocked, unnamed TensorDict; rename_key_ handles (and raises for) the rest.
+    def _unflatten_keys_fast(self, separator: str) -> bool:
+        if (
+            type(self) is not TensorDict
+            or type(separator) is not str
+            or not separator
+            or self._is_locked
+            or self._td_dim_names is not None
+            or is_compiling()
+        ):
+            return False
+        src = self._tensordict
+        tree = {}
+        moved = []
+        for key, value in src.items():
+            if separator not in key:
+                continue
+            cls = type(value)
+            if cls is not Tensor and cls is not TensorDict:
+                return False
+            parts = key.split(separator)
+            if "" in parts or parts[0] in src:
+                return False
+            node = tree
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+                if type(node) is not dict:
+                    return False
+            if parts[-1] in node:
+                return False
+            node[parts[-1]] = value
+            moved.append(key)
+        for key in moved:
+            del src[key]
+        # new groups go last, in the order of their first key, as with rename_key_
+        for key, sub in tree.items():
+            src[key] = self._new_unsafe(
+                source=sub, batch_size=self._batch_size, device=self._device
+            )
+        return True
+
     # Override: dense fast path that shares the leaves and supports inplace.
     def _select(
         self,

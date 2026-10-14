@@ -7920,6 +7920,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         self.exclude(*root_keys, inplace=True)
         return self
 
+    def _unflatten_keys_fast(self, separator: str) -> bool:
+        """Unflattens the keys of a fresh shallow copy in one pass, if it can.
+
+        Returns ``False``, leaving ``self`` unchanged, when :meth:`unflatten_keys`
+        must rename the keys one by one. :class:`~tensordict.TensorDict`
+        overrides it.
+        """
+        return False
+
     @_as_context_manager()
     @_copy_cached_result
     @_cache_while_locked  # noqa: B019
@@ -8011,9 +8020,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         if not inplace:
-            result = self._clone(recurse=False).unflatten_keys(
-                separator=separator, inplace=True
-            )
+            result = self._clone(recurse=False)
+            if not result._unflatten_keys_fast(separator):
+                result = result.unflatten_keys(separator=separator, inplace=True)
             if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
