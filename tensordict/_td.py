@@ -1280,9 +1280,20 @@ class TensorDict(TensorDictBase):
         device = self._device
         entries = self._tensordict
         consolidated = "_consolidated" in self.__dict__
+        # New keys for the general path are collected in `pending` and
+        # written with one _update_entries call, made before the next write
+        # of any other kind and at the end. The general path writes the keys
+        # of a dict in order, so the result and the entries written before an
+        # error are those of one call per key, without the fixed cost of a
+        # call per key. Writing a key that self does not hold yet cannot change
+        # source or another entry, so deferring it to the next write changes
+        # nothing else; keys that self holds keep their own call.
+        pending = None
         # Iterate over source itself, as the general path does: a merge that
         # writes into source (if source is a sub-tensordict of self) shows.
         for key, value in source.items():
+            # 0: the general path, 1: a valid tensor, 2: a merge into child
+            kind = 0
             if type(key) is str:
                 if type(value) is Tensor:
                     if not (
@@ -1295,17 +1306,49 @@ class TensorDict(TensorDictBase):
                         )
                         or (device is not None and value.device != device)
                     ):
-                        entries[key] = value
-                        if consolidated:
-                            self._mark_consolidated_stale()
-                        continue
+                        kind = 1
                 elif type(value) is TensorDict or type(value) is dict:
                     child = entries.get(key)
                     if type(child) is TensorDict:
-                        child.update(value)
-                        continue
+                        kind = 2
+                if not kind and key not in entries:
+                    if pending is None:
+                        pending = {}
+                    pending[key] = value
+                    continue
+            if pending:
+                self._update_entries(
+                    pending,
+                    clone=False,
+                    inplace=False,
+                    non_blocking=False,
+                    keys_to_update=None,
+                    is_leaf=_is_leaf_nontensor,
+                    update_batch_size=False,
+                    ignore_lock=False,
+                )
+                pending = None
+            if kind == 1:
+                # a valid tensor: written as the general path writes it
+                entries[key] = value
+                if consolidated:
+                    self._mark_consolidated_stale()
+            elif kind == 2:
+                child.update(value)
+            else:
+                self._update_entries(
+                    {key: value},
+                    clone=False,
+                    inplace=False,
+                    non_blocking=False,
+                    keys_to_update=None,
+                    is_leaf=_is_leaf_nontensor,
+                    update_batch_size=False,
+                    ignore_lock=False,
+                )
+        if pending:
             self._update_entries(
-                {key: value},
+                pending,
                 clone=False,
                 inplace=False,
                 non_blocking=False,
