@@ -493,6 +493,23 @@ class TestNonTensorData:
         assert not stack.is_locked
         assert call(make().lock_()).is_locked
 
+    @pytest.mark.parametrize(
+        "shape", [(3, 0), (0, 3), (0, 3, 1), (1, 0), (0, 0, 3), (-1, 3)]
+    )
+    def test_view_non_tensor_stack_zero_size(self, shape):
+        # view gives torch's shape and leaves the input as it is
+        def make():
+            return NonTensorStack(*[NonTensorStack(batch_size=[0])] * 3, stack_dim=1)
+
+        stack = make()
+        out = stack.view(shape)
+        expected = torch.zeros(stack.batch_size).view(shape)
+        assert isinstance(out, NonTensorStack)
+        assert out.batch_size == expected.shape
+        assert out.tolist() == expected.tolist()
+        assert not stack.is_locked
+        assert make().lock_().view(shape).is_locked
+
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
         assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
