@@ -1374,6 +1374,30 @@ class LazyStackedTensorDict(TensorDictBase):
                     )
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, num_tds)
 
+    def _reset_member_batch_size(self) -> None:
+        # the members may have changed their batch size, for instance through
+        # update(..., update_batch_size=True)
+        tensordicts = self.tensordicts
+        if tensordicts:
+            td0 = tensordicts[0]
+            batch_size = td0.batch_size
+            # a loop rather than all(): this runs on every such update
+            for td in tensordicts:
+                if td.batch_size != batch_size:
+                    self._reset_batch_size(
+                        td0, tensordicts, td0.device, len(tensordicts), False
+                    )
+                    break
+            else:
+                self._batch_size = self._compute_batch_size(
+                    batch_size, self.stack_dim, len(tensordicts)
+                )
+            if self._is_vmapped:
+                # the batch size of a vmapped stack leaves out the stack dim
+                self._batch_size = torch.Size(
+                    [s for i, s in enumerate(self._batch_size) if i != self.stack_dim]
+                )
+
     @staticmethod
     def _compute_batch_size(
         batch_size: torch.Size, stack_dim: int, num_tds: int
@@ -4146,6 +4170,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             for td_dest, td_source in zip(self.tensordicts, sources):
                 td_dest.update(td_source, **kwargs)
+            if update_batch_size:
+                self._reset_member_batch_size()
             if len(sources) > n and update_batch_size:
                 self.extend([td.copy() for td in sources[n:]])
             # without update_batch_size, the extra members of a longer source
@@ -4188,6 +4214,8 @@ class LazyStackedTensorDict(TensorDictBase):
             self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
         ):
             td_dest.update(td_source, **kwargs)
+        if update_batch_size:
+            self_upd._reset_member_batch_size()
         if self._hook_out is not None:
             self_upd = self._hook_out(self_upd)
         else:
