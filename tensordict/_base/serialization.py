@@ -51,6 +51,7 @@ from tensordict.utils import (
     _get_shared_executor,
     _is_non_tensor,
     _is_safe_legacy_key,
+    _is_tensorclass,
     _is_unbatched,
     _prefix_last_key,
     _rebuild_njt_from_njt,
@@ -428,6 +429,11 @@ class _Serialization:
                         flat_size=flat_size,
                     )
 
+                # Visit a tensorclass through its tensordict: the tensorclass
+                # wrapper would rebuild the (empty) result as an instance and
+                # run __post_init__ on it.
+                if _is_tensorclass(type(value)):
+                    value = value._tensordict
                 value._fast_apply(
                     local_assign,
                     named=True,
