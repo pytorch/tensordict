@@ -31,6 +31,7 @@ import torch
 import torch.distributed as dist
 from _typeshed import Incomplete
 from streaming import MDSWriter
+from tensordict._base.shape import PackLayout
 from tensordict._contextlib import LAST_OP_MAPS as LAST_OP_MAPS
 from tensordict._indexing import convert_ellipsis_to_idx as convert_ellipsis_to_idx
 from tensordict._lazy import LazyStackedTensorDict
@@ -638,6 +639,9 @@ class TensorClass(_TensorClassInitArgs):
         sorted: bool | list[NestedKey] | None = None,
         out: torch.Tensor | None = None,
     ) -> torch.Tensor: ...
+    def pack(
+        self, dim: int = -1, *, layout: PackLayout | None = None
+    ) -> tuple[torch.Tensor, PackLayout]: ...
     def stack_from_tensordict(
         self,
         dim: int = 0,

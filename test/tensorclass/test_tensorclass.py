@@ -1207,6 +1207,35 @@ class TestTensorClass:
         ):
             torch.cat([data1, data3], dim=0)
 
+    def test_pack(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str = None
+            y: "MyDataNested" = None
+
+        data = MyDataNested(
+            X=torch.randn(3, 2),
+            y=MyDataNested(X=torch.randn(3, 4), batch_size=[3, 4]),
+            batch_size=[3],
+        )
+        flat, layout = data.pack()
+        assert flat.shape == (3, 6)
+        assert layout.keys == ("X", ("y", "X"))
+        assert layout.cls is MyDataNested
+        out = layout.unpack(flat)
+        assert type(out) is MyDataNested
+        assert type(out.y) is MyDataNested
+        assert out.y.batch_size == (3, 4)
+        assert out.z is None
+        assert out.y.y is None
+        assert (out == data).all()
+        assert out.X._base is flat
+
+        data.z = "a string"
+        with pytest.raises(TypeError, match="non-tensor entry 'z'"):
+            data.pack()
+
     def test_classvar(self):
         @tensorclass
         class MyData:

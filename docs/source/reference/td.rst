@@ -191,6 +191,7 @@ see :ref:`keys`. For values that are not tensors, see
     TensorDictBase.cat_tensors
     TensorDictBase.stack_tensors
     TensorDictBase.cat_from_tensordict
+    TensorDictBase.pack
     TensorDictBase.stack_from_tensordict
 
 .. rubric:: Classes and functions
@@ -200,6 +201,7 @@ see :ref:`keys`. For values that are not tensors, see
     :template: class.rst
 
     NestedKey
+    PackLayout
 
 .. autosummary::
     :toctree: generated/
