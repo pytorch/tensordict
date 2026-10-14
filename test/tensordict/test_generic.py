@@ -3464,6 +3464,66 @@ class TestGeneric:
         assert sub_tensordict.shape == torch.Size([4, 5])
         assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
 
+    def test_getitem_str_key(self):
+        # td["k"] returns a Tensor or TensorDict entry from the dict itself, and
+        # reads every other entry, and subclasses, through the generic path
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        class SubTD(TensorDict):
+            pass
+
+        def build(cls):
+            td = cls(
+                a=torch.zeros(3),
+                sub=TensorDict(b=torch.zeros(3), batch_size=[3]),
+                s=NonTensorData("text", batch_size=[3]),
+                ns=NonTensorStack(*[NonTensorData(i) for i in range(3)]),
+                tc=TC(x=torch.zeros(3), batch_size=[3]),
+                lazy=lazy_stack([TensorDict(c=torch.zeros(())) for _ in range(3)]),
+                p=nn.Parameter(torch.zeros(3)),
+                u=tensordict.UnbatchedTensor(torch.zeros(2)),
+                batch_size=[3],
+            )
+            td["a.b"] = torch.ones(3)
+            return td
+
+        generic = TensorDictBase._get_tuple_maybe_non_tensor
+        read = []
+
+        def spy(self, key, default, **kwargs):
+            read.append(key)
+            return generic(self, key, default, **kwargs)
+
+        td = build(TensorDict)
+        with mock.patch.object(TensorDictBase, "_get_tuple_maybe_non_tensor", spy):
+            for key in ("a", "sub", "a.b"):
+                assert td[key] is td._tensordict[key]
+            assert type(td["a"]) is torch.Tensor
+            assert type(td["sub"]) is TensorDict
+            assert read == []
+            assert td["s"] == "text"
+            assert td["ns"] == [0, 1, 2]
+            assert type(td["tc"]) is TC
+            assert type(td["lazy"]) is LazyStackedTensorDict
+            for key in ("p", "u"):
+                assert td[key] is td._tensordict[key]
+            with pytest.raises(KeyError, match='key "missing" not found in TensorDict'):
+                td["missing"]
+            assert read == [(key,) for key in ("s", "ns", "tc", "lazy", "p", "u")] + [
+                ("missing",)
+            ]
+            read.clear()
+            assert td["sub", "b"] is td["sub"]["b"]
+            assert read == [("sub", "b")]
+
+            read.clear()
+            subtd = build(SubTD)
+            assert subtd["a"] is subtd._tensordict["a"]
+            assert read == [("a",)]
+        assert SubTD.__getitem__ is TensorDictBase.__getitem__
+
     @legacy_lazy_mode()
     def test_inferred_view_size(self):
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])

@@ -1703,6 +1703,31 @@ class TensorDict(TensorDictBase):
         except KeyError:
             return self._default_get(key, default)
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Subclasses keep the generic __getitem__, without the exact-type
+        # checks of the one below.
+        if cls.__getitem__ is TensorDict.__getitem__:
+            cls.__getitem__ = TensorDictBase.__getitem__
+
+    # Override: returns a Tensor or TensorDict entry under a str key straight
+    # from the dict. Other entries (non-tensor data, tensorclasses, lazy
+    # stacks, tensor subclasses, missing keys) and nested keys are read as
+    # TensorDictBase.__getitem__ reads them; indices go through it.
+    def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
+        if type(self) is TensorDict:
+            if type(index) is str:
+                result = self._tensordict.get(index, NO_DEFAULT)
+                cls = type(result)
+                if cls is Tensor or cls is TensorDict:
+                    return result
+                return self._get_tuple_maybe_non_tensor((index,), NO_DEFAULT)
+            if type(index) is tuple:
+                key = _unravel_key_to_tuple(index)
+                if key:
+                    return self._get_tuple_maybe_non_tensor(key, NO_DEFAULT)
+        return TensorDictBase.__getitem__(self, index)
+
     # Override: shares the dense leaves and marks the tensordict shared.
     def share_memory_(self) -> Self:
         if self.is_memmap():
