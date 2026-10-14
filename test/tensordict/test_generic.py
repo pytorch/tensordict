@@ -78,6 +78,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         get_available_devices,
         is_npu_available,
         legacy_lazy_mode,
+        streaming_dataset,
         TestTensorDictsBase,
     )
 else:
@@ -89,6 +90,7 @@ else:
         get_available_devices,
         is_npu_available,
         legacy_lazy_mode,
+        streaming_dataset,
         TestTensorDictsBase,
     )
 
@@ -8429,11 +8431,8 @@ class TestGeneric:
         tmpdir = str(tmpdir)
         td.to_mds(out=tmpdir)
 
-        # Create a dataloader
-        from streaming import StreamingDataset
-
         # Load the dataset
-        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=2)
         dl = torch.utils.data.DataLoader(  # noqa: TOR401
             dataset=dataset, batch_size=2, collate_fn=TensorDict.from_list
         )
