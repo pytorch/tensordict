@@ -2972,6 +2972,42 @@ class TestGeneric:
             assert td.batch_size == (3,)
             assert type(td.to_pytree().nested).__name__ == "GenericDict"
 
+    def test_from_pytree_namedtuple_tuple(self):
+        # https://github.com/pytorch/tensordict/issues/2160
+        # a tuple field comes back as a tuple
+        Outer = namedtuple("Outer", ["a", "nested"])
+        Inner = namedtuple("Inner", ["p", "name"])
+        a = torch.zeros(3)
+
+        def check(v1, v2):
+            assert (v1 == v2).all() if torch.is_tensor(v1) else v1 == v2
+
+        for nested in (
+            (torch.ones(3), torch.ones(3)),
+            (torch.ones(3), 1, 2.0),
+            (torch.ones(3), {"x": torch.ones(3)}, Inner(p=torch.ones(3), name="n")),
+        ):
+            pytree = Outer(a=a, nested=nested)
+            for kwargs in ({}, {"auto_batch_size": True}):
+                td = TensorDict.from_pytree(pytree, **kwargs)
+                assert td["nested", "_pytree_type"] is tuple
+                recon = td.to_pytree()
+                assert type(recon) is Outer
+                assert type(recon.nested) is tuple
+                torch.utils._pytree.tree_map(check, pytree, recon)
+        pytree = Outer(a=a, nested=(torch.ones(3), {"x": torch.ones(3)}))
+        recon = TensorDict.from_pytree(pytree, batch_size=[3]).to_pytree()
+        torch.utils._pytree.tree_map(check, pytree, recon)
+        # a tuple that holds a str or a list, and an empty tuple, go through
+        # from_any, as on main
+        for nested in (("a", "b"), ([1, 2],), ()):
+            td = TensorDict.from_pytree(Outer(a=a, nested=nested))
+            assert "_pytree_type" not in td["nested"].keys()
+        assert isinstance(
+            TensorDict.from_pytree(Outer(a=a, nested=([1, 2],)))["nested", "0"],
+            torch.Tensor,
+        )
+
     def test_from_pytree_subclasses(self):
         # https://github.com/pytorch/tensordict/issues/2371
         pytree = OrderedDict(
