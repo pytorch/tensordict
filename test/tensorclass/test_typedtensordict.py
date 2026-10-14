@@ -1307,6 +1307,22 @@ class TestBackends:
             with pytest.raises(NotImplementedError, match="contiguous"):
                 state.contiguous(inplace=True)
 
+    def test_new_unsafe_base_keywords(self):
+        # the keywords that the base code passes to _new_unsafe
+        result = _BackendState._new_unsafe(
+            source={"a": torch.zeros(4)},
+            batch_size=torch.Size([4]),
+            device=None,
+            names=None,
+            lock=True,
+            is_shared=False,
+            is_memmap=False,
+        )
+        assert type(result) is _BackendState
+        assert type(result._source) is TensorDict
+        assert result.batch_size == (4,)
+        assert result.is_locked
+
     @staticmethod
     def _flat_lazy_state():
         class Flat(TypedTensorDict):

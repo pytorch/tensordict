@@ -4712,23 +4712,22 @@ class TestTensorDictParams:
         with pytest.raises(RuntimeError, match="locked"):
             params.popitem()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="TensorDictParams._new_unsafe needs the parameters positionally",
-    )
-    def test_new_unsafe_base_keywords(self):
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_new_unsafe_base_keywords(self, lock):
+        # the keywords that the base code passes; a dict gives a TensorDict
         params = self._params()
         result = type(params)._new_unsafe(
             source={"a": torch.zeros(4)},
             batch_size=torch.Size([4]),
             device=None,
             names=None,
-            lock=False,
+            lock=lock,
             is_shared=False,
             is_memmap=False,
         )
         assert type(result) is TensorDict
         assert result.batch_size == (4,)
+        assert result.is_locked is lock
 
     @staticmethod
     def _params_non_tensor(lock):

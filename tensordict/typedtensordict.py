@@ -1055,6 +1055,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         non_blocking=None,
         lock=False,
         nested=True,
+        **kwargs,
     ):
         td = TensorDict._new_unsafe(
             source=source,
@@ -1064,6 +1065,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             non_blocking=non_blocking,
             lock=lock,
             nested=nested,
+            **kwargs,
         )
         return cls._wrap_td(td)
 

@@ -1767,10 +1767,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
-        # This to make sure all TensorDictBase subclasses have a proper fallback if they don't have a _new_unsafe
-        # In other words, only TensorDict subclasses will have their type preserved, others will become TensorDict
-        # instances (note that TensorDictBase should not be directly subclassed outside of this codebase, as it is
-        # highly abstract).
+        """Builds a tensordict from ``source`` without validating it.
+
+        Every subclass accepts the arguments of
+        :meth:`TensorDict._new_unsafe <tensordict.TensorDict._new_unsafe>`:
+        ``source=None, batch_size=None, device=None, names=None,
+        non_blocking=None, lock=False, nested=True, is_shared=False,
+        is_memmap=False``, and passes the keywords it does not use to it. The
+        base code calls it on ``self`` with a dict ``source`` for the results
+        of :meth:`split`, :meth:`contiguous`, :meth:`empty`, ``_unbind`` and
+        ``_index_tensordict``. The result is an instance of the class when the
+        class can hold ``source``: the default returns a
+        :class:`~tensordict.TensorDict`, and so does
+        :class:`~tensordict.nn.TensorDictParams` for a dict.
+        """
         from tensordict._td import TensorDict
 
         return TensorDict._new_unsafe(*args, **kwargs)

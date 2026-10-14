@@ -446,14 +446,18 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @classmethod
     def _new_unsafe(
         cls,
-        parameters: TensorDictBase,
+        parameters: TensorDictBase | dict | None = None,
         *,
+        source: TensorDictBase | dict | None = None,
         no_convert=None,
         lock: bool = False,
         params: dict | None = None,
         buffers: dict | None = None,
         **kwargs,
     ):
+        # ``source`` is the name that the base code uses for ``parameters``
+        if parameters is None:
+            parameters = source
         if is_compiling():
             return TensorDictParams(parameters, no_convert="skip", lock=lock)
 
@@ -461,11 +465,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             parameters = kwargs
 
         if isinstance(parameters, dict):
-            parameters = TensorDict._new_unsafe(parameters, **kwargs)
             if no_convert is None:
                 # Then _new_unsafe is called from somewhere that doesn't know
                 #  that it's a TDParams and we return a TensorDict (eg, torch.gather)
-                return parameters
+                return TensorDict._new_unsafe(parameters, lock=lock, **kwargs)
+            parameters = TensorDict._new_unsafe(parameters, **kwargs)
         elif isinstance(parameters, TensorDictParams):
             if kwargs:
                 raise TypeError(
