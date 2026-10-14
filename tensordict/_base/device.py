@@ -688,7 +688,8 @@ class _DeviceOps:
 
             num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
                 of threads to be used for ``pin_memory``. By default,
-                ``max(1, torch.get_num_threads())`` threads will be spawn.
+                up to ``max(1, torch.get_num_threads() // 2)`` threads are
+                started, and no more than one per leaf.
                 ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
             inplace (bool, optional): if ``True``, the data will be written in-place in the same tensordict.
@@ -935,10 +936,12 @@ class _DeviceOps:
                     result = result._fast_apply(
                         to_pinmem, propagate_lock=True, **apply_kwargs
                     )
-                elif self.is_locked:
+                elif self.is_locked and batch_size is None:
                     # A locked tensordict caches its leaves, so the first walk
                     # is nearly free: keep the two-pass form, which is faster
-                    # there than one walk that calls to() on each leaf.
+                    # there than one walk that calls to() on each leaf. With a
+                    # batch_size, _fast_apply renames the leaves of nested lazy
+                    # stacks, which the keys of _items_list would then miss.
                     keys, tensors = self._items_list(True, True)
                     tensors = [to(t) for t in tensors]
                     items = dict(zip(keys, tensors))

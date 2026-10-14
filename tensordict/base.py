@@ -330,6 +330,14 @@ class _InplaceShapeState(local):
 _inplace_shape_state = _InplaceShapeState()
 
 
+class _KeyThroughLeafError(ValueError):
+    """The ValueError raised when a nested key runs through a leaf.
+
+    :meth:`~TensorDictBase.get` called with a default returns the default
+    instead.
+    """
+
+
 def _raise_if_not_a_tensordict(
     err: AttributeError, key: tuple, i: int, value: Any
 ) -> None:
@@ -341,7 +349,7 @@ def _raise_if_not_a_tensordict(
     """
     if "has no attribute" in str(err):
         rest = key[i] if len(key) == i + 1 else key[i:]
-        raise ValueError(
+        raise _KeyThroughLeafError(
             f"{key[i - 1]!r} is a {type(value).__name__}, not a tensordict, "
             f"so it has no entry {rest!r}."
         )
@@ -1150,6 +1158,67 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+# the numbers that _warn_tuple_dtype warns about, in tuples and nested tuples;
+# exact types, since NumPy scalars such as np.float64 subclass float
+_NUMBER_TYPES = frozenset((bool, int, float, complex))
+
+
+def _is_tuple_of_numbers(value: tuple) -> bool:
+    # a flat tuple is checked at C speed; nested tuples item by item
+    types = set(map(type, value))
+    if types <= _NUMBER_TYPES:
+        return True
+    if not any(issubclass(cls, tuple) for cls in types):
+        return False
+    return all(
+        type(item) in _NUMBER_TYPES
+        or (isinstance(item, tuple) and _is_nested_tuple_of_numbers(item))
+        for item in value
+    )
+
+
+def _is_nested_tuple_of_numbers(value: tuple) -> bool:
+    return all(
+        type(item) in _NUMBER_TYPES
+        or (isinstance(item, tuple) and _is_nested_tuple_of_numbers(item))
+        for item in value
+    )
+
+
+def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
+    """Warns that the tuple of numbers ``value``, stored as ``array``, will get the dtype of ``torch.tensor(value)``.
+
+    NumPy stores a float or complex tuple of Python numbers as float64 or
+    complex128, and ``torch.tensor`` as the default dtype or its complex
+    counterpart: they differ exactly when the default dtype is not float64.
+    """
+    if is_compiling():
+        # Dynamo can trace neither the frame walk nor warnings.warn
+        return
+    new = torch.get_default_dtype()
+    if new == torch.float64 or not _is_tuple_of_numbers(value):
+        return
+    old = torch.as_tensor(array).dtype
+    if old.is_complex:
+        # torch has no complex dtype for a bfloat16 default
+        new = {torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)
+        if new is None:
+            return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"A tuple of numbers is stored as a {old} tensor today. Starting with "
+        "TensorDict 0.16, the default will change to the tensor that "
+        f"torch.tensor(value) gives ({new}), as for a list of numbers. Pass "
+        f"torch.tensor(value) to get {new} now, or "
+        f"torch.tensor(value, dtype={old}) or a NumPy array to keep {old}.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 # the values that set_at_ casts to a tensor in a non-tensor entry, and warns about
 _SET_AT_CAST_TYPES = (list, *_SCALAR_TYPES)
 
@@ -1547,8 +1616,9 @@ def _stored_value(source, dest):
 def _update_at_aliases(update_at_: Callable) -> Callable:
     """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
 
-    ``LazyStackedTensorDict`` and ``NonTensorStack`` called the index
-    ``index``. ``_SubTensorDict`` called the input ``input_dict``, and took
+    ``LazyStackedTensorDict``, ``NonTensorStack``, ``NonTensorData`` and the
+    tensorclass ``update_at_`` called the index ``index``. ``_SubTensorDict``
+    called the input ``input_dict``, and took
     ``discard_idx_attr=True`` to write into its source at an index of the
     source: classes with a ``_update_source_at_`` method still take it.
     Each of these names warns, and goes in 0.17.
@@ -2249,6 +2319,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         The leaves of the result share storage with the leaves of ``self``,
         and do not require gradients. An in-place change to the result
         changes ``self``.
+
+        Assigning ``td.data = other`` rebinds the ``.data`` of each leaf of
+        ``self`` to the matching leaf of ``other``, as :attr:`torch.Tensor.data`
+        does. The leaves then share storage with ``other``: memory-mapped or
+        shared-memory leaves stop writing to their file or shared memory.
+        ``other`` and each of its sub-tensordicts must have the batch size of
+        the matching tensordict in ``self``, and each key of ``other`` must be
+        in ``self``.
         """
         return self._data()
 
@@ -3895,7 +3973,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             key (NestedKey): the key to read. A tuple reads a nested entry:
                 ``td.get(("a", "b"))`` is ``td["a"]["b"]``. See :ref:`keys`.
             default (optional): the value returned if the key is missing.
-                Defaults to ``None``, as for :meth:`dict.get`.
+                Defaults to ``None``, as for :meth:`dict.get`. A nested key
+                that runs through a tensor is missing too: ``get`` returns
+                the default passed to it, and without one raises a
+                ``ValueError`` that names the tensor.
 
         .. versionchanged:: 0.7
             A missing key returns ``None`` instead of raising ``KeyError``.
@@ -3968,6 +4049,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Find what the default is
+        passed_default = True
         if args:
             default = args[0]
             if len(args) > 1:
@@ -3980,9 +4062,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raise TypeError("'default' arg was passed twice.")
         elif _GET_DEFAULTS_TO_NONE:
             default = None
+            passed_default = False
         else:
             default = NO_DEFAULT
-        result = self._get_tuple(key_tuple, default=default, **kwargs)
+        try:
+            result = self._get_tuple(key_tuple, default=default, **kwargs)
+        except _KeyThroughLeafError:
+            # A key that runs through a leaf is missing for a caller that
+            # passed a default; without one, the error names the leaf.
+            if not passed_default or default is NO_DEFAULT:
+                raise
+            return default
         if (
             kwargs
             and (
@@ -5605,11 +5695,38 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _data_setter(self, value: Self):
+        if value.batch_size != self.batch_size:
+            raise RuntimeError(
+                f"Cannot assign .data from a source with batch size {value.batch_size} "
+                f"to a destination with batch size {self.batch_size}."
+            )
+        nodes_self = dict(
+            zip(*self._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS))
+        )
+        for key, node in zip(
+            *value._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        ):
+            node_self = nodes_self.get(key)
+            if (
+                _is_tensor_collection(type(node))
+                and _is_tensor_collection(type(node_self))
+                and node.batch_size != node_self.batch_size
+            ):
+                raise RuntimeError(
+                    f"Cannot assign .data from a source with batch size {node.batch_size} "
+                    f"to a destination with batch size {node_self.batch_size} at key {key!r}."
+                )
         keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        keys_self, vals_self = value._items_list(
+        keys_self, vals_self = self._items_list(
             True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
         self_dict = dict(zip(keys_self, vals_self))
+        missing = [key for key in keys if key not in self_dict]
+        if missing:
+            raise KeyError(
+                f"Cannot assign .data: the keys {missing} of the source are not in "
+                "the destination."
+            )
         for key, val in zip(keys, vals):
             val_self = self_dict[key]
             if hasattr(val_self, "data"):
@@ -5691,7 +5808,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             key (NestedKey): the entry to look for. A tuple removes a nested
                 entry, and keeps the sub-tensordict that held it.
-            default (Any, optional): the value to return if the key cannot be found.
+            default (Any, optional): the value to return if the key cannot be found,
+                including a nested key that runs through a tensor (without a
+                default, that key raises a ``ValueError`` that names the tensor).
 
         Examples:
             >>> from tensordict import TensorDict
@@ -5709,6 +5828,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if out is _UNSET:
             # Key not found
             if default is NO_DEFAULT:
+                if len(key_tuple) > 1:
+                    # a key that runs through a leaf raises get's ValueError
+                    try:
+                        self.get(key_tuple, NO_DEFAULT)
+                    except KeyError:
+                        pass
                 raise KeyError(
                     _KEY_ERROR.format(
                         key_tuple[0] if len(key_tuple) == 1 else key_tuple,
@@ -7627,8 +7752,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 return TensorDictBase.from_struct_array(array, device=self.device)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif isinstance(array, (list, tuple)):
+            value = array
             array = np.asarray(array)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
+            if array.dtype.kind in ("c", "f") and isinstance(value, tuple):
+                _warn_tuple_dtype(value, array)
         elif hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()

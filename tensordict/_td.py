@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
+from collections.abc import Mapping
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
@@ -236,8 +237,10 @@ class TensorDict(TensorDictBase):
     - A key is a string, or a tuple of strings for a nested entry.
 
     Args:
-        source (TensorDict or Dict[NestedKey, Union[Tensor, TensorDictBase]]): a
-            data source. If empty, the tensordict can be populated subsequently.
+        source (TensorDict or Mapping[NestedKey, Union[Tensor, TensorDictBase]]): a
+            data source, such as a ``dict`` or any other
+            :class:`~collections.abc.Mapping`, read like a ``dict``. If empty,
+            the tensordict can be populated subsequently.
             A ``TensorDict`` can also be built via a sequence of keyword arguments,
             as it is the case for ``dict(...)``.
         batch_size (iterable of int, optional): a batch size for the
@@ -291,7 +294,7 @@ class TensorDict(TensorDictBase):
 
     def __init__(
         self,
-        source: T | dict[NestedKey, CompatibleType] | None = None,
+        source: T | Mapping[NestedKey, CompatibleType] | None = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
@@ -351,12 +354,10 @@ class TensorDict(TensorDictBase):
 
             if source is None:
                 source = {}
-            if type(source) is not dict and not isinstance(
-                source, (TensorDictBase, dict)
-            ):
+            if type(source) is not dict and not isinstance(source, Mapping):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "
-                    f"sub-type or a dictionary, found type(source)={type(source)}."
+                    f"sub-type or a Mapping, found type(source)={type(source)}."
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
             self._set_names(names)

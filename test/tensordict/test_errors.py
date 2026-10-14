@@ -206,8 +206,14 @@ class TestErrorMessage:
             td = LazyStackedTensorDict(td, td.clone())
         with pytest.raises(KeyError, match=re.escape(_GENERIC_NESTED_ERR.format(()))):
             td.pop(())
-        with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
-            td.pop(("a", "b"), None)
+        # with a default, a key that runs through a leaf is missing (#2678)
+        assert td.pop(("a", "b"), None) is None
+        assert td.get(("a", "b"), None) is None
+        # without one, get, pop and indexing name the leaf
+        for read in (lambda: td.pop(("a", "b")), lambda: td.get(("a", "b"))):
+            with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+                read()
+        assert list(td.keys()) == ["a"]
 
     @staticmethod
     @pytest.mark.parametrize(

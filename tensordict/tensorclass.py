@@ -66,6 +66,7 @@ from tensordict.base import (
     _register_tensor_class,
     _TENSORDICTBASE_MIXINS,
     _UNSET,
+    _update_at_aliases,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -3688,10 +3689,11 @@ def _update_(
     return self
 
 
+@_update_at_aliases
 def _update_at_(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T,
-    index: IndexType,
+    idx: IndexType,
     clone: bool = False,
     *,
     keys_to_update: Sequence[NestedKey] | None = None,
@@ -3782,14 +3784,17 @@ def _update_at_(
                         "storage, and a source that does not have the shape of "
                         "the index raises.",
                         FutureWarning,
-                        stacklevel=2,
+                        # the caller of the _update_at_aliases wrapper
+                        stacklevel=3,
                     )
                 return self
 
-    # LazyStackedTensorDict.update_at_ takes no keys_to_update
-    kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
     self._tensordict.update_at_(
-        input_dict_or_td, index, clone=clone, non_blocking=non_blocking, **kwargs
+        input_dict_or_td,
+        idx,
+        clone=clone,
+        non_blocking=non_blocking,
+        keys_to_update=keys_to_update,
     )
     return self
 
@@ -4531,6 +4536,7 @@ def _get(self, key: NestedKey, *args, **kwargs):
     if not key:
         raise KeyError(_GENERIC_NESTED_ERR.format(key))
     # Find what the default is
+    passed_default = True
     if args:
         default = args[0]
         if len(args) > 1:
@@ -4543,14 +4549,18 @@ def _get(self, key: NestedKey, *args, **kwargs):
             raise TypeError("'default' arg was passed twice.")
     elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
+        passed_default = False
     else:
         default = NO_DEFAULT
 
     try:
         if len(key) > 1:
-            return _getattr(self, key[0], **kwargs).get(
-                key[1:], default=default, **kwargs
-            )
+            entry = _getattr(self, key[0], **kwargs)
+            if not passed_default and _is_tensor_collection(type(entry)):
+                # the entry's get returns its own default, and keeps raising
+                # for a key that runs through a leaf, as get does without one
+                return entry.get(key[1:], **kwargs)
+            return entry.get(key[1:], default=default, **kwargs)
         if kwargs:
             return _getattr(self, key[0], **kwargs)
         return getattr(self, key[0])
@@ -5850,15 +5860,16 @@ class NonTensorDataBase(TensorClass):
             break_on_memmap=break_on_memmap,
         )
 
+    @_update_at_aliases
     def update_at_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
-        index: IndexType,
+        idx: IndexType,
         clone: bool = False,
         *,
         non_blocking: bool = False,
     ) -> T:
-        if index != () and index != slice(None):
+        if idx != () and idx != slice(None):
             raise RuntimeError("Cannot update a part of a NonTensorDataBase.")
         return self.update_(
             input_dict_or_td=input_dict_or_td, clone=clone, non_blocking=non_blocking

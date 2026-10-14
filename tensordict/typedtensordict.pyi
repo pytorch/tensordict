@@ -90,3 +90,15 @@ class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
     ) -> Self: ...
     @classmethod
     def from_tensordict(cls, td: TensorDictBase, *, check: bool = True) -> Self: ...
+    @classmethod
+    def from_dict(
+        cls,
+        input_dict,
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: Sequence[int] | torch.Size | None = None,
+        device: DeviceType | None = None,
+        batch_dims: int | None = None,
+        names: Sequence[str] | None = None,
+        check: bool = True,
+    ) -> Self: ...

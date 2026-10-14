@@ -24,6 +24,19 @@ else:
 __all__ = ["CompositeDistribution"]
 
 
+def _resolve_name_map(name_map: dict | None, names) -> dict[NestedKey, NestedKey]:
+    """Map each distribution name to the key its sample is written under.
+
+    Keys are matched after :func:`~tensordict.unravel_key`. Distributions
+    omitted from ``name_map`` keep their own name.
+    """
+    unraveled_names = [unravel_key(name) for name in names]
+    if not name_map:
+        return {name: name for name in unraveled_names}
+    name_map = {unravel_key(key): unravel_key(value) for key, value in name_map.items()}
+    return {name: name_map.get(name, name) for name in unraveled_names}
+
+
 class CompositeDistribution(d.Distribution, Mapping):
     """A composite distribution that groups multiple distributions together using the TensorDict interface.
 
@@ -46,7 +59,8 @@ class CompositeDistribution(d.Distribution, Mapping):
 
     Keyword Arguments:
         name_map (Dict[NestedKey, NestedKey], optional): A mapping of where each sample should be written. If not provided,
-            the key names from `distribution_map` will be used.
+            the key names from `distribution_map` will be used. Entries are
+            matched after :func:`~tensordict.unravel_key`.
         extra_kwargs (Dict[NestedKey, Dict], optional): A dictionary of additional keyword arguments for constructing the distributions.
         log_prob_key (NestedKey, optional): The key where the aggregated log probability will be stored.
             Defaults to `'sample_log_prob'`.
@@ -117,25 +131,12 @@ class CompositeDistribution(d.Distribution, Mapping):
         if extra_kwargs is None:
             extra_kwargs = {}
         dists = {}
-        if name_map is not None:
-            name_map = {
-                unravel_key(key): unravel_key(other_key)
-                for key, other_key in name_map.items()
-            }
-        for name, dist_class in distribution_map.items():
-            name_unravel = unravel_key(name)
-            if name_map:
-                try:
-                    write_name = unravel_key(name_map.get(name, name_unravel))
-                except KeyError:
-                    raise KeyError(
-                        f"Failed to retrieve the key {name} from the name_map with keys {name_map.keys()}."
-                    )
-            else:
-                write_name = name_unravel
-            name = name_unravel
+        write_names = _resolve_name_map(name_map, distribution_map)
+        for raw_name, dist_class in distribution_map.items():
+            name = unravel_key(raw_name)
+            write_name = write_names[name]
             dist_params = params.get(name)
-            kwargs = extra_kwargs.get(name, {})
+            kwargs = extra_kwargs.get(name, extra_kwargs.get(raw_name, {}))
             if dist_params is None:
                 raise KeyError(
                     f"no param {name} found in params with keys {params.keys(True, True)}"
@@ -200,7 +201,8 @@ class CompositeDistribution(d.Distribution, Mapping):
 
         Keyword Args:
             name_map (Dict[NestedKey, NestedKey], optional): A mapping of where each sample should be written. If not provided,
-                the keys of ``distributions`` are used.
+                the keys of ``distributions`` are used. Entries are matched
+                after :func:`~tensordict.unravel_key`.
             log_prob_key (NestedKey, optional): The key where the log probability will be stored.
                 Defaults to `'sample_log_prob'`.
             entropy_key (NestedKey, optional): The key where the entropy will be stored. Defaults to `'entropy'`.
@@ -236,23 +238,9 @@ class CompositeDistribution(d.Distribution, Mapping):
         self = cls.__new__(cls)
         self._batch_shape = params.shape
         dists = {}
-        if name_map is not None:
-            name_map = {
-                unravel_key(key): unravel_key(other_key)
-                for key, other_key in name_map.items()
-            }
+        write_names = _resolve_name_map(name_map, distributions)
         for name, dist in distributions.items():
-            name_unravel = unravel_key(name)
-            if name_map:
-                try:
-                    write_name = unravel_key(name_map.get(name, name_unravel))
-                except KeyError:
-                    raise KeyError(
-                        f"Failed to retrieve the key {name} from the name_map with keys {name_map.keys()}."
-                    )
-            else:
-                write_name = name_unravel
-            dists[write_name] = dist
+            dists[write_names[unravel_key(name)]] = dist
         self.dists = dists
         self.log_prob_key = log_prob_key
         self.entropy_key = entropy_key
