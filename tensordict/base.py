@@ -7175,9 +7175,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if not prefix:
             if _inplace_shape_state.nested:
                 return
-            if new_batch_size is not None and tuple(new_batch_size) == tuple(
-                self.batch_size
+            if new_batch_size is not None and (
+                tuple(new_batch_size) == tuple(self.batch_size)
+                or not self._inplace_batch_size_change
             ):
+                # the batch size stays, or self raises before any write
                 new_batch_size = None
         for key, value in self.items():
             cls = type(value)
