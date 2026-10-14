@@ -1,6 +1,6 @@
 # tensorclass
 
-tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
+tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *skip_post_init_on_rebuild: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
 
 A decorator that turns a class with annotated fields into a tensorclass.
 
@@ -35,6 +35,16 @@ be a tensor type or a tensor collection. Values that can be cast
 to a tensor are cast. Reading a field then skips the lookup in the
 non-tensor storage. Exclusive with `autocast` and `nocast`.
 Defaults to `False`.
+- **skip_post_init_on_rebuild** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`,
+`__post_init__` runs in the generated `__init__`,
+`from_tensordict`, `from_dict`, the other constructors such
+as `from_any` or `fromkeys`, and when the data is loaded or
+received from another process, but not when tensordict makes a
+new instance from the data of an existing one, as in indexing,
+`clone`, `to`, `apply` or `torch.stack`. Defaults to
+`False`: `__post_init__` also runs on these rebuilds, except
+on the shells that `empty()` builds. On a lazy stack it runs on
+each stacked instance.
 
 Returns:
 
@@ -118,4 +128,19 @@ A tensorclass instance can be a field of another tensorclass:
 >>> # although the data is stored as a TensorDict, the type hint helps us
 >>> # to appropriately cast the data to the right type
 >>> assert isinstance(nesting_data.nested, type(data))
+```
+
+`skip_post_init_on_rebuild` checks the data once, when it comes in:
+
+```
+>>> @tensorclass(skip_post_init_on_rebuild=True)
+... class Ragged:
+... offsets: torch.Tensor
+... indices: torch.Tensor
+... def __post_init__(self):
+... if int(self.offsets[-1]) != len(self.indices):
+... raise ValueError("the last offset must be len(indices)")
+>>> r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3))
+>>> r.clone().offsets # not checked again
+tensor([0, 2, 3])
 ```

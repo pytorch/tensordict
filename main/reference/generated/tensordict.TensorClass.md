@@ -165,6 +165,22 @@ the member of the same name.
 >>> Foo(sum=torch.ones(3), batch_size=[3]).sum
 tensor([1., 1., 1.])
 ```
+- `skip_post_init_on_rebuild`: `__post_init__` runs on the data that
+comes in (the generated `__init__`, `from_tensordict`,
+`from_dict`, the other constructors such as `from_any` or
+`fromkeys`, and loads), but not when tensordict makes a new instance
+from an existing one (indexing, `clone`, `to`, `apply`, stacking
+and the other operations). Subclasses inherit the flag.
+
+```
+>>> class Foo(TensorClass["skip_post_init_on_rebuild"]):
+... x: torch.Tensor
+... def __post_init__(self):
+... print("checked")
+>>> foo = Foo(x=torch.zeros(3))
+checked
+>>> foo = foo.clone()
+```
 
 `autocast`, `nocast` and `tensor_only` are exclusive: combining two
 of them raises a `TypeError`.
