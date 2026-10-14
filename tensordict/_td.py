@@ -724,8 +724,15 @@ class TensorDict(TensorDictBase):
         # the fast path for a tensordict of plain tensors.
         values = self._tensordict.values()
         for value in values:
-            if type(value) is not Tensor:
-                break
+            cls = type(value)
+            if cls is Tensor:
+                continue
+            if cls is TensorDict:
+                # a nested TensorDict answers for itself, as below
+                if value._has_non_tensor:
+                    return True
+                continue
+            break
         else:
             return False
         for cls in set(map(type, values)):

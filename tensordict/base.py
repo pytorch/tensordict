@@ -62,6 +62,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
+    _any_unbatched,
     _as_context_manager,
     _cache_while_locked,
     _canonicalize_tensor,
@@ -4848,13 +4849,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     vals = [vals[k] for k in new_keys]
                 # _foreach_copy_compiled cannot run under a torch.func transform
                 # (vmap), _foreach can. Same check as in _foreach, which explains it.
-                if (
-                    is_compiling()
-                    and torch._C._functorch.get_dynamic_layer_stack_depth() == 0
-                ):
-                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
-                else:
+                if torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
                     _foreach("copy_", vals, other_val, non_blocking=non_blocking)
+                elif is_compiling():
+                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
+                elif _any_unbatched(vals) or _any_unbatched(other_val):
+                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
+                else:
+                    # what _foreach does for copy_ outside of a torch.func
+                    # transform and without unbatched tensors, without its
+                    # overhead (about 2 µs, as much as the copy of 2 leaves)
+                    torch._foreach_copy_(vals, other_val, non_blocking=non_blocking)
                 if self._reads_return_copies:
                     self._write_back(new_keys, vals, "update_")
                 if not input_dict_or_td._has_non_tensor:
