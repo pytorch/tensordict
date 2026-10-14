@@ -510,6 +510,11 @@ def test_creation(benchmark):
     benchmark(TensorDict, {}, [3, 4])
 
 
+@pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
+def test_creation_device(benchmark, device):
+    benchmark(TensorDict, {}, [3, 4], device=device)
+
+
 def test_creation_empty(benchmark, a, b):
     benchmark(TensorDict, {"a": a, "b": b}, [3, 4])
 
@@ -537,6 +542,10 @@ def test_creation_nested_many_keys(benchmark, num_keys):
 
 def test_clone(benchmark, td):
     benchmark(td.clone)
+
+
+def test_clone_device(benchmark, td):
+    benchmark(td.to("cpu").clone)
 
 
 @pytest.mark.parametrize(
