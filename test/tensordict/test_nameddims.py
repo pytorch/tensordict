@@ -805,6 +805,58 @@ class TestNamedDims(TestTensorDictsBase):
         assert tds[0].names == ["e"]
         assert tds[0][""].names == tds[""][0].names == ["e", "d"]
 
+    def test_lazy_stack_set_names_failure_leaves_names_unchanged(self):
+        # A clash on the stack dim, or a names list of the wrong length, is
+        # rejected before the stack dim name or any member is written.
+        members = [
+            TensorDict({"x": torch.zeros(3)}, [3], names=["inner"]),
+            TensorDict({"x": torch.zeros(3)}, [3], names=["inner"]),
+        ]
+        stack = LazyStackedTensorDict(*members, stack_dim=0)
+        assert stack.names == [None, "inner"]
+        with pytest.raises(ValueError, match="already taken"):
+            stack.names = ["inner", "other"]
+        assert stack.names == [None, "inner"]
+        assert [member.names for member in stack.tensordicts] == [
+            ["inner"],
+            ["inner"],
+        ]
+
+        # The clash is only on the second member. The first must not be renamed.
+        first = TensorDict({"x": torch.zeros(3, 4)}, [3], names=["inner"])
+        second = TensorDict(
+            {"nested": TensorDict({}, [3, 4], names=["inner", "taken"])},
+            [3],
+            names=["inner"],
+        )
+        stack = LazyStackedTensorDict(first, second, stack_dim=0)
+        assert stack.names == [None, "inner"]
+        with pytest.raises(ValueError, match="already taken"):
+            stack.names = ["taken", "other"]
+        assert first.names == ["inner"]
+        assert second.names == ["inner"]
+        assert second["nested"].names == ["inner", "taken"]
+        assert stack.names == [None, "inner"]
+
+        stack = LazyStackedTensorDict(
+            TensorDict({}, [3], names=["feat"]),
+            TensorDict({}, [3], names=["feat"]),
+            stack_dim=0,
+        )
+        assert stack.ndim == 2
+        assert stack.names == [None, "feat"]
+        for bad_names in (["batch"], []):
+            with pytest.raises(
+                ValueError,
+                match="the length of the dimension names must equate the tensordict batch_dims",
+            ):
+                stack.names = bad_names
+            assert stack.names == [None, "feat"]
+            assert [member.names for member in stack.tensordicts] == [
+                ["feat"],
+                ["feat"],
+            ]
+
     def test_sub_td(self):
         td = self.sub_td("cpu")
         with pytest.raises(
