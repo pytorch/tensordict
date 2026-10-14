@@ -21,7 +21,13 @@ from typing import Callable, List, overload, Sequence, TYPE_CHECKING
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
-from tensordict.base import _is_tensor_collection, is_tensor_collection, Self, T
+from tensordict.base import (
+    _is_tensor_collection,
+    is_tensor_collection,
+    NO_DEFAULT,
+    Self,
+    T,
+)
 from tensordict.utils import (
     _as_context_manager,
     _check_unflatten_size,
@@ -968,19 +974,20 @@ class _ShapeOps:
     ) -> Self:
         # Build the result before removing entries. cat/stack raises on a
         # shape mismatch, and set can still reject the written value.
-        entries = [self.get(key) for key in keys]
+        entries = [self.get(key, NO_DEFAULT) for key in keys]
         result = op(entries, dim=dim)
         if keep_entries:
             return self.set(out_key, result)
-        popped = []
+        deleted = 0
         try:
             for key in keys:
-                popped.append((key, self.pop(key)))
+                self.del_(key)
+                deleted += 1
             return self.set(out_key, result)
         except Exception:
             # Last removed first, so a parent is put back before a nested key.
-            for key, value in reversed(popped):
-                self.set(key, value)
+            for i in reversed(range(deleted)):
+                self.set(keys[i], entries[i])
             raise
 
     def cat_tensors(
