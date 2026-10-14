@@ -512,6 +512,40 @@ def test_compile_update_inplace(mode, benchmark):
     benchmark(func, td, src)
 
 
+# ── Cold compile of tensordict and tensorclass writes ───────────────────
+
+
+@tensorclass(tensor_only=True)
+class _Fields:
+    a: torch.Tensor
+    b: torch.Tensor
+    td: TensorDict
+
+
+def build_and_set(x):
+    batch_size = x.shape[:1]
+    td = TensorDict(
+        {"a": x, "nested": TensorDict({"b": x + 1}, batch_size)}, batch_size
+    )
+    td["c"] = x * 2
+    td["nested", "d"] = x - 1
+    data = _Fields(a=x, b=x, td=td, batch_size=batch_size)
+    data.a = x + 3
+    data.b = x + 4
+    return data
+
+
+def test_compile_build_and_set_cold(benchmark):
+    # Dynamo's tracing time: reset before each compile
+    x = torch.randn(4, 3)
+
+    def setup():
+        torch._dynamo.reset()
+        return (torch.compile(build_and_set, backend="eager", fullgraph=True), x), {}
+
+    benchmark.pedantic(lambda func, x: func(x), setup=setup, rounds=10)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

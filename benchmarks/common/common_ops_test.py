@@ -172,6 +172,13 @@ def test_plain_set_stack_nested_inplace(benchmark):
     benchmark(lambda: td.set(key, tensor, inplace=True))
 
 
+def test_plain_set_td_batchfree(benchmark):
+    # the storage of a tensorclass: no batch dims and no device
+    td = TensorDict()
+    sub = TensorDict({"x": torch.zeros(1000)}, [1000])
+    benchmark(lambda: td.set("sub", sub))
+
+
 def test_items(benchmark):
     td = big_td()[0][0]
     benchmark(lambda: list(td.items()))
@@ -233,6 +240,28 @@ def test_keys_nested_leaf(benchmark):
 def test_keys_nested_leaf_loop(benchmark):
     td = big_nested_td()[0][0]
     benchmark(lambda: [key for key in td.keys(True, True)])  # noqa: C416
+
+
+def _small_nested_td():
+    # A few leaves on three levels, as in the data of a mesh
+    return TensorDict(
+        {
+            "a": torch.zeros(3),
+            "b": torch.zeros(3),
+            "nested": {"c": torch.zeros(3), "d": {"e": torch.zeros(3)}},
+        },
+        batch_size=[3],
+    )
+
+
+def test_keys_nested_leaf_small(benchmark):
+    td = _small_nested_td()
+    benchmark(lambda: list(td.keys(True, True)))
+
+
+def test_keys_nested_leaf_small_len(benchmark):
+    td = _small_nested_td()
+    benchmark(lambda: len(td.keys(True, True)))
 
 
 def test_keys_stack_nested(benchmark):
@@ -843,6 +872,13 @@ def test_get_by_key(benchmark, kind):
     benchmark(td.get, _KEYS[kind])
 
 
+@pytest.mark.parametrize("key", [("nest", "c"), ("nest", "zz")], ids=["hit", "miss"])
+def test_get_nested_with_default(benchmark, key):
+    # reading an optional nested entry, such as a cached value
+    td = TensorDict({"a": torch.zeros(3), "nest": {"c": torch.zeros(3)}}, [3])
+    benchmark(td.get, key, None)
+
+
 def test_select(benchmark, td, c):
     def exec_select():
         tdc = td.clone()
@@ -1067,6 +1103,20 @@ def test_apply_nested(benchmark):
     benchmark(td.apply, lambda x: x)
 
 
+@pytest.mark.parametrize("op", ["neg", "mul_scalar", "add"])
+def test_pointwise_nested(benchmark, op):
+    td = TensorDict(
+        {"a": torch.randn(8, 3), "b": torch.randn(8), "n": {"c": torch.randn(8, 4)}},
+        [8],
+    )
+    fn = {
+        "neg": lambda td: -td,
+        "mul_scalar": lambda td: td * 2.0,
+        "add": lambda td: td + td,
+    }[op]
+    benchmark(fn, td)
+
+
 def test_split(benchmark):
     (td,), _ = big_nested_td(size=(3, 20))
     benchmark(lambda td: td.split(2, dim=1), td)
@@ -1075,6 +1125,17 @@ def test_split(benchmark):
 def test_chunk(benchmark):
     (td,), _ = big_nested_td(size=(3, 20))
     benchmark(lambda td: td.chunk(10, dim=1), td)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda device required")
+@pytest.mark.parametrize("op", ["add", "sub"])
+def test_add_cuda_scalar_tensor(benchmark, op):
+    td = TensorDict(
+        {f"k{i}": torch.ones(64, 3, device="cuda") for i in range(10)},
+        batch_size=[64],
+    )
+    t = torch.tensor(0.5, device="cuda")
+    benchmark(getattr(td, op), t)
 
 
 if __name__ == "__main__":

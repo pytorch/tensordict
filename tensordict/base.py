@@ -330,6 +330,23 @@ class _InplaceShapeState(local):
 _inplace_shape_state = _InplaceShapeState()
 
 
+def _raise_if_not_a_tensordict(
+    err: AttributeError, key: tuple, i: int, value: Any
+) -> None:
+    """Raises a ValueError if ``err`` comes from reading ``key[i:]`` in a leaf.
+
+    ``value`` is the entry at ``key[i - 1]`` and ``err`` the AttributeError
+    that ``value._get_tuple(key[i:], ...)`` raised. Other AttributeErrors are
+    left to the caller, which returns ``None``.
+    """
+    if "has no attribute" in str(err):
+        rest = key[i] if len(key) == i + 1 else key[i:]
+        raise ValueError(
+            f"{key[i - 1]!r} is a {type(value).__name__}, not a tensordict, "
+            f"so it has no entry {rest!r}."
+        )
+
+
 def _is_inside(key: NestedKey, other: NestedKey) -> bool:
     """Returns whether the nested key ``key`` lies strictly inside ``other``."""
     key = (key,) if isinstance(key, str) else key
@@ -861,15 +878,12 @@ def _is_tensor_collection(datatype: type) -> bool:
     if datatype is Tensor:
         # The most common entry type: skip is_compiling() and the memo lookup.
         return False
-    is_dynamo = is_compiling()
-    out = None
-    if not is_dynamo:
-        out = _TENSOR_COLLECTION_MEMO.get(datatype)
-
+    if is_compiling():
+        return issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
+    out = _TENSOR_COLLECTION_MEMO.get(datatype)
     if out is None:
         out = issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
-        if not is_dynamo:
-            _TENSOR_COLLECTION_MEMO[datatype] = out
+        _TENSOR_COLLECTION_MEMO[datatype] = out
     return out
 
 
@@ -1519,6 +1533,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by _SubTensorDict, whose memmap_ would memory-map its whole source:
     # memmap_ raises.
     _memmap_inplace_unsupported: bool = False
+    # Whether each read of a leaf builds a new tensor: a lazy stack stacks its
+    # members, a file or a store reads its data. is_contiguous() then returns
+    # False without reading the leaves.
+    _leaves_built_on_read: bool = False
+    # Set by the stores, on which contiguous() returns to_tensordict(), read
+    # in one round trip, instead of reading the leaves one at a time.
+    _contiguous_via_to_tensordict: bool = False
+    # Set by the views and the backends whose leaves cannot be pinned in
+    # place: pin_memory raises.
+    _pin_memory_unsupported: bool = False
     # Set by LazyStackedTensorDict, whose leaves belong to its members:
     # reshape and repeat_interleave with inplace=True raise
     # NotImplementedError before they change anything.
@@ -2129,7 +2153,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self._dtype()
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
-        if new_batch_size == self.batch_size:
+        if new_batch_size == self.batch_size or (
+            # a list equal to the batch size (a tuple compares equal above)
+            type(new_batch_size) is list and new_batch_size == list(self.batch_size)
+        ):
             return
         if self._lazy:
             raise RuntimeError(
@@ -2803,14 +2830,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Erases the dimension names from a tensordict."""
         self._td_dim_names = None
 
-    @abc.abstractmethod
     def _rename_subtds(self, value):
         """Gives the sub-tensordicts the names in value for the dims they share with self.
 
         The dims a sub-tensordict has beyond ``self.batch_dims`` keep their
         names. ``value=None`` clears the names of the shared dims.
+
+        The default renames the sub-tensordicts that
+        :meth:`_lock_sub_tensordicts` returns, with ``rename_``.
         """
-        raise NotImplementedError
+        if value is None:
+            value = [None] * self.ndim
+        for item in self._lock_sub_tensordicts():
+            td_names = list(value) + list(item.names)[self.ndim :]
+            item.rename_(*td_names)
 
     def _check_dim_name(self, name):
         if name is None:
@@ -3076,6 +3109,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Returns:
             self
 
+        """
+        self._share_memory_()
+        return self
+
+    def _share_memory_(self) -> None:
+        """Places the leaves in shared memory and locks the tensordict.
+
+        The storage part of :meth:`share_memory_`, which returns ``self``. The
+        default raises ``NotImplementedError``.
         """
         raise NotImplementedError(
             f"Cannot call share_memory_ on a {type(self).__name__}. "
@@ -3760,12 +3802,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         try:
             return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
-            if "has no attribute" in str(err):
-                rest = key[1] if len(key) == 2 else key[1:]
-                raise ValueError(
-                    f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
-                    f"so it has no entry {rest!r}."
-                )
+            _raise_if_not_a_tensordict(err, key, 1, first)
 
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
         result = self._get_tuple(key, default, **kwargs)
@@ -6466,6 +6503,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result.lock_()
         return result
 
+    def _is_dense_node(self) -> bool:
+        # Whether _fast_apply can use _dense_apply: see TensorDict._is_dense_node.
+        return False
+
     def _fast_apply(
         self,
         fn: Callable,
@@ -6502,6 +6543,37 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     *args, **kwargs, num_threads=num_threads
                 )
 
+        elif (
+            not others
+            and out is None
+            and not inplace
+            and batch_size is None
+            and checked
+            and not call_on_nested
+            and not constructor_kwargs
+            and not is_compiling()
+            and device is NO_DEFAULT
+            and names is NO_DEFAULT
+            and (
+                is_leaf is None
+                or is_leaf is _default_is_leaf
+                or is_leaf is _NESTED_TENSORS_AS_LISTS
+            )
+            and self._is_dense_node()
+        ):
+            # An exact TensorDict without dim names: build the result
+            # directly, as _apply_nest would, without its generic steps.
+            result = self._dense_apply(
+                fn,
+                named,
+                nested_keys,
+                (),
+                filter_empty,
+                _default_is_leaf if is_leaf is None else is_leaf,
+            )
+            if propagate_lock and self.is_locked and result is not None:
+                result.lock_()
+            return result
         else:
             func = self._apply_nest
         result = func(
@@ -6580,6 +6652,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     _inplace_shape_state.nested = nested
                 continue
             new_leaf = leaf_fn(leaf)
+            if new_leaf is leaf:
+                # nothing to rebind, which a locked tensordict allows
+                continue
             del leaf
             self._set_str(key, new_leaf, validated=True, inplace=False)
         if new_batch_size is not None and tuple(new_batch_size) != tuple(
@@ -7360,7 +7435,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value._with_batch_size(self.batch_size)
             return value
         batch_size = self.batch_size
-        if check_shape and _shape(value)[: self.batch_dims] != batch_size:
+        # A tensor collection's shape is its batch size
+        if (
+            check_shape
+            and (value.batch_size if is_tc else _shape(value))[: len(batch_size)]
+            != batch_size
+        ):
             # if TensorDict, let's try to map it to the desired shape
             if is_tc:
                 # we must clone the value before not to corrupt the data passed to set()
@@ -7462,7 +7542,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return value
 
         batch_size = self.batch_size
-        if check_shape and _shape(value)[: self.batch_dims] != batch_size:
+        # A tensor collection's shape is its batch size
+        if (
+            check_shape
+            and (value.batch_size if is_tc else _shape(value))[: len(batch_size)]
+            != batch_size
+        ):
             # if TensorDict, let's try to map it to the desired shape
             if is_tc:
                 # we must clone the value before not to corrupt the data passed to set()
@@ -7980,6 +8065,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def is_contiguous(self) -> bool:
         """Returns a boolean indicating if all the tensors are contiguous."""
+        if self._leaves_built_on_read:
+            return False
         return all([value.is_contiguous() for value in self.values()])
 
     def contiguous(self, *, canonical: bool = False, inplace: bool = False) -> Self:
@@ -8002,9 +8089,36 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 operation is effectively a no-op aside from the key walk.
                 Defaults to ``False``.
 
+        .. note::
+            On a :class:`~tensordict.LazyStackedTensorDict`, a
+            :class:`~tensordict.PersistentTensorDict` (h5, zarr) or a store,
+            the result is a :class:`~tensordict.TensorDict`. If the tensordicts
+            of a lazy stack have no names, the result has no names either,
+            even when the stack dimension has a name (from ``stack_dim_name``
+            or the ``names`` setter). :meth:`~tensordict.LazyStackedTensorDict.densify` and
+            :meth:`clone` keep that name. To keep it here, name the dimension
+            again with :meth:`refine_names`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, lazy_stack
+            >>> stack = lazy_stack(
+            ...     [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)],
+            ...     stack_dim_name="s",
+            ... )
+            >>> stack.names, stack.contiguous().names
+            (['s', None], [None, None])
+            >>> stack.contiguous().refine_names("s", ...).names
+            ['s', None]
+            >>> stack.densify().names
+            ['s', None]
+
         """
         if inplace:
             return self._contiguous_inplace(canonical)
+        if self._contiguous_via_to_tensordict:
+            result = self.to_tensordict()
+            return result.contiguous(canonical=True) if canonical else result
         if canonical:
             source = {
                 key: (
@@ -8627,7 +8741,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
     def _lock_sub_tensordicts(self):
-        """The sub-tensordicts that lock_() and unlock_() reach from this one."""
+        """The sub-tensordicts that lock_(), unlock_() and the default _rename_subtds reach from this one."""
         return [value for value in self.values() if _is_tensor_collection(type(value))]
 
     def _build_lock_schema(self) -> None:

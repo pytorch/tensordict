@@ -476,6 +476,26 @@ class TestZarrWriteOps:
         assert (ztd["a"][0] == 3).all()
         assert (ztd["a"][1:] == 0).all()
 
+    def test_missing_key_reads_no_data(self, ztd, monkeypatch):
+        # A membership test for a missing key, and the one in set, must not
+        # read the arrays of the store
+        reads = []
+        getitem = zarr.Array.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.name)
+            return getitem(self, *args, **kwargs)
+
+        monkeypatch.setattr(zarr.Array, "__getitem__", counting_getitem)
+        assert "missing" not in ztd.keys()
+        assert ("b", "missing") not in ztd.keys(True)
+        assert "a" in ztd.keys()
+        ztd.set(("new_group", "x"), torch.zeros(3, 4))
+        assert reads == []
+        with pytest.raises(KeyError, match="key missing not found"):
+            ztd._get_array("missing")
+        assert reads == []
+
     def test_fill_zero_masked_fill_no_read(self, ztd, tmp_path, monkeypatch):
         # fill_, zero_, masked_fill_ and detach_ write to the store without
         # reading it

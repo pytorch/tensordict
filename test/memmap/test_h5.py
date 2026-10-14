@@ -1370,6 +1370,27 @@ class TestH5Indexing:
             keys = h5td.keys(include_nested, leaves_only)
             assert all(key in keys for key in keys)
 
+    def test_missing_key_reads_no_data(self, data, monkeypatch):
+        # A membership test for a missing key, and the one in set, must not
+        # read the datasets of the file
+        _, h5td = data
+        reads = []
+        getitem = h5py.Dataset.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.name)
+            return getitem(self, *args, **kwargs)
+
+        monkeypatch.setattr(h5py.Dataset, "__getitem__", counting_getitem)
+        assert "missing" not in h5td.keys()
+        assert ("nested", "missing") not in h5td.keys(True)
+        assert "a" in h5td.keys()
+        h5td.set(("new_group", "x"), torch.zeros(10))
+        assert reads == []
+        with pytest.raises(KeyError, match="key missing not found"):
+            h5td._get_array("missing")
+        assert reads == []
+
     def test_entry_class(self, data):
         _, h5td = data
         assert h5td.entry_class("a") is torch.Tensor

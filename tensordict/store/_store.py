@@ -70,6 +70,7 @@ from tensordict.store._utils import (  # noqa: F401
     _compute_covering_range,
     _decode_meta,
     _dtype_to_str,
+    _expand_batch_ellipsis,
     _get_local_idx,
     _getitem_result_shape,
     _is_scattered_index,
@@ -359,6 +360,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     _masked_select_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    _leaves_built_on_read = True
+    _contiguous_via_to_tensordict = True
+    _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
     _rename_key_lenient = True
     # Set on the shallow copies that _clone(recurse=False) returns: they share
@@ -1285,25 +1289,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     # ---- TensorDictBase interface: batch_size / device / names ----
 
-    # Override: converts to torch.Size first, so that an unchanged batch size
-    # returns early and does not persist the metadata again.
-    @TensorDictBase.batch_size.setter
-    def batch_size(self, value):
-        self._batch_size_setter(torch.Size(value))
-
     # Override: the device can be set, and is persisted on the server.
     @TensorDictBase.device.setter
     def device(self, value):
         self._device = torch.device(value) if value is not None else None
         self._run_sync(self._apersist_metadata())
-
-    def _rename_subtds(self, names):
-        if names is None:
-            names = [None] * self.ndim
-        for item in self._nested_tensordicts.values():
-            if is_tensor_collection(item):
-                td_names = list(names) + list(item.names)[self.ndim :]
-                item.rename_(*td_names)
 
     # ---- Key access / mutation ----
 
@@ -1364,6 +1354,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         # Index-based assignment: bypass _SubTensorDict, batch SETRANGE
         if isinstance(index, list):
             index = torch.tensor(index)
+        index = _expand_batch_ellipsis(index, self.batch_size)
 
         _check_indexed_value(self, value)
         if isinstance(value, Number):
@@ -1875,20 +1866,6 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         """
         return self.to_tensordict()
 
-    # Override: materializes in one round trip.
-    def contiguous(self, *, canonical: bool = False) -> TensorDict:
-        """Materialize into a regular TensorDict (see :meth:`to_tensordict`).
-
-        Keyword Args:
-            canonical (bool, optional): if ``True``, also call
-                ``contiguous(canonical=True)`` on the result. Defaults to
-                ``False``.
-        """
-        out = self.to_tensordict()
-        if canonical:
-            out = out.contiguous(canonical=True)
-        return out
-
     # ---- Construction ----
 
     @classmethod
@@ -2369,10 +2346,6 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     # ---- Misc required overrides ----
 
-    # Override: entries live on the server.
-    def is_contiguous(self) -> bool:
-        return False
-
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         # Check the stored shapes of the tensors instead of fetching them. A
         # non-tensor value stored once fits any batch size; one written per
@@ -2442,13 +2415,6 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             f"    backend={self._backend!r}",
             f"    td_id={self._td_id!r}",
         ]
-
-    # Override: server-side entries cannot be pinned.
-    def pin_memory(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot pin memory of a {type(self).__name__}. "
-            "Call `to_tensordict()` before making this call."
-        )
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):

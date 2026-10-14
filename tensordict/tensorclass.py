@@ -1544,7 +1544,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         TensorDictBase.__dict__, *(mixin.__dict__ for mixin in _TENSORDICTBASE_MIXINS)
     )
     for attr in td_attrs:
-        if attr in ("__torch_function__",):
+        # __init_subclass__ is TensorDict's hook for its own subclasses
+        if attr in ("__torch_function__", "__init_subclass__"):
             continue
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and attr not in cls.__dict__:
@@ -3177,7 +3178,9 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             if non_tensordict and key in non_tensordict:
                 del non_tensordict[key]
         return
-    value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
+    # _convert_mapping_for_field, inlined
+    if key in type(self)._tensordict_fields and isinstance(value, Mapping):
+        value = _normalize_nested_mapping(value)
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
     if out is not self:
         raise RuntimeError(
@@ -4412,7 +4415,8 @@ def _set_str(
     ignore_lock: bool = False,
     non_blocking: bool = False,
 ):
-    if is_non_tensor(self):
+    # is_non_tensor(self), inlined: every tensorclass sets _is_non_tensor
+    if type(self)._is_non_tensor is True:
         if key != "data":
             raise KeyError(f"only 'data' keys are supported for {type(self).__name__}.")
         while isinstance(value, (NonTensorData, NonTensorStack)):
@@ -4442,7 +4446,8 @@ def _set_at_str(
     validated: bool,
     non_blocking: bool = False,
 ):
-    if is_non_tensor(self):
+    # is_non_tensor(self), inlined: every tensorclass sets _is_non_tensor
+    if type(self)._is_non_tensor is True:
         if key != "data":
             raise KeyError(f"only 'data' keys are supported for {type(self).__name__}.")
         while isinstance(value, (NonTensorData, NonTensorStack)):
@@ -7016,6 +7021,7 @@ class NonTensorStack(LazyStackedTensorDict):
     def _to_tensordict(self, *, retain_none: bool | None) -> NonTensorStack:
         return self
 
+    # Override: a NonTensorStack is its own materialized form.
     def contiguous(
         self, *, canonical: bool = False, inplace: bool = False
     ) -> NonTensorStack:
