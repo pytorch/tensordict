@@ -45,6 +45,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
+    _raise_if_not_a_tensordict,
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
@@ -1702,6 +1703,41 @@ class TensorDict(TensorDictBase):
             return self._tensordict[key]
         except KeyError:
             return self._default_get(key, default)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Subclasses keep the generic walk, which calls their _get_str and
+        # _default_get, without going through the _get_tuple below.
+        if cls._get_tuple is TensorDict._get_tuple:
+            cls._get_tuple = TensorDictBase._get_tuple
+
+    # Override: reads the levels that are exact TensorDicts from their dicts,
+    # without a _get_str and a _get_tuple call per level.
+    def _get_tuple(self, key, default, **kwargs):
+        if type(self) is not TensorDict:
+            # a subclass's own _get_tuple calling super()._get_tuple
+            return TensorDictBase._get_tuple(self, key, default, **kwargs)
+        try:
+            value = self._tensordict[key[0]]
+        except KeyError:
+            return self._default_get(key[0], default)
+        if len(key) == 1:
+            return value
+        for i in range(1, len(key)):
+            if value is default:
+                return value
+            if type(value) is not TensorDict:
+                # a lazy stack, a tensorclass, a tensor...: it reads the rest
+                try:
+                    return value._get_tuple(key[i:], default=default, **kwargs)
+                except AttributeError as err:
+                    _raise_if_not_a_tensordict(err, key, i, value)
+                    return None
+            td = value
+            value = td._tensordict.get(key[i], NO_DEFAULT)
+            if value is NO_DEFAULT:
+                return td._default_get(key[i], default)
+        return value
 
     # Override: shares the dense leaves and marks the tensordict shared.
     def share_memory_(self) -> Self:

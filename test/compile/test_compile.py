@@ -3572,6 +3572,28 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
+    def test_get_nested_no_recompile(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        def fn(td):
+            hit = td.get(("a", "b"), None)
+            miss = td.get(("a", "z"), None)
+            return hit + td.get(("a", "b")) + td["tc", "x"], miss
+
+        td = TensorDict(
+            {"a": {"b": torch.zeros(3)}, "tc": TC(x=torch.ones(3), batch_size=[3])},
+            batch_size=[3],
+        )
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for _ in range(2):
+            out, miss = compiled(td)
+            torch.testing.assert_close(out, torch.ones(3))
+            assert miss is None
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
     def test_tc_getattr_no_recompile(self):
         class BigTC(TensorClass["nocast"]):
             a: torch.Tensor

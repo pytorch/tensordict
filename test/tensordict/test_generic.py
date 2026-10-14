@@ -48,7 +48,7 @@ from tensordict import (
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import _TensorDictKeysView, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
-from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
+from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.tensorclass import NonTensorData, NonTensorStack
@@ -3463,6 +3463,119 @@ class TestGeneric:
         assert tensordict.shape == torch.Size([4])
         assert sub_tensordict.shape == torch.Size([4, 5])
         assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
+
+    def test_get_nested_reads_dicts(self, monkeypatch):
+        # A nested get through TensorDicts reads their dicts, without a
+        # _get_str call per level, and keeps the results and errors of the
+        # generic walk.
+        leaf = torch.zeros(3)
+        td = TensorDict({"a": {"b": {"c": leaf}}, "t": leaf}, [3])
+        td["l"] = lazy_stack([TensorDict({"q": torch.ones(())})] * 3)
+
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        td["tc"] = TC(x=leaf, batch_size=[3])
+        calls = []
+        get_str = TensorDict._get_str
+
+        def counting_get_str(self, key, default, **kwargs):
+            calls.append(key)
+            return get_str(self, key, default, **kwargs)
+
+        monkeypatch.setattr(TensorDict, "_get_str", counting_get_str)
+        assert td.get(("a", "b", "c")) is leaf
+        assert td["a", "b", "c"] is leaf
+        assert td.get(("a", "b", "z"), "default") == "default"
+        assert td.get(("a", "z", "c"), None) is None
+        assert td.get("a") is td._tensordict["a"]
+        # a tensorclass on the path reads the rest itself
+        assert td.get(("tc", "x")) is leaf
+        assert td["tc", "x"] is leaf
+        assert not calls
+
+        calls.clear()
+
+        # Subclasses keep the generic walk: they make the same _get_str and
+        # _default_get calls, with the same results, as with the generic walk
+        # for every class (main's behaviour).
+        def logged_get_str(self, key, default, **kwargs):
+            calls.append(("_get_str", type(self).__name__, key))
+            return get_str(self, key, default, **kwargs)
+
+        def logged_default_get(self, key, default=NO_DEFAULT):
+            calls.append(("_default_get", type(self).__name__, key))
+            if key == "auto":
+                return type(self)()
+            return TensorDictBase._default_get(self, key, default)
+
+        class Plain(TensorDict):
+            pass
+
+        class OwnGetStr(TensorDict):
+            _get_str = logged_get_str
+
+        class OwnDefaultGet(TensorDict):
+            _default_get = logged_default_get
+
+        class OwnGetTuple(TensorDict):
+            _get_str = logged_get_str
+
+            def _get_tuple(self, key, default, **kwargs):
+                calls.append(("_get_tuple", type(self).__name__, key))
+                return super()._get_tuple(key, default, **kwargs)
+
+        class Late(TensorDict):
+            pass
+
+        Late._get_str = logged_get_str
+        Late._default_get = logged_default_get
+
+        def read(cls):
+            calls.clear()
+            sub = cls({"a": cls({"b": leaf}, [3])}, [3])
+            results = [
+                sub.get(("a", "b")),
+                sub["a", "b"],
+                sub.get(("a", "z"), None),
+                sub.get(("auto", "y"), None),
+            ]
+            with pytest.raises(KeyError) as err:
+                sub["auto", "y"]
+            return results, str(err.value), list(calls)
+
+        for cls in (Plain, OwnGetStr, OwnDefaultGet, OwnGetTuple, Late):
+            results, error, cls_calls = read(cls)
+            with monkeypatch.context() as m:
+                m.setattr(TensorDict, "_get_tuple", TensorDictBase._get_tuple)
+                expected, expected_error, expected_calls = read(cls)
+            assert cls_calls == expected_calls, cls
+            assert error == expected_error, cls
+            assert len(results) == len(expected)
+            for result, value in zip(results, expected):
+                assert result is value or (result == value).all(), cls
+        calls.clear()
+        # a default that is the value on the path is returned, as before
+        sub = td["a", "b"]
+        assert td.get(("a", "b", "c"), sub) is sub
+        # a lazy stack on the path reads the rest itself
+        assert (td.get(("l", "q")) == 1).all()
+        assert td.get(("l", "z"), None) is None
+        with pytest.raises(
+            KeyError, match=r'key "z" not found in TensorDict with keys \[\W*c\W*\]'
+        ):
+            td["a", "b", "z"]
+        with pytest.raises(
+            ValueError,
+            match="'c' is a Tensor, not a tensordict, so it has no entry 'z'",
+        ):
+            td.get(("a", "b", "c", "z"), None)
+        with pytest.raises(
+            ValueError,
+            match=r"'t' is a Tensor, not a tensordict, so it has no entry \('y', 'z'\)",
+        ):
+            td.get(("t", "y", "z"))
 
     @legacy_lazy_mode()
     def test_inferred_view_size(self):
