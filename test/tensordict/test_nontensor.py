@@ -498,10 +498,15 @@ class TestNonTensorData:
     @pytest.mark.parametrize(
         "shape", [(3, 0), (0, 3), (0, 3, 1), (1, 0), (0, 0, 3), (-1, 3)]
     )
-    def test_view_non_tensor_stack_zero_size(self, shape):
-        # view gives torch's shape and leaves the input as it is
+    @pytest.mark.parametrize("member", ["stack", "data"])
+    def test_view_non_tensor_stack_zero_size(self, shape, member):
+        # view gives torch's shape, and the input and result stay unlocked
         def make():
-            return NonTensorStack(*[NonTensorStack(batch_size=[0])] * 3, stack_dim=1)
+            if member == "stack":
+                members = [NonTensorStack(batch_size=[0])] * 3
+            else:
+                members = [NonTensorData("a", batch_size=[0])] * 3
+            return NonTensorStack(*members, stack_dim=1)
 
         stack = make()
         out = stack.view(shape)
@@ -509,6 +514,7 @@ class TestNonTensorData:
         assert isinstance(out, NonTensorStack)
         assert out.batch_size == expected.shape
         assert out.tolist() == expected.tolist()
+        assert not out.is_locked
         assert not stack.is_locked
         assert make().lock_().view(shape).is_locked
 

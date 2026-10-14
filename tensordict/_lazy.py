@@ -4595,17 +4595,12 @@ class LazyStackedTensorDict(TensorDictBase):
             # they cannot regroup, and regrouping can lose the keys. Keep the
             # regrouped stack only for a -1-free shape it gets right;
             # otherwise reshape a dense copy, which has the shared keys. A
-            # NonTensorStack is its own contiguous(), whose reshape gives
-            # torch's shape, so it skips the regrouping: a member stack
-            # without entries counts as shared, and unbinding locks it, which
-            # locks self.
+            # NonTensorStack takes the same path: it is its own contiguous(),
+            # whose reshape gives torch's shape.
             shape = torch.Size(_infer_size_impl(shape, 0))
             if shape == self.batch_size:
                 return self
-            if has_neg_dim or is_non_tensor(self):
-                result = None
-            else:
-                result = self._regroup_empty(shape)
+            result = None if has_neg_dim else self._regroup_empty(shape)
             if result is None:
                 return self._reshape_dense(shape)
             return result
