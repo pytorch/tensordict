@@ -421,6 +421,10 @@ LAST_OP_MAPS["squeeze"] = _reverse_squeeze
 
 
 def _reverse_to_module(self, args, kwargs, out):
+    if out is not None and not is_compiling():
+        from tensordict._base.convert import _restore_module
+
+        return _restore_module(self, args, kwargs, out)
     try:
         with (
             out.unlock_()

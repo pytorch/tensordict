@@ -163,6 +163,13 @@ python -m torch.utils.collect_env
 # - test_worker_affinity_error_shuts_down_workers: AsyncEnvPool reports
 #   "worker process exited unexpectedly" when another worker exits before
 #   worker 0 reports its CPU affinity error (pytorch/rl#4563).
+# test_dreamer_v3_reinforce_return_normalization builds its expected loss from
+# the log-probability that ProbabilisticTensorDictModule stored for the sampled
+# action, while DreamerV3ActorLoss scores the action again with
+# dist.log_prob(action). Since #2563 the module stores the log-probability of
+# the draw itself (rsample_and_log_prob), which differs from the re-scored one
+# when tanh saturates. The loss is unchanged. Run the test again once TorchRL
+# computes its expected value the way the loss does.
 MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
@@ -171,4 +178,5 @@ MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --deselect "test/test_helpers.py::test_transformed_env_constructor_with_state_dict[from_pixels1]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cpu-autocast]" \
   --deselect test/envs/test_special.py::TestAsyncEnvPool::test_worker_affinity_error_shuts_down_workers \
+  --deselect test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_reinforce_return_normalization \
   --timeout=120

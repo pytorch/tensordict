@@ -86,7 +86,6 @@ from tensordict.utils import (
     _LockedSchema,
     _maybe_correct_neg_dim,
     _NON_STR_KEY_ERR,
-    _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
     _pass_through,
     _pass_through_cls,
@@ -3601,9 +3600,8 @@ class _TensorDictKeysView:
                             leaf_td = item_root
                         return key[-1] in leaf_td.keys()
                 return False
-            # this is reached whenever there is more than one key but include_nested is False
-            if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+            # A nested key is not among the keys of a view without nesting
+            return False
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
