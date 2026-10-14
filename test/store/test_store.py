@@ -2320,6 +2320,55 @@ class TestLazyStackedTensorDictStore:
         with pytest.raises(TypeError, match="not a tensor"):
             store_td[index] = torch.ones(3)
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("kind", ["scalar", "tensor"])
+    def test_setitem_ellipsis(self, store_kwargs, stack_dim, kind):
+        """``store[..., i] = value`` writes a batch element, not a feature column.
+
+        An ellipsis stands for the batch dims, as on a TensorDict and on
+        ``__getitem__``. A feature column of the leaf is left alone except
+        where that batch element overlaps it (#2599).
+        """
+        count, inner = (2, [3]) if stack_dim == 0 else (3, [2])
+        leaf = (*inner, 4)
+        numel = 1
+        for size in leaf:
+            numel *= size
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    {"a": torch.arange(numel).reshape(leaf).float() + 100 * i},
+                    batch_size=inner,
+                )
+                for i in range(count)
+            ],
+            stack_dim,
+        )
+        assert lazy_td.batch_size == torch.Size([2, 3])
+        store = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            # the read already selects the batch element, shape [2, 4]
+            assert store[..., 1]["a"].shape == torch.Size([2, 4])
+            torch.testing.assert_close(store[..., 1]["a"], lazy_td[..., 1]["a"])
+            expected = lazy_td.clone()
+            if kind == "scalar":
+                value = 7.0
+            else:
+                value = TensorDict(
+                    {"a": torch.arange(8).reshape(2, 4).float() + 50},
+                    batch_size=[2],
+                )
+            store[..., 1] = value
+            expected[..., 1] = value
+            torch.testing.assert_close(store["a"], expected["a"])
+            torch.testing.assert_close(store[..., 1]["a"], expected[..., 1]["a"])
+            # not a uniform write of the feature column (leaf shape [2, 3, 4])
+            if kind == "scalar":
+                assert not torch.all(store["a"][..., 1] == 7)
+        finally:
+            store.clear_redis()
+            store.close()
+
     def test_nd_mask(self, store_stack):
         """A 2-D mask over the stack dim and an inner dim, as on the lazy stack."""
         store_td, tds, lazy_td = store_stack
@@ -4194,6 +4243,39 @@ class TestNonTensorIndexing:
             assert store[4]["label"] == "placeholder"
             with pytest.raises(TypeError, match="not a tensor"):
                 store[index] = torch.ones(4)
+        finally:
+            store.clear_redis()
+            store.close()
+
+    @pytest.mark.parametrize("kind", ["scalar", "tensor"])
+    def test_setitem_ellipsis(self, store_kwargs, kind):
+        """``store[..., i] = value`` writes a batch element, not a feature column.
+
+        The dense store has the same hole as a lazy stack: ``(..., i)`` must
+        expand to the batch size before the write, for a Python number and
+        for a tensor value (#2599).
+        """
+        td = TensorDict(
+            {"a": torch.arange(24).reshape(2, 3, 4).float()},
+            batch_size=[2, 3],
+        )
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            assert store[..., 1]["a"].shape == torch.Size([2, 4])
+            expected = td.clone()
+            if kind == "scalar":
+                value = 7.0
+            else:
+                value = TensorDict(
+                    {"a": torch.arange(8).reshape(2, 4).float() + 50},
+                    batch_size=[2],
+                )
+            store[..., 1] = value
+            expected[..., 1] = value
+            torch.testing.assert_close(store["a"], expected["a"])
+            torch.testing.assert_close(store[..., 1]["a"], expected[..., 1]["a"])
+            if kind == "scalar":
+                assert not torch.all(store["a"][..., 1] == 7)
         finally:
             store.clear_redis()
             store.close()
