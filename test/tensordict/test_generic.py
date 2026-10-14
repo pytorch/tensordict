@@ -2070,6 +2070,25 @@ class TestGeneric:
         assert td_flat.shape == (2,)
         assert td_flat["a"].shape == (2,)
 
+    def test_flatten_0d_context_manager_restores_batch(self):
+        # flatten on a 0-dim tensordict unsqueezes to 1-d. Exit must restore
+        # batch [] and the values written inside the block.
+        td = TensorDict({"a": torch.tensor([1.0, 2.0])}, batch_size=[])
+        with td.flatten() as flat:
+            assert flat.batch_size == torch.Size([1])
+            flat["a"] = torch.tensor([[3.0, 4.0]])
+        assert td.batch_size == torch.Size([])
+        assert td["a"].shape == torch.Size([2])
+        assert torch.equal(td["a"], torch.tensor([3.0, 4.0]))
+
+    def test_flatten_context_manager_writes_back(self):
+        td = TensorDict({"a": torch.arange(6).reshape(2, 3)}, batch_size=[2, 3])
+        with td.flatten(0, 1) as flat:
+            assert flat.batch_size == torch.Size([6])
+            flat["a"] = torch.arange(6) + 1
+        assert td.batch_size == torch.Size([2, 3])
+        assert torch.equal(td["a"], (torch.arange(6) + 1).reshape(2, 3))
+
     def test_fromkeys(self):
         td = TensorDict.fromkeys({"a", "b", "c"})
         assert td["a"] == 0
