@@ -1144,6 +1144,40 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+# the numbers that _warn_tuple_dtype warns about, in tuples and nested tuples
+_NUMBER_TYPES = (bool, int, float, complex, np.bool_, np.number)
+
+
+def _is_tuple_of_numbers(value: tuple) -> bool:
+    return all(
+        isinstance(item, _NUMBER_TYPES)
+        or (isinstance(item, tuple) and _is_tuple_of_numbers(item))
+        for item in value
+    )
+
+
+def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
+    """Warns that the tuple of numbers ``value``, stored as ``array``, will get the dtype of ``torch.tensor(value)``."""
+    if not _is_tuple_of_numbers(value):
+        return
+    old, new = torch.as_tensor(array).dtype, torch.tensor(value).dtype
+    if old == new:
+        return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"A tuple of numbers is stored as a {old} tensor today. Starting with "
+        "TensorDict 0.16, the default will change to the tensor that "
+        f"torch.tensor(value) gives ({new}), as for a list of numbers. Pass "
+        f"torch.tensor(value) to get {new} now, or "
+        f"torch.tensor(value, dtype={old}) or a NumPy array to keep {old}.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -7360,8 +7394,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 return TensorDictBase.from_struct_array(array, device=self.device)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif isinstance(array, (list, tuple)):
+            value = array
             array = np.asarray(array)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
+            if array.dtype.kind in ("c", "f") and isinstance(value, tuple):
+                _warn_tuple_dtype(value, array)
         elif hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()
