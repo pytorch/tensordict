@@ -1146,6 +1146,44 @@ class TestH5Indexing:
             keys = h5td.keys(include_nested, leaves_only)
             assert all(key in keys for key in keys)
 
+    def test_missing_key_contains_does_not_read(self, tmp_path, monkeypatch):
+        # A missing-key check formatted the tensordict in the KeyError, and
+        # that repr read every dataset. Membership and set() must not.
+        td = TensorDict(
+            {
+                "a": torch.zeros(4, 2),
+                "b": torch.ones(4),
+                "nested": {
+                    "c": torch.arange(8).view(4, 2),
+                    "d": torch.zeros(4, 3),
+                },
+            },
+            batch_size=[4],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        reads = []
+        dataset_getitem = h5py.Dataset.__getitem__
+
+        def counting_getitem(dataset, *args, **kwargs):
+            reads.append(dataset.name)
+            return dataset_getitem(dataset, *args, **kwargs)
+
+        monkeypatch.setattr(h5py.Dataset, "__getitem__", counting_getitem)
+        assert "missing" not in h5td.keys()
+        assert "a" in h5td.keys()
+        assert ("nested", "c") in h5td.keys(True)
+        assert ("nested", "missing") not in h5td.keys(True)
+        assert "nested" not in h5td.keys(True, True)
+        h5td.set(("new_group", "x"), torch.zeros(4))
+        assert ("new_group", "x") in h5td.keys(True)
+        assert reads == []
+        with pytest.raises(KeyError, match="key nope not found"):
+            h5td["nope"]
+        with pytest.raises(KeyError, match="key nested/nope not found"):
+            h5td["nested", "nope"]
+        assert reads == []
+        assert (h5td["new_group", "x"] == 0).all()
+
     def test_entry_class(self, data):
         _, h5td = data
         assert h5td.entry_class("a") is torch.Tensor
