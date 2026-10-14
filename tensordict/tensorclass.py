@@ -71,6 +71,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _expands_to,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _infer_size_impl,
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
@@ -7044,6 +7045,21 @@ class NonTensorStack(LazyStackedTensorDict):
             fn(self._positions())
             return self[index]
         return self._select_positions(fn(self._positions()))
+
+    # Override: an empty batch has no members to regroup. _regroup returns
+    # batch [0] for shapes torch accepts, and unbind locks the input because
+    # an empty stack reports itself as shared. _reshape_empty matches torch
+    # and does not unbind. A -1 stays on the parent, which infers the size.
+    def _view(self, shape: torch.Size) -> NonTensorStack:
+        if not self.batch_size.numel() and all(dim >= 0 for dim in shape):
+            shape = torch.Size(_infer_size_impl(shape, 0))
+            if shape == self.batch_size:
+                return self
+            result = self._reshape_empty(shape)
+            if self.is_locked:
+                result.lock_()
+            return result
+        return super()._view(shape)
 
     # Override: regroup the stack when the new shape allows it, which shares
     # the entries like a view, and move the entries otherwise.
