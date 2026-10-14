@@ -1,6 +1,6 @@
 # TensorDictBase.from_h5
 
-*classmethod*TensorDictBase.from_h5(*filename*, ***, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'r'*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
+*classmethod*TensorDictBase.from_h5(*filename*, ***, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'r'*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Creates a PersistentTensorDict from a h5 file.
 
@@ -10,12 +10,21 @@ Parameters:
 
 Keyword Arguments:
 
-- **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - Reading mode. Defaults to `"r"`.
+- **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - how the file is opened: `"r"` (read only),
+`"r+"` (read and write), or another mode of `h5py.File`
+(see [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)). Defaults to `"r"`.
 - **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, the batch size will be computed automatically.
 Defaults to `False`.
 - **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
 tensordict should have. Defaults to `None` (full batch-size at each level).
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`.
+- **non_tensor_as_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a non-tensor
+dataset that tensordict did not write, such as a string column
+with one string per row, reads as a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
+leading dims equal the batch size. Otherwise it reads as one
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+dataset. Defaults to `False`.
 
 Returns:
 

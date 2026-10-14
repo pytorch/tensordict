@@ -11,6 +11,10 @@ tensors. Submodules become sub-tensordicts: `module.layers[0].weight`
 is the entry `("layers", "0", "weight")`. Write the parameters back
 with [`to_module()`](tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module).
 
+The result is a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) (or a
+`TensorDictParams` with `as_module=True`),
+whichever class this method is called on.
+
 Parameters:
 
 - **module** (*nn.Module*) - the module to get the parameters from.

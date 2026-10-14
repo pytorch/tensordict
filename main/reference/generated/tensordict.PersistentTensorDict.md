@@ -120,7 +120,7 @@ Defaults to `False`.
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
-*classmethod*from_dict(*input_dict*, *filename*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, *backend: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'h5'*, ***kwargs*)
+*classmethod*from_dict(*input_dict*, *filename*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, *backend: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'h5'*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
 
 Converts a dictionary or a TensorDict to a h5 file or zarr store.
 
@@ -145,6 +145,9 @@ expect the tensor once they are returned. Defaults to `None`
 (on cpu by default).
 - **backend** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - storage backend, `"h5"` or `"zarr"`.
 Defaults to `"h5"`.
+- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - for a dict input without
+`batch_size`, the number of leading dims of the inferred
+batch size. Exclusive with `batch_size`.
 - ****kwargs** - kwargs to be passed to `h5py.File.create_dataset()`
 (h5 backend) or [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array) (zarr backend).
 
@@ -167,120 +170,6 @@ Examples
 ... print(ptd.batch_size, ptd["b", "c"])
 ... ptd.close()
 torch.Size([3]) tensor([1., 1., 1.])
-```
-
-*classmethod*from_h5(*filename*, ***, *mode='r'*, *batch_size: torch.size | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
-
-Creates a PersistentTensorDict from a h5 file.
-
-This function will automatically determine the batch-size for each nested tensordict (unless `batch_size`
-is provided).
-
-Parameters:
-
-**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - The path to the h5 file.
-
-Keyword Arguments:
-
-- **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - how the file is opened: `"r"` (read only),
-`"r+"` (read and write), or another mode of `h5py.File`
-(see `PersistentTensorDict`). Defaults to `"r"`.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to None (batch-size automatically
-determined).
-- **non_tensor_as_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a non-tensor
-dataset that tensordict did not write, such as a string column
-with one string per row, reads as a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
-leading dims equal the batch size. Otherwise it reads as one
-[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
-dataset. Defaults to `False`.
-
-Returns:
-
-A PersistentTensorDict representation of the input h5 file.
-
-Examples
-
-```
->>> import os
->>> import tempfile
->>> import torch
->>> from tensordict import PersistentTensorDict
->>> with tempfile.TemporaryDirectory() as tmpdir:
-... filename = os.path.join(tmpdir, "file.h5")
-... PersistentTensorDict.from_dict(
-... {"key1": torch.zeros(3), "key2": torch.ones(3)}, filename
-... ).close()
-... ptd = PersistentTensorDict.from_h5(filename)
-... print(ptd)
-... ptd.close()
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
-```
-
-*classmethod*from_zarr(*filename*, ***, *mode='r'*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
-
-Creates a PersistentTensorDict from a zarr store.
-
-The batch size (and dimension names) are read from the
-`"__tensordict__"` attribute written by `from_dict()` /
-[`to_zarr()`](tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) when present; otherwise the
-batch size of each nested tensordict is determined automatically
-(unless `batch_size` is provided).
-
-Parameters:
-
-**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**path**or**zarr store*) - the path to the zarr store
-(a directory), or a `zarr.abc.store.Store` instance.
-
-Keyword Arguments:
-
-- **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - Reading mode. Defaults to `"r"`.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
-Defaults to `None` (batch-size read from metadata or
-automatically determined).
-- **non_tensor_as_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a non-tensor
-array that tensordict did not write, such as a string column
-with one string per row, reads as a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
-leading dims equal the batch size. Otherwise it reads as one
-[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
-array. Defaults to `False`.
-
-Returns:
-
-A PersistentTensorDict representation of the input zarr store.
-
-Examples
-
-```
->>> import os
->>> import tempfile
->>> import torch
->>> from tensordict import PersistentTensorDict
->>> with tempfile.TemporaryDirectory() as tmpdir:
-... store = os.path.join(tmpdir, "store.zarr")
-... PersistentTensorDict.from_dict(
-... {"key1": torch.zeros(3), "key2": torch.ones(3)},
-... store,
-... batch_size=[3],
-... backend="zarr",
-... ).close()
-... ptd = PersistentTensorDict.from_zarr(store)
-... print(ptd)
-... ptd.close()
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
 ```
 
 get_at(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection = NO_DEFAULT*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection

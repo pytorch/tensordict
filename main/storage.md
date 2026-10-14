@@ -119,9 +119,9 @@ is larger than RAM, use `"memmap"` or `"redis"`.
 
 To get an HDF5 file without this cost, create the datasets with `h5py`,
 which writes no data. Then open the file with
-[`from_h5()`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_h5). For zarr, create the arrays
+[`from_h5()`](reference/generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5). For zarr, create the arrays
 with `zarr`, and open the store with
-[`from_zarr()`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_zarr):
+[`from_zarr()`](reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr):
 
 ```
 >>> import h5py
@@ -370,7 +370,7 @@ directory layout, the `meta.json` files, single-file archives, and the
 
 [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) stores each tensor as an HDF5
 dataset, and each nested tensordict as an HDF5 group. Open an existing file
-with [`from_h5()`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_h5), or write a tensordict
+with [`from_h5()`](reference/generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5), or write a tensordict
 that is in memory with [`from_dict()`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_dict).
 This example writes 500 readings of 4 sensors:
 

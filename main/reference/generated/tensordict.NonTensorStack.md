@@ -88,12 +88,15 @@ maybe_to_stack()
 
 Placeholder for interchangeability between stack and non-stack of non-tensors.
 
-tolist(***, *convert_tensors: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['numpy'] = False*, *tolist_first: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_linked_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+tolist(***, *convert_nodes: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *convert_tensors: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['numpy'] = False*, *tolist_first: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_linked_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Extracts the content of a `tensordict.tensorclass.NonTensorStack` in a nested list.
 
 Keyword Arguments:
 
+- **convert_nodes** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - accepted for compatibility with
+[`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist). It has no effect:
+the elements are the stored values, not tensordicts. Default: `True`.
 - **convert_tensors** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if `True`, tensors will be converted to lists.
 Otherwise, they will remain as tensors. Default: `False`.
 - **tolist_first** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensordict will be converted to a list first when

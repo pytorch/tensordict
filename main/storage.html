@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5636+ge5ae428d3.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5642+g20c84a2e6.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5636+ge5ae428d3.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5642+g20c84a2e6.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1805,9 +1805,9 @@ allocates the tensors, then copies them to shared memory. For a dataset that
 is larger than RAM, use <code class="docutils literal notranslate"><span class="pre">&quot;memmap&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;redis&quot;</span></code>.</p>
 <p>To get an HDF5 file without this cost, create the datasets with <code class="docutils literal notranslate"><span class="pre">h5py</span></code>,
 which writes no data. Then open the file with
-<a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_h5" title="tensordict.PersistentTensorDict.from_h5"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_h5()</span></code></a>. For zarr, create the arrays
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5" title="tensordict.PersistentTensorDict.from_h5"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_h5()</span></code></a>. For zarr, create the arrays
 with <code class="docutils literal notranslate"><span class="pre">zarr</span></code>, and open the store with
-<a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_zarr" title="tensordict.PersistentTensorDict.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a>:</p>
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr" title="tensordict.PersistentTensorDict.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">h5py</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">PersistentTensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">"large.h5"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
@@ -2061,7 +2061,7 @@ directory layout, the <code class="docutils literal notranslate"><span class="pr
 <h3>HDF5<a class="headerlink" href="#hdf5" title="Link to this heading">#</a></h3>
 <p><a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> stores each tensor as an HDF5
 dataset, and each nested tensordict as an HDF5 group. Open an existing file
-with <a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_h5" title="tensordict.PersistentTensorDict.from_h5"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_h5()</span></code></a>, or write a tensordict
+with <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5" title="tensordict.PersistentTensorDict.from_h5"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_h5()</span></code></a>, or write a tensordict
 that is in memory with <a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict.from_dict" title="tensordict.PersistentTensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a>.
 This example writes 500 readings of 4 sensors:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_mem</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"sensors"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">500</span><span class="p">])</span>

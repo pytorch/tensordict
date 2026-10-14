@@ -125,7 +125,7 @@ Defaults to `False`.
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
-*classmethod*from_dict(*input_dict*, ***, *backend: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['redis', 'dragonfly'] = 'redis'*, *host: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'localhost'*, *port: [int](https://docs.python.org/3/builtins/functions.html#int) = 6379*, *db: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *unix_socket_path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'tensordict'*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, ***kwargs*)
+*classmethod*from_dict(*input_dict*, ***, *backend: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['redis', 'dragonfly'] = 'redis'*, *host: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'localhost'*, *port: [int](https://docs.python.org/3/builtins/functions.html#int) = 6379*, *db: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *unix_socket_path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'tensordict'*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *names: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
 
 Create a TensorDictStore from a dictionary or TensorDict.
 
@@ -153,6 +153,11 @@ Defaults to `False`.
 `[]`, or to the inferred batch size with
 `auto_batch_size=True`.
 - **device** - Target device for tensor retrieval.
+- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - for a dict `input_dict` without
+`batch_size`, the number of leading dims of the inferred batch
+size; implies `auto_batch_size=True`. Exclusive with
+`batch_size`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the dimension names of the store.
 - ****kwargs** - Additional connection kwargs.
 
 Returns:
@@ -193,7 +198,8 @@ split the entry.
 
 Parameters:
 
-**schema** - Mapping from field name to `(element_shape, dtype)`.
+**schema** - Mapping from field name (a str, or a tuple of str for a
+nested entry) to `(element_shape, dtype)`.
 `element_shape` is the per-element shape (excluding
 `batch_size`). The full stored shape is
 `[*batch_size, *element_shape]`.
@@ -362,17 +368,6 @@ to_local() → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
 
 Pull the entire Redis-backed dict into local RAM.
 
-Alias for `to_tensordict()`.
+Alias for [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict).
 
-Deprecated since version 0.15: Use `to_tensordict()` instead.
-
-to_tensordict(***, *retain_none: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
-
-Materialize all leaf tensors into a local `TensorDict`.
-
-Fetches all the data in one round-trip to the server.
-
-Keyword Arguments:
-
-**retain_none** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - has no effect on a store. Defaults
-to `None`.
+Deprecated since version 0.15: Use [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) instead.
