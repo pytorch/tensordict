@@ -856,8 +856,12 @@ class _ShapeOps:
             if isinstance(repeats, (list, tuple)):
                 return self.repeat(*repeats, inplace=inplace)
             if isinstance(repeats, torch.Tensor):
-                # This will cause cuda to sync, which may not be desirable
-                return self.repeat(*repeats.tolist())
+                # This will cause cuda to sync, which may not be desirable.
+                # A 0-dim tensor is one count: tolist() returns that int.
+                values = repeats.tolist()
+                if repeats.ndim == 0:
+                    values = (values,)
+                return self.repeat(*values, inplace=inplace)
             raise ValueError(
                 f"repeats must be a sequence of integers, a tensor or a torch.Size object. Got {type(repeats)} instead."
             )
