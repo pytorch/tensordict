@@ -9,6 +9,7 @@ import importlib.util
 import os
 import platform
 import sys
+import warnings
 
 import pytest
 import torch
@@ -686,6 +687,62 @@ class TestNamedDims(TestTensorDictsBase):
         td = TensorDict({"s": stack}, [])
         td.names = None
         assert [member.names for member in td["s"].tensordicts] == [["x"], ["y"]]
+
+    def test_names_wrong_length_with_none_entries_warns(self):
+        # a list one entry too long, with as many None entries as batch dims,
+        # is accepted and dropped until 0.17, where it raises (#2600)
+        match = r"Got the dimension names \['s', None\] for 1 batch dims"
+        with pytest.warns(FutureWarning, match=match) as record:
+            td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["s", None])
+        assert record[0].filename == __file__
+        assert td.names == [None]
+        td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["prev"])
+        with pytest.warns(FutureWarning, match=match) as record:
+            td.names = ["s", None]
+        assert record[0].filename == __file__
+        assert td.names == [None]
+        with pytest.warns(FutureWarning, match=match):
+            assert td.rename_("s", None).names == [None]
+        with pytest.warns(FutureWarning, match=match):
+            td = TensorDict.from_dict(
+                {"a": torch.zeros(3)}, batch_size=[3], names=["s", None]
+            )
+        assert td.names == [None]
+
+        tc = self.nested_tensorclass("cpu").get("my_nested_tc")
+        with pytest.warns(FutureWarning, match="for 4 batch dims") as record:
+            tc.names = ["s", None, None, None, None]
+        assert record[0].filename == __file__
+        assert tc.names == [None] * 4
+
+        stack = LazyStackedTensorDict(
+            *[TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        )
+        with pytest.warns(FutureWarning, match="for 2 batch dims") as record:
+            stack.names = ["s", "t", None]
+        # the members get the list, but the user's call warns once
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert stack.names == ["s", None]
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", message="Got the dimension names")
+            # lists of the right length, and from_list, which names the result
+            # once its batch size is known, do not warn
+            td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4])
+            td.names = ["s", None]
+            assert td.names == ["s", None]
+            td.names = [None, None]
+            assert td.names == [None, None]
+            td = TensorDict.from_list(
+                [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}],
+                names=["x", "y"],
+                auto_batch_size=True,
+            )
+            assert td.names == ["x", "y"]
+            # a list of the wrong length that raises keeps raising
+            with pytest.raises(ValueError, match="the length of the dimension names"):
+                TensorDict(a=torch.zeros(3), batch_size=[3], names=["s", "t"])
 
     def test_names_setter_clash_leaves_names_unchanged(self):
         td = TensorDict(

@@ -1121,6 +1121,23 @@ def _warn_read_only(method: str) -> None:
     )
 
 
+def _warn_names_length(names: list, batch_dims: int) -> None:
+    """Warns that ``names``, of the wrong length, is accepted because of its None entries, which raises from 0.17 (#2600)."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"Got the dimension names {names} for {batch_dims} batch dims. The "
+        "list has the wrong length, but is accepted today because of its None "
+        "entries, and its names are dropped. Starting with TensorDict 0.17, "
+        "the default will change to raising a ValueError, as for any other "
+        "list of the wrong length. Pass one name per batch dim.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 # the scalars that _warn_scalar_over_non_tensor warns about
 _SCALAR_TYPES = (bool, int, float, np.bool_, np.integer, np.floating)
 
@@ -2240,6 +2257,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         for v in value:
             num_none += v is None
         if num_none == self.batch_dims:
+            if len(value) != self.batch_dims:
+                _warn_names_length(value, self.batch_dims)
             self._set_names(None)
             return
         if num_none:

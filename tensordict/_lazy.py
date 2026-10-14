@@ -66,6 +66,7 @@ from tensordict.base import (
     _READ_ONLY_CALL,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
+    _warn_names_length,
     _warn_read_only,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
@@ -1238,6 +1239,15 @@ class LazyStackedTensorDict(TensorDictBase):
             name = names_c[self.stack_dim]
             self._td_dim_name = name
             del names_c[self.stack_dim]
+            member_dims = self.batch_dims - 1
+            if (
+                len(names_c) != member_dims
+                and self.tensordicts
+                and sum(n is None for n in names_c) == member_dims
+            ):
+                # each member would drop these names and warn: warn once
+                _warn_names_length(list(names), self.batch_dims)
+                names_c = [None] * member_dims
             if not self.tensordicts:
                 self._empty_stack_names = names_c
             for td in self.tensordicts:
