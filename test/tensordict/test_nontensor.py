@@ -1093,6 +1093,145 @@ class TestNonTensorData:
             with pytest.raises((RuntimeError, ValueError)):
                 write(td)
 
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize("index", [(), 1, slice(0, 2)], ids=str)
+    @pytest.mark.parametrize(
+        "value",
+        [[1, 2], 1, True, 1.5, np.bool_(True), np.int64(1), np.float32(1.5)],
+        ids=lambda value: type(value).__name__,
+    )
+    def test_set_at_cast_over_non_tensor_warns(self, value, index, lazy):
+        # set_at_ casts a list or a scalar written into a non-tensor entry to
+        # a tensor today, and stores it as non-tensor data in 0.17 (gh-2522).
+        # A lazy stack warns once, not once per member.
+        td = TensorDict(a=NonTensorData("s", batch_size=[3]), batch_size=[3])
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        with pytest.warns(
+            FutureWarning,
+            match="Starting with TensorDict 0.17, the default will change to "
+            "storing it as non-tensor data",
+        ) as w:
+            td.set_at_("a", value, index)
+        assert len(w) == 1
+        assert w[0].filename == __file__
+        assert torch.equal(td[1]["a"], torch.as_tensor(value))
+
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize(
+        "value", [[1, 2], 0, np.float32(1.5)], ids=lambda value: type(value).__name__
+    )
+    def test_setitem_cast_over_non_tensor_warns(self, value, lazy):
+        # td[index] = value casts a list or a scalar to a tensor in the
+        # non-tensor entries today, and leaves them unchanged in 0.17, as a
+        # TensorDictStore does (gh-2522). The call warns once, whatever the
+        # number of non-tensor entries and members.
+        td = TensorDict(
+            a=NonTensorData("s", batch_size=[3]),
+            b=torch.zeros(3),
+            nested=TensorDict(c=NonTensorData("t", batch_size=[3]), batch_size=[3]),
+            batch_size=[3],
+        )
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        with pytest.warns(
+            FutureWarning,
+            match="Starting with TensorDict 0.17, the default will change to "
+            "leaving the non-tensor entries unchanged",
+        ) as w:
+            td[:2] = value
+        assert len(w) == 1
+        assert w[0].filename == __file__
+        expected = torch.as_tensor(value)
+        assert torch.equal(td[1]["a"], expected)
+        assert torch.equal(td[1]["nested", "c"], expected)
+        assert td[2]["a"] == "s"
+
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize("nested", ["tensorclass", "tensordict"])
+    @pytest.mark.parametrize(
+        "value", [3, np.bool_(True), [1, 2]], ids=lambda value: type(value).__name__
+    )
+    def test_set_at_cast_into_nested_non_tensor_warns(self, value, nested, lazy):
+        # set_at_ of a list or a scalar on a nested tensordict writes it into
+        # each entry, as td[index] = value does, and warns once (gh-2522)
+        @tensorclass
+        class Named:
+            x: torch.Tensor
+            s: str
+
+        if nested == "tensorclass":
+            inner = Named(x=torch.zeros(3), s="v", batch_size=[3])
+        else:
+            inner = TensorDict(
+                x=torch.zeros(3), s=NonTensorData("v", batch_size=[3]), batch_size=[3]
+            )
+        td = TensorDict(n=inner, batch_size=[3])
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        with pytest.warns(
+            FutureWarning, match="leaving the non-tensor entries unchanged"
+        ) as w:
+            td.set_at_("n", value, slice(0, 2))
+        assert len(w) == 1
+        assert w[0].filename == __file__
+        assert torch.equal(td[0]["n", "s"], torch.as_tensor(value))
+        assert td[2]["n", "s"] == "v"
+
+    def test_set_at_non_tensor_stack_data(self):
+        # The members of a NonTensorStack are NonTensorData: set_at_ writes
+        # the value into the first one, which holds it as it is
+        stack = NonTensorStack("a", "b", "c")
+        stack.set_at_("data", 3, 0)
+        assert stack.tolist() == [3, "b", "c"]
+        td = TensorDict(s=NonTensorStack("a", "b", "c"), batch_size=[3])
+        td.set_at_(("s", "data"), 3, 0)
+        assert td.get("s").tolist() == [3, "b", "c"]
+
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize(
+        "key,value",
+        [
+            ("a", torch.tensor(1)),
+            ("a", "text"),
+            ("a", NonTensorData(1)),
+            ("b", 1),
+            ("b", [1.0, 2.0]),
+            ("b", torch.ones(2)),
+        ],
+        ids=[
+            "tensor",
+            "str",
+            "non-tensor",
+            "tensor-entry-scalar",
+            "tensor-entry-list",
+            "tensor-entry",
+        ],
+    )
+    def test_set_at_without_cast_no_warning(self, key, value, lazy):
+        td = TensorDict(
+            a=NonTensorData("s", batch_size=[3]), b=torch.zeros(3, 2), batch_size=[3]
+        )
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.set_at_(key, value, 1)
+
+    @pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+    @pytest.mark.parametrize("kind", ["shared", "memmap"])
+    @pytest.mark.parametrize("value", [[1, 2], 1], ids=type)
+    def test_set_at_cast_raises_no_warning(self, value, kind, lazy):
+        # Shared and memmap containers refuse the write: it does not warn
+        td = TensorDict(a=NonTensorData("s", batch_size=[3]), batch_size=[3])
+        if lazy:
+            td = lazy_stack(td.unbind(0))
+        td = td.share_memory_() if kind == "shared" else td.memmap_()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(RuntimeError):
+                td.set_at_("a", value, slice(0, 2))
+
     @pytest.mark.parametrize("stacked", [False, True])
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_set_at_array_data(self, array, stacked):
@@ -1147,9 +1286,12 @@ class TestNonTensorData:
             )
 
         dense = make()
-        dense.set_at_("a", value, index)
         lazy = lazy_stack(list(make().unbind(0)))
-        lazy.set_at_("a", value, index)
+        # the scalar is cast to a tensor until 0.17 (gh-2522)
+        with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
+            dense.set_at_("a", value, index)
+        with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
+            lazy.set_at_("a", value, index)
         expected = dense.get("a").tolist()
         result = lazy.get("a").tolist()
         assert [type(x) for x in result] == [type(x) for x in expected]
@@ -1169,7 +1311,9 @@ class TestNonTensorData:
         # A member of a lazy stack writes a scalar into its non-tensor entry
         # at (), which selects the whole entry
         td = TensorDict(a=NonTensorData("s0"))
-        td.set_at_("a", 3, ())
+        # the scalar is cast to a tensor until 0.17 (gh-2522)
+        with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
+            td.set_at_("a", 3, ())
         assert type(td.get("a")) is NonTensorData
         assert td.get("a").data == torch.tensor(3)
 

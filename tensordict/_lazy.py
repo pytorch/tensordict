@@ -66,7 +66,10 @@ from tensordict.base import (
     _READ_ONLY_CALL,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
+    _SET_AT_CAST_TYPES,
+    _set_at_each_key,
     _warn_read_only,
+    _warn_set_at_cast,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -745,6 +748,7 @@ class LazyStackedTensorDict(TensorDictBase):
     _empty_stack_names = None
     _safe = False
     _lazy = True
+    _set_at_warns_cast = True
     _leaves_built_on_read = True
     _inplace_shape_ops_unsupported = True
     _flatten_lenient = True
@@ -1744,7 +1748,16 @@ class LazyStackedTensorDict(TensorDictBase):
             batch_size=constituent_batch_size,
         )
 
-    def _set_at_str(self, key, value, index, *, validated, non_blocking: bool):
+    def _set_at_str(
+        self,
+        key,
+        value,
+        index,
+        *,
+        validated,
+        non_blocking: bool,
+        warn_cast: bool = True,
+    ):
         if not self._is_vmapped and self._ellipsis_covers_entry_dims(key, index):
             # torch reads the index on the entry, where the Ellipsis also
             # covers the dims after the batch dims: write through the stacked
@@ -1757,13 +1770,21 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         if not validated and not self._is_vmapped and isinstance(value, numbers.Number):
             # each member writes a Python scalar in the dtype of its entry, as
-            # torch does
+            # torch does. A non-tensor entry casts it to a tensor: only the
+            # first member warns, once for the whole stack.
             self._set_at_members(
-                key, value, index, validated=False, non_blocking=non_blocking
+                key,
+                value,
+                index,
+                validated=False,
+                non_blocking=non_blocking,
+                warn_cast=warn_cast,
             )
             return self
         converted = False
+        original = None
         if not validated:
+            original = value
             converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
@@ -1790,8 +1811,23 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             if is_tensor_collection(entry) and not is_non_tensor(entry):
                 # the value is written to each entry of the nested tensordicts
+                if (
+                    warn_cast
+                    and isinstance(original, _SET_AT_CAST_TYPES)
+                    and entry._has_non_tensor
+                    and not (self._is_shared or self._is_memmap)
+                ):
+                    _warn_set_at_cast(None, original)
                 self._get_str(key, NO_DEFAULT)[index] = value
                 return self
+            if (
+                warn_cast
+                and getattr(type(entry), "_is_non_tensor", False)
+                and isinstance(original, _SET_AT_CAST_TYPES)
+                # shared and memmap members refuse the write
+                and not (self._is_shared or self._is_memmap)
+            ):
+                _warn_set_at_cast(key, original)
             feature_ndim = entry.ndim
             if not _is_unbatched(entry):
                 feature_ndim -= entry_batch_dims
@@ -1838,16 +1874,37 @@ class LazyStackedTensorDict(TensorDictBase):
             and entry.ndim > entry_batch_dims
         )
 
-    def _set_at_members(self, key, value, index, *, validated, non_blocking: bool):
-        """Write ``value``, the same for every element, at ``index`` of each member that the index reaches."""
+    def _set_at_members(
+        self, key, value, index, *, validated, non_blocking: bool, warn_cast=False
+    ):
+        """Write ``value``, the same for every element, at ``index`` of each member that the index reaches.
+
+        With ``warn_cast``, the first member may warn of a cast to a tensor in
+        a non-tensor entry, and the others do not.
+        """
         for member, member_index, _ in self._split_index(index).parts:
-            self.tensordicts[member]._set_at_str(
-                key,
-                value,
-                () if member_index is None else member_index,
-                validated=validated,
-                non_blocking=non_blocking,
-            )
+            td = self.tensordicts[member]
+            member_index = () if member_index is None else member_index
+            # the members of a NonTensorStack are NonTensorData tensorclasses,
+            # which do not have the attribute
+            if getattr(type(td), "_set_at_warns_cast", False):
+                td._set_at_str(
+                    key,
+                    value,
+                    member_index,
+                    validated=validated,
+                    non_blocking=non_blocking,
+                    warn_cast=warn_cast,
+                )
+                warn_cast = False
+            else:
+                td._set_at_str(
+                    key,
+                    value,
+                    member_index,
+                    validated=validated,
+                    non_blocking=non_blocking,
+                )
 
     def _member_entry(self, key: str):
         """The entry ``key`` of the first member that has it and the batch dims of that member, or ``(None, None)``."""
@@ -3497,8 +3554,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # the Ellipsis covers the batch dims, where set_at_ would read it on
             # the entries
             index = convert_ellipsis_to_idx(index, self.batch_size)
-            for key in self.keys():
-                self.set_at_(key, value, index)
+            _set_at_each_key(self, value, index)
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
         """Write ``piece`` at ``member_index`` of the member at position ``member``, for :meth:`__setitem__`."""

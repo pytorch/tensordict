@@ -5160,8 +5160,13 @@ class TestLazyStackedTensorDict:
         # members, which also raised when its size did not match (#2522)
         dense = TensorDict(a="s0", batch_size=(3, *member_batch_size))
         lazy = lazy_stack(list(dense.clone().unbind(0)))
-        dense.set_at_("a", value, index)
-        lazy.set_at_("a", value, index)
+        for td in (dense, lazy):
+            if isinstance(value, list):
+                # a list is cast to a tensor until 0.17
+                with pytest.warns(FutureWarning, match="storing it as non-tensor data"):
+                    td.set_at_("a", value, index)
+            else:
+                td.set_at_("a", value, index)
         written = torch.arange(3)[index].reshape(-1).tolist()
         for td in (dense, lazy):
             for i in range(3):
