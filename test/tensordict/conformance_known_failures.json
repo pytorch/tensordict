@@ -258,9 +258,7 @@
  "td_with_non_tensor_and_metadata shape": [],
  "td_with_non_tensor_and_metadata update": [],
  "td_with_unbatched apply": [],
- "td_with_unbatched filling": [
-  "detach_()"
- ],
+ "td_with_unbatched filling": [],
  "td_with_unbatched keys": [],
  "td_with_unbatched masking": [],
  "td_with_unbatched pointwise": [],

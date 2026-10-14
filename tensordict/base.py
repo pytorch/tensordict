@@ -1079,6 +1079,38 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+def _warn_get_kwargs(
+    td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
+) -> None:
+    """Warns that ``td`` ignored ``as_list=True`` or ``as_nested_tensor=True``, which a lazy stack honors."""
+    if (
+        isinstance(result, torch.Tensor)
+        and result is not default
+        and td.batch_dims
+        and not (kwargs.get("as_nested_tensor") and result.is_nested)
+    ):
+        if kwargs.get("as_list"):
+            name, future = "as_list", "list(tensor.unbind(0))"
+        else:
+            name, future = (
+                "as_nested_tensor",
+                "torch.nested.as_nested_tensor(list(tensor.unbind(0)), layout=layout)",
+            )
+        message = (
+            f"{type(td).__name__}.get(key, {name}=True) returns the stored "
+            "tensor today. Starting with TensorDict 0.17, the default will "
+            f"change to returning {future}, as a LazyStackedTensorDict does. "
+            f"Drop {name}=True to keep the tensor."
+        )
+    else:
+        return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+
+
 def _has_lazy_stack(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
@@ -1374,6 +1406,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
+    # Whether get() ignores as_list and as_nested_tensor, and warns about them
+    # (see _warn_get_kwargs). False for lazy stacks, which honor them.
+    _get_ignores_kwargs: bool = True
     # Set by the files and stores, which hold no autograd history: detach_
     # returns without reading their entries.
     _storage_holds_no_gradients: bool = False
@@ -3508,6 +3543,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
             See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
+            A dense tensordict ignores them today and warns for ``as_list=True``
+            and ``as_nested_tensor=True``. Starting with TensorDict 0.17, the
+            default will change to returning a list or a nested tensor, as a
+            lazy stack does.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -3539,7 +3578,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default = None
         else:
             default = NO_DEFAULT
-        return self._get_tuple(key_tuple, default=default, **kwargs)
+        result = self._get_tuple(key_tuple, default=default, **kwargs)
+        if (
+            kwargs
+            and (
+                ("as_list" in kwargs and kwargs["as_list"])
+                or ("as_nested_tensor" in kwargs and kwargs["as_nested_tensor"])
+            )
+            and self._get_ignores_kwargs
+            and not is_compiling()
+        ):
+            # the cheap checks come first: get is a hot path
+            _warn_get_kwargs(self, kwargs, result, default)
+        return result
 
     @abc.abstractmethod
     def _get_str(self, key, default, **kwargs):
@@ -4900,8 +4951,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Called by the in-place methods when ``_reads_return_copies`` is set.
         """
-        from tensordict._td import TensorDict
-
         # the public name of a hook such as _masked_fill_
         name = method.__name__.lstrip("_")
         if self._storage_is_read_only():
@@ -4915,12 +4964,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _warn_read_only(name)
             return result
         try:
-            items = list(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+            leaves = self._copy_of_leaves()
         except RuntimeError:
             # The members of a lazy stack that differ in shape cannot be read
             # as one tensor: the method runs on self, which writes nothing
             # unless it broadcasts self over its members.
             return method(self, *args, **kwargs)
+        result = method(leaves, *args, **kwargs)
+        if result is not leaves:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        keys, values = leaves._items_list(True, True)
+        self._write_back(keys, values, name)
+        return self
+
+    def _copy_of_leaves(self) -> TensorDictBase:
+        """A ``TensorDict`` of the tensor leaves that ``items`` reads, for an in-place method to change.
+
+        Only called when ``_reads_return_copies`` is set, by
+        ``_inplace_on_copies``.
+        """
+        from tensordict._td import TensorDict
+
+        items = list(self.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
         # The leaves are set in the order of self, as in to_tensordict():
         # lerp_, addcdiv_ and addcmul_ pair their operands by position.
         leaves = TensorDict(batch_size=self.batch_size, device=self.device)
@@ -4936,13 +5002,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 validated=True,
                 non_blocking=False,
             )
-        result = method(leaves, *args, **kwargs)
-        if result is not leaves:
-            # broadcasting self returns a new tensordict and writes nothing
-            return result
-        keys, values = leaves._items_list(True, True)
-        self._write_back(keys, values, name)
-        return self
+        return leaves
 
     def _write_back(self, keys, values, method: str) -> None:
         """Writes the leaves that the in-place method ``method`` changed back to storage.
@@ -5111,6 +5171,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             The view is lazy. If you modify the tensordict after you call
             ``keys()`` and before you iterate over the result, the iteration
             returns the keys after the change.
+
+        .. note::
+            On a :class:`~tensordict.TensorDict`, and on most other types,
+            ``key in td.keys(include_nested=True, leaves_only=True)`` checks
+            that ``key`` exists, not that it is a leaf: it is ``True`` for a
+            sub-tensordict, although iterating the view does not list it. To
+            test that a key is a leaf, call ``is_leaf(td.entry_class(key))``,
+            with :func:`~tensordict.default_is_leaf` as the default
+            ``is_leaf``. A nested key is never in a view built with
+            ``include_nested=False``: ``("nested", "b") in td.keys()`` is
+            ``False``. On a :class:`~tensordict.LazyStackedTensorDict`, a
+            :class:`~tensordict.store.TensorDictStore` and a
+            :class:`~tensordict.store.LazyStackedTensorDictStore`, it is still
+            ``True``, with a ``FutureWarning``, until TensorDict 0.17.
 
         Args:
             include_nested (bool, optional): if ``True``, the entries of the
@@ -8847,12 +8921,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Called by :meth:`detach_`, which returns ``self`` afterwards, unless
         ``_storage_holds_no_gradients`` is set. The base implementation calls
-        ``detach_`` on each value. Override it when the values are not the
-        stored tensors (a lazy stack detaches each member) or when the leaves
-        cannot be detached in place (a sub-tensordict raises).
+        ``detach_`` on each value, and replaces each
+        :class:`~tensordict.UnbatchedTensor` with its ``detach()``, which
+        shares its storage. Override it when the values are not the stored
+        tensors (a lazy stack detaches each member) or when the leaves cannot
+        be detached in place (a sub-tensordict raises).
         """
-        for value in self.values():
-            value.detach_()
+        for key, value in self.items():
+            if _is_unbatched(value):
+                # A tensordict stores an UnbatchedTensor as an alias that
+                # keeps its batch size, and torch cannot detach a view in place.
+                self._set_str(
+                    key, value.detach(), inplace=False, validated=True, ignore_lock=True
+                )
+            else:
+                value.detach_()
 
     @_cache_while_locked  # noqa: B019
     def detach(self) -> Self:

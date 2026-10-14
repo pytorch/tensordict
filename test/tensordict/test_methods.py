@@ -1481,6 +1481,25 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert not td.isneginf().any()
 
+    def test_keys_contains_nested_key_without_include_nested(self, td_name, device):
+        # A nested key is not among the keys of a view without nesting. A lazy
+        # stack still finds it, with a FutureWarning, until 0.17 (#2060).
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td["nested", "leaf"] = torch.zeros(td.shape, device=device)
+        td["leaf"] = torch.zeros(td.shape, device=device)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            for key in [("nested", "leaf", "x"), ("leaf", "x")]:
+                assert key not in td.keys()
+            assert ("nested", "leaf") not in td.keys(leaves_only=True)
+            assert ("nested", "leaf") in td.keys(include_nested=True)
+            if not isinstance(td, LazyStackedTensorDict):
+                assert ("nested", "leaf") not in td.keys()
+                return
+        with pytest.warns(FutureWarning, match="returns False"):
+            assert ("nested", "leaf") in td.keys()
+
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -5200,7 +5219,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="sub-tensordict in-place"):
                 td.detach_()
             return
-        if td_name in ("idx_td", "memmap_td", "td_with_unbatched"):
+        if td_name in ("idx_td", "memmap_td"):
             # the leaves are views, which torch cannot detach in place
             with pytest.raises(RuntimeError, match="Can't detach views in-place"):
                 td.detach_()
