@@ -592,6 +592,28 @@ def test_getitem(benchmark, td, c, index):
     benchmark(exec_getitem)
 
 
+@pytest.mark.parametrize(
+    "device", [None, "cpu"] + (["cuda"] if torch.cuda.is_available() else [])
+)
+def test_getitem_mask_many_leaves(benchmark, device):
+    # the cells of a mesh: several leaves, some nested, filtered by a mask
+    leaf_device = "cpu" if device is None else device
+    td = TensorDict(
+        {
+            "a": torch.randn(1000, 3, device=leaf_device),
+            "b": torch.randn(1000, device=leaf_device),
+            "nest": {
+                "c": torch.randn(1000, 4, device=leaf_device),
+                "d": {"e": torch.randn(1000, device=leaf_device)},
+            },
+        },
+        [1000],
+        device=device,
+    )
+    mask = torch.rand(1000, device=leaf_device) > 0.5
+    benchmark(td.__getitem__, mask)
+
+
 @pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])
 def test_setitem_dim(benchmark, td, c, index):
     if index == "int":

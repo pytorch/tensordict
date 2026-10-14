@@ -66,6 +66,8 @@ from tensordict.utils import (
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.nn.parameter import UninitializedTensorMixin
+from torch.utils._python_dispatch import TorchDispatchMode
+from torch.utils._pytree import tree_leaves
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -3178,6 +3180,64 @@ class TestGeneric:
         assert (sub["a"] == expected).all()
         assert (sub["n", "b"] == expected).all()
         assert (td_written["a"] == written).all()
+
+    @pytest.mark.parametrize("mask_shape", [(3,), (3, 4)])
+    def test_index_mask_reads_mask_once(self, mask_shape):
+        # td[mask] reads the mask once, not once per leaf: on CUDA each read
+        # is a device sync. A CPU mask is read once when the tensordict is on
+        # the CPU.
+        class MaskOps(TorchDispatchMode):
+            def __init__(self, mask):
+                super().__init__()
+                self.mask = mask
+                self.ops = []
+
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                kwargs = kwargs or {}
+                if any(arg is self.mask for arg in tree_leaves((args, kwargs))):
+                    self.ops.append(func)
+                return func(*args, **kwargs)
+
+        tensor = torch.arange(60.0).view(3, 4, 5)
+        td = TensorDict(
+            {"a": tensor, "b": tensor[..., 0], "n": {"c": tensor}},
+            [3, 4],
+            names=["x", "y"],
+            device="cpu",
+        )
+        mask = torch.zeros(mask_shape, dtype=torch.bool)
+        mask[0] = True
+        mask[-1] = True
+        with MaskOps(mask) as mode:
+            sub = td[mask]
+        assert len(mode.ops) == 1, mode.ops
+        expected = tensor[mask]
+        assert sub.batch_size == expected.shape[: len(sub.batch_size)]
+        assert (sub["a"] == expected).all()
+        assert (sub["b"] == expected[..., 0]).all()
+        assert (sub["n", "c"] == expected).all()
+        assert sub.names == (["x", "y"] if len(mask_shape) == 1 else [None])
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    @pytest.mark.parametrize("mask_device", ["cuda", "cpu"])
+    def test_index_mask_cuda_syncs_once(self, mask_device):
+        # a CPU mask on a tensordict without a device is kept as it is: CPU
+        # indices would make CUDA leaves sync once each
+        x = torch.randn(10, device="cuda")
+        mask = (x > 0).to(mask_device)
+        td = TensorDict({"a": x, "b": x, "n": {"c": x, "d": {"e": x}}}, [10])
+        torch.cuda.synchronize()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            torch.cuda.set_sync_debug_mode("warn")
+            try:
+                sub = td[mask]
+            finally:
+                torch.cuda.set_sync_debug_mode(0)
+        syncs = [w for w in caught if "called a synchronizing" in str(w.message)]
+        # nonzero syncs on a CUDA mask; CUDA leaves read a CPU mask without one
+        assert len(syncs) == (1 if mask_device == "cuda" else 0)
+        assert (sub["n", "d", "e"] == x[mask]).all()
 
     @pytest.mark.parametrize(
         "index",

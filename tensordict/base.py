@@ -52,6 +52,7 @@ from tensordict._indexing import (
     _getitem_batch_size,
     _getitem_names,
     _is_new_dim_index,
+    _mask_to_indices,
     _read_element,
     convert_ellipsis_to_idx,
 )
@@ -8243,6 +8244,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if new_batch_size is not None:
             batch_size = new_batch_size
         else:
+            if (
+                type(index) is tuple
+                and len(index) == 1
+                and type(index[0]) is Tensor
+                and index[0].dtype is torch.bool
+                and not is_compiling()
+            ):
+                index = _mask_to_indices(index, batch_size, self.device)
             batch_size = _getitem_batch_size(batch_size, index)
 
         if names is None:
