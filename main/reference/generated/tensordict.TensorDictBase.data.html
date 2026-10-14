@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.14.0.dev5690+g4b178db14.d20261014)">
+<meta name="llm:version" content="main (0.14.0.dev5691+gc0a887eb5.d20261014)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5690+g4b178db14.d20261014)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0.dev5691+gc0a887eb5.d20261014)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1646,6 +1646,13 @@ document.write(`
 <p>The leaves of the result share storage with the leaves of <code class="docutils literal notranslate"><span class="pre">self</span></code>,
 and do not require gradients. An in-place change to the result
 changes <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>Assigning <code class="docutils literal notranslate"><span class="pre">td.data</span> <span class="pre">=</span> <span class="pre">other</span></code> rebinds the <code class="docutils literal notranslate"><span class="pre">.data</span></code> of each leaf of
+<code class="docutils literal notranslate"><span class="pre">self</span></code> to the matching leaf of <code class="docutils literal notranslate"><span class="pre">other</span></code>, as <code class="xref py py-attr docutils literal notranslate"><span class="pre">torch.Tensor.data</span></code>
+does. The leaves then share storage with <code class="docutils literal notranslate"><span class="pre">other</span></code>: memory-mapped or
+shared-memory leaves stop writing to their file or shared memory.
+<code class="docutils literal notranslate"><span class="pre">other</span></code> and each of its sub-tensordicts must have the batch size of
+the matching tensordict in <code class="docutils literal notranslate"><span class="pre">self</span></code>, and each key of <code class="docutils literal notranslate"><span class="pre">other</span></code> must be
+in <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2006,7 +2013,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.data",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.data",
        "url": "/reference/generated/tensordict.TensorDictBase.data.html",
-       "articleBody": "TensorDictBase.data# property TensorDictBase.data: Any# Returns a tensordict containing the .data attributes of the leaf tensors. The leaves of the result share storage with the leaves of self, and do not require gradients. An in-place change to the result changes self. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.data# property TensorDictBase.data: Any# Returns a tensordict containing the .data attributes of the leaf tensors. The leaves of the result share storage with the leaves of self, and do not require gradients. An in-place change to the result changes self. Assigning td.data = other rebinds the .data of each leaf of self to the matching leaf of other, as torch.Tensor.data does. The leaves then share storage with other: memory-mapped or shared-memory leaves stop writing to their file or shared memory. other and each of its sub-tensordicts must have the batch size of the matching tensordict in self, and each key of other must be in self. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
