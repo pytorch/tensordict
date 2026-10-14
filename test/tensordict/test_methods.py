@@ -5803,6 +5803,186 @@ def test_add_sub_cuda_scalar_tensor_forward_ad(op, number):
                 torch.testing.assert_close(tangent, expected_tangent, rtol=0, atol=0)
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+def test_cat_tensors_shape_mismatch_preserves_entries(device):
+    # Last dims differ, and dim=1 is not that dim, so cat raises.
+    a = torch.zeros(2, 3, 4, device=device)
+    b = torch.ones(2, 3, 5, device=device)
+    td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.cat_tensors("a", "b", out_key="c", dim=1)
+    assert "a" in td
+    assert "b" in td
+    assert "c" not in td
+    assert td.get("a") is a
+    assert td.get("b") is b
+    assert torch.equal(td.get("a"), torch.zeros(2, 3, 4, device=device))
+    assert torch.equal(td.get("b"), torch.ones(2, 3, 5, device=device))
+
+    a = torch.zeros(2, 3, 4, device=device)
+    b = torch.ones(2, 3, 5, device=device)
+    td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.cat_tensors("a", "b", out_key="a", dim=1)
+    assert "a" in td
+    assert "b" in td
+    assert td.get("a") is a
+    assert td.get("b") is b
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_cat_tensors_set_failure_preserves_entries(device):
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    c = torch.full((2, 1), 4.0, device=device)
+    td = TensorDict({"a": a, "b": b, "c": c}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.cat_tensors("a", "b", out_key="d", dim=0)
+    assert "a" in td
+    assert "b" in td
+    assert "d" not in td
+    assert td.get("a") is a
+    assert td.get("b") is b
+    assert td.get("c") is c
+
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    c = torch.full((2, 1), 4.0, device=device)
+    td = TensorDict({"a": a, "b": b, "c": c}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.cat_tensors("a", "b", out_key="c", dim=0)
+    assert td.get("a") is a
+    assert td.get("b") is b
+    assert td.get("c") is c
+
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.cat_tensors("a", "b", out_key="a", dim=0)
+    assert td.get("a") is a
+    assert td.get("b") is b
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_cat_tensors_out_key_is_input(device):
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    z = torch.full((2, 1), 2.0, device=device)
+    td = TensorDict({"z": z, "a": a, "b": b}, batch_size=[2], device=device)
+    td.cat_tensors("a", "b", out_key="a", dim=-1)
+    assert list(td.keys()) == ["z", "a"]
+    assert torch.equal(td.get("a"), torch.cat([a, b], -1))
+    assert td.get("z") is z
+
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    z = torch.full((2, 1), 2.0, device=device)
+    td = TensorDict({"a": a, "b": b, "z": z}, batch_size=[2], device=device)
+    td.cat_tensors("a", "b", out_key="a", dim=-1, keep_entries=True)
+    assert list(td.keys()) == ["a", "b", "z"]
+    assert torch.equal(td.get("a"), torch.cat([a, b], -1))
+    assert td.get("b") is b
+    assert td.get("z") is z
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_stack_tensors_shape_mismatch_preserves_entries(device):
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 4, device=device)
+    td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.stack_tensors("a", "b", out_key="c")
+    assert "a" in td
+    assert "b" in td
+    assert "c" not in td
+    assert td.get("a") is a
+    assert td.get("b") is b
+    assert torch.equal(td.get("a"), torch.zeros(2, 3, device=device))
+    assert torch.equal(td.get("b"), torch.ones(2, 4, device=device))
+
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 4, device=device)
+    td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+    with pytest.raises(RuntimeError):
+        td.stack_tensors("a", "b", out_key="a")
+    assert "a" in td
+    assert "b" in td
+    assert td.get("a") is a
+    assert td.get("b") is b
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_stack_tensors_set_failure_preserves_entries(device):
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    td = TensorDict({"a": a, "b": b}, batch_size=[2, 3], device=device)
+    with pytest.raises(RuntimeError):
+        td.stack_tensors("a", "b", out_key="c", dim=0)
+    assert "a" in td
+    assert "b" in td
+    assert "c" not in td
+    assert td.get("a") is a
+    assert td.get("b") is b
+
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    c = torch.full((2, 3), 4.0, device=device)
+    td = TensorDict({"a": a, "b": b, "c": c}, batch_size=[2, 3], device=device)
+    with pytest.raises(RuntimeError):
+        td.stack_tensors("a", "b", out_key="c", dim=0)
+    assert td.get("a") is a
+    assert td.get("b") is b
+    assert td.get("c") is c
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_stack_tensors_out_key_is_input(device):
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    z = torch.full((2, 1), 2.0, device=device)
+    td = TensorDict({"z": z, "a": a, "b": b}, batch_size=[2], device=device)
+    td.stack_tensors("a", "b", out_key="b", dim=0)
+    assert list(td.keys()) == ["z", "b"]
+    assert torch.equal(td.get("b"), torch.stack([a, b], 0))
+    assert td.get("z") is z
+
+    a = torch.zeros(2, 3, device=device)
+    b = torch.ones(2, 3, device=device)
+    z = torch.full((2, 1), 2.0, device=device)
+    td = TensorDict({"a": a, "b": b, "z": z}, batch_size=[2], device=device)
+    td.stack_tensors("a", "b", out_key="b", dim=0, keep_entries=True)
+    assert list(td.keys()) == ["a", "b", "z"]
+    assert torch.equal(td.get("b"), torch.stack([a, b], 0))
+    assert td.get("a") is a
+    assert td.get("z") is z
+
+
+@pytest.mark.parametrize("method", ["cat_tensors", "stack_tensors"])
+@pytest.mark.parametrize("keep_entries", [False, True])
+def test_cat_stack_tensors_missing_key_raises_keyerror(method, keep_entries):
+    a = torch.zeros(2, 3)
+    td = TensorDict({"a": a, "n": {"a": torch.ones(2, 3)}}, batch_size=[2])
+    with pytest.raises(KeyError, match='key "missing" not found'):
+        getattr(td, method)("a", "missing", out_key="c", keep_entries=keep_entries)
+    with pytest.raises(KeyError, match='key "missing" not found'):
+        getattr(td, method)(
+            "a", ("n", "missing"), out_key="c", keep_entries=keep_entries
+        )
+    assert td.get("a") is a
+    assert set(td.keys(True, True)) == {"a", ("n", "a")}
+
+    # "x" is only in the first tensordict of the stack.
+    td = LazyStackedTensorDict(
+        TensorDict({"a": torch.zeros(3), "x": torch.ones(1)}, []),
+        TensorDict({"a": torch.ones(3)}, []),
+        stack_dim=0,
+    )
+    with pytest.raises(KeyError, match='key "x" not found'):
+        getattr(td, method)("a", "x", out_key="c", keep_entries=keep_entries)
+    assert set(td.keys()) == {"a"}
+
+
 class TestEmptyTensorMemmapRoundtrip:
     @pytest.mark.parametrize("archive", [False, True])
     def test_empty_tensor_leaves(self, tmp_path, archive):
