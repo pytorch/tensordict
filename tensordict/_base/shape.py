@@ -958,6 +958,31 @@ class _ShapeOps:
 
         return _pad(self, pad_size, value=value, inplace=inplace, safe=safe)
 
+    def _cat_or_stack_tensors(
+        self,
+        *keys: NestedKey,
+        out_key: NestedKey,
+        dim: int,
+        keep_entries: bool,
+        op: Callable,
+    ) -> Self:
+        # Build the result before removing entries. cat/stack raises on a
+        # shape mismatch, and set can still reject the written value.
+        entries = [self.get(key) for key in keys]
+        result = op(entries, dim=dim)
+        if keep_entries:
+            return self.set(out_key, result)
+        popped = []
+        try:
+            for key in keys:
+                popped.append((key, self.pop(key)))
+            return self.set(out_key, result)
+        except Exception:
+            # Last removed first, so a parent is put back before a nested key.
+            for key, value in reversed(popped):
+                self.set(key, value)
+            raise
+
     def cat_tensors(
         self,
         *keys: NestedKey,
@@ -973,7 +998,9 @@ class _ShapeOps:
         Keyword Arguments:
             out_key (NestedKey): new key name for the concatenated inputs.
             keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
-                Defaults to ``False``.
+                Defaults to ``False``. Entries are deleted only after the result
+                has been written. If concatenation fails, or if the result cannot
+                be written, every input entry is kept with its original value.
             dim (int, optional): the dimension along which the concatenation must occur.
                 Defaults to ``0``.
 
@@ -988,11 +1015,13 @@ class _ShapeOps:
             >>> assert (td["c"] == torch.tensor([0, 1])).all()
 
         """
-        if keep_entries:
-            entries = [self.get(key) for key in keys]
-        else:
-            entries = [self.pop(key) for key in keys]
-        return self.set(out_key, torch.cat(entries, dim=dim))
+        return self._cat_or_stack_tensors(
+            *keys,
+            out_key=out_key,
+            dim=dim,
+            keep_entries=keep_entries,
+            op=torch.cat,
+        )
 
     def stack_tensors(
         self,
@@ -1009,7 +1038,9 @@ class _ShapeOps:
         Keyword Arguments:
             out_key (NestedKey): new key name for the stacked inputs.
             keep_entries (bool, optional): if ``False``, entries in ``keys`` will be deleted.
-                Defaults to ``False``.
+                Defaults to ``False``. Entries are deleted only after the result
+                has been written. If stacking fails, or if the result cannot
+                be written, every input entry is kept with its original value.
             dim (int, optional): the dimension along which the stack must occur.
                 Defaults to ``0``.
 
@@ -1024,11 +1055,13 @@ class _ShapeOps:
             >>> assert (td["c"] == torch.tensor([0, 1])).all()
 
         """
-        if keep_entries:
-            entries = [self.get(key) for key in keys]
-        else:
-            entries = [self.pop(key) for key in keys]
-        return self.set(out_key, torch.stack(entries, dim=dim))
+        return self._cat_or_stack_tensors(
+            *keys,
+            out_key=out_key,
+            dim=dim,
+            keep_entries=keep_entries,
+            op=torch.stack,
+        )
 
     def cat_from_tensordict(
         self,
