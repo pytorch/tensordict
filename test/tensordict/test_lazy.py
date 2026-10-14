@@ -4848,6 +4848,55 @@ class TestLazyStackedTensorDict:
                 )
             assert lazy.batch_size == (2, 3) and (lazy["a"] == before).all()
 
+    @pytest.mark.parametrize("members", ["lazy0", "lazy1", "dense"])
+    def test_lazy_update_batch_size_members_grow(self, members):
+        # update(..., update_batch_size=True) can grow the members of a lazy
+        # stack along a dim other than the stack dim: the stack then takes
+        # the batch size of its members, as the dense update does (#2206)
+        if members == "dense":
+            lazy = lazy_stack(
+                [TensorDict(a=torch.zeros(2), batch_size=[2]) for _ in range(2)]
+            )
+            source = TensorDict(a=torch.ones(2, 3), batch_size=[2, 3])
+        else:
+            stack_dim = int(members[-1])
+            lazy = lazy_stack(
+                [lazy_stack(self._members(2)) for _ in range(2)], stack_dim
+            )
+            source = lazy_stack(
+                [lazy_stack(self._members(3, 10.0)) for _ in range(2)], stack_dim
+            )
+        expected = lazy.to_tensordict().update(
+            source.to_tensordict(), update_batch_size=True
+        )
+        lazy.update(source, update_batch_size=True)
+        assert lazy.batch_size == source.batch_size == expected.batch_size
+        assert (lazy.to_tensordict() == expected).all()
+        # members that grow to different sizes give -1, as lazy_stack does
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(2), batch_size=[2]) for _ in range(2)]
+        )
+        source = lazy_stack(
+            [
+                TensorDict(a=torch.ones(3), batch_size=[3]),
+                TensorDict(a=torch.ones(4), batch_size=[4]),
+            ]
+        )
+        lazy.update(source, update_batch_size=True)
+        assert lazy.batch_size == source.batch_size == (2, -1)
+        # under vmap, the batch size of the stack leaves out the stack dim
+        sizes = []
+
+        def fn(x, s):
+            sizes.append(x.update(s, update_batch_size=True).batch_size)
+            return x["a"]
+
+        lazy = lazy_stack(self._members(2))
+        torch.vmap(fn)(lazy, lazy_stack(self._members(2)))
+        source = TensorDict(a=torch.ones(2, 4), batch_size=[2, 4])
+        torch.vmap(fn)(lazy, source.to_lazystack(0))
+        assert sizes == [(3,), (4,)]
+
     def test_lazy_update_tuple_key_over_tensor(self):
         # A tuple key whose prefix is a tensor of the members raises, as on a
         # TensorDict, instead of replacing the tensor with a sub-tensordict
