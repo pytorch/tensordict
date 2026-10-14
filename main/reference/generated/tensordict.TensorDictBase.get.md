@@ -25,6 +25,10 @@ Note
 
 Keyword arguments can be passed to `get()` when dealing with ragged tensors.
 See [`get()`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.get) for a complete overview.
+A dense tensordict ignores them today and warns for `as_list=True`
+and `as_nested_tensor=True`. Starting with TensorDict 0.17, the
+default will change to returning a list or a nested tensor, as a
+lazy stack does.
 
 Examples
 
