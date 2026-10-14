@@ -27,7 +27,8 @@ The names of the distributions should match the sample names in the TensorDict.
 Keyword Arguments:
 
 - **name_map** (*Dict**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A mapping of where each sample should be written. If not provided,
-the key names from distribution_map will be used.
+the key names from distribution_map will be used. Entries are
+matched after [`unravel_key()`](tensordict.unravel_key.html#tensordict.unravel_key).
 - **extra_kwargs** (*Dict**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**Dict**]**,**optional*) - A dictionary of additional keyword arguments for constructing the distributions.
 - **log_prob_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - 
 
@@ -241,7 +242,8 @@ These distributions will be used directly in the composite distribution.
 Keyword Arguments:
 
 - **name_map** (*Dict**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]**,**optional*) - A mapping of where each sample should be written. If not provided,
-the keys of `distributions` are used.
+the keys of `distributions` are used. Entries are matched
+after [`unravel_key()`](tensordict.unravel_key.html#tensordict.unravel_key).
 - **log_prob_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - The key where the log probability will be stored.
 Defaults to 'sample_log_prob'.
 - **entropy_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - The key where the entropy will be stored. Defaults to 'entropy'.
