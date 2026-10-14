@@ -13,6 +13,21 @@ The view is lazy. If you modify the tensordict after you call
 `keys()` and before you iterate over the result, the iteration
 returns the keys after the change.
 
+Note
+
+On a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), and on most other types,
+`key in td.keys(include_nested=True, leaves_only=True)` checks
+that `key` exists, not that it is a leaf: it is `True` for a
+sub-tensordict, although iterating the view does not list it. To
+test that a key is a leaf, call `is_leaf(td.entry_class(key))`,
+with [`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is_leaf) as the default
+`is_leaf`. A nested key is never in a view built with
+`include_nested=False`: `("nested", "b") in td.keys()` is
+`False`. On a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), a
+[`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and a
+[`LazyStackedTensorDictStore`](tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore), it is still
+`True`, with a `FutureWarning`, until TensorDict 0.17.
+
 Parameters:
 
 - **include_nested** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the entries of the

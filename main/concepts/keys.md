@@ -118,12 +118,46 @@ has a timestamp, an arm, and a gripper on the arm:
 take the same arguments.
 
 To test a key, use `key in td`. It accepts nested keys. `key in td.keys()`
-accepts a nested key only with `include_nested=True`:
+finds a nested key only with `include_nested=True`:
 
 ```
 >>> ("arm", "pos") in td
 True
 >>> ("arm", "pos") in td.keys(include_nested=True)
+True
+>>> ("arm", "pos") in td.keys()
+False
+```
+
+On a [`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), a
+[`TensorDictStore`](../reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and a
+[`LazyStackedTensorDictStore`](../reference/generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore),
+`("arm", "pos") in td.keys()` is `True` and emits a `FutureWarning`. This
+result is deprecated and will be removed in TensorDict 0.17: from then on, the
+check returns `False`.
+
+On a [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), and on most other types,
+`key in td.keys(include_nested=True, leaves_only=True)` checks that the key
+exists, not that it is a leaf. A sub-tensordict is in the view, although
+iterating the view does not list it (a
+[`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) and a
+[`PersistentTensorDict`](../reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) check that the key is a leaf):
+
+```
+>>> "arm" in td.keys(include_nested=True, leaves_only=True)
+True
+>>> "arm" in list(td.keys(include_nested=True, leaves_only=True))
+False
+```
+
+To test that a key is a leaf, pass the class of its entry to the `is_leaf`
+function of the view, by default [`default_is_leaf()`](../reference/generated/tensordict.default_is_leaf.html#tensordict.default_is_leaf):
+
+```
+>>> from tensordict import default_is_leaf
+>>> default_is_leaf(td.entry_class("arm"))
+False
+>>> default_is_leaf(td.entry_class(("arm", "pos")))
 True
 ```
 
