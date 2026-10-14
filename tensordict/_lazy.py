@@ -2816,6 +2816,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # names=None keeps the names of the stack and of its members
         name = self._td_dim_name
         if batch_size is not None:
+            given = batch_size
             if type(batch_size) is not torch.Size:
                 batch_size = torch.Size(batch_size)
             if self._is_non_tensor:
@@ -2833,7 +2834,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 if recurse:
                     # a TensorDict with the sub-tensordicts of self
                     source = self._empty(True, None, NO_DEFAULT, None).to_tensordict()
-                    if not self.stack_dim:
+                    # before 0.15, the members got the batch size without the
+                    # stack dim when the dims before it were equal (a list
+                    # never compared equal to them)
+                    stack_dim = self.stack_dim
+                    if (
+                        not stack_dim
+                        or given[:stack_dim] == self._batch_size[:stack_dim]
+                    ):
                         misfit = _empty_misfit(source, batch_size)
                 if misfit is None:
                     return TensorDict.empty(
@@ -2843,8 +2851,6 @@ class LazyStackedTensorDict(TensorDictBase):
                         device=device if device is not NO_DEFAULT else self.device,
                         names=names if names is not None else NO_DEFAULT,
                     )
-                # Before 0.15, a stack along dim 0 gave its members the batch
-                # size without the stack dim, and kept the size of the stack dim.
                 key, value = misfit
                 warnings.warn(
                     "LazyStackedTensorDict.empty(recurse=True, batch_size="

@@ -1793,6 +1793,10 @@ class TestLazyStackedTensorDict:
             (lazy_stack([member] * 2), [5, 3], [2, 3]),
             (lazy_stack([member] * 2), [5], [2]),
             (heterogeneous, [5], [2]),
+            # along dim 1 too, for a batch size that is not a list and keeps
+            # the dims before the stack dim
+            (lazy_stack([member] * 2, 1), torch.Size([3, 5]), [3, 2]),
+            (lazy_stack([member] * 2, 1), (3, 5), [3, 2]),
         ):
             with pytest.warns(
                 FutureWarning,
@@ -1805,7 +1809,11 @@ class TestLazyStackedTensorDict:
             assert type(empty) is LazyStackedTensorDict
             assert empty.batch_size == torch.Size(expected)
             assert list(empty.keys()) == ["s"]
-            assert empty["s"].batch_size[:1] == torch.Size([2])
+            assert empty["s"].batch_size[: len(expected)] == torch.Size(expected)
+        # a list, or new dims before the stack dim, raised a TypeError before
+        for batch_size in ([3, 5], torch.Size([4, 2])):
+            with pytest.raises(RuntimeError, match="cannot give the batch size"):
+                lazy_stack([member] * 2, 1).empty(True, batch_size=batch_size)
 
     def test_lazy_stack_onto_non_stack_dim(self):
         # torch.stack(..., out=lazy) along another dim than the stack dim
