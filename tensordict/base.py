@@ -2128,6 +2128,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         The leaves of the result share storage with the leaves of ``self``,
         and do not require gradients. An in-place change to the result
         changes ``self``.
+
+        Assigning ``td.data = other`` rebinds the ``.data`` of each leaf of
+        ``self`` to the matching leaf of ``other``, as :attr:`torch.Tensor.data`
+        does. The leaves then share storage with ``other``: memory-mapped or
+        shared-memory leaves stop writing to their file or shared memory.
+        ``other`` must have the batch size of ``self``, and each of its keys
+        must be in ``self``.
         """
         return self._data()
 
@@ -5377,11 +5384,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _data_setter(self, value: Self):
+        if value.batch_size != self.batch_size:
+            raise RuntimeError(
+                f"Cannot assign .data from a source with batch size {value.batch_size} "
+                f"to a destination with batch size {self.batch_size}."
+            )
         keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
         keys_self, vals_self = self._items_list(
             True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
         self_dict = dict(zip(keys_self, vals_self))
+        missing = [key for key in keys if key not in self_dict]
+        if missing:
+            raise KeyError(
+                f"Cannot assign .data: the keys {missing} of the source are not in "
+                "the destination."
+            )
         for key, val in zip(keys, vals):
             val_self = self_dict[key]
             if hasattr(val_self, "data"):

@@ -1647,6 +1647,21 @@ class TestGeneric:
             missing.data = TensorDict({"z": torch.zeros(2)}, batch_size=[2])
         assert missing.get("a").tolist() == [1.0, 1.0]
 
+    def test_data_setter_mismatch_writes_nothing(self):
+        td = TensorDict({"a": torch.zeros(2), "b": torch.zeros(2)}, batch_size=[2])
+
+        with pytest.raises(RuntimeError, match="batch size"):
+            td.data = TensorDict({"a": torch.ones(3)}, batch_size=[3])
+        assert td.get("a").tolist() == [0.0, 0.0]
+        td._check_batch_size(raise_exception=True)
+
+        with pytest.raises(KeyError, match="'z'"):
+            td.data = TensorDict(
+                {"a": torch.ones(2), "z": torch.ones(2)}, batch_size=[2]
+            )
+        assert td.get("a").tolist() == [0.0, 0.0]
+        assert td.get("b").tolist() == [0.0, 0.0]
+
     @pytest.mark.parametrize(
         "stack_dim",
         [0, 1, 2, 3],
