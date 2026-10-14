@@ -3288,7 +3288,17 @@ class TestTensorClass:
             elif broadcast_type == "maptensor":
                 val = MemoryMappedTensor.from_tensor(torch.zeros(4, 5))
 
-            data[:2] = val
+            if broadcast_type == "scalar":
+                # z is a non-tensor entry, where the scalar is cast to a
+                # tensor until 0.17, which leaves it unchanged (gh-2522). The
+                # call warns once, for z and y.z.
+                with pytest.warns(
+                    FutureWarning, match="leaving the non-tensor entries unchanged"
+                ) as w:
+                    data[:2] = val
+                assert len(w) == 1
+            else:
+                data[:2] = val
             assert (data[:2] == 0).all()
             assert (data.X[:2] == 0).all()
             assert (data.y.X[:2] == 0).all()
@@ -4262,6 +4272,32 @@ class TestTensorClass:
                 tc.update_at_(source, 1)
             assert tc.a is source.a
             assert (tc.b == 1).all()
+
+    def test_update_at_idx_keyword(self):
+        # update_at_ names the index idx, as TensorDict.update_at_ does, and
+        # still takes index= until TensorDict 0.17
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        source = TC(a=torch.ones(2), batch_size=[2])
+        expected = TC(a=torch.zeros(4), batch_size=[4])
+        expected.update_at_(source, slice(1, 3))
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert tc.update_at_(source, idx=slice(1, 3)) is tc
+        assert (tc.a == expected.a).all()
+        assert tc.a.tolist() == [0.0, 1.0, 1.0, 0.0]
+
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(index=.*0\.17.*update_at_\(idx=",
+        ) as record:
+            assert tc.update_at_(source, index=slice(1, 3)) is tc
+        assert record[0].filename == __file__
+        assert (tc.a == expected.a).all()
 
     @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
     def test_update_at_full_size_source(self, source_type):

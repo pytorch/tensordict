@@ -25,6 +25,7 @@ from tensordict._td import (
     TensorDict,
 )
 from tensordict.base import (
+    _has_lazy_stack,
     _is_leaf_nontensor,
     _normalize_from_dict_args,
     _register_tensor_class,
@@ -2376,6 +2377,34 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         # only the store's own handle persists its batch size.
         if not self._prefix and not self._is_shallow_copy:
             self._run_sync(self._apersist_metadata())
+
+    # Override: a lazy stack in the input is read as one TensorDict first.
+    def _update_(
+        self,
+        input_dict_or_td: dict | TensorDictBase,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> Self:
+        # TensorDictBase._update_ splits self into views along the stack dim
+        # of a lazy stack in the input, and changes their copies without
+        # writing them (#2593).
+        if is_tensor_collection(input_dict_or_td) and _has_lazy_stack(input_dict_or_td):
+            if keys_to_update is not None:
+                # the other keys may have elements that differ in shape
+                input_dict_or_td = input_dict_or_td.select(
+                    *keys_to_update, strict=False
+                )
+            input_dict_or_td = input_dict_or_td.to_tensordict()
+        # not super(): LazyStackedTensorDictStore[i] shares this method
+        return TensorDictBase._update_(
+            self,
+            input_dict_or_td,
+            clone=clone,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+        )
 
     # Override: a TensorDict skeleton, built without reading the data.
     def empty(
