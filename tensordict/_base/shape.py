@@ -748,7 +748,7 @@ class _ShapeOps:
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
         if inplace:
-            self._raise_if_holds_lazy_stack("reshape")
+            self._raise_if_holds_lazy_stack("reshape", new_batch_size=shape)
 
             def nested_fn(nested):
                 nested.reshape((*shape, *nested.batch_size[batch_dims:]), inplace=True)
@@ -898,7 +898,12 @@ class _ShapeOps:
         if dim_corrected >= ndim:
             _warn_dim_past_batch_dims("repeat_interleave")
         if inplace:
-            self._raise_if_holds_lazy_stack("repeat_interleave")
+            new_batch_size = _repeat_interleave_batch_size(
+                self.batch_size, repeats, dim_corrected
+            )
+            self._raise_if_holds_lazy_stack(
+                "repeat_interleave", new_batch_size=new_batch_size
+            )
 
             def rep(leaf):
                 return leaf.repeat_interleave(
@@ -913,11 +918,7 @@ class _ShapeOps:
                     inplace=True,
                 )
 
-            return self._inplace_rebind_leaves(
-                rep,
-                nested_fn,
-                _repeat_interleave_batch_size(self.batch_size, repeats, dim_corrected),
-            )
+            return self._inplace_rebind_leaves(rep, nested_fn, new_batch_size)
         return self._repeat_interleave(repeats, dim_corrected, output_size)
 
     def _repeat_interleave(
@@ -1030,10 +1031,10 @@ class _ShapeOps:
                     "repeat(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
-            self._raise_if_holds_lazy_stack("repeat")
             new_batch_size = torch.Size(
                 [s * r for s, r in zip(self.batch_size, repeats)]
             )
+            self._raise_if_holds_lazy_stack("repeat", new_batch_size=new_batch_size)
             ndim = self.ndim
 
             def leaf_fn(leaf):
@@ -1796,7 +1797,9 @@ class _ShapeOps:
                     "gather(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
-            self._raise_if_holds_lazy_stack("gather")
+            self._raise_if_holds_lazy_stack(
+                "gather", new_batch_size=torch.Size(index.shape)
+            )
             if index.ndim != self.batch_dims:
                 raise NotImplementedError(
                     f"gather(inplace=True) requires index.ndim == self.batch_dims "
@@ -2874,7 +2877,9 @@ class _ShapeOps:
         else:
             names = None
         if inplace:
-            self._raise_if_holds_lazy_stack("flatten")
+            self._raise_if_holds_lazy_stack(
+                "flatten", new_batch_size=torch.Size(batch_size)
+            )
 
             def nested_fn(nested):
                 nested.flatten(start_dim, end_dim, inplace=True)
@@ -2960,7 +2965,9 @@ class _ShapeOps:
             names = None
         # TODO: check that this works with nested tds of different batch size
         if inplace:
-            self._raise_if_holds_lazy_stack("unflatten")
+            self._raise_if_holds_lazy_stack(
+                "unflatten", new_batch_size=torch.Size(batch_size)
+            )
 
             def nested_fn(nested):
                 nested.unflatten(dim, unflattened_size, inplace=True)
@@ -3169,7 +3176,7 @@ class _ShapeOps:
         other_dim = self.shape[mask.ndim :]
         batch_size = torch.Size([dim, *other_dim])
         if inplace:
-            self._raise_if_holds_lazy_stack("masked_select")
+            self._raise_if_holds_lazy_stack("masked_select", new_batch_size=batch_size)
 
             def nested_fn(nested):
                 nested.masked_select(mask_expand, inplace=True)

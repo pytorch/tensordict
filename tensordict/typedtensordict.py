@@ -557,12 +557,6 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             self._source, LazyStackedTensorDict
         )
 
-    # Override: a lazy source, a file or a sub-tensordict refuses the in-place
-    # shape ops; reshape, repeat_interleave and masked_select check it first.
-    @property
-    def _inplace_shape_ops_unsupported(self):
-        return self._source._inplace_shape_ops_unsupported
-
     # Override: the members of a lazy source keep their batch size, so an
     # in-place shape op that changes the batch size raises before it writes,
     # also through a tensordict that holds self.
@@ -1060,12 +1054,13 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         return type(self)._wrap_td(result)
 
     # ------------------------------------------------------------------
-    # _del and rename_key_
+    # del_ and rename_key_: in-place, return self
     # ------------------------------------------------------------------
-    # Override: the source deletes, with its checks and the errors of its
-    # backend.
-    def _del(self, key):
+    # Override: perf, one call to the source (the base front and a _del hook
+    # take 60-80% longer); the source checks its lock and the key.
+    def del_(self, key):
         self._source.del_(key)
+        return self
 
     # Override: the source checks its lock and the keys, and renames: a lazy
     # stack renames in each member, where the base would write a stacked copy.
@@ -1125,7 +1120,9 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 # Direct delegation: return value from _source as-is
 # The public methods in these lists override the base: ``is_contiguous`` (the
 # base walks the leaves, several times slower), ``all`` and ``any`` (the base
-# is 10-15% slower with a dim), ``popitem`` (one call to the source),
+# is 10-15% slower with a dim), ``reshape`` and ``repeat_interleave`` (with
+# inplace=True, the base rewrites the leaves through self, 50% slower),
+# ``popitem`` (one call to the source),
 # ``__setitem__`` (the source's checks), ``make_memmap*`` (a memory-mapped
 # source), ``contiguous`` (one call to the source), ``masked_fill`` (the
 # source's copy: the base would clone a file), ``masked_select`` (the typed
@@ -1155,13 +1152,14 @@ _WRAP_DELEGATES = [
     "_clone",
     "_expand",
     "_reshape",
+    "reshape",
     "_unsqueeze",
     "_squeeze",
     "_view",
     "_transpose",
     "_permute",
     "_repeat",
-    "_repeat_interleave",
+    "repeat_interleave",
     "contiguous",
     "masked_fill",
     "masked_select",
