@@ -2311,7 +2311,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 validated=validated,
                 non_blocking=non_blocking,
             )
-        inplace = self._convert_inplace(inplace, key)
+        # the path in the file, which a KeyError shows
+        inplace = self._convert_inplace(inplace, self._process_key(key))
         return self._set(
             key, value, inplace=inplace, validated=validated, non_blocking=non_blocking
         )

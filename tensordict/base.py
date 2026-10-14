@@ -1228,6 +1228,20 @@ def _set_at_each_key(
         )
 
 
+def _empty_misfit(td: TensorDictBase, batch_size: torch.Size):
+    """The first ``(key, entry)`` of ``td`` whose batch size ``empty(recurse=True, batch_size=batch_size)`` cannot set, or ``None``.
+
+    The batch_size setter gives the new batch size to the shorter
+    sub-tensordicts and skips the empty ones of other shapes: an entry fits if
+    its batch size and ``batch_size`` agree on the dims that they both have.
+    """
+    for key, value in td.items(True):
+        ndim = min(value.batch_dims, len(batch_size))
+        if value.batch_size[:ndim] != batch_size[:ndim]:
+            return key, value
+    return None
+
+
 def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
     """Whether writing the list or number ``value`` at an index of every entry of ``td``, which has a non-tensor entry, casts it to a tensor there."""
     if is_compiling() or td._is_shared or td._is_memmap:
@@ -1898,11 +1912,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         ``__setitem__`` has written the keys (a str or a tuple of str), and has
         replaced an ``Ellipsis`` in ``index`` by the batch dims that it covers
-        (see :func:`~tensordict._indexing._expand_batch_ellipsis`). ``value`` is
-        a tensor collection, a dict, a tensor or a scalar. The base reads the
-        index as ``__getitem__`` does, writes the entries of a tensor
-        collection or a dict key by key (a new key through a sub-tensordict of
-        ``self``), and writes any other value into every entry.
+        (see :func:`~tensordict._indexing._expand_batch_ellipsis`). Any other
+        index, a list included, is passed as given (the h5 file and the stores
+        convert a list to a tensor). ``value`` is passed as given too: a tensor
+        collection (a tensorclass is not unwrapped: the base hook does it), a
+        dict, a tensor or a scalar. The return value is ignored.
+
+        The base reads the index as ``__getitem__`` does, writes the entries of
+        a tensor collection or a dict key by key (a new key through a
+        sub-tensordict of ``self``), and writes any other value into every
+        entry.
         """
         if (
             # is_tensorclass reads this class attribute: skip the call for the
@@ -3715,8 +3734,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _contains_str(self, key: str) -> bool:
         """Returns whether ``key`` is a key of ``self`` (not of a sub-tensordict), without reading data.
 
-        The base checks ``key in self.keys()``; a file or a store asks its
-        storage.
+        :meth:`_convert_inplace` calls it with the str key of a ``_set_str``
+        call. The base checks ``key in self.keys()``; a file or a store asks
+        its storage.
         """
         return key in self.keys()
 
@@ -8128,9 +8148,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         The arguments are those of :meth:`empty`, as given: ``batch_size`` is
         ``None`` or the new batch size, ``device`` is ``NO_DEFAULT`` to keep the
         device, and ``names=None`` keeps the names. Returns a new, unlocked
-        tensordict without leaves (with ``recurse=True``, with the
-        sub-tensordicts of ``self``, without their leaves). A file or a store
-        builds it without reading its data.
+        tensordict without tensor leaves (with ``recurse=True``, with the
+        sub-tensordicts of ``self``, without their tensor leaves; a dense
+        tensordict and an h5 file keep their non-tensor entries). A file or a
+        store builds it without reading its tensors.
         """
         if not recurse:
             result = self._select(set_shared=False)
@@ -8140,18 +8161,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             leaves = [key for key in self.keys(True, True)]  # noqa: C416
             result = self._exclude(*leaves, set_shared=False)
             if batch_size is not None:
-                # The batch_size setter gives the new batch size to the shorter
-                # sub-tensordicts and skips the empty ones of other shapes:
-                # those must already fit it.
                 batch_size = torch.Size(batch_size)
-                for key, value in result.items(True):
-                    ndim = min(value.batch_dims, len(batch_size))
-                    if value.batch_size[:ndim] != batch_size[:ndim]:
-                        raise RuntimeError(
-                            f"empty(recurse=True) cannot give the batch size "
-                            f"{batch_size} to the entry {key!r}, whose batch size "
-                            f"{value.batch_size} does not start with it."
-                        )
+                misfit = _empty_misfit(result, batch_size)
+                if misfit is not None:
+                    key, value = misfit
+                    raise RuntimeError(
+                        f"empty(recurse=True) cannot give the batch size "
+                        f"{batch_size} to the entry {key!r}, whose batch size "
+                        f"{value.batch_size} does not start with it."
+                    )
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not NO_DEFAULT:

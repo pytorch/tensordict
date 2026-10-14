@@ -1233,6 +1233,11 @@ class TestH5Indexing:
         assert h5td["new"].dtype == torch.float64
         h5td["nested", "c"] = torch.zeros(10, 2)
         assert (h5td["nested", "c"] == 0).all()
+        # set_ of a missing nested key names its path in the file
+        with pytest.raises(
+            KeyError, match='key "zz/y" not found in PersistentTensorDict'
+        ):
+            h5td.set_(("zz", "y"), torch.zeros(10))
 
     def test_h5_setitem_index_values(self, data):
         # a list index, a dict, a tensordict that does not broadcast, an Ellipsis

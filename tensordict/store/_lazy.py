@@ -1404,11 +1404,11 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor
             )
         }
-        all_keys = sorted(
-            key_path
-            for key_path in await self._aget_all_keys()
-            if key_path in value_paths
-        )
+        missing = value_paths.difference(await self._aget_all_keys())
+        if missing:
+            # as the writes at other indices, an element cannot take a new key
+            raise KeyError(f"key {min(missing)} not found in {type(self).__name__}")
+        all_keys = sorted(value_paths)
         pos = _normalize_index(element_idx, self._count)
 
         # Pipeline: fetch all metadata + offset tables in one round-trip

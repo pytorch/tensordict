@@ -1530,6 +1530,20 @@ class TestNonTensorData:
             assert type(empty) is NonTensorStack
             assert empty.batch_size == torch.Size([4, 3])
             assert empty.tolist() == stack.tolist()
+        # along dim 1, a list is read as a torch.Size: the same leading dims
+        # give a NonTensorStack, other leading dims a TensorDict
+        stack = lazy_stack(
+            [NonTensorStack("a", "b", "c"), NonTensorStack("d", "e", "f")], 1
+        )
+        assert type(stack) is NonTensorStack and stack.stack_dim == 1
+        for batch_size in ([3, 2], torch.Size([3, 2]), [3, 5]):
+            empty = stack.empty(batch_size=batch_size)
+            assert type(empty) is NonTensorStack
+            assert empty.batch_size == torch.Size([3, 2])
+            assert empty.tolist() == stack.tolist()
+        empty = stack.empty(batch_size=[4, 2])
+        assert type(empty) is TensorDict
+        assert empty.batch_size == torch.Size([4, 2])
 
     def test_nontensorstack_repr_and_to_tensordict(self):
         stack = NonTensorStack.from_list(["a", "b"])
@@ -3429,6 +3443,38 @@ class TestUnbatchedTensor:
         assert isinstance(u, UnbatchedTensor)
         assert u.data_ptr() == data.data_ptr()
         assert (u == 7).all()
+
+    @pytest.mark.parametrize(
+        "index,same_as",
+        [
+            ((0, Ellipsis), 0),
+            (Ellipsis, slice(None)),
+            ((Ellipsis,), slice(None)),
+            ((None, Ellipsis), None),
+        ],
+    )
+    @pytest.mark.parametrize("value", ["scalar", "tensordict"])
+    def test_unbatched_setitem_ellipsis(self, index, same_as, value):
+        # the Ellipsis covers the batch dims and the trailing ':' are dropped,
+        # so these indices write as the index without the Ellipsis does, also
+        # into an UnbatchedTensor of fewer dims than the batch dims
+        def make():
+            return TensorDict(
+                a=torch.zeros(4, 3),
+                u=UnbatchedTensor(torch.zeros(5)),
+                batch_size=[4, 3],
+            )
+
+        td, expected = make(), make()
+        if value == "scalar":
+            td[index] = 2.0
+            expected[same_as] = 2.0
+        else:
+            source = make()[same_as] + 2
+            td[index] = source
+            expected[same_as] = source
+        assert (td == expected).all()
+        assert (td.get("u") == expected.get("u")).all()
 
     @pytest.mark.parametrize(
         "index",

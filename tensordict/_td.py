@@ -1308,6 +1308,10 @@ class TensorDict(TensorDictBase):
                 ignore_lock=False,
             )
 
+    # Override: dense fast path.
+    def _contains_str(self, key: str) -> bool:
+        return key in self._tensordict
+
     def _set_str(
         self,
         key: NestedKey,

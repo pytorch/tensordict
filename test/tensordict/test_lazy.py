@@ -1779,6 +1779,33 @@ class TestLazyStackedTensorDict:
         empty = nested.empty(True, batch_size=[3, 2])
         assert type(empty) is LazyStackedTensorDict
         assert empty["b"].batch_size == torch.Size([3, 2, 2])
+        # along dim 0, the members still take the batch size without the stack
+        # dim when a sub-tensordict does not fit it, with a FutureWarning
+        member = TensorDict(
+            a=torch.zeros(3),
+            s=TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4]),
+            batch_size=[3],
+        )
+        heterogeneous = lazy_stack(
+            [TensorDict(s=TensorDict(x=torch.zeros(n), batch_size=[n])) for n in (3, 4)]
+        )
+        for td, batch_size, expected in (
+            (lazy_stack([member] * 2), [5, 3], [2, 3]),
+            (lazy_stack([member] * 2), [5], [2]),
+            (heterogeneous, [5], [2]),
+        ):
+            with pytest.warns(
+                FutureWarning,
+                match=r"cannot give that batch size to the entry 's'.*"
+                r"Starting with TensorDict 0\.17, the default will change to "
+                r"raising a RuntimeError",
+            ) as record:
+                empty = td.empty(True, batch_size=batch_size)
+            assert record[0].filename == __file__
+            assert type(empty) is LazyStackedTensorDict
+            assert empty.batch_size == torch.Size(expected)
+            assert list(empty.keys()) == ["s"]
+            assert empty["s"].batch_size[:1] == torch.Size([2])
 
     def test_lazy_stack_onto_non_stack_dim(self):
         # torch.stack(..., out=lazy) along another dim than the stack dim

@@ -995,6 +995,21 @@ class TestTensorDictStore:
         with pytest.raises(TypeError, match="not a tensor"):
             store_td[[0, 1]] = torch.zeros(2)
 
+    def test_store_setitem_ellipsis_0d(self, store_kwargs):
+        # with an empty batch size, the Ellipsis covers no dim: a 0-d entry
+        # takes the scalar too
+        store = TensorDictStore.from_tensordict(
+            TensorDict(a=torch.zeros(()), b=torch.zeros(3)), **store_kwargs
+        )
+        try:
+            store[...] = 3
+            assert (store["a"] == 3).all() and (store["b"] == 3).all()
+            store[...] = TensorDict(a=torch.ones(()), b=torch.ones(3))
+            assert (store["a"] == 1).all() and (store["b"] == 1).all()
+        finally:
+            store.clear_redis()
+            store.close()
+
     def test_store_setitem_self_nesting(self, store_td):
         store_td["a"] = torch.zeros(10)
         with pytest.raises(
@@ -2763,6 +2778,24 @@ class TestLazyStackedTensorDictStore:
         value = TensorDict(a=torch.ones(4, 3), batch_size=[4])
         store_td[0] = value.to_dict() if as_dict else value
         lazy_td[0] = value
+        assert (store_td.to_tensordict() == lazy_td.to_tensordict()).all()
+        # a key that the store lacks raises before anything is written, as at
+        # a slice
+        for value in (
+            TensorDict(zz=torch.ones(4), batch_size=[4]),
+            TensorDict(
+                a=torch.ones(4, 3), b=torch.ones(4), zz=torch.ones(4), batch_size=[4]
+            ),
+        ):
+            with pytest.raises(
+                KeyError, match="key zz not found in LazyStackedTensorDictStore"
+            ):
+                store_td[1] = value.to_dict() if as_dict else value
+            with pytest.raises(
+                KeyError, match="key zz not found in LazyStackedTensorDictStore"
+            ):
+                store_td[1:2] = value.unsqueeze(0)
+        assert set(store_td.keys()) == {"a", "b"}
         assert (store_td.to_tensordict() == lazy_td.to_tensordict()).all()
 
     def test_lstore_setitem_self_nesting(self, store_stack):

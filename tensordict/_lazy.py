@@ -55,6 +55,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
+    _empty_misfit,
     _has_lazy_stack,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -97,6 +98,7 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
+    _user_stacklevel,
     _warn_dim_past_batch_dims,
     _warn_lazy_shape_args,
     _warn_nested_key_in_flat_keys,
@@ -2814,31 +2816,46 @@ class LazyStackedTensorDict(TensorDictBase):
         # names=None keeps the names of the stack and of its members
         name = self._td_dim_name
         if batch_size is not None:
+            if type(batch_size) is not torch.Size:
+                batch_size = torch.Size(batch_size)
             if self._is_non_tensor:
                 # the members of a NonTensorStack must stay non-tensors: only
                 # new leading dims give a TensorDict
-                dense = bool(self.stack_dim) and (
-                    batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
-                )
+                stack_end = self.stack_dim
             else:
-                if type(batch_size) is not torch.Size:
-                    batch_size = torch.Size(batch_size)
-                # also True for a batch size that ends before the stack dim
+                # also a batch size that ends before the stack dim
                 stack_end = self.stack_dim + 1
-                dense = batch_size[:stack_end] != self._batch_size[:stack_end]
-            if dense:
+            if batch_size[:stack_end] != self._batch_size[:stack_end]:
                 # the members cannot give the leading dims or the stack dim:
                 # the result is a TensorDict
                 source = self
+                misfit = None
                 if recurse:
                     # a TensorDict with the sub-tensordicts of self
                     source = self._empty(True, None, NO_DEFAULT, None).to_tensordict()
-                return TensorDict.empty(
-                    source,
-                    recurse=recurse,
-                    batch_size=batch_size,
-                    device=device if device is not NO_DEFAULT else self.device,
-                    names=names if names is not None else NO_DEFAULT,
+                    if not self.stack_dim:
+                        misfit = _empty_misfit(source, batch_size)
+                if misfit is None:
+                    return TensorDict.empty(
+                        source,
+                        recurse=recurse,
+                        batch_size=batch_size,
+                        device=device if device is not NO_DEFAULT else self.device,
+                        names=names if names is not None else NO_DEFAULT,
+                    )
+                # Before 0.15, a stack along dim 0 gave its members the batch
+                # size without the stack dim, and kept the size of the stack dim.
+                key, value = misfit
+                warnings.warn(
+                    "LazyStackedTensorDict.empty(recurse=True, batch_size="
+                    f"{list(batch_size)}) cannot give that batch size to the entry "
+                    f"{key!r}, whose batch size {list(value.batch_size)} does not "
+                    "start with it, and returns the empty stack of its members, "
+                    "which keeps the size of the stack dim. Starting with "
+                    "TensorDict 0.17, the default will change to raising a "
+                    "RuntimeError, as TensorDict.empty does.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
                 )
         names_kwarg = {}
         if names is not None:
