@@ -69,7 +69,8 @@ of multithreading, and if the tensors are small the overhead of iterating
 over a long list is also prohibitively large.
 - **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - if `non_blocking_pin=True`, the number
 of threads to be used for `pin_memory`. By default,
-`max(1, torch.get_num_threads())` threads will be spawn.
+up to `max(1, torch.get_num_threads() // 2)` threads are
+started, and no more than one per leaf.
 `num_threads=0` will cancel any
 multithreading for the pin_memory() calls.
 - **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the data will be written in-place in the same tensordict.
