@@ -1034,8 +1034,10 @@ class TestTD:
 
     def test_inplace_methods(self, mode):
         # The in-place methods trace without a graph break: the check for
-        # containers that read copies of their data is a class attribute
+        # containers that read copies of their data is a class attribute, and
+        # the one for nested lazy stacks that read copies (#2592) is a try
         def inplace(td, other):
+            td.zero_()
             td.abs_()
             td.add_(other, alpha=2.0)
             td.mul_(2.0)

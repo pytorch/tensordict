@@ -1132,22 +1132,91 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     )
 
 
+class _NestedReadsCopies(Exception):
+    """Raised by a lazy stack whose members read copies when an in-place method lists the leaves of a tensordict that holds it.
+
+    See ``_raise_if_inplace_call``.
+    """
+
+
+# Set while an in-place method runs on copies that are written back, so that
+# the lazy stacks it lists do not raise _NestedReadsCopies.
+_ON_COPIES_CALL = local()
+
+
+def _on_copies(fn: Callable, *args, **kwargs) -> Any:
+    """Calls ``fn``, with no ``_NestedReadsCopies`` raised by the lazy stacks that it lists."""
+    running = getattr(_ON_COPIES_CALL, "running", False)
+    _ON_COPIES_CALL.running = True
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        _ON_COPIES_CALL.running = running
+
+
+def _raise_if_inplace_call() -> None:
+    """Raises ``_NestedReadsCopies`` if an in-place method changes the leaves being listed.
+
+    Called by a lazy stack whose members read copies, such as h5 files, when
+    a tensordict that holds it lists its leaves (#2592). The in-place method
+    would change copies: ``_write_back_inplace`` catches the error and runs
+    the method again through ``_inplace_on_nested_copies``. The frames are
+    only searched here, so that the in-place methods of the tensordicts that
+    hold no such stack pay nothing.
+    """
+    if getattr(_ON_COPIES_CALL, "running", False):
+        return
+    frame = sys._getframe(1)
+    while frame is not None:
+        if frame.f_code is _WRITE_BACK_INPLACE_CODE:
+            raise _NestedReadsCopies
+        frame = frame.f_back
+
+
 def _write_back_inplace(method: Callable) -> Callable:
     """Makes an in-place method also write its result where reads return copies.
 
     The in-place methods change the tensor leaves that ``_items_list(True,
     True)`` returns. On a class that sets ``_reads_return_copies``, such as a
     file or a store, these leaves are copies of the stored data, and the
-    method runs through ``_inplace_on_copies`` instead.
+    method runs through ``_inplace_on_copies`` instead. Where only a nested
+    lazy stack reads copies, it raises ``_NestedReadsCopies`` before the
+    method changes anything, and the method runs through
+    ``_inplace_on_nested_copies``.
     """
 
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         if not self._reads_return_copies:
-            return method(self, *args, **kwargs)
-        return self._inplace_on_copies(method, *args, **kwargs)
+            try:
+                return method(self, *args, **kwargs)
+            except _NestedReadsCopies:
+                pass
+            return _on_copies(self._inplace_on_nested_copies, method, *args, **kwargs)
+        return _on_copies(self._inplace_on_copies, method, *args, **kwargs)
 
     return wrapper
+
+
+# the frame of an in-place method, which _raise_if_inplace_call looks for
+_WRITE_BACK_INPLACE_CODE = _write_back_inplace(lambda self: self).__code__
+
+
+def _write_back_members(written: list, method: str) -> None:
+    """Writes back the copies of the leaves that the in-place ``method`` changed.
+
+    ``written`` holds ``(td, leaves)`` pairs: ``leaves`` is the changed copy
+    of the leaves of ``td``, which reads copies. A ``td`` opened read-only is
+    left unchanged, with one warning for the call, as for one file.
+    """
+    read_only = False
+    for td, leaves in written:
+        if td._storage_is_read_only():
+            read_only = True
+        else:
+            td._write_back(*leaves._items_list(True, True), method)
+    if read_only:
+        _warn_read_only(method)
 
 
 def _expand_to_match_shape(
@@ -4789,6 +4858,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         keys, values = leaves._items_list(True, True)
         self._write_back(keys, values, name)
         return self
+
+    def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
+        """Runs the in-place ``method`` where a nested lazy stack reads copies, and writes them back.
+
+        Called by the in-place methods when a lazy stack that ``self`` holds
+        raises ``_NestedReadsCopies``. ``TensorDict`` overrides it. Here the
+        method runs on ``self``, which leaves the copies unchanged.
+        """
+        return method(self, *args, **kwargs)
 
     def _copy_of_leaves(self) -> TensorDictBase:
         """A ``TensorDict`` of the tensor leaves that ``items`` reads, for an in-place method to change.
