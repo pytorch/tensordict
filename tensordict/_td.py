@@ -50,9 +50,12 @@ from tensordict.base import (
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
+    _SET_AT_CAST_TYPES,
+    _set_at_each_key,
     _set_tensordict_type,
     _UNSET,
     _warn_scalar_over_non_tensor,
+    _warn_set_at_cast,
     _wrap_extra_state,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
@@ -284,6 +287,7 @@ class TensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    _set_at_warns_cast = True
 
     def __init__(
         self,
@@ -1446,7 +1450,9 @@ class TensorDict(TensorDictBase):
         "to see how to properly pre-allocate memory in shared contexts."
     )
 
-    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
+    def _set_at_str(
+        self, key, value, idx, *, validated, non_blocking: bool, warn_cast: bool = True
+    ):
         tensor_in = self._get_str(key, NO_DEFAULT)
         converted = False
         if not validated:
@@ -1456,14 +1462,36 @@ class TensorDict(TensorDictBase):
                 and not is_non_tensor(tensor_in)
             ):
                 # each entry of the nested tensordict casts the scalar
-                tensor_in[idx] = value
+                nested = (
+                    tensor_in._tensordict if is_tensorclass(tensor_in) else tensor_in
+                )
+                if warn_cast or not type(nested)._set_at_warns_cast:
+                    tensor_in[idx] = value
+                else:
+                    # td[index] = value has decided whether to warn
+                    _set_at_each_key(nested, value, idx, warn_cast=False)
                 return self
+            original = value
             value = _cast_scalar(value, tensor_in)
             converted = not is_tensor_collection(value)
             value = self._validate_value(
                 value, check_shape=False, non_blocking=non_blocking
             )
             validated = True
+            if (
+                warn_cast
+                and type(tensor_in) is not Tensor
+                and isinstance(original, _SET_AT_CAST_TYPES)
+                and not is_tensor_collection(value)
+                # shared and memmap containers refuse the write below
+                and not (self._is_shared or self._is_memmap)
+            ):
+                if getattr(type(tensor_in), "_is_non_tensor", False):
+                    _warn_set_at_cast(key, original)
+                elif is_tensor_collection(tensor_in) and tensor_in._has_non_tensor:
+                    # written into each entry of the nested tensordict, as
+                    # td[index] = value does
+                    _warn_set_at_cast(None, original)
 
         if is_non_tensor(value) and not (self._is_shared or self._is_memmap):
             if isinstance(idx, tuple) and len(idx) == 1:

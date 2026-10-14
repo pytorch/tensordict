@@ -219,6 +219,13 @@ def _reverse_flatten(self, args, kwargs, out):
     else:
         dim0 = kwargs.get("start_dim", 0)
         dim1 = kwargs.get("end_dim", -1)
+    # A 0-dim flatten unsqueezes to shape [1] instead of calling unflatten.
+    # An empty size would make unflatten raise, so squeeze that dim back.
+    if not out.ndim and dim0 in (None, 0) and dim1 in (None, -1, 0):
+        self = self.squeeze(0)
+        if not out.is_locked:
+            return out.update(self, inplace=False)
+        return out.update_(self)
     if dim0 is None:
         dim0 = 0
     if dim1 is None:
@@ -361,11 +368,12 @@ LAST_OP_MAPS["rot90"] = _reverse_rot90
 
 
 def _reverse_atleast_1d(self, args, kwargs, out):
-    # Remove added dimensions
+    # ``self`` is the expanded result and ``out`` is the original.
+    # atleast_* prepends size-1 dims; squeeze only those before write-back.
     out_ndim = out.ndim
     self_ndim = self.ndim
-    if out_ndim > self_ndim:
-        for _ in range(out_ndim - self_ndim):
+    if self_ndim > out_ndim:
+        for _ in range(self_ndim - out_ndim):
             self = self.squeeze(0)
     if not out.is_locked:
         return out.update(self, inplace=False)

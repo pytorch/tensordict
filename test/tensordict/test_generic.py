@@ -1071,6 +1071,39 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="Modifying the batch size of a lazy"):
             td.to("cpu", batch_size=[2, 3])
 
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    @pytest.mark.parametrize("dest", ["meta", torch.float64])
+    def test_to_device_batch_size_nested_lazy(self, locked, batch_size, dest):
+        # to(device_or_dtype, batch_size=...) moves the leaves of a nested
+        # lazy stack, locked or not (#2374)
+        td = TensorDict(
+            lazy=lazy_stack(
+                [
+                    TensorDict(
+                        x=torch.zeros(3),
+                        n=TensorDict(w=torch.zeros(3, 1), batch_size=[3]),
+                    )
+                    for _ in range(2)
+                ]
+            ),
+            y=torch.zeros(2, 3),
+            batch_size=[2],
+        )
+        if locked:
+            td.lock_()
+        with pytest.warns(FutureWarning, match="turns nested lazy stacks into"):
+            result = td.to(dest, batch_size=batch_size)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result.is_locked is locked
+        leaves = list(result.values(True, True))
+        assert len(leaves) == 3
+        for leaf in leaves:
+            if dest == "meta":
+                assert leaf.device == torch.device("meta")
+            else:
+                assert leaf.dtype == torch.float64
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py needed for persistent tensordicts")
     def test_persistent_to_batch_size_same_device(self, tmp_path):
         td = PersistentTensorDict.from_dict(
@@ -2137,6 +2170,25 @@ class TestGeneric:
         assert td_flat.shape == (2,)
         assert td_flat["a"].shape == (2,)
 
+    def test_flatten_0d_context_manager_restores_batch(self):
+        # flatten on a 0-dim tensordict unsqueezes to 1-d. Exit must restore
+        # batch [] and the values written inside the block.
+        td = TensorDict({"a": torch.tensor([1.0, 2.0])}, batch_size=[])
+        with td.flatten() as flat:
+            assert flat.batch_size == torch.Size([1])
+            flat["a"] = torch.tensor([[3.0, 4.0]])
+        assert td.batch_size == torch.Size([])
+        assert td["a"].shape == torch.Size([2])
+        assert torch.equal(td["a"], torch.tensor([3.0, 4.0]))
+
+    def test_flatten_context_manager_writes_back(self):
+        td = TensorDict({"a": torch.arange(6).reshape(2, 3)}, batch_size=[2, 3])
+        with td.flatten(0, 1) as flat:
+            assert flat.batch_size == torch.Size([6])
+            flat["a"] = torch.arange(6) + 1
+        assert td.batch_size == torch.Size([2, 3])
+        assert torch.equal(td["a"], (torch.arange(6) + 1).reshape(2, 3))
+
     def test_fromkeys(self):
         td = TensorDict.fromkeys({"a", "b", "c"})
         assert td["a"] == 0
@@ -2967,6 +3019,42 @@ class TestGeneric:
             td = TensorDict.from_pytree(pytree, auto_batch_size=True)
             assert td.batch_size == (3,)
             assert type(td.to_pytree().nested).__name__ == "GenericDict"
+
+    def test_from_pytree_namedtuple_tuple(self):
+        # https://github.com/pytorch/tensordict/issues/2160
+        # a tuple field comes back as a tuple
+        Outer = namedtuple("Outer", ["a", "nested"])
+        Inner = namedtuple("Inner", ["p", "name"])
+        a = torch.zeros(3)
+
+        def check(v1, v2):
+            assert (v1 == v2).all() if torch.is_tensor(v1) else v1 == v2
+
+        for nested in (
+            (torch.ones(3), torch.ones(3)),
+            (torch.ones(3), 1, 2.0),
+            (torch.ones(3), {"x": torch.ones(3)}, Inner(p=torch.ones(3), name="n")),
+        ):
+            pytree = Outer(a=a, nested=nested)
+            for kwargs in ({}, {"auto_batch_size": True}):
+                td = TensorDict.from_pytree(pytree, **kwargs)
+                assert td["nested", "_pytree_type"] is tuple
+                recon = td.to_pytree()
+                assert type(recon) is Outer
+                assert type(recon.nested) is tuple
+                torch.utils._pytree.tree_map(check, pytree, recon)
+        pytree = Outer(a=a, nested=(torch.ones(3), {"x": torch.ones(3)}))
+        recon = TensorDict.from_pytree(pytree, batch_size=[3]).to_pytree()
+        torch.utils._pytree.tree_map(check, pytree, recon)
+        # a tuple that holds a str or a list, and an empty tuple, go through
+        # from_any, as on main
+        for nested in (("a", "b"), ([1, 2],), ()):
+            td = TensorDict.from_pytree(Outer(a=a, nested=nested))
+            assert "_pytree_type" not in td["nested"].keys()
+        assert isinstance(
+            TensorDict.from_pytree(Outer(a=a, nested=([1, 2],)))["nested", "0"],
+            torch.Tensor,
+        )
 
     def test_from_pytree_subclasses(self):
         # https://github.com/pytorch/tensordict/issues/2371
@@ -5471,6 +5559,35 @@ class TestGeneric:
         assert (out == ref).all()
 
     @pytest.mark.parametrize("inplace", [True, False])
+    def test_repeat_tensor(self, inplace):
+        # a tensor of counts is a sequence of integers, and inplace is kept
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat(2, 1)
+        leaf = td["a"]
+        out = td.repeat(torch.tensor([2, 1]), inplace=inplace)
+        assert (out is td) is inplace
+        if inplace:
+            assert td.batch_size == torch.Size([6, 4])
+        else:
+            assert td.batch_size == torch.Size([3, 4])
+            assert td["a"] is leaf
+        assert out.batch_size == torch.Size([6, 4])
+        assert (out == ref).all()
+
+    def test_repeat_zero_dim_tensor(self):
+        # a 0-dim tensor is one repeat count, the same as passing that int
+        td = self._build_nested_td(batch_size=(4,))
+        ref = self._build_nested_td(batch_size=(4,)).repeat(2)
+        out = td.repeat(torch.tensor(2))
+        assert out is not td
+        assert td.batch_size == torch.Size([4])
+        assert out.batch_size == torch.Size([8])
+        assert (out == ref).all()
+        td2 = self._build_nested_td()
+        with pytest.raises(ValueError, match="number of repeat elements"):
+            td2.repeat(torch.tensor(2))
+
+    @pytest.mark.parametrize("inplace", [True, False])
     def test_repeat_interleave_inplace(self, inplace):
         td = self._build_nested_td()
         ref = self._build_nested_td().repeat_interleave(2, dim=0)
@@ -6920,6 +7037,29 @@ class TestGeneric:
         assert torch.atleast_1d(td0).shape == torch.Size([1])
         assert torch.atleast_2d(td_1d).shape == torch.Size([1, 3])
         assert torch.atleast_3d(td_1d).shape == torch.Size([1, 1, 3])
+
+    def test_atleast_1d_context_manager_keeps_empty_batch(self):
+        # 0-dim input: values written inside the block come back, batch stays [].
+        td = TensorDict({"a": torch.tensor(3.0)}, batch_size=[])
+        with td.atleast_1d() as expanded:
+            assert expanded.batch_size == torch.Size([1])
+            expanded["a"] = torch.tensor([5.0])
+        assert td.batch_size == torch.Size([])
+        assert td["a"].shape == torch.Size([])
+        assert td["a"].item() == 5.0
+
+    @pytest.mark.parametrize("nd", [2, 3])
+    def test_atleast_nd_context_manager_keeps_batch(self, nd):
+        # 1-dim input: exit is clean, the original batch is unchanged, and the
+        # in-block mutation is visible on the original.
+        td = TensorDict({"a": torch.arange(3)}, batch_size=[3])
+        expanded_batch = torch.Size((1,) * (nd - 1) + (3,))
+        with getattr(td, f"atleast_{nd}d")() as expanded:
+            assert expanded.batch_size == expanded_batch
+            expanded["a"] = (torch.arange(3) + 1).reshape(expanded_batch)
+        assert td.batch_size == torch.Size([3])
+        assert td["a"].shape == torch.Size([3])
+        assert torch.equal(td["a"], torch.arange(3) + 1)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_requires_grad(self, device):
