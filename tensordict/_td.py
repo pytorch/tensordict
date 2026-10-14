@@ -2314,7 +2314,19 @@ class TensorDict(TensorDictBase):
 
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
-                    source[key] = source[key]._select(
+                    entry = source[key]
+                    if not _is_tensor_collection(type(entry)):
+                        # The path runs through a leaf: the nested key is missing.
+                        if strict:
+                            rest = val[0][0] if len(val[0]) == 1 else val[0]
+                            raise KeyError(
+                                f"{key!r} is a {type(entry).__name__}, not a "
+                                f"tensordict, so it has no entry {rest!r}."
+                            )
+                        if key not in keys:
+                            del source[key]
+                        continue
+                    source[key] = entry._select(
                         *val, strict=strict, inplace=inplace, set_shared=set_shared
                     )
 
@@ -2369,7 +2381,8 @@ class TensorDict(TensorDictBase):
         if keys_to_exclude is not None:
             for key, cur_keys in keys_to_exclude.items():
                 val = _tensordict.get(key)
-                if val is not None:
+                # A path that runs through a leaf is missing: keep the leaf.
+                if _is_tensor_collection(type(val)):
                     val = val._exclude(
                         *cur_keys, inplace=inplace, set_shared=set_shared
                     )
