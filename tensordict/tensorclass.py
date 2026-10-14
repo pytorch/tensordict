@@ -1544,8 +1544,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         TensorDictBase.__dict__, *(mixin.__dict__ for mixin in _TENSORDICTBASE_MIXINS)
     )
     for attr in td_attrs:
-        # __init_subclass__ is TensorDict's hook for its own subclasses
-        if attr in ("__torch_function__", "__init_subclass__"):
+        if attr in ("__torch_function__",):
             continue
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and attr not in cls.__dict__:
