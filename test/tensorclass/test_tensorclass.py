@@ -6077,6 +6077,82 @@ class TestSubClassing:
         obj.s = "u"
         assert obj.s == "u"
 
+    _OPERATORS = (
+        "__repr__",
+        "__eq__",
+        "__ne__",
+        "__or__",
+        "__xor__",
+        "__bool__",
+        "__lt__",
+        "__le__",
+        "__gt__",
+        "__ge__",
+        "__ror__",
+    )
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    def test_subclassing_keeps_operators(self, api):
+        # gh-2602: a tensorclass keeps the operators that its body or a parent
+        # defines, as dataclasses keeps __repr__ and __eq__.
+        def make_operator(name):
+            def operator(self, *args):
+                return False if name == "__bool__" else f"custom {name}"
+
+            return operator
+
+        operators = {name: make_operator(name) for name in self._OPERATORS}
+        namespace = {"__annotations__": {"x": torch.Tensor}, **operators}
+        if api == "inheritance":
+            Parent = type("Parent", (TensorClass,), namespace)
+            Child = type("Child", (Parent,), {})
+        else:
+            Parent = type("Parent", (), namespace)
+            if api == "dataclass":
+                Parent = dataclasses.dataclass(Parent)
+            Parent = tensorclass(Parent)
+            Child = tensorclass(type("Child", (Parent,), {}))
+        for cls in (Parent, Child):
+            for name, operator in operators.items():
+                assert getattr(cls, name) is operator, name
+            obj = cls(x=torch.zeros(2), batch_size=[2])
+            assert repr(obj) == "custom __repr__"
+            assert (obj == obj) == "custom __eq__"
+            assert (obj < obj) == "custom __lt__"
+            assert (1 | obj) == "custom __ror__"
+            assert not obj
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    def test_subclassing_default_operators(self, api):
+        if api == "inheritance":
+
+            class Parent(TensorClass):
+                x: torch.Tensor
+
+        else:
+
+            class Parent:
+                x: torch.Tensor
+
+            if api == "dataclass":
+                Parent = dataclasses.dataclass(Parent)
+            Parent = tensorclass(Parent)
+
+        class Child(Parent):
+            pass
+
+        if api != "inheritance":
+            Child = tensorclass(Child)
+        for cls in (Parent, Child):
+            obj = cls(x=torch.zeros(2, dtype=torch.bool), batch_size=[2])
+            assert repr(obj).startswith(f"{cls.__name__}(\n    x=Tensor(")
+            for result in (obj == obj, obj != obj, obj | obj, obj ^ obj, obj < obj):
+                assert type(result) is cls
+            assert (obj == obj).x.all()
+            assert not (obj < obj).x.any()
+            with pytest.raises(RuntimeError):
+                bool(obj)
+
     # Regression test for GitHub issue #1469: the metaclass __getitem__ used to
     # read every subscript as a list of flags, so a generic TensorClass could not
     # be subscripted with types.
