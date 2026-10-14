@@ -1546,6 +1546,40 @@ class TestGeneric:
         assert td.grad.is_locked
         assert td.data.is_locked
 
+    def test_data_setter(self):
+        td = TensorDict(
+            {
+                "a": torch.tensor([1.0, 2.0]),
+                "b": {"c": torch.tensor([[3.0, 4.0], [5.0, 6.0]])},
+            },
+            batch_size=[2],
+        )
+        other = TensorDict(
+            {
+                "a": torch.tensor([7.0, 8.0]),
+                "b": {"c": torch.tensor([[9.0, 10.0], [11.0, 12.0]])},
+            },
+            batch_size=[2],
+        )
+        leaf_a = td.get("a")
+        leaf_c = td.get(("b", "c"))
+        batch_size = td.batch_size
+
+        td.data = other
+
+        assert td.get("a").tolist() == [7.0, 8.0]
+        assert td.get(("b", "c")).tolist() == [[9.0, 10.0], [11.0, 12.0]]
+        assert td.get("a") is leaf_a
+        assert td.get(("b", "c")) is leaf_c
+        assert other.get("a").tolist() == [7.0, 8.0]
+        assert other.get(("b", "c")).tolist() == [[9.0, 10.0], [11.0, 12.0]]
+        assert td.batch_size == batch_size
+
+        missing = TensorDict({"a": torch.ones(2)}, batch_size=[2])
+        with pytest.raises(KeyError):
+            missing.data = TensorDict({"z": torch.zeros(2)}, batch_size=[2])
+        assert missing.get("a").tolist() == [1.0, 1.0]
+
     @pytest.mark.parametrize(
         "stack_dim",
         [0, 1, 2, 3],
