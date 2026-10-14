@@ -1698,16 +1698,20 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         """Writes the dense copy of a ``with self.to(...)`` block back into the file, on exit.
 
         ``result`` is the copy that ``to()`` returned, as the block left it.
-        The caller has checked that it is not ``self``, not on ``meta``, and
-        that the file is writable. Each leaf that the file and ``result``
-        both have, with the same shape, is written into its dataset in
-        place: the file casts it to the dtype of the dataset, keeps its
-        layout (compression, chunks), and reads nothing. The other entries
-        of ``result`` (new keys, an entry whose shape or type the block
-        changed) go through ``update()``, which replaces or creates them
-        without looking them up in the file. As on a ``TensorDict``, the
-        non-tensor entries that the file has stay unchanged.
+        The caller has checked that it is not ``self`` and that the file is
+        writable. A copy on ``meta`` holds no data: nothing is written.
+        Otherwise each leaf that the file and ``result`` both have, with the
+        same shape, is written into its dataset in place: the file casts it
+        to the dtype of the dataset, keeps its layout (compression, chunks),
+        and reads nothing. The other entries of ``result`` (new keys, entries
+        whose shape the block changed, a group it replaced with a tensor) go
+        through ``update()``, which replaces or creates them without looking
+        them up in the file; a tensor replaced with a tensordict makes it
+        raise, as on a ``TensorDict``. As on a ``TensorDict``, the non-tensor
+        entries that the file has stay unchanged.
         """
+        if result.device is not None and result.device.type == "meta":
+            return
         keys = set(self.keys(True, True, is_leaf=_is_leaf_nontensor))
         keys &= set(result.keys(True, True, is_leaf=_is_leaf_nontensor))
         for key, value in result.items(True, True):

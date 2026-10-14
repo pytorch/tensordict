@@ -465,9 +465,6 @@ def _reverse_to(self, args, kwargs, out):
             # written to it already. This assumes that no other class with
             # _masking_on_dense_copy returns a copy of its own type from to().
             return self
-        if result.device is not None and result.device.type == "meta":
-            # a copy on meta holds no data to write back
-            return self
         if out._storage_is_read_only():
             _warn_read_only("to")
             return self
