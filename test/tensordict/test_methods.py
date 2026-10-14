@@ -5305,7 +5305,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="sub-tensordict in-place"):
                 td.detach_()
             return
-        if td_name in ("idx_td", "memmap_td", "td_with_unbatched"):
+        if td_name in ("idx_td", "memmap_td"):
             # the leaves are views, which torch cannot detach in place
             with pytest.raises(RuntimeError, match="Can't detach views in-place"):
                 td.detach_()

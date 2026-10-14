@@ -10,7 +10,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import lazy_stack, NonTensorData, PersistentTensorDict, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    NonTensorStack,
+    PersistentTensorDict,
+    TensorDict,
+)
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
@@ -193,6 +199,46 @@ class TestZarrNonTensor:
         root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
         assert root["c"].attrs.get("__tensordict_non_tensor__") is not None
         assert root["c"].dtype == np.dtype("uint8")
+
+    def test_nontensor_stack(self, tmp_path):
+        # one value per row is written as an array of the stack's shape (a
+        # payload if the values are not strings) and read back as a
+        # NonTensorStack (#2544)
+        grid = NonTensorStack(*(NonTensorStack(f"{i}0", f"{i}1") for i in range(3)))
+        td = TensorDict(
+            {
+                "x": torch.zeros(3),
+                "text": NonTensorStack("a", "b", "c"),
+                ("n", "y"): torch.zeros(3, 2),
+                ("n", "grid"): grid,
+                "dicts": NonTensorStack({"a": 1}, {"b": 2}, {"c": 3}),
+            },
+            [3],
+        )
+        ztd = td.to_zarr(tmp_path / "s.zarr")
+        # a stack is written whole: an in-place write raises
+        with pytest.raises(RuntimeError, match="in place"):
+            ztd.set_at_("text", "q", 0)
+        ztd.close()
+        root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
+        assert root["text"].shape == (3,)
+        assert root["text"].attrs["__tensordict_stack__"] == [3]
+        assert root["n/grid"].shape == (3, 2)
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        assert ztd.entry_class("text") is NonTensorStack
+        text = ztd.get("text")
+        assert isinstance(text, NonTensorStack)
+        assert text.batch_size == (3,)
+        assert text.tolist() == ["a", "b", "c"]
+        assert ztd[1]["text"] == "b"
+        assert ztd.get(("n", "grid")).batch_size == (3, 2)
+        assert ztd.get(("n", "grid")).tolist() == grid.tolist()
+        assert ztd[2]["n", "grid"] == ["20", "21"]
+        assert ztd.get("dicts").tolist() == [{"a": 1}, {"b": 2}, {"c": 3}]
+        assert ztd.to_tensordict()["text"] == ["a", "b", "c"]
+        ztd["text"] = NonTensorStack("x", "yy", "z")
+        assert ztd.get("text").tolist() == ["x", "yy", "z"]
+        ztd.close()
 
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
