@@ -29,7 +29,7 @@ from tensordict.utils import (  # noqa: F401
     is_non_tensor,
 )
 from torch.compiler import is_dynamo_compiling
-from torch.utils._pytree import Context, MappingKey, register_pytree_node
+from torch.utils._pytree import Context, MappingKey, register_pytree_node, SequenceKey
 
 PYTREE_REGISTERED_TDS = (
     _SubTensorDict,
@@ -280,7 +280,10 @@ def _td_flatten_with_keys(
 def _lazy_td_flatten_with_keys(
     d: LazyStackedTensorDict,
 ):
-    raise NotImplementedError
+    # Same context as _lazy_tensordict_flatten: torch.export compares the spec of
+    # tree_flatten_with_path(call inputs) with the spec of tree_flatten(example inputs).
+    values, context = _lazy_tensordict_flatten(d)
+    return [(SequenceKey(i), v) for i, v in enumerate(values)], context
 
 
 def _register_td_node(cls):
