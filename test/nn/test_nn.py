@@ -37,6 +37,7 @@ from tensordict import (
     set_list_to_stack,
     tensorclass,
     TensorDict,
+    unravel_key,
     unravel_key_list,
 )
 from tensordict.nn import (
@@ -4685,6 +4686,81 @@ class TestCompositeDist:
         assert sample.shape == torch.Size((4,) + params.shape)
         assert sample["sample", "cont"].shape == torch.Size((4, 3, 4))
         assert sample["sample", "disc"].shape == torch.Size((4, 3))
+
+    def _dist_with_name_map(self, constructor, dist_name, name_map):
+        # Params are stored under the unraveled name, which is what both
+        # constructors look up. The distribution key itself may still be a
+        # nested tuple that unravels to a different object.
+        key = unravel_key(dist_name)
+        if constructor == "init":
+            params = TensorDict(
+                {key: {"loc": torch.zeros(3), "scale": torch.ones(3)}},
+                [3],
+            )
+            return CompositeDistribution(
+                params,
+                distribution_map={dist_name: distributions.Normal},
+                name_map=name_map,
+            )
+        params = TensorDict({}, batch_size=[3])
+        return CompositeDistribution.from_distributions(
+            params,
+            {dist_name: distributions.Normal(torch.zeros(3), torch.ones(3))},
+            name_map=name_map,
+        )
+
+    @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
+    def test_name_map_tuple_key(self, constructor):
+        # ("a",) unravels to "a". Looking the raw key up in name_map misses.
+        dist_name = ("a",)
+        assert unravel_key(dist_name) != dist_name
+        dist = self._dist_with_name_map(constructor, dist_name, {dist_name: "b"})
+        assert list(dist.dists) == ["b"], list(dist.dists)
+        assert "b" in dist.sample().keys()
+        assert "a" not in dist.sample().keys()
+
+    @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
+    def test_name_map_nested_tuple_key(self, constructor):
+        # (("nested",), "disc") unravels to ("nested", "disc"), not itself.
+        dist_name = (("nested",), "disc")
+        assert unravel_key(dist_name) != dist_name
+        dist = self._dist_with_name_map(constructor, dist_name, {dist_name: "b"})
+        assert list(dist.dists) == ["b"], list(dist.dists)
+        sample = dist.sample()
+        assert "b" in sample.keys()
+        assert ("nested", "disc") not in sample.keys(True, True)
+
+    @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
+    def test_name_map_string_key(self, constructor):
+        dist = self._dist_with_name_map(constructor, "a", {"a": "b"})
+        assert list(dist.dists) == ["b"], list(dist.dists)
+        assert "b" in dist.sample().keys()
+        assert "a" not in dist.sample().keys()
+
+    @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
+    def test_name_map_unknown_key_ignored(self, constructor):
+        # A name_map shared by several modules may name other distributions.
+        dist = self._dist_with_name_map(
+            constructor, "a", {"a": "b", "nope": "x", ("nope",): "y"}
+        )
+        assert list(dist.dists) == ["b"], list(dist.dists)
+
+    @pytest.mark.parametrize("dist_name", ["a", ("a",), (("nested",), "disc")])
+    @pytest.mark.parametrize("raw_key", [True, False])
+    def test_extra_kwargs_unraveled_key(self, dist_name, raw_key):
+        # extra_kwargs is looked up with the unraveled name, then with the key
+        # as written in distribution_map.
+        key = unravel_key(dist_name)
+        params = TensorDict(
+            {key: {"loc": torch.zeros(3), "scale": torch.ones(3)}},
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={dist_name: distributions.Normal},
+            extra_kwargs={dist_name if raw_key else key: {"validate_args": False}},
+        )
+        assert dist[key]._validate_args is False
 
     def test_rsample(self):
         params = TensorDict(

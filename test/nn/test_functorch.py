@@ -21,12 +21,15 @@ from tensordict import (
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
+    tensorclass,
     TensorDict,
 )
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.utils import is_non_tensor
 from torch import nn, vmap
 from torch.utils._pytree import (
+    MappingKey,
+    SequenceKey,
     tree_flatten,
     tree_flatten_with_path,
     tree_map,
@@ -473,6 +476,70 @@ class TestPyTree(TestTensorDictsBase):
         # With exclusive keys
         del td0["a"]
         assert (tree_map(lambda x: x + 1, td) == td + 1).all()
+
+    def test_pytree_lazy_flatten_with_keys(self):
+        # torch.export compares the spec of tree_flatten_with_path with the spec
+        # of tree_flatten, so both must describe the same lazy stack.
+        def assert_roundtrip(lazy, expected_paths):
+            keyed, spec_with_path = tree_flatten_with_path(lazy)
+            values, spec = tree_flatten(lazy)
+            assert spec_with_path == spec
+            assert spec_with_path.context == spec.context
+            assert [path for path, _ in keyed] == expected_paths
+            assert [leaf for _, leaf in keyed] == values
+            out = tree_unflatten([leaf for _, leaf in keyed], spec_with_path)
+            assert isinstance(out, LazyStackedTensorDict)
+            assert out.stack_dim == lazy.stack_dim
+            assert out.batch_size == lazy.batch_size
+            assert out.names == lazy.names
+            assert_close(out, lazy)
+            for got, exp in zip(out.tensordicts, lazy.tensordicts):
+                assert type(got) is type(exp)
+                assert_close(got, exp)
+
+        td0 = TensorDict(
+            {
+                "a": torch.zeros(3, 2),
+                "nested": TensorDict({"d": torch.ones(3, 4)}, [3]),
+            },
+            [3],
+        )
+        # "c" is exclusive to the second member.
+        td1 = TensorDict(
+            {
+                "a": torch.ones(3, 2),
+                "c": torch.full((3, 2), 2.0),
+            },
+            [3],
+        )
+        lazy = LazyStackedTensorDict(td0, td1, stack_dim=0, stack_dim_name="time")
+        assert_roundtrip(
+            lazy,
+            [
+                (SequenceKey(0), MappingKey("a")),
+                (SequenceKey(0), MappingKey("nested"), MappingKey("d")),
+                (SequenceKey(1), MappingKey("a")),
+                (SequenceKey(1), MappingKey("c")),
+            ],
+        )
+
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        tc0 = Data(x=torch.zeros(2, 3), y=torch.ones(2, 3), batch_size=[2])
+        tc1 = Data(x=torch.ones(2, 3), y=torch.full((2, 3), 3.0), batch_size=[2])
+        lazy_tc = LazyStackedTensorDict(tc0, tc1, stack_dim=1)
+        assert_roundtrip(
+            lazy_tc,
+            [
+                (SequenceKey(0), MappingKey("x")),
+                (SequenceKey(0), MappingKey("y")),
+                (SequenceKey(1), MappingKey("x")),
+                (SequenceKey(1), MappingKey("y")),
+            ],
+        )
 
     def test_pytree_non_tensor_spec(self):
         # The specs of tensordicts with batched non-tensor entries compare

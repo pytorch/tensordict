@@ -2415,6 +2415,21 @@ class TestNonTensorData:
         assert record[0].filename == __file__
         assert stack.tolist() == ["c", "e"]
 
+    def test_update_at_idx_keyword(self):
+        # NonTensorData.update_at_ names the index idx, as
+        # TensorDict.update_at_ does, and still takes index= until 0.17
+        data = NonTensorData("a")
+        assert data.update_at_(NonTensorData("b"), ()) is data
+        assert data.data == "b"
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert data.update_at_(NonTensorData("c"), idx=()) is data
+        assert data.data == "c"
+        with pytest.warns(DeprecationWarning, match=r"update_at_\(index=") as record:
+            assert data.update_at_(NonTensorData("d"), index=()) is data
+        assert record[0].filename == __file__
+        assert data.data == "d"
+
     @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
     def test_memmap_stack_updates(self, tmpdir):
         data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)

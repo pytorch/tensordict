@@ -853,6 +853,15 @@ class TestTensorClass:
         assert data.get(("td", "missing"), "else") == "else"
         assert data.get(("td", "missing")) is None
 
+        # a field that is not a tensor collection gets the default passed on,
+        # as before #2678 (dict.get takes no keyword arguments)
+        @tensorclass
+        class Meta:
+            meta: dict
+
+        with pytest.raises(TypeError, match="keyword arguments"):
+            Meta(meta={"k": 1}).get(("meta", "k"))
+
         data = data.expand(10)
         assert data.get_at("a", 0) is not None
         assert data.get_at("b", 0) is None
@@ -910,6 +919,30 @@ class TestTensorClass:
                 assert not obj.is_locked
             assert obj.is_locked
         assert not obj.is_locked
+
+    @pytest.mark.parametrize(
+        "op,args,kwargs",
+        [
+            ("squeeze", (0,), {}),
+            ("squeeze", (-1,), {}),
+            ("flatten", (0, None), {}),
+            ("flatten", (), {"end_dim": None}),
+            ("transpose", (), {"dim0": 0, "dim1": 1}),
+            ("swapaxes", (), {"axis0": 0, "axis1": 1}),
+        ],
+    )
+    def test_shape_op_context_manager(self, op, args, kwargs):
+        # the shape op is undone on exit and the values written in the block stay
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+
+        obj = MyClass(X=torch.zeros(2, 3), batch_size=[2, 3])
+        with getattr(obj, op)(*args, **kwargs) as obj_op:
+            obj_op.X += 1
+        assert obj.batch_size == (2, 3)
+        assert obj.X.shape == (2, 3)
+        assert (obj.X == 1).all()
 
     def test_lock_context_manager_restores_on_error(self):
         # lock_() and unlock_() undo their change also when the body raises
@@ -4036,6 +4069,32 @@ class TestTensorClass:
                 tc.update_at_(source, 1)
             assert tc.a is source.a
             assert (tc.b == 1).all()
+
+    def test_update_at_idx_keyword(self):
+        # update_at_ names the index idx, as TensorDict.update_at_ does, and
+        # still takes index= until TensorDict 0.17
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        source = TC(a=torch.ones(2), batch_size=[2])
+        expected = TC(a=torch.zeros(4), batch_size=[4])
+        expected.update_at_(source, slice(1, 3))
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert tc.update_at_(source, idx=slice(1, 3)) is tc
+        assert (tc.a == expected.a).all()
+        assert tc.a.tolist() == [0.0, 1.0, 1.0, 0.0]
+
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(index=.*0\.17.*update_at_\(idx=",
+        ) as record:
+            assert tc.update_at_(source, index=slice(1, 3)) is tc
+        assert record[0].filename == __file__
+        assert (tc.a == expected.a).all()
 
     @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
     def test_update_at_full_size_source(self, source_type):
