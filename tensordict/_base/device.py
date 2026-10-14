@@ -688,7 +688,8 @@ class _DeviceOps:
 
             num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
                 of threads to be used for ``pin_memory``. By default,
-                ``max(1, torch.get_num_threads())`` threads will be spawn.
+                up to ``max(1, torch.get_num_threads() // 2)`` threads are
+                started, and no more than one per leaf.
                 ``num_threads=0`` will cancel any
                 multithreading for the `pin_memory()` calls.
             inplace (bool, optional): if ``True``, the data will be written in-place in the same tensordict.
