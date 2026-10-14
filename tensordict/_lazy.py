@@ -26,10 +26,8 @@ from typing import (
     Dict,
     Iterator,
     List,
-    Literal,
     Mapping,
     NamedTuple,
-    OrderedDict,
     overload,
     Sequence,
     Tuple,
@@ -980,15 +978,6 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             return False
 
-    @_fails_exclusive_keys
-    def to_dict(
-        self,
-        *,
-        retain_none: bool = True,
-        convert_tensors: bool | Literal["numpy"] = False,
-        tolist_first: bool = False,
-    ) -> dict[str, Any]: ...
-
     def _reduce_get_metadata(self):
         metadata = {}
         metadata["stack_dim"] = self.stack_dim
@@ -1139,6 +1128,7 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim_name=stack_dim_name,
         )
 
+    # Override: stacks one tensordict per element; batch_size is the members' (#1955).
     @classmethod
     def from_list(
         cls,
@@ -1175,15 +1165,6 @@ class LazyStackedTensorDict(TensorDictBase):
             device=device,
             names=names,
         )
-
-    @_fails_exclusive_keys
-    def state_dict(
-        self,
-        destination=None,
-        prefix="",
-        keep_vars=False,
-        flatten=True,
-    ) -> OrderedDict[str, Any]: ...
 
     # Override: raises for keys that are not in every member.
     @_fails_exclusive_keys
@@ -2840,10 +2821,34 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
-    def to(self, *args, **kwargs) -> Self:
-        if kwargs.get("batch_size") is not None:
+    # Override: the batch size of a lazy stack follows its members.
+    def _to(
+        self,
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        non_blocking_pin,
+        num_threads,
+        inplace,
+        args,
+        kwargs,
+    ):
+        if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
-        return super().to(*args, **kwargs)
+        return super()._to(
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            non_blocking_pin,
+            num_threads,
+            inplace,
+            args,
+            kwargs,
+        )
 
     def keys(
         self,
@@ -3510,6 +3515,7 @@ class LazyStackedTensorDict(TensorDictBase):
     @overload
     def __getitem__(self, index: IndexType) -> TensorDictBase: ...
 
+    # Override: indexes the members, so the result is a lazy stack sharing their storage.
     def __getitem__(self, index: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)
@@ -4547,7 +4553,8 @@ class LazyStackedTensorDict(TensorDictBase):
         sub_tds = [item for value in sub_tds.values() for item in value]
         return sub_tds
 
-    def __repr__(self):
+    # Override: adds the exclusive fields and the stack dim.
+    def _repr_parts(self) -> list[str]:
         fields = _td_fields(self)
         parts = [
             indent(f"fields={{{fields}}}", 4 * " "),
@@ -4560,8 +4567,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if _REPR_OPTIONS["show_is_shared"]:
             parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
         parts.append(indent(f"stack_dim={self.stack_dim}", 4 * " "))
-        string = ",\n".join(parts)
-        return f"{type(self).__name__}(\n{string})"
+        return parts
 
     def _exclusive_keys(self):
         return {key for td in self.tensordicts for key in td.keys()}

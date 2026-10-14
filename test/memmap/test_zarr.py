@@ -141,6 +141,15 @@ class TestZarrRoundTrip:
         )
         assert td_recon.batch_size == torch.Size([3])
 
+    def test_auto_batch_size_persistent(self, tmp_path):
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
+        td.to_zarr(tmp_path / "s.zarr")
+        td_recon = PersistentTensorDict.from_zarr(
+            tmp_path / "s.zarr", auto_batch_size=True, batch_dims=1
+        )
+        assert type(td_recon) is PersistentTensorDict
+        assert td_recon.batch_size == torch.Size([3])
+
     def test_free_function(self, tmp_path):
         from tensordict import from_zarr
 
@@ -631,6 +640,54 @@ class TestZarrWriteOps:
             assert root[key].compressors, key
         td_back = TensorDict.from_zarr(tmp_path / "s.zarr")
         assert (td_back == td).all()
+
+    def test_to_context_manager_writes_in_place(self, tmp_path, monkeypatch):
+        # the write-back of to() reads nothing and keeps the layout of the
+        # arrays, also for a store reopened without its creation arguments
+        td = TensorDict(
+            {"a": torch.arange(8.0), "b": {"c": torch.zeros(8)}}, batch_size=[8]
+        )
+        td.to_zarr(tmp_path / "s.zarr", chunks=(2,))
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        reads = []
+        getitem = zarr.Array.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.path)
+            return getitem(self, *args, **kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with ztd.to(torch.float64) as td64:
+                td64["a"] += 1
+                td64["b", "d"] = torch.ones(8)
+                monkeypatch.setattr(zarr.Array, "__getitem__", counting_getitem)
+        monkeypatch.undo()
+        assert reads == []
+        root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
+        assert root["a"].chunks == (2,)
+        assert root["b/c"].chunks == (2,)
+        assert ztd["a"].dtype == torch.float32
+        assert (ztd["a"] == torch.arange(8.0) + 1).all()
+        assert (ztd["b", "d"] == 1).all()
+
+    def test_to_context_manager_changes_entry_type(self, tmp_path):
+        # as on a TensorDict, a group that the block replaces with a tensor is
+        # replaced, and a tensor replaced with a tensordict raises
+        td = TensorDict(
+            {"a": torch.arange(8.0), "b": {"c": torch.zeros(8)}}, batch_size=[8]
+        )
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        with ztd.to(torch.float64) as td64:
+            td64["b"] = torch.ones(8)
+        assert set(ztd.keys(True, True)) == {"a", "b"}
+        assert (ztd["b"] == 1).all()
+        with pytest.raises(RuntimeError, match="cannot set a tensor collection"):
+            with ztd.to(torch.float64) as td64:
+                td64["a"] = TensorDict(c=torch.ones(8), batch_size=[8])
+        assert set(ztd.keys(True, True)) == {"a", "b"}
+        assert (ztd["a"] == torch.arange(8.0)).all()
 
     def test_chunks_heterogeneous_ranks(self, tmp_path):
         # a single chunks spec constrains the leading dims of every leaf,

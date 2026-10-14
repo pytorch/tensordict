@@ -26,6 +26,7 @@ from tensordict._td import (
 )
 from tensordict.base import (
     _is_leaf_nontensor,
+    _normalize_from_dict_args,
     _register_tensor_class,
     is_tensor_collection,
     T,
@@ -1815,15 +1816,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     # ---- Materialization ----
 
-    def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
-        """Materialize all leaf tensors into a local ``TensorDict``.
-
-        Fetches all the data in one round-trip to the server.
-
-        Keyword Args:
-            retain_none (bool, optional): has no effect on a store. Defaults
-                to ``None``.
-        """
+    # Override: reads all the leaves in one round trip (retain_none has no
+    # effect on a store).
+    def _to_tensordict(self, *, retain_none: bool | None) -> TensorDict:
         all_keys = self._get_all_keys()
         # Filter to keys under our prefix
         if self._prefix:
@@ -1887,6 +1882,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         auto_batch_size: bool = False,
         batch_size=None,
         device=None,
+        batch_dims: int | None = None,
+        names: Sequence[str] | None = None,
         **kwargs,
     ):
         """Create a TensorDictStore from a dictionary or TensorDict.
@@ -1913,6 +1910,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                 ``[]``, or to the inferred batch size with
                 ``auto_batch_size=True``.
             device: Target device for tensor retrieval.
+            batch_dims (int, optional): for a dict ``input_dict`` without
+                ``batch_size``, the number of leading dims of the inferred batch
+                size; implies ``auto_batch_size=True``. Exclusive with
+                ``batch_size``.
+            names (list of str, optional): the dimension names of the store.
             **kwargs: Additional connection kwargs.
 
         Returns:
@@ -1929,16 +1931,16 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             >>> store.clear_redis()
             >>> store.close()
         """
+        batch_size = _normalize_from_dict_args(
+            input_dict, batch_size=batch_size, batch_dims=batch_dims
+        )
         if batch_size is None:
-            if is_tensor_collection(input_dict):
+            batch_size = torch.Size([])
+            if auto_batch_size or batch_dims is not None:
+                input_dict = TensorDict(
+                    input_dict, batch_size=batch_size
+                ).auto_batch_size_(batch_dims=batch_dims)
                 batch_size = input_dict.batch_size
-            else:
-                batch_size = torch.Size([])
-                if auto_batch_size:
-                    input_dict = TensorDict(
-                        input_dict, batch_size=batch_size
-                    ).auto_batch_size_()
-                    batch_size = input_dict.batch_size
 
         connect_kwargs = {}
         if unix_socket_path is not None:
@@ -1960,6 +1962,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             out.update(input_dict)
         else:
             out.update(TensorDict(input_dict, batch_size=batch_size))
+        if names is not None:
+            out.names = names
         return out
 
     @classmethod
@@ -2063,6 +2067,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         out.update(td)
         return out
 
+    # Override: takes the connection arguments of the store.
     @classmethod
     def from_schema(
         cls,
@@ -2095,7 +2100,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         split the entry.
 
         Args:
-            schema: Mapping from field name to ``(element_shape, dtype)``.
+            schema: Mapping from field name (a str, or a tuple of str for a
+                nested entry) to ``(element_shape, dtype)``.
                 ``element_shape`` is the per-element shape (excluding
                 ``batch_size``).  The full stored shape is
                 ``[*batch_size, *element_shape]``.
@@ -2141,6 +2147,16 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             >>> store.clear_redis()
             >>> store.close()
         """
+        # Read the schema before the store writes anything, so that an invalid
+        # entry leaves nothing on the server. A nested key is stored under its
+        # dot-joined path.
+        entries = []
+        for key, (elem_shape, dtype) in schema.items():
+            if isinstance(key, tuple):
+                key = _KEY_SEP.join(_unravel_key_to_tuple(key))
+            elem_size = torch.tensor([], dtype=dtype).element_size()
+            entries.append((key, list(elem_shape), dtype, elem_size))
+
         connect_kwargs = dict(kwargs)
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
@@ -2159,14 +2175,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
         async def _preallocate():
             pipe = out._client.pipeline()
-            for key, (elem_shape, dtype) in schema.items():
-                if isinstance(elem_shape, torch.Size):
-                    elem_shape = list(elem_shape)
-                else:
-                    elem_shape = list(elem_shape)
+            for key, elem_shape, dtype, elem_size in entries:
                 full_shape = list(out._batch_size) + elem_shape
-                dummy = torch.tensor([], dtype=dtype)
-                elem_size = dummy.element_size()
                 numel = 1
                 for s in full_shape:
                     numel *= s
@@ -2396,18 +2406,15 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             names=self.names if names is None and self._has_names() else names,
         )
 
-    def __repr__(self):
-        keys_str = list(self.keys())
-        device = self.device
-        batch_size = self.batch_size
-        return (
-            f"TensorDictStore(\n"
-            f"    keys={keys_str},\n"
-            f"    batch_size={batch_size},\n"
-            f"    device={device},\n"
-            f"    backend={self._backend!r},\n"
-            f"    td_id={self._td_id!r})"
-        )
+    # Override: lists the key names, without reading the entries.
+    def _repr_parts(self) -> list[str]:
+        return [
+            f"    keys={list(self.keys())}",
+            f"    batch_size={self.batch_size}",
+            f"    device={self.device}",
+            f"    backend={self._backend!r}",
+            f"    td_id={self._td_id!r}",
+        ]
 
     # Override: not supported: it would read the store.
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):

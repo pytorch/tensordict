@@ -1337,6 +1337,28 @@ class TestNonTensorData:
         data[1:] = NonTensorStack("s0", "s0")
         assert data.tolist() == ["s0"] * 3
 
+    def test_nontensorstack_repr_and_to_tensordict(self):
+        stack = NonTensorStack.from_list(["a", "b"])
+        assert repr(stack) == (
+            "NonTensorStack(\n"
+            "    ['a', 'b'],\n"
+            "    batch_size=torch.Size([2]),\n"
+            "    device=None)"
+        )
+        # the data is cut after 50 characters
+        long = NonTensorStack.from_list(["x" * 30, "y" * 30])
+        assert repr(long).splitlines()[1] == (
+            "    ['" + "x" * 30 + "', '" + "y" * 14 + "...,"
+        )
+        # a NonTensorStack is already the dense form of its data
+        assert stack.to_tensordict() is stack
+        assert stack.to_tensordict(retain_none=True) is stack
+
+    def test_nontensorstack_tolist_convert_nodes(self):
+        stack = NonTensorStack.from_list(["a", "b"])
+        assert stack.tolist(convert_nodes=True) == ["a", "b"]
+        assert stack.tolist(convert_nodes=False) == ["a", "b"]
+
     @pytest.mark.parametrize(
         "index,rows",
         [

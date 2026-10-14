@@ -279,6 +279,9 @@ _OPS = {
             td.to_dict(), batch_size=td.batch_size
         ),
         "pickle": _pickle_round_trip,
+        "state_dict()": lambda td: td.state_dict(),
+        "to_tensordict()": lambda td: td.to_tensordict(),
+        "to(float64)": lambda td: td.to(torch.float64),
     },
 }
 

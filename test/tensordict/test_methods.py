@@ -695,6 +695,43 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_batchsize.batch_size == torch.Size([])
             del td_batchsize
 
+    def test_to_batch_size_per_class(self, td_name, device):
+        # to(batch_size=...) without a device or dtype: a lazy stack raises, a
+        # sub-tensordict returns a TensorDict copy (also for the same batch
+        # size), and the other types set the batch size and return themselves
+        td = getattr(self, td_name)(device)
+        batch_size = td.batch_size[:-1]
+        if td_name in (
+            "stacked_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+            "nested_stacked_td",
+        ):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to "):
+                td.to(batch_size=batch_size)
+            with pytest.raises(TypeError, match="Cannot pass batch-size to "):
+                td.to("meta", batch_size=batch_size)
+            return
+        is_sub = td_name in ("sub_td", "sub_td2")
+        old_batch_size = td.batch_size
+        same = td.to(batch_size=old_batch_size)
+        assert (same is not td) if is_sub else (same is td)
+        out = td.to(batch_size=batch_size)
+        assert out.batch_size == batch_size
+        if is_sub:
+            assert type(same) is TensorDict and type(out) is TensorDict
+            assert td.batch_size == old_batch_size
+        else:
+            assert out is td
+        with warnings.catch_warnings():
+            # nested tensordicts get the batch size (the 0.17 FutureWarning)
+            warnings.simplefilter("ignore", FutureWarning)
+            meta = getattr(self, td_name)(device).to("meta", batch_size=batch_size)
+        assert type(meta) is (TensorDict if is_sub else type(td))
+        assert meta.device == torch.device("meta")
+        assert meta.batch_size == batch_size
+
     @pytest.mark.skipif(
         is_npu_available(), reason="torch.double is not adapted on NPU currently"
     )

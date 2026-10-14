@@ -42,10 +42,12 @@ from tensordict._tabular import (
 from tensordict.base import (
     __base__setattr__,
     _has_h5,
+    _has_top_level_exclusive_keys,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _maybe_preserve_module_state,
     _PACKAGE_DIR,
+    _raise_on_exclusive_keys,
     _set_tensor_dict,
     _wrap_extra_state,
     Buffer,
@@ -680,6 +682,7 @@ class _Conversion:
         auto_batch_size: bool = False,
         batch_dims: int | None = None,
         batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
     ):
         """Creates a PersistentTensorDict from a h5 file.
 
@@ -687,12 +690,21 @@ class _Conversion:
             filename (str): The path to the h5 file.
 
         Keyword Arguments:
-            mode (str, optional): Reading mode. Defaults to ``"r"``.
+            mode (str, optional): how the file is opened: ``"r"`` (read only),
+                ``"r+"`` (read and write), or another mode of :class:`h5py.File`
+                (see :class:`~tensordict.PersistentTensorDict`). Defaults to ``"r"``.
             auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically.
                 Defaults to ``False``.
             batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output
                 tensordict should have. Defaults to ``None`` (full batch-size at each level).
             batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
+            non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
+                dataset that tensordict did not write, such as a string column
+                with one string per row, reads as a
+                :class:`~tensordict.NonTensorStack` of its rows when its
+                leading dims equal the batch size. Otherwise it reads as one
+                :class:`~tensordict.NonTensorData` that holds the whole
+                dataset. Defaults to ``False``.
 
         Returns:
             A PersistentTensorDict representation of the input h5 file.
@@ -718,8 +730,13 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        result = PersistentTensorDict.from_h5(
-            filename, mode=mode, batch_size=batch_size
+        if not issubclass(cls, PersistentTensorDict):
+            cls = PersistentTensorDict
+        result = cls._open_h5(
+            filename,
+            mode=mode,
+            batch_size=batch_size,
+            non_tensor_as_stack=non_tensor_as_stack,
         )
         if auto_batch_size:
             if batch_size is not None:
@@ -736,6 +753,7 @@ class _Conversion:
         auto_batch_size: bool = False,
         batch_dims: int | None = None,
         batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
     ):
         """Creates a PersistentTensorDict from a zarr store.
 
@@ -755,6 +773,13 @@ class _Conversion:
             batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``
                 (read from the metadata written by :meth:`~.to_zarr`, or automatically determined
                 for stores written by other tools).
+            non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
+                array that tensordict did not write, such as a string column
+                with one string per row, reads as a
+                :class:`~tensordict.NonTensorStack` of its rows when its
+                leading dims equal the batch size. Otherwise it reads as one
+                :class:`~tensordict.NonTensorData` that holds the whole
+                array. Defaults to ``False``.
 
         Returns:
             A PersistentTensorDict representation of the input zarr store.
@@ -780,8 +805,13 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        result = PersistentTensorDict.from_zarr(
-            filename, mode=mode, batch_size=batch_size
+        if not issubclass(cls, PersistentTensorDict):
+            cls = PersistentTensorDict
+        result = cls._open_zarr(
+            filename,
+            mode=mode,
+            batch_size=batch_size,
+            non_tensor_as_stack=non_tensor_as_stack,
         )
         if auto_batch_size:
             if batch_size is not None:
@@ -958,6 +988,10 @@ class _Conversion:
         is the entry ``("layers", "0", "weight")``. Write the parameters back
         with :meth:`~.to_module`.
 
+        The result is a :class:`~tensordict.TensorDict` (or a
+        :class:`~tensordict.nn.TensorDictParams` with ``as_module=True``),
+        whichever class this method is called on.
+
         Args:
             module (nn.Module): the module to get the parameters from.
             as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
@@ -990,7 +1024,11 @@ class _Conversion:
                 is_shared=False)
 
         """
-        ...
+        from tensordict import TensorDict
+
+        return TensorDict.from_module(
+            module, as_module=as_module, lock=lock, use_state_dict=use_state_dict
+        )
 
     @classmethod
     def from_modules(
@@ -1525,6 +1563,17 @@ class _Conversion:
             ['s']
 
         """
+        return self._to_tensordict(retain_none=retain_none)
+
+    def _to_tensordict(self, *, retain_none: bool | None) -> TensorDictBase:
+        """Builds the dense copy that :meth:`to_tensordict` returns.
+
+        ``retain_none`` is the argument of :meth:`to_tensordict`. The base
+        implementation clones each tensor and converts each nested tensordict
+        and tensorclass with its own :meth:`to_tensordict`. A store overrides
+        it to read all the leaves in one round trip; a ``NonTensorStack``,
+        which is already the dense form of its data, returns itself.
+        """
         from tensordict import TensorDict
 
         return TensorDict(
@@ -1639,6 +1688,12 @@ class _Conversion:
             {'a': [[0, 1, 2], [3, 4, 5]], 'b': {'c': [[0, 1], [2, 3]]}}
 
         """
+        # With tolist_first, the members of a nested lazy stack are listed one
+        # by one, so only exclusive keys at the top level would be lost.
+        if self._has_exclusive_keys and (
+            not tolist_first or _has_top_level_exclusive_keys(self)
+        ):
+            _raise_on_exclusive_keys("to_dict")
         result = {}
         for key, value in self.items():
             if _is_tensor_collection(type(value)):

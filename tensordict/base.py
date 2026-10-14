@@ -1049,6 +1049,37 @@ _READ_ONLY_CALL = local()
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
+def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
+    """Checks the batch-size arguments of a ``from_dict`` that writes to a file or a store.
+
+    Raises if both ``batch_size`` and ``batch_dims`` are given, as
+    ``TensorDict.from_dict`` does. Returns ``batch_size``, else the batch size
+    of a tensor collection ``input_dict``, else ``None``: the caller then
+    infers it from the entries.
+    """
+    if batch_dims is not None and batch_size is not None:
+        raise ValueError("Cannot pass both batch_size and batch_dims to `from_dict`.")
+    if batch_size is None and _is_tensor_collection(type(input_dict)):
+        return input_dict.batch_size
+    return batch_size
+
+
+def _raise_on_exclusive_keys(method: str) -> None:
+    """Raises because ``method`` would drop the keys that some members of a lazy stack lack."""
+    raise RuntimeError(
+        f"the method {method} cannot complete when there are exclusive keys."
+    )
+
+
+def _has_top_level_exclusive_keys(td: TensorDictBase) -> bool:
+    """Whether the members of the lazy stack ``td`` differ in their top-level keys.
+
+    Call it only when ``td._has_exclusive_keys`` is set, that is on a lazy stack.
+    """
+    keys = set(td.keys())
+    return any(set(member.keys()) != keys for member in td.tensordicts)
+
+
 def _warn_read_only(method: str) -> None:
     """Warns that the in-place ``method`` leaves a file opened read-only unchanged."""
     if getattr(_READ_ONLY_CALL, "running", False):
@@ -1466,6 +1497,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # ``to_tensordict()`` copy: the stores read it in one round trip, and on
     # all of them the result is a new, unlocked TensorDict.
     _masking_on_dense_copy: bool = False
+    # Set by the files, into which the exit of a ``with td.to(...)`` block
+    # writes the dense copy in place, with _write_back_to().
+    _to_writes_back_in_place: bool = False
     # Set by the stores, on which ``masked_select`` masks a
     # ``to_tensordict()`` copy, read in one round trip. On the views and h5
     # files, that is slower than masking each entry.
@@ -1490,6 +1524,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # rename in a locked tensordict with a warning, and pass an old key that is
     # not a str or tuple to _rename_key (which raises or warns as before).
     _rename_key_lenient: bool = False
+    # Set by PersistentTensorDict, whose file handles cannot be sent to another
+    # process: map sends a to_tensordict() copy of each chunk to the workers.
+    _map_on_dense_copies: bool = False
+    # Whether the members of a lazy stack have different keys, which to_dict
+    # and state_dict would silently drop (a property on LazyStackedTensorDict).
+    _has_exclusive_keys: bool = False
+    # Set by _SubTensorDict, whose memmap_ would memory-map its whole source:
+    # memmap_ raises.
+    _memmap_inplace_unsupported: bool = False
     # Whether each read of a leaf builds a new tensor: a lazy stack stacks its
     # members, a file or a store reads its data. is_contiguous() then returns
     # False without reading the leaves.
@@ -1538,15 +1581,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def __repr__(self) -> str:
         try:
-            fields = _td_fields(self)
-            parts = [indent(f"fields={{{fields}}}", 4 * " ")]
-            if _REPR_OPTIONS["show_batch_size"]:
-                parts.append(indent(f"batch_size={self.batch_size}", 4 * " "))
-            if _REPR_OPTIONS["show_device"]:
-                parts.append(indent(f"device={self.device}", 4 * " "))
-            if _REPR_OPTIONS["show_is_shared"]:
-                parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
-            string = ",\n".join(parts)
+            string = ",\n".join(self._repr_parts())
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
             #  that has no attribute (no _tensordict or no _batch_size).
@@ -1554,6 +1589,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             #  we simply default to '...' when trying to print the TD content.
             string = "..."
         return f"{type(self).__name__}(\n{string})"
+
+    def _repr_parts(self) -> list[str]:
+        """Returns the lines that :meth:`__repr__` joins inside ``ClassName(...)``.
+
+        Each part is indented by four spaces; ``__repr__`` separates them with
+        a comma and a line break. The base implementation lists the fields, then the batch
+        size, the device and ``is_shared`` as :class:`~tensordict.set_printoptions`
+        selects. A class overrides it to add lines (a lazy stack's exclusive
+        fields and stack dim), or so that the repr reads no data (the stores
+        list their key names).
+        """
+        fields = _td_fields(self)
+        parts = [indent(f"fields={{{fields}}}", 4 * " ")]
+        if _REPR_OPTIONS["show_batch_size"]:
+            parts.append(indent(f"batch_size={self.batch_size}", 4 * " "))
+        if _REPR_OPTIONS["show_device"]:
+            parts.append(indent(f"device={self.device}", 4 * " "))
+        if _REPR_OPTIONS["show_is_shared"]:
+            parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
+        return parts
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         """Iterates over the first batch dimension of the tensordict.
@@ -7071,9 +7126,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             dim,
             shuffle=shuffle,
             use_generator=index_with_generator,
+            to_tensordict=self._map_on_dense_copies,
         )
         if not index_with_generator:
             length = len(self_split)
+            if self._map_on_dense_copies:
+                self_split = tuple(split.to_tensordict() for split in self_split)
         else:
             length = None
         call_chunksize = 1

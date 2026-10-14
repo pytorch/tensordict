@@ -8,6 +8,7 @@ import functools
 import importlib
 import io
 import pickle
+import uuid
 import warnings
 
 import numpy as np
@@ -68,6 +69,18 @@ def store_kwargs(backend):
     """Common keyword arguments for constructing a store in tests."""
     name, port = backend
     return {"backend": name, "port": port, "db": 15}
+
+
+def _delete_namespace(prefix, store_kwargs):
+    """Delete every server key under ``prefix``, also of a store that failed to build."""
+    import redis
+
+    client = redis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+    try:
+        for key in client.scan_iter(match=f"{prefix}:*"):
+            client.delete(key)
+    finally:
+        client.close()
 
 
 def _stored_batch_size(store, store_kwargs):
@@ -368,6 +381,64 @@ class TestTensorDictStore:
         finally:
             td.clear_redis()
             td.close()
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"batch_dims": 1},
+            {"batch_size": [5, 3], "names": ["x", "y"]},
+        ],
+    )
+    def test_from_dict_batch_dims_names(self, store_kwargs, kwargs):
+        source = {"obs": torch.randn(5, 3)}
+        expected = TensorDict.from_dict(source, **kwargs)
+        prefix = f"td-test-{uuid.uuid4().hex}"
+        try:
+            td = TensorDictStore.from_dict(
+                source, prefix=prefix, **kwargs, **store_kwargs
+            )
+            assert td.batch_size == expected.batch_size
+            assert td.names == expected.names
+            assert torch.equal(td["obs"], source["obs"])
+            td.close()
+        finally:
+            _delete_namespace(prefix, store_kwargs)
+
+    def test_from_schema(self, store_kwargs):
+        prefix = f"td-test-{uuid.uuid4().hex}"
+        try:
+            td = TensorDictStore.from_schema(
+                {"a": ([2], torch.int64), "r": ([], torch.float32)},
+                batch_size=[4],
+                prefix=prefix,
+                **store_kwargs,
+            )
+            assert td.batch_size == (4,)
+            assert list(td.keys()) == ["a", "r"]
+            assert torch.equal(td["a"], torch.zeros(4, 2, dtype=torch.int64))
+            assert torch.equal(td["r"], torch.zeros(4))
+            td.close()
+        finally:
+            _delete_namespace(prefix, store_kwargs)
+
+    def test_from_schema_nested(self, store_kwargs):
+        prefix = f"td-test-{uuid.uuid4().hex}"
+        try:
+            td = TensorDictStore.from_schema(
+                {("n", "b"): ([2], torch.int64), "a": ([], torch.float32)},
+                batch_size=[4],
+                prefix=prefix,
+                **store_kwargs,
+            )
+            expected = TensorDict.from_schema(
+                {("n", "b"): ([2], torch.int64), "a": ([], torch.float32)},
+                batch_size=[4],
+            )
+            assert td.batch_size == (4,)
+            assert (td.to_tensordict() == expected).all()
+            td.close()
+        finally:
+            _delete_namespace(prefix, store_kwargs)
 
     def test_to_local(self, store_td):
         """Materialize to a local TensorDict."""
@@ -786,6 +857,84 @@ class TestTensorDictStore:
         s = repr(store_td)
         assert "TensorDictStore" in s
         assert "obs" in s
+
+    def test_to_tensordict_and_repr_do_not_read_leaves(self, store_td, monkeypatch):
+        source = TensorDict(
+            obs=torch.arange(10.0),
+            nested=TensorDict(x=torch.arange(20).view(10, 2), batch_size=[10]),
+            batch_size=[10],
+        )
+        store_td.update(source)
+
+        def no_read(self, *args, **kwargs):
+            raise AssertionError("a leaf was read")
+
+        monkeypatch.setattr(TensorDictStore, "_get_str", no_read)
+        monkeypatch.setattr(TensorDictStore, "_aget_tensor", no_read)
+        assert repr(store_td) == (
+            "TensorDictStore(\n"
+            "    keys=['nested', 'obs'],\n"
+            "    batch_size=torch.Size([10]),\n"
+            "    device=None,\n"
+            f"    backend={store_td._backend!r},\n"
+            f"    td_id={store_td._td_id!r})"
+        )
+        local = store_td.to_tensordict()
+        monkeypatch.undo()
+        assert type(local) is TensorDict
+        assert local.batch_size == (10,)
+        assert (local == source).all()
+
+    @pytest.mark.parametrize(
+        "with_string",
+        [
+            False,
+            True,
+        ],
+    )
+    def test_to_dtype_store(self, store_td, with_string):
+        source = TensorDict(
+            obs=torch.arange(10.0),
+            nested=TensorDict(x=torch.arange(20).view(10, 2), batch_size=[10]),
+            batch_size=[10],
+        )
+        if with_string:
+            source["s"] = "hello"
+        store_td.update(source)
+        for args in ((torch.float64,), ("cpu",)):
+            out = store_td.to(*args)
+            expected = source.to(*args)
+            assert type(out) is TensorDict
+            assert out.device == expected.device
+            assert out["nested", "x"].dtype == expected["nested", "x"].dtype
+            assert (out == expected).all()
+            if with_string:
+                assert out["s"] == "hello"
+
+    def test_to_context_manager_same_device(self, store_kwargs):
+        # to() on the device of the store returns the store, so the block
+        # writes to it and nothing is written back on exit
+        store = TensorDictStore(batch_size=[10], device="cpu", **store_kwargs)
+        try:
+            store["obs"] = torch.zeros(10)
+            store["nested", "x"] = torch.zeros(10, 2)
+            calls = []
+            run_sync = store._run_sync
+
+            def counting_run_sync(coro):
+                calls.append(None)
+                return run_sync(coro)
+
+            with store.to("cpu") as same:
+                assert same is store
+                same["obs"] = torch.ones(10)
+                store._run_sync = counting_run_sync
+            del store._run_sync
+            assert calls == []
+            assert (store["obs"] == 1).all()
+        finally:
+            store.clear_redis()
+            store.close()
 
     def test_empty(self, store_td):
         """Test empty()."""
@@ -2243,6 +2392,39 @@ class TestLazyStackedTensorDictStore:
         r = repr(store_td)
         assert "LazyStackedTensorDictStore" in r
         assert "count=5" in r
+
+    def test_repr_and_to_tensordict_do_not_read_leaves(self, store_stack, monkeypatch):
+        store_td, tds, _ = store_stack
+        element = store_td[1]
+
+        def no_read(self, *args, **kwargs):
+            raise AssertionError("a leaf was read")
+
+        monkeypatch.setattr(LazyStackedTensorDictStore, "_get_str", no_read)
+        monkeypatch.setattr(_StoreStackElementView, "_get_str", no_read)
+        assert repr(store_td) == (
+            "LazyStackedTensorDictStore(\n"
+            "    keys=['a', 'b'],\n"
+            "    batch_size=torch.Size([5, 4]),\n"
+            "    count=5,\n"
+            "    stack_dim=0,\n"
+            "    device=None,\n"
+            f"    backend={store_td._backend!r},\n"
+            f"    td_id={store_td._td_id!r})"
+        )
+        assert repr(element) == (
+            "_StoreStackElementView(\n"
+            f"    parent_td_id={store_td._td_id!r},\n"
+            "    element_idx=1,\n"
+            "    keys=['a', 'b'],\n"
+            "    batch_size=torch.Size([4]),\n"
+            "    device=None)"
+        )
+        local = element.to_tensordict()
+        monkeypatch.undo()
+        assert type(local) is TensorDict
+        assert local.batch_size == (4,)
+        assert (local == tds[1]).all()
 
     # ---- to_store() convenience ----
 

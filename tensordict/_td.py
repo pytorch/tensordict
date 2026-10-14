@@ -86,7 +86,6 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _LockedSchema,
     _NON_STR_KEY_ERR,
-    _parse_to,
     _pass_through,
     _pass_through_cls,
     _prune_selected_keys,
@@ -284,7 +283,6 @@ class TensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
-    _has_exclusive_keys = False
 
     def __init__(
         self,
@@ -2158,6 +2156,7 @@ class TensorDict(TensorDictBase):
             result = result_tmp
         return result
 
+    # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap(
         self,
         key: NestedKey,
@@ -2213,6 +2212,7 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
+    # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap_from_storage(
         self,
         key: NestedKey,
@@ -2273,6 +2273,7 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
+    # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap_from_tensor(
         self,
         key: NestedKey,
@@ -2847,6 +2848,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     _inplace_set = True
     _safe = False
     _masking_on_dense_copy = True
+    _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
 
     def __init__(
@@ -3125,19 +3127,22 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
 
-    @_as_context_manager()
-    def to(self, *args, **kwargs: Any) -> Self:
-        (
-            device,
-            dtype,
-            non_blocking,
-            convert_to_format,
-            batch_size,
-            pin_memory,
-            num_threads,
-            inplace,
-        ) = _parse_to(*args, **kwargs)
-        result = self
+    # Override: a view cannot change its leaves in place nor its batch size:
+    # it returns itself on its own device, and converts a to_tensordict() copy
+    # otherwise.
+    def _to(
+        self,
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        non_blocking_pin,
+        num_threads,
+        inplace,
+        args,
+        kwargs,
+    ):
         if inplace:
             raise TypeError(
                 "Cannot send a _SubTensorDict instance to device/dtype inplace."
@@ -3149,8 +3154,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
             and device == self.device
             and (batch_size is None or torch.Size(batch_size) == self.batch_size)
         ):
-            return result
-        return self.to_tensordict().to(*args, **kwargs)
+            return self
+        return self.to_tensordict().to(*args, non_blocking=non_blocking, **kwargs)
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
@@ -3384,6 +3389,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     def expand(self, *args: int, inplace: bool = False) -> Self:
         return super().expand(*args)
 
+    # Override: a view of another tensordict cannot be built from a dict.
     @classmethod
     def from_dict(
         cls,
@@ -3416,16 +3422,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         for key, item in self.items():
             self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
-
-    def memmap_(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> Self:
-        raise RuntimeError(
-            "Converting a sub-tensordict values to memmap cannot be done."
-        )
 
     def _memmap_(
         self,

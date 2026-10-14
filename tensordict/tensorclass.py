@@ -6895,9 +6895,11 @@ class NonTensorStack(LazyStackedTensorDict):
         if not all(is_non_tensor(item) for item in self.tensordicts):
             raise RuntimeError("All tensordicts must be non-tensors.")
 
+    # Override: lists the stored values, not dicts of the members.
     def tolist(
         self,
         *,
+        convert_nodes: bool = True,
         convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
@@ -6905,6 +6907,9 @@ class NonTensorStack(LazyStackedTensorDict):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
 
         Keyword Args:
+            convert_nodes (bool): accepted for compatibility with
+                :meth:`~tensordict.TensorDictBase.tolist`. It has no effect:
+                the elements are the stored values, not tensordicts. Default: ``True``.
             convert_tensors (bool): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
@@ -6942,6 +6947,7 @@ class NonTensorStack(LazyStackedTensorDict):
             stack_dim=self.stack_dim,
         )
 
+    # Override: builds the stack from raw values, not from dicts.
     @classmethod
     def from_list(cls, non_tensors: List[Any]):
         # Use local function because refers to cls
@@ -6985,15 +6991,18 @@ class NonTensorStack(LazyStackedTensorDict):
             prev = cls(*[prev.clone(False) for _ in range(dim)], stack_dim=0)
         return prev
 
-    def __repr__(self):
+    # Override: shows the data, cut after 50 characters.
+    def _repr_parts(self) -> list[str]:
         selfrepr = str(self.tolist())
         if len(selfrepr) > 50:
             selfrepr = f"{selfrepr[:50]}..."
-        selfrepr = indent(selfrepr, prefix=4 * " ")
-        batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
-        device = indent(f"device={self.device}", prefix=4 * " ")
-        return f"NonTensorStack(\n{selfrepr},\n{batch_size},\n{device})"
+        return [
+            indent(selfrepr, prefix=4 * " "),
+            indent(f"batch_size={self.batch_size}", prefix=4 * " "),
+            indent(f"device={self.device}", prefix=4 * " "),
+        ]
 
+    # Override: returns the stacked values as a list, as NonTensorData.to_dict returns its data.
     def to_dict(
         self,
         *,
@@ -7008,7 +7017,8 @@ class NonTensorStack(LazyStackedTensorDict):
             as_linked_list=as_linked_list,
         )
 
-    def to_tensordict(self, *, retain_none: bool | None = None):
+    # Override: a NonTensorStack is already the dense form of its data.
+    def _to_tensordict(self, *, retain_none: bool | None) -> NonTensorStack:
         return self
 
     # Override: a NonTensorStack is its own materialized form.
