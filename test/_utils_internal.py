@@ -456,6 +456,11 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["nested_typed_td", device]]
         TYPES_DEVICES_NOLAZY += [["nested_typed_td", device]]
 
+    # Not in TYPES_DEVICES: test_conformance.py runs it.
+    @classmethod
+    def typed_lazy(cls, device):
+        return _TypedTD.from_tensordict(cls.stacked_td(device))
+
 
 class _TypedTD(TypedTensorDict):
     a: torch.Tensor

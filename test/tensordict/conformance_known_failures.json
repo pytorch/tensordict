@@ -13,9 +13,12 @@
  "idx_td update": [],
  "memmap_td apply": [],
  "memmap_td filling": [
-  "detach_()"
+  "detach_()",
+  "share_memory_()"
  ],
- "memmap_td keys": [],
+ "memmap_td keys": [
+  "list(td)"
+ ],
  "memmap_td masking": [],
  "memmap_td pointwise": [],
  "memmap_td reductions": [],
@@ -34,7 +37,9 @@
  "nested_stacked_td masking": [],
  "nested_stacked_td pointwise": [],
  "nested_stacked_td reductions": [],
- "nested_stacked_td select": [],
+ "nested_stacked_td select": [
+  "contiguous(inplace=True)"
+ ],
  "nested_stacked_td serialization": [],
  "nested_stacked_td shape": [],
  "nested_stacked_td update": [],
@@ -84,7 +89,9 @@
  ],
  "permute_td pointwise": [],
  "permute_td reductions": [],
- "permute_td select": [],
+ "permute_td select": [
+  "contiguous(inplace=True)"
+ ],
  "permute_td serialization": [],
  "permute_td shape": [
   "permute(3, 2, 1, 0)",
@@ -108,7 +115,9 @@
  ],
  "squeezed_td pointwise": [],
  "squeezed_td reductions": [],
- "squeezed_td select": [],
+ "squeezed_td select": [
+  "contiguous(inplace=True)"
+ ],
  "squeezed_td serialization": [],
  "squeezed_td shape": [
   "permute(3, 2, 1, 0)",
@@ -130,21 +139,27 @@
  "stacked_td masking": [],
  "stacked_td pointwise": [],
  "stacked_td reductions": [],
- "stacked_td select": [],
+ "stacked_td select": [
+  "contiguous(inplace=True)"
+ ],
  "stacked_td serialization": [],
  "stacked_td shape": [],
  "stacked_td update": [],
  "sub_td apply": [],
  "sub_td filling": [
-  "detach_()"
+  "detach_()",
+  "share_memory_()"
  ],
  "sub_td keys": [
-  "clear_device_()"
+  "clear_device_()",
+  "popitem()"
  ],
  "sub_td masking": [],
  "sub_td pointwise": [],
  "sub_td reductions": [],
- "sub_td select": [],
+ "sub_td select": [
+  "contiguous(inplace=True)"
+ ],
  "sub_td serialization": [],
  "sub_td shape": [
   "permute(3, 2, 1, 0)",
@@ -160,16 +175,20 @@
  ],
  "sub_td2 apply": [],
  "sub_td2 filling": [
-  "detach_()"
+  "detach_()",
+  "share_memory_()"
  ],
  "sub_td2 keys": [
   "clear_device_()",
-  "is_contiguous()"
+  "is_contiguous()",
+  "popitem()"
  ],
  "sub_td2 masking": [],
  "sub_td2 pointwise": [],
  "sub_td2 reductions": [],
- "sub_td2 select": [],
+ "sub_td2 select": [
+  "contiguous(inplace=True)"
+ ],
  "sub_td2 serialization": [],
  "sub_td2 shape": [
   "permute(3, 2, 1, 0)",
@@ -194,15 +213,19 @@
  "td shape": [],
  "td update": [],
  "td_h5 apply": [],
- "td_h5 filling": [],
+ "td_h5 filling": [
+  "share_memory_()"
+ ],
  "td_h5 keys": [
   "is_contiguous()",
-  "keys(True)"
+  "keys(True)",
+  "popitem()"
  ],
  "td_h5 masking": [],
  "td_h5 pointwise": [],
  "td_h5 reductions": [],
  "td_h5 select": [
+  "contiguous(inplace=True)",
   "exclude('a')",
   "exclude('a', 'missing')",
   "exclude(('my_nested_td', 'inner'))",
@@ -226,7 +249,9 @@
   "update(dense[0], update_batch_size=True)"
  ],
  "td_params apply": [],
- "td_params filling": [],
+ "td_params filling": [
+  "share_memory_()"
+ ],
  "td_params keys": [],
  "td_params masking": [],
  "td_params pointwise": [],
@@ -278,6 +303,29 @@
  "td_with_unbatched serialization": [],
  "td_with_unbatched shape": [],
  "td_with_unbatched update": [],
+ "typed_lazy apply": [],
+ "typed_lazy filling": [],
+ "typed_lazy keys": [
+  "clear_device_()",
+  "is_contiguous()"
+ ],
+ "typed_lazy masking": [],
+ "typed_lazy pointwise": [
+  "abs()",
+  "add(1)",
+  "add(td)",
+  "mul(2)",
+  "mul(td)"
+ ],
+ "typed_lazy reductions": [],
+ "typed_lazy select": [
+  "contiguous(inplace=True)"
+ ],
+ "typed_lazy serialization": [],
+ "typed_lazy shape": [],
+ "typed_lazy update": [
+  "update(dense[0], update_batch_size=True)"
+ ],
  "typed_td apply": [],
  "typed_td filling": [],
  "typed_td keys": [
@@ -301,7 +349,9 @@
  ],
  "unsqueezed_td pointwise": [],
  "unsqueezed_td reductions": [],
- "unsqueezed_td select": [],
+ "unsqueezed_td select": [
+  "contiguous(inplace=True)"
+ ],
  "unsqueezed_td serialization": [],
  "unsqueezed_td shape": [
   "permute(3, 2, 1, 0)",
