@@ -496,6 +496,7 @@ class _DeviceOps:
                     if any(thread.is_alive() for thread in threads):
                         continue
                     # A thread may have put its last leaf after the wait
+                    # timed out.
                     try:
                         keyval = q_out.get_nowait()
                     except queue.Empty:
