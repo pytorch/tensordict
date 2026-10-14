@@ -47,6 +47,20 @@ def test_tensordictmodule_trace_consistency():
     ).all()
 
 
+def test_tensordictmodule_trace_single_out_key():
+    module = TensorDictModule(nn.Linear(3, 2), in_keys=["x"], out_keys=["y"])
+    graph_module = symbolic_trace(module)
+
+    tensordict = TensorDict({"x": torch.randn(4, 3)}, [4])
+    module_out = TensorDict()
+    graph_module_out = TensorDict()
+
+    module(tensordict, tensordict_out=module_out)
+    graph_module(tensordict, tensordict_out=graph_module_out)
+
+    assert (module_out["y"] == graph_module_out["y"]).all()
+
+
 def test_tensordictsequential_trace_consistency():
     class Net(nn.Module):
         def __init__(self, input_size=100, hidden_size=50, output_size=10):
