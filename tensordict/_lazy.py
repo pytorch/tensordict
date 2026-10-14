@@ -102,6 +102,7 @@ from tensordict.utils import (
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
     _warn_dim_past_batch_dims,
+    _warn_nested_key_in_flat_keys,
     _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
@@ -205,10 +206,12 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         for tensordict in self.tensordict.tensordicts:
             sub = tensordict._get_str(item[0], None)
             # As in TensorDict, a nested key that goes through a tensor is absent
-            if self.include_nested and not _is_tensor_collection(type(sub)):
+            if not _is_tensor_collection(type(sub)):
                 return False
             if item[1:] not in sub.keys(self.include_nested, self.leaves_only):
                 return False
+        if not self.include_nested:
+            _warn_nested_key_in_flat_keys(item, self.tensordict)
         return True
 
     def __repr__(self):

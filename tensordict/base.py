@@ -4952,6 +4952,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ``keys()`` and before you iterate over the result, the iteration
             returns the keys after the change.
 
+        .. note::
+            On a :class:`~tensordict.TensorDict`, and on most other types,
+            ``key in td.keys(include_nested=True, leaves_only=True)`` checks
+            that ``key`` exists, not that it is a leaf: it is ``True`` for a
+            sub-tensordict, although iterating the view does not list it. To
+            test that a key is a leaf, call ``is_leaf(td.entry_class(key))``,
+            with :func:`~tensordict.default_is_leaf` as the default
+            ``is_leaf``. A nested key is never in a view built with
+            ``include_nested=False``: ``("nested", "b") in td.keys()`` is
+            ``False``. On a :class:`~tensordict.LazyStackedTensorDict`, a
+            :class:`~tensordict.store.TensorDictStore` and a
+            :class:`~tensordict.store.LazyStackedTensorDictStore`, it is still
+            ``True``, with a ``FutureWarning``, until TensorDict 0.17.
+
         Args:
             include_nested (bool, optional): if ``True``, the entries of the
                 sub-tensordicts are also returned, with nested keys (tuples of

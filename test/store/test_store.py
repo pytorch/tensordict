@@ -479,6 +479,20 @@ class TestTensorDictStore:
         assert ("nested", "val") in store_td.keys(include_nested=True)
         assert "nonexistent" not in store_td.keys()
 
+    def test_contains_nested_key_without_include_nested(self, store_td):
+        # The store finds a nested key in a view without nesting, with a
+        # FutureWarning: it returns False in 0.17, as TensorDict does (#2060).
+        store_td["nested", "val"] = torch.randn(10, 2)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert "nested" in store_td.keys()
+            assert ("nested",) in store_td.keys()
+            assert ("nested", "val") in store_td.keys(include_nested=True)
+            assert ("nested", "x") not in store_td.keys()
+        for keys in (store_td.keys(), store_td.keys(leaves_only=True)):
+            with pytest.warns(FutureWarning, match="returns False"):
+                assert ("nested", "val") in keys
+
     def test_del(self, store_td):
         """Test key deletion."""
         store_td["obs"] = torch.randn(10, 3)
@@ -2105,6 +2119,21 @@ class TestLazyStackedTensorDictStore:
         finally:
             store_td.clear_redis()
             store_td.close()
+
+    def test_contains_nested_key_without_include_nested(self, store_stack):
+        # As on a lazy stack, a nested key in a view without nesting is found,
+        # with a FutureWarning: it returns False in 0.17 (#2060).
+        store_td, _, _ = store_stack
+        store_td["nested", "val"] = torch.zeros(5, 4)
+        # the store and the view of one of its elements
+        for store in (store_td, store_td[0]):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                assert "nested" in store.keys()
+                assert ("nested", "val") in store.keys(include_nested=True)
+                assert ("nested", "x") not in store.keys()
+            with pytest.warns(FutureWarning, match="returns False"):
+                assert ("nested", "val") in store.keys()
 
     def test_repr(self, store_stack):
         store_td, _, _ = store_stack
