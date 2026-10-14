@@ -51,6 +51,10 @@ class TDGraphModule(nn.Module):
         **kwargs,
     ) -> TensorDictBase:
         outputs = self._gm(tensordict, **kwargs)
+        # One output is the tensor itself. A tuple is several outputs. Iterating
+        # a tensor walks dim 0, so zip would not pair out_keys with outputs.
+        if not isinstance(outputs, tuple):
+            outputs = (outputs,)
 
         if tensordict_out is None:
             tensordict_out = tensordict
