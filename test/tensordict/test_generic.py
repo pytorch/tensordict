@@ -6359,6 +6359,29 @@ class TestGeneric:
         assert ("a", "b") in list(td_select.keys(True, True))
         assert ("a", "b") in td_select.keys(True, True)
 
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_select_exclude_nested_through_leaf(self, inplace):
+        # A nested key through a leaf is missing, as ("x", "q") in td says (#2617)
+        def make():
+            return TensorDict(x=torch.zeros(3), n=TensorDict(y=torch.zeros(3)))
+
+        td = make()
+        with pytest.raises(KeyError, match="'x' is a Tensor, not a tensordict"):
+            td.select(("x", "q"), inplace=inplace)
+        with pytest.raises(KeyError, match="'y' is a Tensor, not a tensordict"):
+            td.select(("n", "y", "q"), inplace=inplace)
+        assert set(td.keys(True)) == {"x", "n", ("n", "y")}
+        out = make().select(("x", "q"), "n", strict=False, inplace=inplace)
+        assert set(out.keys(True)) == {"n", ("n", "y")}
+        out = make().select("x", ("x", "q"), strict=False, inplace=inplace)
+        assert set(out.keys(True)) == {"x"}
+        out = make().select(("n", "y"), ("n", "y", "q"), strict=False, inplace=inplace)
+        assert set(out.keys(True)) == {"n", ("n", "y")}
+        td = make()
+        out = td.exclude(("x", "q"), ("n", "y", "q"), inplace=inplace)
+        assert set(out.keys(True)) == {"x", "n", ("n", "y")}
+        assert out["x"] is td["x"]
+
     def test_separates(self):
         td = TensorDict(a=0, b=TensorDict(c=0, d=0))
         td_sep = td.separates("a", ("b", ("d",)))

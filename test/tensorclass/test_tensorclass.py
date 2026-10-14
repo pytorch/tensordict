@@ -2749,6 +2749,24 @@ class TestTensorClass:
         assert (data_select == 1).all()
         assert "a" in data_select._tensordict
 
+    def test_select_exclude_nested_through_leaf(self):
+        # A nested key through a leaf is missing (#2617)
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+            n: TensorDict
+
+        data = Data(x=torch.zeros(3), n=TensorDict(y=torch.zeros(3)), batch_size=[3])
+        with pytest.raises(KeyError, match="'x' is a Tensor, not a tensordict"):
+            data.select(("x", "q"))
+        out = data.select(("x", "q"), "n", strict=False)
+        assert isinstance(out, Data)
+        assert out.x is None
+        assert out.n is data.n
+        out = data.exclude(("x", "q"))
+        assert isinstance(out, Data)
+        assert out.x is data.x
+
     def test_is_non_tensor_key(self):
         @tensorclass
         class Transition:

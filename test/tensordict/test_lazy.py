@@ -4669,6 +4669,24 @@ class TestLazyStackedTensorDict:
         lst[torch.tensor(False)] = TensorDict({"a": torch.full((1, 2), 5.0)}, [1, 2])
         assert lst["a"].tolist() == before
 
+    def test_select_exclude_nested_through_leaf(self):
+        # A nested key through a leaf is missing in each member (#2617)
+        lst = LazyStackedTensorDict(
+            *[
+                TensorDict(x=torch.zeros(3), n=TensorDict(y=torch.zeros(3)))
+                for _ in range(2)
+            ],
+            stack_dim=0,
+        )
+        with pytest.raises(KeyError, match="'x' is a Tensor, not a tensordict"):
+            lst.select(("x", "q"))
+        out = lst.select(("x", "q"), "n", strict=False)
+        assert isinstance(out, LazyStackedTensorDict)
+        assert set(out.keys(True)) == {"n", ("n", "y")}
+        out = lst.exclude(("x", "q"), ("n", "y", "q"))
+        assert isinstance(out, LazyStackedTensorDict)
+        assert set(out.keys(True)) == {"x", "n", ("n", "y")}
+
     def test_lazy_empty_selection_batch_size(self):
         lst = LazyStackedTensorDict(
             *[TensorDict({"a": torch.ones(2)}, [2]) for _ in range(3)],
