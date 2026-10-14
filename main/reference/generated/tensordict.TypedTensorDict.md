@@ -63,6 +63,50 @@ torch.Size([5, 4])
 torch.Size([5, 3])
 ```
 
+*classmethod*from_dict(*input_dict*, ***, *auto_batch_size=None*, *batch_size=None*, *device=None*, *batch_dims=None*, *names=None*, *check: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
+
+Builds an instance of the class from a dictionary of its fields.
+
+Keys of `input_dict` that the class does not declare are kept, as
+`from_tensordict()` and [`set()`](tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set)
+keep them.
+
+Parameters:
+
+**input_dict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the values of the fields. Nested dictionaries
+become [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) instances.
+
+Keyword Arguments:
+
+- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether to infer the batch size.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device.
+- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of batch dimensions to infer.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions.
+- **check** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - If `True` (default), warn with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning) when `input_dict` misses a required
+field. Starting with TensorDict 0.17, the default will change
+to raising the `TypeError` that the constructor raises. Set
+it to `False` to build an instance without these fields;
+reading one then raises `AttributeError`.
+
+Returns:
+
+A new instance of the class.
+
+from_dict_instance(*input_dict*, ***, *auto_batch_size=None*, *batch_size=None*, *device=None*, *batch_dims=None*, *names=None*)
+
+Builds an instance of the same class from a dictionary, keeping the types of the existing entries.
+
+Unlike [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict), it does not check the declared fields: the
+result can miss required fields and hold undeclared keys. tensordict
+calls it with the entries that a nested write changes, as in
+`outer[0:2] = {"inner": {"eta": value}}` where `outer["inner"]`
+is a `TypedTensorDict`.
+
+The arguments are those of
+[`from_dict_instance()`](tensordict.TensorDictBase.from_dict_instance.html#tensordict.TensorDictBase.from_dict_instance).
+
 *classmethod*from_tensordict(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *check: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → TypedTensorDict
 
 Wrap an existing TensorDictBase backend as a TypedTensorDict.
