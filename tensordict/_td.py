@@ -46,6 +46,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
+    _raise_if_not_a_tensordict,
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
@@ -1634,13 +1635,16 @@ class TensorDict(TensorDictBase):
             return self._default_get(key[0], default)
         if len(key) == 1:
             return value
-        td = self
         for i in range(1, len(key)):
             if value is default:
                 return value
             if type(value) is not TensorDict:
-                # a lazy stack, a tensorclass, a tensor...: the generic walk
-                return TensorDictBase._get_tuple(td, key[i - 1 :], default, **kwargs)
+                # a lazy stack, a tensorclass, a tensor...: it reads the rest
+                try:
+                    return value._get_tuple(key[i:], default=default, **kwargs)
+                except AttributeError as err:
+                    _raise_if_not_a_tensordict(err, key, i, value)
+                    return None
             td = value
             value = td._tensordict.get(key[i], NO_DEFAULT)
             if value is NO_DEFAULT:

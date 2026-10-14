@@ -3303,6 +3303,12 @@ class TestGeneric:
         leaf = torch.zeros(3)
         td = TensorDict({"a": {"b": {"c": leaf}}, "t": leaf}, [3])
         td["l"] = lazy_stack([TensorDict({"q": torch.ones(())})] * 3)
+
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        td["tc"] = TC(x=leaf, batch_size=[3])
         calls = []
         get_str = TensorDict._get_str
 
@@ -3316,7 +3322,22 @@ class TestGeneric:
         assert td.get(("a", "b", "z"), "default") == "default"
         assert td.get(("a", "z", "c"), None) is None
         assert td.get("a") is td._tensordict["a"]
+        # a tensorclass on the path reads the rest itself
+        assert td.get(("tc", "x")) is leaf
+        assert td["tc", "x"] is leaf
         assert not calls
+
+        class SubStr(TensorDict):
+            def _get_str(self, key, default, **kwargs):
+                calls.append(key)
+                return get_str(self, key, default, **kwargs)
+
+        # a subclass that overrides _get_str is read through it
+        sub_str = SubStr({"a": {"b": leaf}}, [3])
+        assert sub_str.get(("a", "b")) is leaf
+        assert sub_str.get(("z", "b"), None) is None
+        assert calls == ["a", "z"]
+        calls.clear()
         # a default that is the value on the path is returned, as before
         sub = td["a", "b"]
         assert td.get(("a", "b", "c"), sub) is sub
