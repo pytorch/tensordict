@@ -2616,6 +2616,38 @@ def _any_unbatched(tensors) -> bool:
     return False
 
 
+# Python picks the overload of torch._foreach_add and torch._foreach_sub that
+# takes a number for a 0-dim tensor, and reading the number of a CUDA tensor
+# synchronizes the device. The overload of _foreach_add that takes a 0-dim
+# tensor does not, and computes ``tensor + alpha * other`` in one kernel.
+_FOREACH_ADD_TENSOR = {
+    "add": (torch.ops.aten._foreach_add.Tensor, 1),
+    "add_": (torch.ops.aten._foreach_add_.Tensor, 1),
+    "sub": (torch.ops.aten._foreach_add.Tensor, -1),
+    "sub_": (torch.ops.aten._foreach_add_.Tensor, -1),
+}
+
+
+def _is_cuda_scalar_of(other, tensors) -> bool:
+    # Integer tensors with a float64 0-dim tensor give float32 with the number
+    # and float64 with the 0-dim tensor; floating-point tensors on the device
+    # of the 0-dim tensor give the same dtypes and values with both.
+    if not (
+        isinstance(other, Tensor)
+        and other.is_cuda
+        and not other.ndim
+        and not other.is_complex()
+        and not other.requires_grad
+        and not _is_unbatched(other)
+    ):
+        return False
+    device = other.device
+    for tensor in tensors:
+        if not tensor.is_floating_point() or tensor.device != device:
+            return False
+    return True
+
+
 def _foreach(name: str, tensors, *args, **kwargs):
     """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func or with an unbatched tensor.
 
@@ -2637,6 +2669,10 @@ def _foreach(name: str, tensors, *args, **kwargs):
         _any_unbatched(tensors)
         or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
     ):
+        add_tensor = _FOREACH_ADD_TENSOR.get(name)
+        if add_tensor is not None and _is_cuda_scalar_of(args[0], tensors):
+            op, sign = add_tensor
+            return op(tensors, args[0], alpha=sign * kwargs.get("alpha", 1))
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [

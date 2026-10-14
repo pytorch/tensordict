@@ -1038,6 +1038,17 @@ def test_chunk(benchmark):
     benchmark(lambda td: td.chunk(10, dim=1), td)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda device required")
+@pytest.mark.parametrize("op", ["add", "sub"])
+def test_add_cuda_scalar_tensor(benchmark, op):
+    td = TensorDict(
+        {f"k{i}": torch.ones(64, 3, device="cuda") for i in range(10)},
+        batch_size=[64],
+    )
+    t = torch.tensor(0.5, device="cuda")
+    benchmark(getattr(td, op), t)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

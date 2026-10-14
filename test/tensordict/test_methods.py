@@ -5422,6 +5422,66 @@ def test_pointwise_unary_vmap(op):
     )
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize(
+    "op",
+    [
+        lambda x, t: x + t,
+        lambda x, t: t + x,
+        lambda x, t: x - t,
+        lambda x, t: t - x,
+        lambda x, t: x.add(t, alpha=2),
+        lambda x, t: x.sub(t, alpha=2),
+        lambda x, t: x.clone().add_(t),
+        lambda x, t: x.clone().sub_(t),
+        lambda x, t: x.clone().sub_(t, alpha=2),
+    ],
+    ids=[
+        "add",
+        "radd",
+        "sub",
+        "rsub",
+        "add-alpha",
+        "sub-alpha",
+        "add_",
+        "sub_",
+        "sub_-alpha",
+    ],
+)
+def test_add_sub_cuda_scalar_tensor_no_sync(op):
+    # Python passes a 0-dim tensor to the overload of _foreach_add or
+    # _foreach_sub that takes a number, which synchronizes the device (#2616)
+    td = TensorDict(
+        a=torch.rand(3, 2, device="cuda"),
+        nested=TensorDict(b=torch.rand(3, device="cuda", dtype=torch.float64)),
+        batch_size=[3],
+    )
+    t = torch.tensor(0.75, device="cuda")
+    expected = td.apply(lambda x: op(x, t))
+    op(td, t)  # warm up outside the check
+    torch.cuda.synchronize()
+    try:
+        with warnings.catch_warnings():
+            # "Synchronization debug mode is a prototype feature"
+            warnings.simplefilter("ignore", UserWarning)
+            torch.cuda.set_sync_debug_mode("error")
+        out = op(td, t)
+    finally:
+        torch.cuda.set_sync_debug_mode(0)
+    for key, val in expected.items(True, True):
+        assert out.get(key).dtype == val.dtype
+        torch.testing.assert_close(out.get(key), val, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+def test_add_cuda_scalar_tensor_other_leaves():
+    # Integer and CPU leaves keep the result of torch._foreach_add(vals, t)
+    t = torch.tensor(0.5, device="cuda", dtype=torch.float64)
+    td = TensorDict(a=torch.arange(3, device="cuda"), b=torch.ones(3, device="cuda"))
+    assert (td + t)["a"].dtype == torch.float32
+    assert (td.cpu() + t)["a"].device == torch.device("cpu")
+
+
 class TestEmptyTensorMemmapRoundtrip:
     @pytest.mark.parametrize("archive", [False, True])
     def test_empty_tensor_leaves(self, tmp_path, archive):
