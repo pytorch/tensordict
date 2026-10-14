@@ -1071,6 +1071,39 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="Modifying the batch size of a lazy"):
             td.to("cpu", batch_size=[2, 3])
 
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    @pytest.mark.parametrize("dest", ["meta", torch.float64])
+    def test_to_device_batch_size_nested_lazy(self, locked, batch_size, dest):
+        # to(device_or_dtype, batch_size=...) moves the leaves of a nested
+        # lazy stack, locked or not (#2374)
+        td = TensorDict(
+            lazy=lazy_stack(
+                [
+                    TensorDict(
+                        x=torch.zeros(3),
+                        n=TensorDict(w=torch.zeros(3, 1), batch_size=[3]),
+                    )
+                    for _ in range(2)
+                ]
+            ),
+            y=torch.zeros(2, 3),
+            batch_size=[2],
+        )
+        if locked:
+            td.lock_()
+        with pytest.warns(FutureWarning, match="turns nested lazy stacks into"):
+            result = td.to(dest, batch_size=batch_size)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result.is_locked is locked
+        leaves = list(result.values(True, True))
+        assert len(leaves) == 3
+        for leaf in leaves:
+            if dest == "meta":
+                assert leaf.device == torch.device("meta")
+            else:
+                assert leaf.dtype == torch.float64
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py needed for persistent tensordicts")
     def test_persistent_to_batch_size_same_device(self, tmp_path):
         td = PersistentTensorDict.from_dict(
