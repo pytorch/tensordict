@@ -57,6 +57,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch._subclasses import FakeTensor, FakeTensorMode
+from torch.autograd import forward_ad as fwAD
+from torch.overrides import TorchFunctionMode
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -5509,6 +5511,24 @@ def test_add_cuda_scalar_tensor_other_leaves():
     leaves.sub(t.float())
     assert LoggedTensor.funcs == [torch._foreach_sub]
 
+    class LoggingMode(TorchFunctionMode):
+        def __init__(self):
+            super().__init__()
+            self.funcs = set()
+
+        def __torch_function__(self, func, types, args=(), kwargs=None):
+            self.funcs.add(getattr(func, "__name__", str(func)))
+            return func(*args, **(kwargs or {}))
+
+    # A torch function mode sees the _foreach op of the method, and nothing else
+    for op, name in [("sub", "_foreach_sub"), ("add_", "_foreach_add_")]:
+        leaves = TensorDict(b=torch.ones(3, device="cuda"))
+        with torch.device("cuda"), LoggingMode() as mode:
+            out = getattr(leaves, op)(t.float())
+        torch.testing.assert_close(out["b"], getattr(torch.ones(3), op)(0.5).cuda())
+        assert name in mode.funcs
+        assert not mode.funcs & {"get_device", "clone", "_foreach_add"}
+
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
 @pytest.mark.parametrize(
@@ -5581,6 +5601,47 @@ def test_add_sub_cuda_scalar_tensor_backward(op, inference):
     y = torch.ones(3, device="cuda", requires_grad=True)
     op(y * 2, 0.25).sum().backward()
     torch.testing.assert_close(x.grad, y.grad, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize(
+    "op,number",
+    [
+        (lambda x, t: x + t, True),
+        (lambda x, t: x.sub(t), True),
+        (lambda x, t: t - x, True),
+        (lambda x, t: x.clone().add_(t), True),
+        (lambda x, t: x.clone().sub_(t), True),
+        (lambda x, t: x.add(t, alpha=2), False),
+    ],
+    ids=["add", "sub", "rsub", "add_", "sub_", "add-alpha"],
+)
+def test_add_sub_cuda_scalar_tensor_forward_ad(op, number):
+    # Without alpha, the number drops the tangent of a dual 0-dim tensor; with
+    # alpha, the 0-dim tensor overload keeps it, as Tensor.add does
+    with fwAD.dual_level():
+        with warnings.catch_warnings():
+            # make_dual loads its decompositions with torch.jit.script once
+            warnings.simplefilter("ignore", FutureWarning)
+            t = fwAD.make_dual(
+                torch.tensor(0.25, device="cuda"), torch.tensor(1.0, device="cuda")
+            )
+        td = TensorDict(
+            a=fwAD.make_dual(
+                torch.ones(3, device="cuda"), torch.full((3,), 2.0, device="cuda")
+            ),
+            b=torch.ones(3, device="cuda"),
+        )
+        out = op(td, t)
+        expected = op(td, t.item()) if number else td.apply(lambda x: op(x, t))
+        for key in ("a", "b"):
+            primal, tangent = fwAD.unpack_dual(out[key])
+            expected_primal, expected_tangent = fwAD.unpack_dual(expected[key])
+            torch.testing.assert_close(primal, expected_primal, rtol=0, atol=0)
+            if expected_tangent is None:
+                assert tangent is None
+            else:
+                torch.testing.assert_close(tangent, expected_tangent, rtol=0, atol=0)
 
 
 class TestEmptyTensorMemmapRoundtrip:
