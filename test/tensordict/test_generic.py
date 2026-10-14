@@ -8440,7 +8440,9 @@ class TestGeneric:
             assert result is None
             result = expected = td.empty()
         results = [(result, expected), (-td, neg), (td * 2, mul), (td + td, add)]
-        # only the lazy stack took _apply_nest
+        # Of the recorded _apply_nest copies (TensorDictBase and lazy stacks),
+        # only the lazy stack's ran; the NonTensorData takes its own copy,
+        # which is not recorded.
         assert bool(prefixes) is mixed
         assert all(prefix[:2] == ("b", "l") for prefix in prefixes)
         for res, exp in results:
