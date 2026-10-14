@@ -1719,6 +1719,67 @@ class TestLazyStackedTensorDict:
         td.names = None
         assert td.names == [None, None]
 
+    @pytest.mark.parametrize("recurse", [False, True])
+    def test_lazy_empty_keeps_member_types(self, recurse):
+        # empty() gives a lazy stack of the empty members, each of its own type
+        inner = lazy_stack(
+            [TensorDict(a=torch.zeros(()), sub=TensorDict()) for _ in range(3)]
+        )
+        dense = TensorDict(
+            a=torch.zeros(3), sub=TensorDict(batch_size=[3]), batch_size=[3]
+        )
+        lazy = lazy_stack([dense, inner], 1, stack_dim_name="s")
+        empty = lazy.empty(recurse)
+        assert type(empty) is LazyStackedTensorDict
+        assert empty.stack_dim == 1
+        assert empty.batch_size == torch.Size([3, 2])
+        assert empty.names == [None, "s"]
+        assert [type(td) for td in empty.tensordicts] == [
+            TensorDict,
+            LazyStackedTensorDict,
+        ]
+        assert empty.tensordicts[1].stack_dim == 0
+        assert all(
+            td is not member for td, member in zip(empty.tensordicts, lazy.tensordicts)
+        )
+        assert list(empty.keys(True)) == (["sub"] if recurse else [])
+
+    def test_lazy_empty_batch_size_list_vs_size(self):
+        # the same batch size as a list takes another route than as a torch.Size
+        lazy = lazy_stack([TensorDict(a=torch.zeros(3), batch_size=[3])] * 2, 1)
+        assert type(lazy.empty(batch_size=[3, 2])) is TensorDict
+        for batch_size in (torch.Size([3, 2]), (3, 2)):
+            empty = lazy.empty(batch_size=batch_size)
+            assert type(empty) is LazyStackedTensorDict
+            assert empty.batch_size == torch.Size([3, 2])
+        assert type(lazy.empty(True, batch_size=torch.Size([3, 2]))) is (
+            LazyStackedTensorDict
+        )
+        with pytest.raises(TypeError, match=r"super\(type, obj\)"):
+            lazy.empty(True, batch_size=[3, 2])
+
+    def test_lazy_empty_stack_dim_size_ignored(self):
+        # a new size of the stack dim is ignored
+        lazy = lazy_stack([TensorDict(a=torch.zeros(3), batch_size=[3])] * 2)
+        for batch_size in ([5, 3], torch.Size([5, 3])):
+            empty = lazy.empty(batch_size=batch_size)
+            assert type(empty) is LazyStackedTensorDict
+            assert empty.batch_size == torch.Size([2, 3])
+
+    def test_lazy_stack_onto_non_stack_dim(self):
+        # torch.stack(..., out=lazy) along another dim than the stack dim
+        # writes into the members, which keep their storage
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        ptrs = [td["a"].data_ptr() for td in tds]
+        lazy = lazy_stack(tds)
+        items = [
+            TensorDict(a=torch.full((2,), float(i)), batch_size=[2]) for i in range(3)
+        ]
+        assert torch.stack(items, 1, out=lazy) is lazy
+        for td, ptr in zip(tds, ptrs):
+            assert td["a"].data_ptr() == ptr
+            assert (td["a"] == torch.arange(3.0)).all()
+
     def test_create_names_with_members_warns(self):
         # With members, the constructor ignores names until 0.17 (#2559).
         tds = [TensorDict(batch_size=[3]), TensorDict(batch_size=[3])]
@@ -2477,6 +2538,22 @@ class TestLazyStackedTensorDict:
         for td, value in zip(tds, (4.0, 5.0, 4.0)):
             assert (td["a"] == value).all()
             assert (td["u"] == value).all()
+
+    @pytest.mark.parametrize("index", [0, (0,), (0, Ellipsis), slice(0, 1)])
+    def test_lazy_setitem_new_key_is_exclusive(self, index):
+        # a new key written at an index goes only into the members that the
+        # index touches; the members keep their storage
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        a_ptrs = [td["a"].data_ptr() for td in tds]
+        lazy = lazy_stack(tds)
+        value = TensorDict(a=torch.ones(3), zz=torch.ones(3), batch_size=[3])
+        if isinstance(index, slice):
+            value = value.unsqueeze(0)
+        lazy[index] = value
+        assert [list(td.keys()) for td in lazy.tensordicts] == [["a", "zz"], ["a"]]
+        assert [td["a"].data_ptr() for td in tds] == a_ptrs
+        assert (tds[0]["a"] == 1).all() and (tds[1]["a"] == 0).all()
+        assert (tds[0]["zz"] == 1).all()
 
     def test_lazy_mask_indexing_single(self):
         td = LazyStackedTensorDict(

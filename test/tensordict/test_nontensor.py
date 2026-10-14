@@ -1504,6 +1504,21 @@ class TestNonTensorData:
         data[1:] = NonTensorStack("s0", "s0")
         assert data.tolist() == ["s0"] * 3
 
+    def test_nts_setitem_scalar_and_oob(self):
+        # a NonTensorStack takes a value, or a list of values, at an index
+        stack = NonTensorStack("s0", "s1", "s2")
+        stack[0] = "x"
+        assert stack.tolist() == ["x", "s1", "s2"]
+        with pytest.raises(IndexError, match="index 99 is out of bounds"):
+            stack[99] = "y"
+        assert stack.tolist() == ["x", "s1", "s2"]
+        stack[1:3] = ["p", "q"]
+        stack[-1] = 5
+        assert stack.tolist() == ["x", "p", 5]
+        stack[..., 0] = "e"
+        stack[torch.tensor([False, True, True])] = "m"
+        assert stack.tolist() == ["e", "m", "m"]
+
     def test_nontensorstack_repr_and_to_tensordict(self):
         stack = NonTensorStack.from_list(["a", "b"])
         assert repr(stack) == (
