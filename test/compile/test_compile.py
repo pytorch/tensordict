@@ -2863,7 +2863,9 @@ class TestCudaGraphs:
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
         yield
-        torch.set_default_device(device)
+        # With no default device set, get_default_device() returns cpu, and
+        # set_default_device(cpu) would leave a device mode on for later tests.
+        torch.set_default_device(None if device.type == "cpu" else device)
 
     def test_cudagraphs_keeps_pytree_registry(self, compiled):
         # pytorch/tensordict#2076: creating and calling a CudaGraphModule used to

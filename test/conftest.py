@@ -6,6 +6,7 @@
 import multiprocessing
 
 import pytest
+import torch
 
 try:
     multiprocessing.set_start_method("spawn")
@@ -21,6 +22,16 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _no_torch_function_mode_left_on():
+    yield
+    # A torch function mode left on, e.g. by torch.set_default_device, would
+    # change the code paths of every later test in the same process.
+    assert not torch._C._is_torch_function_mode_enabled(), (
+        "a test in this module left a torch function mode on"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
