@@ -1091,6 +1091,12 @@ class TensorDict(TensorDictBase):
                 device=device,
                 batch_size=batch_size,
             )
+        if batch_size is None and names is not None:
+            names = list(names)
+            if None not in names:
+                # a 0-dim tensordict drops names without None entries: drop
+                # them here, without the warning for a list of the wrong length
+                names = None
         # regular __init__ breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
             input_dict,

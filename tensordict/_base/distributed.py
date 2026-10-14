@@ -618,7 +618,8 @@ class _Distributed:
         result = _rebuild_tensordict_files_consolidated(metadata, storage)
         if tc_type_str is not None:
             tc_cls = _resolve_tensorclass_type(tc_type_str)
-            result = tc_cls._from_tensordict(result)
+            # Like a load: the data comes from another process
+            result = tc_cls._from_tensordict(result, rebuild=False)
         return result
 
     def isend(
@@ -1069,7 +1070,8 @@ class _Distributed:
             result = _rebuild_tensordict_files_consolidated(metadata, storage)
             if tc_type_str is not None:
                 tc_cls = _resolve_tensorclass_type(tc_type_str)
-                result = tc_cls._from_tensordict(result)
+                # Like a load: the data comes from another process
+                result = tc_cls._from_tensordict(result, rebuild=False)
             return result
 
     def all_reduce(

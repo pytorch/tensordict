@@ -13,6 +13,7 @@ from tensordict._archive import (
     refresh_archive_checksums,
     unpack_memmap,
 )
+from tensordict._base.shape import PackLayout
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
@@ -123,6 +124,7 @@ __all__ = [
     "TensorDictStore",
     "LazyStackedTensorDictStore",
     "NestedKey",
+    "PackLayout",
     # Factory functions
     "from_csv",
     "from_dict",

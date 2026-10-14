@@ -68,6 +68,7 @@ from tensordict.base import (
     _register_tensor_class,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
+    _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
     _write_back_members,
@@ -1265,6 +1266,15 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             if td._check_dim_name(stack_name):
                 raise ValueError(f"The dimension name {stack_name} is already taken.")
+        member_dims = self.batch_dims - 1
+        if (
+            len(names_list) != member_dims
+            and self.tensordicts
+            and sum(n is None for n in names_list) == member_dims
+        ):
+            # each member would drop these names and warn: warn once
+            _warn_names_length(list(names), self.batch_dims)
+            names_list = [None] * member_dims
         previous_stack_name = self._td_dim_name
         previous_empty_names = self._empty_stack_names
         renamed = []

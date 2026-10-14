@@ -23,11 +23,13 @@ from tensordict.utils import (
     _check_keys,
     _is_unbatched,
     _shape,
+    _SKIP_TENSORCLASS_POST_INIT,
     DeviceType,
     is_non_tensor,
     is_tensorclass,
     unravel_key,
 )
+from torch.compiler import is_compiling
 
 __all__ = [
     "dense_stack_tds",
@@ -625,9 +627,17 @@ def pad_sequence(
     ] + old_batch_size
 
     if out is None:
-        out = _with_batch_size(
-            list_of_tensordicts[0].empty(recurse=True), torch.Size(shape)
-        )
+        # The shell is filled in place below: tensorclass __post_init__ does
+        # not run on it. Dynamo cannot set a ContextVar, so compiled code
+        # still runs it.
+        token = None if is_compiling() else _SKIP_TENSORCLASS_POST_INIT.set(True)
+        try:
+            out = _with_batch_size(
+                list_of_tensordicts[0].empty(recurse=True), torch.Size(shape)
+            )
+        finally:
+            if token is not None:
+                _SKIP_TENSORCLASS_POST_INIT.reset(token)
 
     for key in keys:
         try:

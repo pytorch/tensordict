@@ -40,6 +40,7 @@ from tensordict import (
     is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
+    PackLayout,
     PersistentTensorDict,
     set_capture_non_tensor_stack,
     TensorClass,
@@ -351,6 +352,172 @@ class TestGeneric:
         assert tensor.shape == (3, 8)
         assert (tensor[:, :4] == 0).all()
         assert (tensor[:, 4:] == 1).all()
+
+    def test_pack(self):
+        td = TensorDict(
+            {
+                "v": torch.randn(5, 3),
+                "p": torch.randn(5),
+                "nested": TensorDict(stress=torch.randn(5, 2, 3, 3), batch_size=[5, 2]),
+            },
+            batch_size=[5],
+        )
+        flat, layout = td.pack()
+        assert flat.shape == (5, 22)
+        assert layout.keys == (("nested", "stress"), "p", "v")
+        assert layout.keys == tuple(td.keys(True, True, sort=True))
+        assert layout.shapes == ((2, 3, 3), (), (3,))
+        assert layout.offsets == (0, 18, 19)
+        assert layout.numel == 22
+        assert (flat[:, :18] == td["nested", "stress"].flatten(1)).all()
+        assert (flat[:, 18] == td["p"]).all()
+        assert (flat[:, 19:] == td["v"]).all()
+
+        out = layout.unpack(flat)
+        assert type(out) is TensorDict
+        assert out["nested"].batch_size == (5, 2)
+        assert out.device is None
+        assert (out == td).all()
+        # the leaves are views of flat
+        for key in layout.keys:
+            assert out[key]._base is flat
+
+        # the batch size comes from flat
+        sub = layout.unpack(flat.index_select(0, torch.tensor([0, 3])))
+        assert sub.batch_size == (2,)
+        assert (sub == td[torch.tensor([0, 3])]).all()
+
+        # writing into a leaf writes into flat
+        out["p"].fill_(0)
+        assert (flat[:, 18] == 0).all()
+
+        # gradients flow back to flat
+        flat = flat.detach().requires_grad_()
+        layout.unpack(flat)["v"].sum().backward()
+        assert (flat.grad[:, 19:] == 1).all()
+        assert (flat.grad[:, :19] == 0).all()
+
+    @pytest.mark.parametrize("dim", [0, 1, 2, 3, -1, -2, -3, -4])
+    def test_pack_dim(self, dim):
+        td = TensorDict(
+            a=torch.randn(2, 4, 4), b=torch.randn(2, 4, 4, 2), batch_size=[2, 4, 4]
+        )
+        flat, layout = td.pack(dim=dim)
+        pos = dim % 4
+        assert flat.shape == (2, 4, 4)[:pos] + (3,) + (2, 4, 4)[pos:]
+        assert flat.is_contiguous()
+        assert (layout.unpack(flat) == td).all()
+        # the dim is stored counted from the end, so both spellings agree
+        assert layout.dim == pos - 4
+        assert layout == td.pack(dim=pos - 4)[1] == td.pack(dim=pos)[1]
+        with pytest.raises(IndexError, match="out of range"):
+            layout.unpack(torch.zeros(()))
+
+    @pytest.mark.parametrize("dim", [-4, 3])
+    def test_pack_dim_out_of_range(self, dim):
+        td = TensorDict(a=torch.randn(2, 4), batch_size=[2, 4])
+        with pytest.raises(IndexError, match="out of range"):
+            td.pack(dim=dim)
+
+    def test_pack_layout(self):
+        td = TensorDict(a=torch.zeros(4, 2), b=torch.ones(4), batch_size=[4])
+        # same fields, other insertion order
+        other = TensorDict(b=torch.ones(4) * 2, a=torch.zeros(4, 2), batch_size=[4])
+        flat, layout = td.pack()
+        flat_other, layout_other = other.pack()
+        assert layout_other == layout
+        assert hash(layout_other) == hash(layout)
+        assert (flat_other[:, 2] == 2).all()
+
+        # a layout in another column order
+        reverse = PackLayout(keys=("b", "a"), shapes=(torch.Size([]), torch.Size([2])))
+        flat_reverse, layout_reverse = td.pack(layout=reverse)
+        assert layout_reverse == reverse
+        assert (flat_reverse[:, 0] == 1).all()
+        assert (reverse.unpack(flat_reverse) == td).all()
+        # shapes given as lists or tuples are converted to torch.Size
+        by_hand = PackLayout(keys=("b", "a"), shapes=([], (2,)))
+        assert by_hand == reverse
+        assert hash(by_hand) == hash(reverse)
+        assert (td.pack(layout=by_hand)[0] == flat_reverse).all()
+        nested = TensorDict(n=TensorDict(x=torch.zeros(4, 2), batch_size=[4, 2]))
+        nested.batch_size = [4]
+        _, layout_nested = nested.pack()
+        by_hand = PackLayout(
+            keys=(("n", "x"),), shapes=([2],), nested=(("n", [2], None),)
+        )
+        assert by_hand == layout_nested
+        assert hash(by_hand) == hash(layout_nested)
+        assert by_hand.unpack(torch.ones(3, 2))["n"].batch_size == (3, 2)
+
+        with pytest.raises(KeyError, match="differ from the keys of the layout"):
+            td.exclude("a").pack(layout=layout)
+        with pytest.raises(KeyError, match="differ from the keys of the layout"):
+            td.set("c", torch.zeros(4)).pack(layout=layout)
+        td = td.exclude("c")
+        with pytest.raises(ValueError, match="feature shapes"):
+            td.set("a", torch.zeros(4, 3)).pack(layout=layout)
+        td = TensorDict(a=torch.zeros(4, 2), b=torch.ones(4), batch_size=[4])
+        with pytest.raises(ValueError, match="along dim 0"):
+            td.pack(dim=0, layout=layout)
+        # -1 and 1 are the same position for one batch dim
+        assert (td.pack(dim=1, layout=layout)[0] == flat).all()
+        with pytest.raises(ValueError, match="Expected 3 entries"):
+            layout.unpack(torch.zeros(4, 2))
+
+    def test_pack_empty(self):
+        td = TensorDict(batch_size=[3, 2], device="cpu")
+        flat, layout = td.pack(dim=1)
+        assert flat.shape == (3, 0, 2)
+        assert flat.device == torch.device("cpu")
+        assert layout.numel == 0
+        out = layout.unpack(torch.zeros(5, 0, 2))
+        assert out.is_empty()
+        assert out.batch_size == (5, 2)
+        assert out.device == torch.device("cpu")
+        # empty nested tensordicts are kept
+        td = TensorDict(
+            a=torch.zeros(3), b=TensorDict(batch_size=[3, 4]), batch_size=[3]
+        )
+        flat, layout = td.pack()
+        out = layout.unpack(flat)
+        assert out["b"].batch_size == (3, 4)
+        assert (out == td).all()
+
+    def test_pack_lazy_stack(self):
+        tds = [TensorDict(a=torch.randn(2), n={"b": torch.randn(())}) for _ in range(3)]
+        td = lazy_stack(tds)
+        flat, layout = td.pack()
+        dense_flat, dense_layout = td.to_tensordict().pack()
+        assert layout == dense_layout
+        assert (flat == dense_flat).all()
+        out = layout.unpack(flat)
+        assert type(out) is TensorDict
+        assert (out == td).all()
+
+        tds[0]["c"] = torch.zeros(())
+        with pytest.raises(RuntimeError, match="different keys"):
+            lazy_stack(tds).pack()
+        # a lazy stack below a tensordict
+        with pytest.raises(RuntimeError, match="different keys"):
+            TensorDict(s=lazy_stack(tds), batch_size=[3]).pack()
+        tds[0] = tds[0].exclude("c")
+        tds[0]["a"] = torch.zeros(3)
+        with pytest.raises(RuntimeError, match="Failed to stack"):
+            lazy_stack(tds).pack()
+
+    def test_pack_raises(self):
+        td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+        with pytest.raises(TypeError, match="non-tensor entry 'b'"):
+            td.pack()
+        flat, layout = td.filter_non_tensor_data().pack()
+        assert layout.keys == ("a",)
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3, dtype=torch.long))
+        with pytest.raises(TypeError, match="different dtypes"):
+            td.pack()
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3, device="meta"))
+        with pytest.raises(RuntimeError, match="different devices"):
+            td.pack()
 
     def test_chunk_nested_tensor(self):
         # Create two sequences of different lengths with known values

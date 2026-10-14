@@ -31,6 +31,7 @@ import torch
 import torch.distributed as dist
 from _typeshed import Incomplete
 from streaming import MDSWriter
+from tensordict._base.shape import PackLayout
 from tensordict._contextlib import LAST_OP_MAPS as LAST_OP_MAPS
 from tensordict._indexing import convert_ellipsis_to_idx as convert_ellipsis_to_idx
 from tensordict._lazy import LazyStackedTensorDict
@@ -120,9 +121,21 @@ class TensorClass(_TensorClassInitArgs):
     def __class_getitem__(cls, item: Literal["shadow"]) -> Type["TensorClass"]: ...
     @overload
     def __class_getitem__(
+        cls, item: Literal["skip_post_init_on_rebuild"]
+    ) -> Type["TensorClass"]: ...
+    @overload
+    def __class_getitem__(
         cls,
         item: tuple[
-            Literal["autocast", "nocast", "frozen", "tensor_only", "shadow"], ...
+            Literal[
+                "autocast",
+                "nocast",
+                "frozen",
+                "tensor_only",
+                "shadow",
+                "skip_post_init_on_rebuild",
+            ],
+            ...,
         ],
     ) -> Type["TensorClass"]: ...
     def __init_subclass__(
@@ -133,6 +146,7 @@ class TensorClass(_TensorClassInitArgs):
         frozen: bool | None = None,
         tensor_only: bool | None = None,
         shadow: bool | None = None,
+        skip_post_init_on_rebuild: bool | None = None,
         **kwargs: Any,
     ) -> None: ...
     @property
@@ -638,6 +652,9 @@ class TensorClass(_TensorClassInitArgs):
         sorted: bool | list[NestedKey] | None = None,
         out: torch.Tensor | None = None,
     ) -> torch.Tensor: ...
+    def pack(
+        self, dim: int = -1, *, layout: PackLayout | None = None
+    ) -> tuple[torch.Tensor, PackLayout]: ...
     def stack_from_tensordict(
         self,
         dim: int = 0,
@@ -1678,6 +1695,7 @@ def tensorclass(
     nocast: bool = False,
     shadow: bool = False,
     tensor_only: bool = False,
+    skip_post_init_on_rebuild: bool = False,
 ) -> type[_ClassT]: ...
 @overload
 def tensorclass(
@@ -1689,6 +1707,7 @@ def tensorclass(
     nocast: bool = False,
     shadow: bool = False,
     tensor_only: bool = False,
+    skip_post_init_on_rebuild: bool = False,
 ) -> Callable[[type[_ClassT]], type[_ClassT]]: ...
 def is_non_tensor(obj) -> bool: ...
 def from_dataclass(

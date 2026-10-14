@@ -2307,7 +2307,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         tc_type = _resolve_tensorclass(tensorclass_cls, raw_tc)
         if tc_type is not None:
             store._tensorclass_cls = f"{tc_type.__module__}.{tc_type.__qualname__}"
-            return tc_type._from_tensordict(store)
+            # Like a load: the data comes from outside this process
+            return tc_type._from_tensordict(store, rebuild=False)
         return store
 
     # ---- Cloning ----
