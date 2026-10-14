@@ -2589,14 +2589,13 @@ def _is_unbatched(data) -> bool:
     cls = type(data)
     if cls is Tensor:
         return False
-    is_dynamo = is_compiling()
-    if not is_dynamo:
-        out = _UNBATCHED_MEMO.get(cls)
-        if out is not None:
-            return out
+    if is_compiling():
+        return bool(getattr(cls, "_pass_through", False))
+    out = _UNBATCHED_MEMO.get(cls)
+    if out is not None:
+        return out
     out = bool(getattr(cls, "_pass_through", False))
-    if not is_dynamo:
-        _UNBATCHED_MEMO[cls] = out
+    _UNBATCHED_MEMO[cls] = out
     return out
 
 
