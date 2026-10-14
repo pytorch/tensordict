@@ -3040,9 +3040,11 @@ class LazyStackedTensorDict(TensorDictBase):
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
         items = self.tensordicts[0].non_tensor_items(include_nested=include_nested)
+        if not items:
+            return ()
         # Only the keys that the stack lists, which every member holds. The
         # members of a NonTensorStack list their fields, which keys() omits.
-        keys = self._key_list()
+        keys = set(self._key_list())
         result = []
         for key, val0 in items:
             nested = not isinstance(key, str)
