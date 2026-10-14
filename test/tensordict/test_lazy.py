@@ -1926,6 +1926,38 @@ class TestLazyStackedTensorDict:
         assert isinstance(x, torch.Tensor)
         assert x[0, 0] == 100
 
+    @pytest.mark.parametrize("build", ["torch.stack", "contiguous", "sub"])
+    def test_dense_get_as_list_warns(self, build):
+        # a dense tensordict ignores as_list and as_nested_tensor, where a
+        # lazy stack does not, and warns (#2551)
+        rows = [TensorDict(x=torch.arange(4.0) + i) for i in range(2)]
+        lazy = lazy_stack(rows)
+        if build == "torch.stack":
+            td = torch.stack(rows)
+        elif build == "contiguous":
+            td = lazy.contiguous()
+        else:
+            td = torch.stack([torch.stack(rows)] * 3)._get_sub_tensordict(1)
+        x = torch.stack([row["x"] for row in rows])
+        for name in ("as_list", "as_nested_tensor"):
+            with pytest.warns(
+                FutureWarning,
+                match=rf"get\(key, {name}=True\) returns the stored tensor today",
+            ):
+                out = td.get("x", **{name: True})
+            assert type(out) is torch.Tensor and not out.is_nested
+            assert (out == x).all()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert (td.get("x", as_padded_tensor=True) == x).all()
+            assert td.get("missing", 0, as_list=True) == 0
+            assert isinstance(lazy.get("x", as_list=True), list)
+            assert lazy.get("x", as_nested_tensor=True).is_nested
+            outer = TensorDict(inner=lazy, batch_size=[2])
+            assert isinstance(outer.get(("inner", "x"), as_list=True), list)
+        with pytest.raises(TypeError, match="as_lst"):
+            lazy.get("x", as_lst=True)
+
     def test_lazy_stack_nested_get(self):
         td0 = TensorDict(a=torch.randn(3))
         td1 = TensorDict(a=torch.randn(4))
