@@ -5107,6 +5107,12 @@ def _patch_tc(cls):
     # _set_methods(TensorClass)
 
 
+def _is_tensorclass_flags(item: IndexType) -> bool:
+    if not isinstance(item, tuple):
+        item = (item,)
+    return all(isinstance(_item, str) and _item in _TENSORCLASS_FLAGS for _item in item)
+
+
 class _TensorClassMeta(abc.ABCMeta):
     def __new__(
         mcs,
@@ -5159,11 +5165,22 @@ class _TensorClassMeta(abc.ABCMeta):
         return cls
 
     def __getitem__(cls, item: IndexType) -> Self:
+        # Python calls a metaclass __getitem__ before __class_getitem__, so pass
+        # anything other than flags or type arguments of a generic class to a
+        # __class_getitem__ that a subclass defines, with the item unchanged.
+        if not issubclass(cls, Generic) and not _is_tensorclass_flags(item):
+            for base in cls.__mro__:
+                if base is TensorClass:
+                    break
+                if "__class_getitem__" in base.__dict__:
+                    return cls.__class_getitem__(item)
+        return _TensorClassMeta._getitem_flags(cls, item)
+
+    def _getitem_flags(cls, item: IndexType) -> Self:
+        # TensorClass[flags] and the type arguments of a generic TensorClass.
         if not isinstance(item, tuple):
             item = (item,)
-        if not all(
-            isinstance(_item, str) and _item in _TENSORCLASS_FLAGS for _item in item
-        ):
+        if not _is_tensorclass_flags(item):
             # Type arguments of a generic class, as in
             # ``class Foo(TensorClass, Generic[T])`` or ``class Foo[T](TensorClass)``.
             # This metaclass __getitem__ hides Generic.__class_getitem__, so we
@@ -5390,7 +5407,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     # __class_getitem__ on the class rather than a metaclass __getitem__.
     # Delegate to the metaclass implementation that builds the configured subclass.
     def __class_getitem__(cls, item: IndexType) -> Self:  # type: ignore[override]
-        return _TensorClassMeta.__getitem__(cls, item)
+        return _TensorClassMeta._getitem_flags(cls, item)
 
 
 # _TensorClassMeta does not pass the base class itself to tensorclass(), which

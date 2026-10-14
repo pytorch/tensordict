@@ -6115,6 +6115,45 @@ class TestSubClassing:
         with pytest.raises(TypeError, match="only accepts the flags"):
             TensorClass[int]
 
+    # Regression test for GitHub issue #2601: the metaclass __getitem__ hid a
+    # __class_getitem__ defined by a subclass.
+    def test_subclassing_class_getitem(self):
+        class Shape(TensorClass):
+            x: torch.Tensor
+
+            @classmethod
+            def __class_getitem__(cls, item):
+                return (cls, item)
+
+        class SubShape(Shape):
+            y: torch.Tensor
+
+        class Super(TensorClass):
+            x: torch.Tensor
+
+            def __class_getitem__(cls, item):
+                return super().__class_getitem__(item)
+
+        for cls in (Shape, SubShape):
+            assert cls[2, 3] == (cls, (2, 3))
+            assert cls[2] == (cls, 2)
+            assert cls[(2,)] == (cls, (2,))
+            assert cls[...] == (cls, ...)
+            # flags are handled first, as before
+            NoCast = cls["nocast"]
+            assert issubclass(NoCast, cls) and NoCast._nocast
+
+        assert Super["nocast"]._nocast
+        assert Super.__class_getitem__("nocast")._nocast
+        with pytest.raises(TypeError, match="only accepts the flags"):
+            Super[2]
+
+        class Plain(TensorClass):
+            x: torch.Tensor
+
+        with pytest.raises(TypeError, match="Plain is not a generic class"):
+            Plain[2, 3]
+
     @pytest.mark.skipif(
         sys.version_info < (3, 12), reason="PEP 695 syntax requires Python 3.12"
     )
