@@ -34,7 +34,7 @@ from pathlib import Path, PurePosixPath
 
 import torch
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
-from tensordict.utils import _zip_strict
+from tensordict.utils import _SKIP_TENSORCLASS_POST_INIT, _zip_strict
 
 # Suffix that triggers archive mode by default in ``save``/``memmap``.
 TENSORDICT_ARCHIVE_SUFFIX = ".tdz"
@@ -817,13 +817,22 @@ def _write_archive_from_td(
             # the staged tensordict's insertion order would follow thread
             # completion order, breaking the positional pairing between
             # `leaves` and the staged leaves below.
-            td_stage = td.memmap_like(
-                prefix=staging,
-                copy_existing=copy_existing,
-                share_non_tensor=share_non_tensor,
-                robust_key=robust_key,
-                existsok=True,
-            )
+            # With like=False the staged leaves are placeholders until
+            # _pack_dir streams the data in: do not run tensorclass
+            # __post_init__ on them. It runs on the real data when the
+            # archive is loaded.
+            token = None if like else _SKIP_TENSORCLASS_POST_INIT.set(True)
+            try:
+                td_stage = td.memmap_like(
+                    prefix=staging,
+                    copy_existing=copy_existing,
+                    share_non_tensor=share_non_tensor,
+                    robust_key=robust_key,
+                    existsok=True,
+                )
+            finally:
+                if token is not None:
+                    _SKIP_TENSORCLASS_POST_INIT.reset(token)
             if not like:
                 staged_leaves = td_stage.values(
                     True, True, is_leaf=_NESTED_TENSORS_AS_LISTS

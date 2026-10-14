@@ -15,7 +15,6 @@ import pickle
 import sys
 import tempfile
 import warnings
-from functools import wraps
 from numbers import Number
 from pathlib import Path
 from typing import Any, Callable, overload, Tuple, Type, TYPE_CHECKING
@@ -36,6 +35,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
+    _normalize_from_dict_args,
     _PACKAGE_DIR,
     _register_tensor_class,
     is_tensor_collection,
@@ -46,22 +46,17 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
-    _CloudpickleWrapper,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
-    _parse_to,
-    _proc_init,
-    _split_tensordict,
-    _zip_strict,
     expand_right,
     IndexType,
     is_non_tensor,
     NestedKey,
     unravel_key,
 )
-from torch import multiprocessing as mp, Tensor
+from torch import Tensor
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 _has_zarr = importlib.util.find_spec("zarr", None) is not None
@@ -1067,15 +1062,20 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
 
     _td_dim_names = None
     _masking_on_dense_copy = True
+    _to_writes_back_in_place = True
     _rename_key_lenient = True
     LOCKING = None
     # each read loads the entry from the file into a new tensor
     _reads_return_copies = True
+    _leaves_built_on_read = True
+    _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
     _fills_without_reading = True
     # _change_batch_size raises, so an in-place shape method that changes the
     # batch size raises before it rewrites the datasets
     _inplace_batch_size_change = False
+    # an open file cannot be sent to the workers of map
+    _map_on_dense_copies = True
     # for the pickles made before non_tensor_as_stack
     _non_tensor_as_stack = False
 
@@ -1141,59 +1141,18 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             self._check_batch_size(self._batch_size)
 
     @classmethod
-    def from_h5(
+    def _open_h5(
         cls,
         filename,
         *,
         mode="r",
-        batch_size: torch.size | None = None,
+        batch_size: torch.Size | None = None,
         non_tensor_as_stack: bool = False,
     ):
-        """Creates a PersistentTensorDict from a h5 file.
+        """Opens an h5 file; the public :meth:`~.from_h5` calls it.
 
-        This function will automatically determine the batch-size for each nested tensordict (unless ``batch_size``
-        is provided).
-
-        Args:
-            filename (str): The path to the h5 file.
-
-        Keyword Args:
-            mode (str, optional): how the file is opened: ``"r"`` (read only),
-                ``"r+"`` (read and write), or another mode of :class:`h5py.File`
-                (see :class:`PersistentTensorDict`). Defaults to ``"r"``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to None (batch-size automatically
-                determined).
-            non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
-                dataset that tensordict did not write, such as a string column
-                with one string per row, reads as a
-                :class:`~tensordict.NonTensorStack` of its rows when its
-                leading dims equal the batch size. Otherwise it reads as one
-                :class:`~tensordict.NonTensorData` that holds the whole
-                dataset. Defaults to ``False``.
-
-        Returns:
-            A PersistentTensorDict representation of the input h5 file.
-
-        Examples:
-            >>> import os
-            >>> import tempfile
-            >>> import torch
-            >>> from tensordict import PersistentTensorDict
-            >>> with tempfile.TemporaryDirectory() as tmpdir:
-            ...     filename = os.path.join(tmpdir, "file.h5")
-            ...     PersistentTensorDict.from_dict(
-            ...         {"key1": torch.zeros(3), "key2": torch.ones(3)}, filename
-            ...     ).close()
-            ...     ptd = PersistentTensorDict.from_h5(filename)
-            ...     print(ptd)
-            ...     ptd.close()
-            PersistentTensorDict(
-                fields={
-                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+        Without ``batch_size``, each nested tensordict gets the largest batch
+        size that its entries share.
         """
         out = cls(
             filename=filename,
@@ -1207,7 +1166,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         return out
 
     @classmethod
-    def from_zarr(
+    def _open_zarr(
         cls,
         filename,
         *,
@@ -1215,57 +1174,12 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         batch_size: torch.Size | None = None,
         non_tensor_as_stack: bool = False,
     ):
-        """Creates a PersistentTensorDict from a zarr store.
+        """Opens a zarr store; the public :meth:`~.from_zarr` calls it.
 
-        The batch size (and dimension names) are read from the
-        ``"__tensordict__"`` attribute written by :meth:`~.from_dict` /
-        :meth:`~tensordict.TensorDictBase.to_zarr` when present; otherwise the
-        batch size of each nested tensordict is determined automatically
-        (unless ``batch_size`` is provided).
-
-        Args:
-            filename (str, path or zarr store): the path to the zarr store
-                (a directory), or a ``zarr.abc.store.Store`` instance.
-
-        Keyword Args:
-            mode (str, optional): Reading mode. Defaults to ``"r"``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict.
-                Defaults to ``None`` (batch-size read from metadata or
-                automatically determined).
-            non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
-                array that tensordict did not write, such as a string column
-                with one string per row, reads as a
-                :class:`~tensordict.NonTensorStack` of its rows when its
-                leading dims equal the batch size. Otherwise it reads as one
-                :class:`~tensordict.NonTensorData` that holds the whole
-                array. Defaults to ``False``.
-
-        Returns:
-            A PersistentTensorDict representation of the input zarr store.
-
-        Examples:
-            >>> import os
-            >>> import tempfile
-            >>> import torch
-            >>> from tensordict import PersistentTensorDict
-            >>> with tempfile.TemporaryDirectory() as tmpdir:
-            ...     store = os.path.join(tmpdir, "store.zarr")
-            ...     PersistentTensorDict.from_dict(
-            ...         {"key1": torch.zeros(3), "key2": torch.ones(3)},
-            ...         store,
-            ...         batch_size=[3],
-            ...         backend="zarr",
-            ...     ).close()
-            ...     ptd = PersistentTensorDict.from_zarr(store)
-            ...     print(ptd)
-            ...     ptd.close()
-            PersistentTensorDict(
-                fields={
-                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+        Without ``batch_size``, the batch size (and the dimension names) are
+        read from the ``"__tensordict__"`` attribute that :meth:`~.from_dict`
+        and :meth:`~tensordict.TensorDictBase.to_zarr` write, or else each
+        nested tensordict gets the largest batch size that its entries share.
         """
         out = cls(
             filename=filename,
@@ -1298,6 +1212,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         batch_size=None,
         device=None,
         backend: str = "h5",
+        batch_dims: int | None = None,
         **kwargs,
     ):
         """Converts a dictionary or a TensorDict to a h5 file or zarr store.
@@ -1321,6 +1236,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 (on cpu by default).
             backend (str, optional): storage backend, ``"h5"`` or ``"zarr"``.
                 Defaults to ``"h5"``.
+            batch_dims (int, optional): for a dict input without
+                ``batch_size``, the number of leading dims of the inferred
+                batch size. Exclusive with ``batch_size``.
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`
                 (h5 backend) or :meth:`zarr.Group.create_array` (zarr backend).
 
@@ -1345,9 +1263,12 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         return cls._from_dict(
             input_dict,
             filename,
-            batch_size=batch_size,
+            batch_size=_normalize_from_dict_args(
+                input_dict, batch_size=batch_size, batch_dims=batch_dims
+            ),
             device=device,
             backend=backend,
+            batch_dims=batch_dims,
             **kwargs,
         )
 
@@ -1361,6 +1282,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         device=None,
         backend: str = "h5",
         names=None,
+        batch_dims=None,
         **kwargs,
     ):
         # from_dict, which also sets the dimension names before writing the
@@ -1394,6 +1316,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         out._backend.metadata_on_create = False
         if not _has_batch_size:
             _set_max_batch_size(out)
+            if batch_dims is not None:
+                out.auto_batch_size_(batch_dims=batch_dims)
         if names is not None:
             out.names = names
         out._write_attrs_metadata()
@@ -1469,7 +1393,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         except KeyError:
             if default is not NO_DEFAULT:
                 return default
-            raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
+            # name the file, not the tensordict: its repr reads every dataset
+            raise KeyError(f"key {key} not found in PersistentTensorDict {self.file}")
 
     def _process_array(self, key, array):
         if self._backend.is_array(array):
@@ -1646,6 +1571,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     @overload
     def __getitem__(self, item: IndexType) -> TensorDictBase: ...
 
+    # Override: an index gives a writable view of the file.
     def __getitem__(self, item: IndexType) -> Self | Tensor | TensorCollection | Any:
         if isinstance(item, str) or (
             isinstance(item, tuple) and _unravel_key_to_tuple(item)
@@ -1755,6 +1681,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             self._batch_size = _batch_size
             raise RuntimeError(str(err)) from err
 
+    # Override: a nested name that clashes with the new names warns and is
+    # dropped until 0.17, where it raises as on TensorDict.
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
@@ -1779,14 +1707,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                         None if n in clash else n for n in td_names[self.ndim :]
                     ]
                 item.rename_(*td_names)
-
-    # Override: materializes with one read of the file.
-    def contiguous(self, *, canonical: bool = False):
-        """Materializes a PersistentTensorDict on a regular TensorDict."""
-        out = self.to_tensordict()
-        if canonical:
-            out = out.contiguous(canonical=True)
-        return out
 
     @_lock_blocked
     def del_(self, key):
@@ -1846,6 +1766,36 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     def _storage_is_read_only(self) -> bool:
         return self._backend.is_read_only(self.file)
 
+    def _write_back_to(self, result: TensorDictBase) -> None:
+        """Writes the dense copy of a ``with self.to(...)`` block back into the file, on exit.
+
+        ``result`` is the copy that ``to()`` returned, as the block left it.
+        The caller has checked that it is not ``self`` and that the file is
+        writable. A copy on ``meta`` holds no data: nothing is written.
+        Otherwise each leaf that the file and ``result`` both have, with the
+        same shape, is written into its dataset in place: the file casts it
+        to the dtype of the dataset, keeps its layout (compression, chunks),
+        and reads nothing. The other entries of ``result`` (new keys, entries
+        whose shape the block changed, a group it replaced with a tensor) go
+        through ``update()``, which replaces or creates them without looking
+        them up in the file; a tensor replaced with a tensordict makes it
+        raise, as on a ``TensorDict``. As on a ``TensorDict``, the non-tensor
+        entries that the file has stay unchanged.
+        """
+        if result.device is not None and result.device.type == "meta":
+            return
+        keys = set(self.keys(True, True, is_leaf=_is_leaf_nontensor))
+        keys &= set(result.keys(True, True, is_leaf=_is_leaf_nontensor))
+        for key, value in result.items(True, True):
+            if key not in keys:
+                continue
+            if self._get_metadata(key).get("shape") == value.shape:
+                self.set_(key, value)
+            else:
+                # the block changed its shape: update() replaces it
+                keys.discard(key)
+        self.update(result.exclude(*keys))
+
     def entry_class(self, key: NestedKey) -> type:
         # Inspects the node only: no data is read from storage.
         array = self._get_array(key)
@@ -1861,10 +1811,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 return NonTensorStack
             return NonTensorData
         return torch.Tensor
-
-    # Override: entries live in a file.
-    def is_contiguous(self):
-        return False
 
     # Override: the file reads give copies, so the fill is written to the
     # arrays directly, without reading them.
@@ -2003,12 +1949,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 )
         return dest
 
-    # Override: file-backed entries cannot be pinned.
-    def pin_memory(self, *args, **kwargs):
-        raise RuntimeError(
-            f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
-        )
-
     def _popped_value(self, value):
         # Override: a zarr group reads from the store: copy it before deleting it
         if (
@@ -2025,130 +1965,6 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         raise NotImplementedError(
             f"popitem not implemented for class {type(self).__name__}."
         )
-
-    def map(
-        self,
-        fn: Callable,
-        dim: int = 0,
-        num_workers: int | None = None,
-        *,
-        out: TensorDictBase = None,
-        chunksize: int | None = None,
-        num_chunks: int | None = None,
-        pool: mp.Pool = None,
-        generator: torch.Generator | None = None,
-        max_tasks_per_child: int | None = None,
-        worker_threads: int = 1,
-        index_with_generator: bool = False,
-        pbar: bool = False,
-        mp_start_method: str | None = None,
-    ):
-        if pool is None:
-            if num_workers is None:
-                num_workers = mp.cpu_count()  # Get the number of CPU cores
-            if generator is None:
-                generator = torch.Generator()
-            seed = (
-                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
-            )
-            if mp_start_method is not None:
-                ctx = mp.get_context(mp_start_method)
-            else:
-                ctx = mp.get_context()
-
-            queue = ctx.Queue(maxsize=num_workers)
-            for i in range(num_workers):
-                queue.put(i)
-            with ctx.Pool(
-                processes=num_workers,
-                initializer=_proc_init,
-                initargs=(seed, queue, worker_threads),
-                maxtasksperchild=max_tasks_per_child,
-            ) as pool:
-                return self.map(
-                    fn,
-                    dim=dim,
-                    chunksize=chunksize,
-                    pool=pool,
-                    index_with_generator=index_with_generator,
-                )
-        num_workers = pool._processes
-        dim_orig = dim
-        if dim < 0:
-            dim = self.ndim + dim
-        if dim < 0 or dim >= self.ndim:
-            raise ValueError(f"Got incompatible dimension {dim_orig}")
-
-        self_split = _split_tensordict(
-            self,
-            chunksize,
-            num_chunks,
-            num_workers,
-            dim,
-            use_generator=index_with_generator,
-            to_tensordict=True,
-        )
-        if not index_with_generator:
-            length = len(self_split)
-            self_split = tuple(split.to_tensordict() for split in self_split)
-        else:
-            length = None
-
-        if out is not None and (out.is_shared() or out.is_memmap()):
-
-            def wrap_fn_with_out(fn, out):
-                @wraps(fn)
-                def newfn(item_and_out):
-                    item, out = item_and_out
-                    result = fn(item)
-                    out.update_(result)
-                    return
-
-                out_split = _split_tensordict(
-                    out,
-                    chunksize,
-                    num_chunks,
-                    num_workers,
-                    dim,
-                    use_generator=index_with_generator,
-                )
-                return _CloudpickleWrapper(newfn), _zip_strict(self_split, out_split)
-
-            fn, self_split = wrap_fn_with_out(fn, out)
-            out = None
-
-        call_chunksize = 1
-        imap = pool.imap(fn, self_split, call_chunksize)
-
-        if pbar and importlib.util.find_spec("tqdm", None) is not None:
-            import tqdm
-
-            imap = tqdm.tqdm(imap, total=length)
-
-        imaplist = []
-        start = 0
-        for item in imap:
-            if item is not None:
-                if out is not None:
-                    if chunksize != 0:
-                        end = start + item.shape[dim]
-                        chunk = slice(start, end)
-                        out[chunk].update_(item)
-                        start = end
-                    else:
-                        out[start].update_(item)
-                        start += 1
-                else:
-                    imaplist.append(item)
-        del imap
-
-        # support inplace modif
-        if imaplist:
-            if chunksize == 0:
-                out = torch.stack(imaplist, dim)
-            else:
-                out = torch.cat(imaplist, dim)
-        return out
 
     # Override: moves the node in the file, without reading the data.
     def _rename_key(self, old_key: NestedKey, new_key: NestedKey) -> None:
@@ -2269,8 +2085,56 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             )
         return self.to_tensordict().unflatten_keys(separator=separator)
 
-    def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
-        (
+    # Override: changes the device without reading the file, and rejects the
+    # in-place and pinned copies, which the file cannot hold.
+    def _to(
+        self,
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        non_blocking_pin,
+        num_threads,
+        inplace,
+        args,
+        kwargs,
+    ):
+        if inplace:
+            raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
+        if non_blocking_pin:
+            raise RuntimeError(
+                f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
+                f"`to_tensordict()` before executing this code."
+            )
+        if convert_to_format is not None and dtype is None:
+            warnings.warn(
+                f"{type(self).__name__}.to(memory_format=...) without a dtype "
+                "ignores the memory format. Starting with TensorDict 0.17, the "
+                "default will change to returning a TensorDict copy in that "
+                "memory format, as to(dtype, memory_format=...) does, which "
+                "raises where torch.Tensor.to raises. Call "
+                "to_tensordict().to(memory_format=...) to get the new "
+                "behaviour now.",
+                FutureWarning,
+                # skip to() and the _as_context_manager wrapper
+                stacklevel=4,
+            )
+            convert_to_format = None
+        if (
+            device is not None
+            and dtype is None
+            and convert_to_format is None
+            and device != self.device
+        ):
+            result = self.clone(False)
+            result._device = device
+            for key, nested in list(result._nested_tensordicts.items()):
+                result._nested_tensordicts[key] = nested.to(device)
+            if batch_size is not None:
+                result.batch_size = batch_size
+            return result
+        return super()._to(
             device,
             dtype,
             non_blocking,
@@ -2279,31 +2143,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             non_blocking_pin,
             num_threads,
             inplace,
-        ) = _parse_to(*args, **kwargs)
-        if inplace:
-            raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
-
-        if non_blocking_pin:
-            raise RuntimeError(
-                f"Cannot use non_blocking_pin=True {type(self).__name__}.to(). Call "
-                f"`to_tensordict()` before executing this code."
-            )
-        result = self
-        if device is not None and dtype is None and device == self.device:
-            if batch_size is not None and torch.Size(batch_size) != result.batch_size:
-                result.batch_size = batch_size
-            return result
-        if dtype is not None:
-            return self.to_tensordict().to(*args, **kwargs)
-        result = self
-        if device is not None:
-            result = result.clone(False)
-            result._device = device
-            for key, nested in list(result._nested_tensordicts.items()):
-                result._nested_tensordicts[key] = nested.to(device)
-        if batch_size is not None:
-            result.batch_size = batch_size
-        return result
+            args,
+            kwargs,
+        )
 
     def _to_numpy(self, value):
         if hasattr(value, "requires_grad") and value.requires_grad:

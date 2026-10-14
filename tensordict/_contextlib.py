@@ -451,8 +451,28 @@ def _reverse_to(self, args, kwargs, out):
     """
     if out is None:
         return self
-    from tensordict.base import _is_tensor_collection
+    from tensordict.base import _is_tensor_collection, _warn_read_only
     from tensordict.tensorclass import TensorAttrs
+
+    if getattr(out, "_masking_on_dense_copy", False):
+        from tensordict.utils import is_tensorclass
+
+        # to() on a tensorclass wraps the result of to() on its tensordict
+        result = self._tensordict if is_tensorclass(self) else self
+        if result is out or type(result) is type(out):
+            # to() returned ``out`` itself or, for a file, a copy on another
+            # device that reads and writes the same file: the block has
+            # written to it already. This assumes that no other class with
+            # _masking_on_dense_copy returns a copy of its own type from to().
+            return self
+        if out._storage_is_read_only():
+            _warn_read_only("to")
+            return self
+        # a tensorclass forwards the attribute to its tensordict, but is
+        # written back by apply() below
+        if out._to_writes_back_in_place and not is_tensorclass(out):
+            out._write_back_to(result)
+            return self
 
     # to() casts the dtypes if it gets a dtype, a tensor, other= with a single dtype
     # or an attrs tensordict that records dtypes. A device-only to() leaves the

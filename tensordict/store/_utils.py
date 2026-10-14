@@ -17,6 +17,7 @@ from tensordict._indexing import (
     _MASK,
     _read_element,
     _SLICE,
+    convert_ellipsis_to_idx,
 )
 
 __all__ = [
@@ -138,6 +139,24 @@ def _normalize_index(idx: int, size: int) -> int:
             f"index {idx} is out of bounds for dimension 0 with size {size}"
         )
     return idx + size if idx < 0 else idx
+
+
+def _expand_batch_ellipsis(idx, batch_size):
+    """Replace the ``Ellipsis`` of ``idx`` by the batch dims that it stands for.
+
+    A store applies a batch index to each entry, whose feature dims follow the
+    batch dims; as on a tensordict, an ``Ellipsis`` covers the batch dims only.
+    The trailing ``:`` after the first element are dropped, as they select the
+    same elements, so that an index that only selects along dim 0 is still read
+    as one. An empty batch gives ``()``, which a 0-d entry accepts.
+    """
+    if not (isinstance(idx, tuple) and any(i is Ellipsis for i in idx)):
+        return idx
+    idx = convert_ellipsis_to_idx(idx, batch_size)
+    end = len(idx)
+    while end > 1 and isinstance(idx[end - 1], slice) and idx[end - 1] == slice(None):
+        end -= 1
+    return idx[:end]
 
 
 def _read_dim0(idx):

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import ctypes
 import importlib.util
 import math
 import operator
@@ -13,6 +14,7 @@ import os
 import pickle
 import platform
 import sys
+import threading
 import warnings
 from dataclasses import dataclass
 
@@ -1352,6 +1354,28 @@ class TestNonTensorData:
         data[1:] = NonTensorStack("s0", "s0")
         assert data.tolist() == ["s0"] * 3
 
+    def test_nontensorstack_repr_and_to_tensordict(self):
+        stack = NonTensorStack.from_list(["a", "b"])
+        assert repr(stack) == (
+            "NonTensorStack(\n"
+            "    ['a', 'b'],\n"
+            "    batch_size=torch.Size([2]),\n"
+            "    device=None)"
+        )
+        # the data is cut after 50 characters
+        long = NonTensorStack.from_list(["x" * 30, "y" * 30])
+        assert repr(long).splitlines()[1] == (
+            "    ['" + "x" * 30 + "', '" + "y" * 14 + "...,"
+        )
+        # a NonTensorStack is already the dense form of its data
+        assert stack.to_tensordict() is stack
+        assert stack.to_tensordict(retain_none=True) is stack
+
+    def test_nontensorstack_tolist_convert_nodes(self):
+        stack = NonTensorStack.from_list(["a", "b"])
+        assert stack.tolist(convert_nodes=True) == ["a", "b"]
+        assert stack.tolist(convert_nodes=False) == ["a", "b"]
+
     @pytest.mark.parametrize(
         "index,rows",
         [
@@ -1564,13 +1588,57 @@ class TestNonTensorData:
         if mode.startswith("memmap"):
             assert TensorDict.load_memmap(tmpdir).get("s").tolist() == expected
 
+    @pytest.mark.parametrize("layout", ["1d", "nd_members", "stack_dim1", "nested"])
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__data_into_stack_with_tensor(self, layout, locked, write):
+        # With a tensor entry in the source, update_ takes its fast route,
+        # which writes the NonTensorData into every member of the stack (#2263)
+        if layout == "1d":
+            s = NonTensorStack("a", "b", "c")
+        elif layout == "nd_members":
+            s = torch.stack([NonTensorData(f"m{i}", batch_size=[3]) for i in range(4)])
+        elif layout == "stack_dim1":
+            s = NonTensorStack(
+                *[NonTensorData(f"m{i}", batch_size=[4]) for i in range(3)],
+                stack_dim=1,
+            )
+        else:
+            s = NonTensorStack(
+                *[NonTensorStack(*[f"m{i}{j}" for j in range(3)]) for i in range(4)]
+            )
+        assert isinstance(s, NonTensorStack)
+        td = TensorDict(x=torch.zeros(s.batch_size), s=s, batch_size=s.batch_size)
+        if locked:
+            td.lock_()
+        source = TensorDict(
+            x=torch.ones(s.batch_size),
+            s=NonTensorData("w", batch_size=s.batch_size),
+            batch_size=s.batch_size,
+        )
+        getattr(td, write)(source)
+        assert (td["x"] == 1).all()
+        assert isinstance(td.get("s"), NonTensorStack)
+        assert (
+            td.get("s").tolist() == NonTensorData("w", batch_size=s.batch_size).tolist()
+        )
+
+    def test_update__stack_into_data_still_skipped(self):
+        # A NonTensorStack in the source stays skipped where the destination
+        # holds a NonTensorData
+        td = TensorDict(x=torch.zeros(2), s=NonTensorData("hello"), batch_size=[2])
+        source = TensorDict(x=torch.ones(2), s=NonTensorStack("a", "b"), batch_size=[2])
+        td.update_(source)
+        assert (td["x"] == 1).all()
+        assert td["s"] == "hello"
+
     @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
     @pytest.mark.parametrize("stack", [False, True])
     @pytest.mark.parametrize("write", ["update_", "copy_"])
     def test_shared_inplace_write_skips_non_tensor(self, mode, stack, write):
         # update_ and copy_ write the tensor leaves of a shared or memmapped
-        # tensordict and skip its non-tensor leaves, which most types cannot
-        # update in place
+        # tensordict, and skip with a warning the non-tensor values that its
+        # shared buffers cannot store, such as None
         def make(x):
             s = NonTensorStack(None, None) if stack else NonTensorData(None)
             return TensorDict(x=torch.full((2,), x), s=s, batch_size=[2])
@@ -1580,9 +1648,185 @@ class TestNonTensorData:
             td.share_memory_()
         else:
             td.memmap_(share_non_tensor=mode == "memmap_shared")
-        getattr(td, write)(make(1.0))
+        if mode == "memmap":
+            # without shared buffers, the memmapped values are rewritten
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                getattr(td, write)(make(1.0))
+        else:
+            with pytest.warns(
+                UserWarning, match=r"skipped the non-tensor entries \['s'\]"
+            ) as record:
+                getattr(td, write)(make(1.0))
+            assert record[0].filename == __file__
         assert (td["x"] == 1).all()
         assert td.get("s").tolist() == [None, None]
+
+    @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
+    @pytest.mark.parametrize("with_tensor", [False, True])
+    @pytest.mark.parametrize("keys_to_update", [False, True])
+    def test_shared_update__non_tensor(self, mode, with_tensor, keys_to_update):
+        # update_ on a shared or memmapped tensordict writes the non-tensor
+        # values that its storage can store, and skips the others with a
+        # warning, whether or not the source also holds a tensor (#2487)
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "hello")
+        td.set_non_tensor("i", 3)
+        td.set_non_tensor("f", 1.5)
+        td.set_non_tensor("by", b"xx")
+        td.set_non_tensor("n", None)
+        td.set_non_tensor("j", 4)
+        td.set_non_tensor("l", [1])
+        td.set_non_tensor("d", {"x": 1})
+        if mode == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(share_non_tensor=mode == "memmap_shared")
+
+        def update_(entries):
+            source = TensorDict(batch_size=[3])
+            for key, value in entries.items():
+                source.set_non_tensor(key, value)
+            if with_tensor:
+                source["a"] = torch.ones(3)
+            kwargs = {"keys_to_update": list(source.keys())} if keys_to_update else {}
+            return td.update_(source, **kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            # a shared list takes any iterable and a shared dict any pairs,
+            # as their extend and update do
+            update_({"s": "bye", "i": 7, "f": 2, "l": "ab", "d": [("k", 2)]})
+        assert td["s"] == "bye" and td["i"] == 7 and td["f"] == 2
+        if mode == "memmap":
+            assert td["l"] == "ab" and td["d"] == [("k", 2)]
+        else:
+            assert td["l"] == ["a", "b"] and td["d"] == {"k": 2}
+        assert (td["a"] == float(with_tensor)).all()
+        entries = {"s": 5, "i": "x", "f": "y", "by": b"yy", "n": "z", "l": 5, "d": "ab"}
+        # an array converts to a scalar only if it has one element
+        array = np.array([1, 2])
+        if mode == "memmap":
+            # without shared buffers, any value is stored
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                update_({**entries, "j": array})
+            assert {key: td[key] for key in entries} == entries
+            assert td["j"] is array
+        else:
+            with pytest.warns(
+                UserWarning, match="skipped the non-tensor entries"
+            ) as record:
+                update_({**entries, "j": array})
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert f"entries {[*entries, 'j']} of" in str(record[0].message)
+            assert td["s"] == "bye" and td["i"] == 7 and td["f"] == 2
+            assert td["by"] == b"xx" and td["n"] is None and td["j"] == 4
+            assert td["l"] == ["a", "b"] and td["d"] == {"k": 2}
+        if mode == "shared":
+            # a shallow copy shares the values
+            td.copy().update_({"s": "copied", "a": torch.full((3,), 2.0)})
+            assert td["s"] == "copied" and (td["a"] == 2).all()
+
+    @pytest.mark.parametrize("mode", ["shared", "memmap_shared"])
+    @pytest.mark.parametrize("with_tensor", [False, True])
+    def test_shared_update__iterator(self, mode, with_tensor):
+        # The manager of a shared list or dict cannot pickle a generator: it is
+        # skipped with a warning and not read. Other iterators are read once.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("l", [1])
+        td.set_non_tensor("d", {"k": 1})
+        if mode == "shared":
+            td.share_memory_()
+        else:
+            td.memmap_(share_non_tensor=True)
+
+        def update_(entries):
+            source = TensorDict(batch_size=[3])
+            for key, value in entries.items():
+                source.set_non_tensor(key, value)
+            if with_tensor:
+                source["a"] = torch.ones(3)
+            td.update_(source)
+
+        generators = [(x for x in [1]), (x for x in [("k", 2)])]
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['l', 'd'\]"
+        ) as record:
+            update_({"l": generators[0], "d": generators[1]})
+        assert record[0].filename == __file__
+        assert [list(gen) for gen in generators] == [[1], [("k", 2)]]
+        assert td["l"] == [1] and td["d"] == {"k": 1}
+        assert (td["a"] == float(with_tensor)).all()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            update_({"l": ["ab", "cd"], "d": iter([("k", 2)])})
+        assert td["l"] == ["ab", "cd"] and td["d"] == {"k": 2}
+
+    @pytest.mark.parametrize("share_non_tensor", [False, True])
+    @pytest.mark.parametrize("index", [1, slice(1, 3)])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_memmap_stack_view_update__non_tensor(
+        self, share_non_tensor, index, write, tmp_path
+    ):
+        # The members of a memmapped NonTensorStack are written only through
+        # the stack: a view at an index skips them with a warning, and still
+        # writes the tensors
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        td["s"] = NonTensorStack("a", "b", "c", "d")
+        td.memmap_(tmp_path, share_non_tensor=share_non_tensor)
+        view = td[index]
+        source = TensorDict(a=torch.ones(view.shape), batch_size=view.shape)
+        source.set_non_tensor("s", "z")
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['s'\]"
+        ) as record:
+            getattr(view, write)(source)
+        assert record[0].filename == __file__
+        expected = torch.zeros(4)
+        expected[index] = 1
+        assert (td["a"] == expected).all()
+        assert td.get("s").tolist() == ["a", "b", "c", "d"]
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert loaded.get("s").tolist() == ["a", "b", "c", "d"]
+
+    @pytest.mark.parametrize(
+        "route", ["update_", "update_no_tensor", "copy_", "keys_to_update"]
+    )
+    @pytest.mark.parametrize("unpicklable", ["lock", "ctypes_pointer"])
+    def test_memmap_update__unpicklable(self, route, unpicklable, tmp_path):
+        # A value that cannot be pickled is one that a memmapped tensordict
+        # cannot store: update_ skips it with a warning and writes the others.
+        # Pickling a lock raises a TypeError, a ctypes pointer a ValueError.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("o", 1)
+        td.set_non_tensor("s", "old")
+        td.memmap_(tmp_path)
+        source = TensorDict(batch_size=[3])
+        if unpicklable == "lock":
+            source.set_non_tensor("o", threading.Lock())
+        else:
+            source.set_non_tensor("o", ctypes.pointer(ctypes.c_int(1)))
+        source.set_non_tensor("s", "new")
+        if route != "update_no_tensor":
+            source["a"] = torch.ones(3)
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['o'\]"
+        ) as record:
+            if route == "copy_":
+                td.copy_(source)
+            elif route == "keys_to_update":
+                td.update_(source, keys_to_update=list(source.keys()))
+            else:
+                td.update_(source)
+        assert record[0].filename == __file__
+        expected_a = 0.0 if route == "update_no_tensor" else 1.0
+        assert (td["a"] == expected_a).all() and td["s"] == "new"
+        assert td["o"] == 1 and td.get("o").is_memmap()
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded["o"] == 1 and loaded["s"] == "new"
+        assert (loaded["a"] == expected_a).all()
 
     def test_ignore_lock(self):
         td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
@@ -1825,6 +2069,31 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=False)
         assert loaded.tolist() == ["a", "b"]
 
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("old", [1, {1, 2}])
+    def test_memmap_unpicklable_keeps_files(self, tmp_path, stack, old):
+        # memmap_ over an existing memmap with a value that cannot be pickled
+        # raises and leaves the files that are already there as they were
+        def make(value):
+            if stack:
+                return NonTensorStack(value, value)
+            return NonTensorData(value)
+
+        def files():
+            return {
+                path: path.read_bytes()
+                for path in tmp_path.rglob("*")
+                if path.is_file()
+            }
+
+        make(old).memmap_(tmp_path)
+        before = files()
+        with pytest.raises(TypeError, match="pickle"):
+            make(threading.Lock()).memmap_(tmp_path)
+        assert files() == before
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded.tolist() == make(old).tolist()
+
     @pytest.mark.parametrize("value", [{1, 2}, {"a": {1, 2}}, [{1, 2}]])
     def test_memmap_set_is_pickled(self, tmp_path, value):
         td = TensorDict(x=torch.zeros(3), batch_size=[3])
@@ -1934,6 +2203,24 @@ class TestNonTensorData:
         td = TensorDict.load_memmap(tmp_path, allow_pickle=True)
         assert _PICKLE_LOAD_EXECUTED
         assert td["value"] == "loaded"
+
+    def test_nts_update_kwargs_typeerror(self):
+        # A NonTensorStack is a value: update and update_ take no entries as
+        # keyword arguments
+        stack = NonTensorStack("a", "b")
+        with pytest.raises(TypeError, match="keyword-argument"):
+            stack.update(x=NonTensorData("c"))
+        with pytest.raises(TypeError, match="keyword-argument"):
+            stack.update_(x=NonTensorData("c"))
+        assert stack.update(None) is stack and stack.update_(None) is stack
+        with pytest.warns(DeprecationWarning, match="ignore_lock") as record:
+            assert stack.update(NonTensorStack("c", "d"), ignore_lock=True) is stack
+        assert record[0].filename == __file__
+        assert stack.tolist() == ["c", "d"]
+        with pytest.warns(DeprecationWarning, match=r"update_at_\(index=") as record:
+            assert stack.update_at_(NonTensorData("e"), index=1) is stack
+        assert record[0].filename == __file__
+        assert stack.tolist() == ["c", "e"]
 
     @pytest.mark.skipif(IS_FB, reason="deactivating on fbcode")
     def test_memmap_stack_updates(self, tmpdir):
@@ -2059,10 +2346,12 @@ class TestNonTensorData:
                 inplace=True,
                 non_blocking=False,
             )
-        with pytest.raises(
-            NotImplementedError, match="Updating MyClass within a shared/memmaped"
+        # update_ skips what the shared value cannot store (#2487)
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['val'\]"
         ):
             td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+        assert td["val"] == val0
 
         # We can update a batched NonTensorData to a NonTensorStack if it's not already shared
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
@@ -2079,8 +2368,13 @@ class TestNonTensorData:
         # A shared bool only takes what a shared int takes
         td = TensorDict({"val": NonTensorData(data=True, batch_size=[])}, [])
         td.share_memory_()
-        with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
+        with pytest.warns(
+            UserWarning, match=r"skipped the non-tensor entries \['val'\]"
+        ):
             td.update_(TensorDict({"val": NonTensorData(data=None, batch_size=[])}, []))
+        assert td["val"] is True
+        with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
+            td.get("val").copy_(NonTensorData(data=None, batch_size=[]))
 
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize(

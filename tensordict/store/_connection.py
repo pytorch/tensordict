@@ -298,7 +298,10 @@ class _StoreConnection:
         return meta.get("homogeneous", "1") == "1"
 
     async def _aget_metadata_batch(
-        self, key_paths: list[str], non_tensor: dict | None = None
+        self,
+        key_paths: list[str],
+        non_tensor: dict | None = None,
+        layouts: dict | None = None,
     ) -> dict[str, tuple[list[int] | None, torch.dtype]]:
         """Get ``(shape, dtype)`` for multiple keys, using the local cache when available.
 
@@ -306,6 +309,8 @@ class _StoreConnection:
         into ``_meta_cache`` (when caching is enabled). The shape is ``None``
         for a key whose elements differ in shape or dtype. When *non_tensor*
         is given, the metadata of non-tensor keys is stored there instead.
+        When *layouts* is given, the ``layout`` field of each fetched entry, or
+        ``None``, is stored there.
         """
         result: dict[str, tuple[list[int] | None, torch.dtype]] = {}
         uncached: list[str] = []
@@ -335,6 +340,8 @@ class _StoreConnection:
                 )
                 dtype = _str_to_dtype(meta["dtype"])
                 result[kp] = (shape, dtype)
+                if layouts is not None:
+                    layouts[kp] = meta.get("layout")
                 if self._meta_cache is not None:
                     self._meta_cache[kp] = (shape, dtype)
 

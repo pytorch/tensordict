@@ -89,6 +89,29 @@ class TestConstruction:
         assert isinstance(state, TensorDictBase)
         assert state.batch_size == torch.Size([5])
 
+    def test_from_dict_and_instance(self):
+        data = {
+            "eta": torch.zeros(4, 3),
+            "X": torch.ones(4, 3),
+            "beta": torch.zeros(4, 3),
+        }
+        state = PredictorState.from_dict(data, batch_size=[4, 3], names=["n", "t"])
+        assert type(state) is PredictorState
+        assert state.batch_size == (4, 3)
+        assert state.names == ["n", "t"]
+        assert (state.X == 1).all()
+        other = state.from_dict_instance(
+            {**data, "X": torch.full((4, 3), 2.0)}, batch_size=[4]
+        )
+        assert type(other) is PredictorState
+        assert other.batch_size == (4,)
+        assert (other.X == 2).all()
+        assert (state.X == 1).all()
+        # no schema validation: a missing field gives an instance without it
+        partial = PredictorState.from_dict({"eta": torch.zeros(4)}, batch_size=[4])
+        assert type(partial) is PredictorState
+        assert list(partial.keys()) == ["eta"]
+
     def test_missing_required_field(self):
         with pytest.raises(TypeError, match="missing required field.*beta"):
             PredictorState(

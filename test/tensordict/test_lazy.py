@@ -33,7 +33,7 @@ from tensordict import (
 from tensordict._indexing import _getitem_batch_size
 from tensordict._lazy import _LazyStackedTensorDictKeysView
 from tensordict._reductions import _reduce_td
-from tensordict._td import _TensorDictKeysView
+from tensordict._td import _SubTensorDict, _TensorDictKeysView
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import (
     _default_is_leaf,
@@ -53,10 +53,16 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         decompose,
         get_available_devices,
         is_npu_available,
+        streaming_dataset,
     )
 else:
     IS_FB = False
-    from _utils_internal import decompose, get_available_devices, is_npu_available
+    from _utils_internal import (
+        decompose,
+        get_available_devices,
+        is_npu_available,
+        streaming_dataset,
+    )
 
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -371,11 +377,8 @@ class TestLazyStackedTensorDict:
         tmpdir = str(tmpdir)
         td.to_mds(out=tmpdir)
 
-        # Create a dataloader
-        from streaming import StreamingDataset
-
         # Load the dataset
-        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=2)
         dl = torch.utils.data.DataLoader(  # noqa: TOR401
             dataset=dataset, batch_size=2, collate_fn=LazyStackedTensorDict.from_list
         )
@@ -390,6 +393,89 @@ class TestLazyStackedTensorDict:
         batch = tensordict.__getitems__(indices)
         assert isinstance(batch, LazyStackedTensorDict)
         assert [len(td["x"]) for td in batch] == indices
+
+    def test_to_dict_state_dict_exclusive_keys_raise(self):
+        # to_dict and state_dict would silently drop the keys that are not in
+        # every member, so they raise
+        match = "cannot complete when there are exclusive keys"
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(()), b=torch.ones(())),
+                TensorDict(a=torch.zeros(()), c=torch.ones(())),
+            ]
+        )
+        nested = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(()), n=TensorDict(x=torch.zeros(()))),
+                TensorDict(a=torch.zeros(()), n=TensorDict(y=torch.ones(()))),
+            ]
+        )
+        for data in (td, nested, TensorDict(s=nested)):
+            for call in (data.to_dict, data.state_dict):
+                with pytest.raises(RuntimeError, match=match):
+                    call()
+        # with tolist_first, the members of a nested stack are listed one by
+        # one, so only exclusive keys at the top level are lost
+        with pytest.raises(RuntimeError, match=match):
+            td.to_dict(tolist_first=True)
+        result = nested.to_dict(tolist_first=True)
+        assert list(result) == ["a", "n"]
+        assert (result["a"] == torch.zeros(2)).all()
+        assert result["n"] == [{"x": torch.zeros(())}, {"y": torch.ones(())}]
+        assert TensorDict(s=nested).to_dict(tolist_first=True) == {
+            "s": [
+                {"a": torch.zeros(()), "n": {"x": torch.zeros(())}},
+                {"a": torch.zeros(()), "n": {"y": torch.ones(())}},
+            ]
+        }
+        same_keys = lazy_stack(
+            [TensorDict(a=torch.zeros(())), TensorDict(a=torch.ones(()))]
+        )
+        assert (same_keys.to_dict()["a"] == torch.tensor([0.0, 1.0])).all()
+        assert list(same_keys.state_dict()) == ["a"]
+
+    def test_repr_exact(self):
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3, 2), batch_size=[3]),
+                TensorDict(a=torch.ones(3), batch_size=[3]),
+            ],
+            1,
+        )
+        assert repr(td) == (
+            "LazyStackedTensorDict(\n"
+            "    fields={\n"
+            "        a: Tensor(shape=torch.Size([3, 2]), device=cpu, "
+            "dtype=torch.float32, is_shared=False)},\n"
+            "    exclusive_fields={\n"
+            "        0 ->\n"
+            "            b: Tensor(shape=torch.Size([3, 2]), device=cpu, "
+            "dtype=torch.float32, is_shared=False)},\n"
+            "    batch_size=torch.Size([3, 2]),\n"
+            "    device=None,\n"
+            "    is_shared=False,\n"
+            "    stack_dim=1)"
+        )
+
+    def test_to_keeps_nested_tensorclass(self):
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        td = lazy_stack(
+            [
+                TensorDict(tc=MC(x=torch.zeros(3), batch_size=[3]), batch_size=[3])
+                for _ in range(2)
+            ]
+        )
+        out = td.to(torch.float64)
+        assert type(out) is LazyStackedTensorDict
+        assert type(out.tensordicts[0]["tc"]) is MC
+        assert type(out["tc"]) is MC
+        assert out["tc"].x.dtype == torch.float64
+        # to_tensordict converts every tensorclass to a TensorDict
+        dense = td.to_tensordict()
+        assert type(dense) is TensorDict
+        assert type(dense["tc"]) is TensorDict
 
     def test_all_keys(self):
         td = TensorDict({"a": torch.zeros(1)}, [])
@@ -1569,6 +1655,28 @@ class TestLazyStackedTensorDict:
         assert assert_allclose_td(td_c_device.cpu(), td)
         assert td_c_device["njt_lengths"]._lengths is not None
 
+    def test_batch_size_equal_list(self):
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        )
+        sub = _SubTensorDict(
+            TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3]), (slice(0, 2),)
+        )
+        nontensor = lazy_stack(
+            [
+                lazy_stack([NonTensorData("a"), NonTensorData("b"), NonTensorData("c")])
+                for _ in range(2)
+            ]
+        )
+        for td in (lazy, sub, nontensor):
+            td.batch_size = torch.Size([2, 3])
+            td.batch_size = [2, 3]
+            td.batch_size = (2, 3)
+            for new_batch_size in ([2], 3, None, [2.0]):
+                with pytest.raises(RuntimeError, match="Modifying the batch size"):
+                    td.batch_size = new_batch_size
+            assert td.batch_size == torch.Size([2, 3])
+
     def test_create_empty(self):
         td = LazyStackedTensorDict(stack_dim=0)
         assert td.device is None
@@ -1579,6 +1687,16 @@ class TestLazyStackedTensorDict:
         for clone in (td.clone(), td.clone(recurse=False)):
             assert clone.shape == torch.Size([1, 0, 2])
             assert clone.device == torch.device("cpu")
+
+    def test_create_empty_state(self):
+        # as on an empty TensorDict
+        empty = LazyStackedTensorDict(stack_dim=0, batch_size=[3], device="cpu")
+        assert empty._is_shared is False
+        assert empty._is_memmap is False
+        assert empty.is_shared() is False
+        assert empty.is_memmap() is False
+        assert empty.clear_device_() is empty
+        assert empty.device is None
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("names", [None, ["a"]])
@@ -3352,6 +3470,29 @@ class TestLazyStackedTensorDict:
             with pytest.raises(RuntimeError, match="dim must be greater than"):
                 getattr(lazy, op)(dim)
 
+    @pytest.mark.parametrize("method", ["rename_", "refine_names"])
+    def test_rename_locked_names(self, method):
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        lazy = lazy_stack(tds).lock_()
+        assert lazy.names == [None, None]
+        getattr(lazy, method)("s", "x")
+        assert tds[0].names == ["x"]
+        assert lazy.names == ["s", "x"]
+        lazy.unlock_()
+        assert lazy.names == ["s", "x"]
+
+    def test_views_is_shared_mixed_members(self):
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
+        tds[0].share_memory_()
+        lazy = lazy_stack(tds)
+        with pytest.raises(RuntimeError, match="shared status mismatch"):
+            lazy.is_shared()
+        assert not lazy.is_memmap()
+        # a view reads the flags of its source, which hold for every member
+        sub = _SubTensorDict(lazy, (slice(0, 1),))
+        assert sub.is_shared() is False
+        assert sub.is_memmap() is False
+
     @pytest.mark.parametrize("safe", [False, True])
     @pytest.mark.parametrize(
         "key,new_key",
@@ -4534,6 +4675,195 @@ class TestLazyStackedTensorDict:
         assert td.batch_size == (2, 4)
         assert td.batch_size == td2.batch_size
 
+    @staticmethod
+    def _members(n, value=0.0, **kwargs):
+        return [
+            TensorDict(a=torch.full((3,), value + i), batch_size=[3], **kwargs)
+            for i in range(n)
+        ]
+
+    def test_lazy_update_per_member_shares_storage(self):
+        # update writes each member of a lazy source into the member of self
+        # by reference, and keeps the members of self
+        members = self._members(2)
+        lazy = lazy_stack(members)
+        source = lazy_stack(self._members(2, 10.0))
+        assert lazy.update(source) is lazy
+        for member, dest, src in zip(lazy.tensordicts, members, source.tensordicts):
+            assert member is dest
+            assert member["a"] is src["a"]
+        # a dense source is split along the stack dim
+        dense = TensorDict(
+            a=torch.full((2, 3), 20.0), b=torch.ones(2, 3), batch_size=[2, 3]
+        )
+        assert lazy.update(dense) is lazy
+        assert (lazy["a"] == 20).all() and (lazy["b"] == 1).all()
+        assert lazy.tensordicts[0]["a"].data_ptr() == dense["a"].data_ptr()
+        # dicts, kwargs, None, self and empty keys_to_update
+        assert lazy.update({"c": torch.zeros(2, 3)}, d=torch.ones(2, 3)) is lazy
+        assert (lazy["c"] == 0).all() and (lazy["d"] == 1).all()
+        assert (
+            lazy.update(
+                TensorDict(c=torch.ones(2, 3), batch_size=[2, 3]), e=torch.ones(2, 3)
+            )
+            is lazy
+        )
+        assert (lazy["c"] == 1).all() and (lazy["e"] == 1).all()
+        assert lazy.update(e=torch.zeros(2, 3)) is lazy and (lazy["e"] == 0).all()
+        assert lazy.update(None) is lazy and lazy.update(lazy) is lazy
+        assert lazy.update({"e": torch.ones(2, 3)}, keys_to_update=[]) is lazy
+        assert (lazy["e"] == 0).all()
+        # a source whose batch size can be reset to that of self
+        assert lazy.update(TensorDict(a=torch.zeros(2, 3), batch_size=[])) is lazy
+        assert (lazy["a"] == 0).all()
+        with pytest.raises(ValueError, match="different shapes"):
+            lazy.update(TensorDict(a=torch.zeros(3, 3), batch_size=[]))
+        with pytest.raises(ValueError, match="update_batch_size=False"):
+            lazy.update(lazy_stack(self._members(1)))
+        with pytest.raises(RuntimeError, match="Some keys of the dest"):
+            lazy.update(lazy_stack(self._members(1)), update_batch_size=True)
+        lazy.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            lazy.update({"a": torch.ones(2, 3)})
+        assert lazy.update({"a": torch.ones(2, 3)}, inplace=True) is lazy
+        # inplace given by position, as TensorDict accepts it
+        assert lazy.update({"a": torch.zeros(2, 3)}, False, True) is lazy
+        assert (lazy["a"] == 0).all()
+
+    def test_lazy_update_vmap(self):
+        # Under vmap over the stack dim, update writes each member
+        lazy = lazy_stack(self._members(2))
+
+        def add_b(td):
+            return td.update({"b": td["a"] + 1})
+
+        def add_c(td):
+            return td.update(TensorDict(c=td["a"] + 2, batch_size=[]))
+
+        out = torch.vmap(add_b)(lazy)
+        assert (out["b"] == lazy["a"] + 1).all()
+        out = torch.vmap(add_c)(lazy)
+        assert (out["c"] == lazy["a"] + 2).all()
+
+    @pytest.mark.parametrize(
+        "stack_dim,source",
+        [
+            (0, {}),
+            (0, {"a": torch.full((), 2.0)}),
+            (0, {"a": torch.arange(3.0)}),
+            (0, TensorDict(a=torch.arange(3.0), batch_size=[])),
+            (0, TensorDict(a=torch.arange(3.0).expand(1, 3), batch_size=[1, 3])),
+            (1, TensorDict(a=torch.arange(6.0).view(2, 3), batch_size=[2])),
+            (1, TensorDict(a=torch.arange(6.0).view(2, 3), batch_size=[])),
+            (1, {"a": torch.arange(6.0).view(2, 3)}),
+            (1, {"a": torch.arange(3.0)}),
+        ],
+    )
+    def test_lazy_update__broadcasts(self, stack_dim, source):
+        # update_ broadcasts the leaves of a source that does not have the
+        # stack dim to the leaves of self, as TensorDict.update_ does
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(2), batch_size=[2]) for _ in range(3)], 1
+        )
+        if stack_dim == 0:
+            lazy = lazy_stack(self._members(2))
+        expected = lazy.to_tensordict().update_(source)
+        assert lazy.update_(source) is lazy
+        assert (lazy == expected).all()
+
+    def test_lazy_update__arguments(self):
+        lazy = lazy_stack(self._members(2))
+        # kwargs, None, self, and a source of another length
+        assert lazy.update_({"a": torch.ones(2, 3)}, a=torch.full((2, 3), 2.0)) is lazy
+        assert (lazy["a"] == 2).all()
+        lazy.update_(
+            TensorDict(a=torch.ones(2, 3), batch_size=[2, 3]), a=torch.zeros(2, 3)
+        )
+        assert (lazy["a"] == 0).all()
+        assert lazy.update_(a=torch.ones(2, 3)) is lazy and (lazy["a"] == 1).all()
+        assert lazy.update_(None) is lazy and lazy.update_(lazy) is lazy
+        with pytest.raises(ValueError, match="different shapes"):
+            lazy.update_(TensorDict(a=torch.ones(3, 3), batch_size=[3, 3]))
+
+    def test_lazy_update_at_signature(self):
+        # LazyStackedTensorDict.update_at_ takes the arguments of
+        # TensorDictBase.update_at_, and still the name `index` for idx
+        lazy = lazy_stack(self._members(2))
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(index=.*0\.17.*update_at_\(idx=",
+        ) as record:
+            assert lazy.update_at_({"a": torch.full((3,), 5.0)}, index=0) is lazy
+        assert record[0].filename == __file__
+        assert (lazy[0]["a"] == 5).all() and (lazy[1]["a"] == 1).all()
+        assert lazy.update_at_({"a": torch.full((3,), 7.0)}, idx=0) is lazy
+        assert (lazy[0]["a"] == 7).all()
+        lazy.update_at_(
+            {"a": torch.full((3,), 8.0), "b": torch.ones(3)}, 0, keys_to_update=["a"]
+        )
+        assert (lazy[0]["a"] == 8).all() and "b" not in lazy.keys()
+        assert lazy.update_at_({"a": torch.full((3,), 6.0)}, (1, Ellipsis)) is lazy
+        assert (lazy[1]["a"] == 6).all()
+
+    def test_lazy_update_longer_source(self):
+        # A source with more members along the stack dim: with
+        # update_batch_size=True, the members of self are updated and copies
+        # of the extra members are appended (#2206)
+        for source in (
+            lazy_stack(self._members(3, 10.0)),
+            TensorDict(a=torch.full((3, 3), 10.0), batch_size=[3, 3]),
+        ):
+            lazy = lazy_stack(self._members(2))
+            members = list(lazy.tensordicts)
+            lazy.update(source, update_batch_size=True)
+            assert lazy.batch_size == (3, 3)
+            assert (lazy["a"] == source["a"]).all()
+            assert lazy.tensordicts[:2] == members
+            if isinstance(source, LazyStackedTensorDict):
+                assert lazy.tensordicts[2] is not source.tensordicts[2]
+                assert lazy.tensordicts[2]["a"] is source.tensordicts[2]["a"]
+        # without it, the extra members are left out, as before
+        lazy = lazy_stack(self._members(2))
+        lazy.update(lazy_stack(self._members(3, 10.0)))
+        assert lazy.batch_size == (2, 3)
+        # it raises where a TensorDict does, before writing anything
+        lazy = lazy_stack(self._members(2))
+        lazy.set("b", torch.zeros(2, 3))
+        before = lazy["a"].clone()
+        for kwargs, match in (
+            ({}, "Some keys of the dest"),
+            ({"inplace": True}, "inplace=True"),
+            ({"keys_to_update": ["a"]}, "keys_to_update"),
+        ):
+            with pytest.raises(RuntimeError, match=match):
+                lazy.to_tensordict().update(
+                    lazy_stack(self._members(3, 10.0)).to_tensordict(),
+                    update_batch_size=True,
+                    **kwargs,
+                )
+            with pytest.raises(RuntimeError, match=match):
+                lazy.update(
+                    lazy_stack(self._members(3, 10.0)),
+                    update_batch_size=True,
+                    **kwargs,
+                )
+            assert lazy.batch_size == (2, 3) and (lazy["a"] == before).all()
+
+    def test_lazy_update_tuple_key_over_tensor(self):
+        # A tuple key whose prefix is a tensor of the members raises, as on a
+        # TensorDict, instead of replacing the tensor with a sub-tensordict
+        lazy = lazy_stack([TensorDict(x=torch.zeros(3), batch_size=[3])] * 2)
+        with pytest.raises(KeyError, match="already present"):
+            lazy.to_tensordict().update({("x", "y"): torch.ones(2, 3)})
+        with pytest.raises(KeyError, match="already present"):
+            lazy.update({("x", "y"): torch.ones(2, 3)})
+        assert (lazy.get("x") == 0).all()
+        nested = TensorDict(lazy=lazy, batch_size=[2])
+        with pytest.raises(KeyError, match="already present"):
+            nested.update({("lazy", "x", "y"): torch.ones(2, 3)})
+        lazy.update({("z", "y"): torch.ones(2, 3)})
+        assert (lazy.get(("z", "y")) == 1).all()
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_where_scalar_tensor(self, stack_dim):
         # A 0-dim tensor goes whole to each member, as a scalar does
@@ -4669,6 +4999,24 @@ class TestLazyStackedTensorDict:
         before = lst["a"].tolist()
         lst[torch.tensor(False)] = TensorDict({"a": torch.full((1, 2), 5.0)}, [1, 2])
         assert lst["a"].tolist() == before
+
+    def test_select_exclude_nested_through_leaf(self):
+        # A nested key through a leaf is missing in each member (#2617)
+        lst = LazyStackedTensorDict(
+            *[
+                TensorDict(x=torch.zeros(3), n=TensorDict(y=torch.zeros(3)))
+                for _ in range(2)
+            ],
+            stack_dim=0,
+        )
+        with pytest.raises(KeyError, match="'x' is a Tensor, not a tensordict"):
+            lst.select(("x", "q"))
+        out = lst.select(("x", "q"), "n", strict=False)
+        assert isinstance(out, LazyStackedTensorDict)
+        assert set(out.keys(True)) == {"n", ("n", "y")}
+        out = lst.exclude(("x", "q"), ("n", "y", "q"))
+        assert isinstance(out, LazyStackedTensorDict)
+        assert set(out.keys(True)) == {"x", "n", ("n", "y")}
 
     def test_lazy_empty_selection_batch_size(self):
         lst = LazyStackedTensorDict(

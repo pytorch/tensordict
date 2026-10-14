@@ -1325,7 +1325,7 @@ def _proc_args_const(*args, **kwargs):
 
 def _is_writable(file_path):
     file_path = str(file_path)
-    if os.path.exists(file_path):
-        return os.access(file_path, os.W_OK)
-    # Assume that the file can be written in the directory
-    return True
+    if os.access(file_path, os.W_OK):
+        return True
+    # Assume that a missing file can be written in the directory
+    return not os.path.exists(file_path)
