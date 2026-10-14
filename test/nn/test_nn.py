@@ -4745,6 +4745,23 @@ class TestCompositeDist:
         )
         assert list(dist.dists) == ["b"], list(dist.dists)
 
+    @pytest.mark.parametrize("dist_name", ["a", ("a",), (("nested",), "disc")])
+    @pytest.mark.parametrize("raw_key", [True, False])
+    def test_extra_kwargs_unraveled_key(self, dist_name, raw_key):
+        # extra_kwargs is looked up with the unraveled name, then with the key
+        # as written in distribution_map.
+        key = unravel_key(dist_name)
+        params = TensorDict(
+            {key: {"loc": torch.zeros(3), "scale": torch.ones(3)}},
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={dist_name: distributions.Normal},
+            extra_kwargs={dist_name if raw_key else key: {"validate_args": False}},
+        )
+        assert dist[key]._validate_args is False
+
     def test_rsample(self):
         params = TensorDict(
             {

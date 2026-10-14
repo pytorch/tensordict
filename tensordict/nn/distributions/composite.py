@@ -132,11 +132,11 @@ class CompositeDistribution(d.Distribution, Mapping):
             extra_kwargs = {}
         dists = {}
         write_names = _resolve_name_map(name_map, distribution_map)
-        for name, dist_class in distribution_map.items():
-            name = unravel_key(name)
+        for raw_name, dist_class in distribution_map.items():
+            name = unravel_key(raw_name)
             write_name = write_names[name]
             dist_params = params.get(name)
-            kwargs = extra_kwargs.get(name, {})
+            kwargs = extra_kwargs.get(name, extra_kwargs.get(raw_name, {}))
             if dist_params is None:
                 raise KeyError(
                     f"no param {name} found in params with keys {params.keys(True, True)}"
