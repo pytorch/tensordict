@@ -146,16 +146,17 @@ def _expand_batch_ellipsis(idx, batch_size):
 
     A store applies a batch index to each entry, whose feature dims follow the
     batch dims; as on a tensordict, an ``Ellipsis`` covers the batch dims only.
-    The trailing ``:`` are dropped, as they select the same elements, so that
-    an index that only selects along dim 0 is still read as one.
+    The trailing ``:`` after the first element are dropped, as they select the
+    same elements, so that an index that only selects along dim 0 is still read
+    as one. An empty batch gives ``()``, which a 0-d entry accepts.
     """
     if not (isinstance(idx, tuple) and any(i is Ellipsis for i in idx)):
         return idx
     idx = convert_ellipsis_to_idx(idx, batch_size)
     end = len(idx)
-    while end and isinstance(idx[end - 1], slice) and idx[end - 1] == slice(None):
+    while end > 1 and isinstance(idx[end - 1], slice) and idx[end - 1] == slice(None):
         end -= 1
-    return idx[:end] if end else slice(None)
+    return idx[:end]
 
 
 def _read_dim0(idx):

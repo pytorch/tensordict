@@ -2757,6 +2757,23 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    @pytest.mark.parametrize("written", ["upload", "set"])
+    def test_setitem_ellipsis_0d_elements(self, store_kwargs, written):
+        """An Ellipsis written to an element of empty batch size selects its 0-d entries whole (#2599)."""
+        lazy_td = self._layout_lazy_td(0, 2, [])
+        store_td = self._layout_store(store_kwargs, lazy_td, written, False)
+        try:
+            for td, element in (
+                (store_td, _StoreStackElementView(store_td, 1)),
+                (lazy_td, lazy_td.tensordicts[1]),
+            ):
+                td[(...,)] = 7.0
+                element[(...,)] = 8.0
+            assert (store_td.to_tensordict() == lazy_td).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     @pytest.mark.parametrize("legacy", [False, True])
     @pytest.mark.parametrize("written", ["upload", "set"])
     def test_stack_dim_nonzero_square(self, store_kwargs, written, legacy):
