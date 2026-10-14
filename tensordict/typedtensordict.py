@@ -189,13 +189,17 @@ def _collect_fields(
     return frozenset(expected), frozenset(required), frozenset(optional), defaults
 
 
-def _warn_missing_required(cls: type, td: TensorDict, call: str, opt_out: str) -> None:
+def _warn_missing_required(
+    cls: type, td: TensorDictBase, call: str, opt_out: str
+) -> None:
     """Warns if ``td``, the backend of a new ``cls`` built by ``call``, lacks a required field.
 
     ``call`` names the call, with ``{}`` for the class name.
     """
-    # the backing dict: a keys() view costs about 2 us more per call
-    missing = cls.__required_keys__.difference(td._tensordict)
+    # the backing dict: a keys() view costs about 2 us more per call.
+    # from_dict passes other tensor collections through unchanged.
+    keys = td._tensordict if type(td) is TensorDict else td.keys()
+    missing = cls.__required_keys__.difference(keys)
     # Dynamo cannot trace warnings.warn: a compiled call stays silent.
     if not missing or is_compiling():
         return

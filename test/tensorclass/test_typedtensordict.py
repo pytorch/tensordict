@@ -122,6 +122,10 @@ class TestConstruction:
             # undeclared keys are kept without a warning
             extra = PredictorState.from_dict({**data, "z": torch.zeros(4)})
             assert sorted(extra.keys()) == ["X", "beta", "eta", "z"]
+            # a tensor collection that is not a TensorDict is wrapped as is
+            stacked = PredictorState.from_dict(lazy_stack([state[0], state[1]]))
+            assert type(stacked) is PredictorState
+            assert sorted(stacked.keys()) == sorted(data)
             # from_dict_instance does not check the declared fields
             other = state.from_dict_instance({"eta": torch.zeros(4)}, batch_size=[4])
             assert list(other.keys()) == ["eta"]
