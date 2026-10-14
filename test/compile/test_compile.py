@@ -3480,6 +3480,14 @@ class _PostInitTC:
         self.x = self.x * 2
 
 
+@tensorclass(skip_post_init_on_rebuild=True)
+class _SkipRebuildPostInitTC:
+    x: torch.Tensor
+
+    def __post_init__(self):
+        self.x = self.x * 2
+
+
 @tensorclass
 class _ConcreteDefaultTC:
     cache: torch.Tensor = torch.zeros(3)
@@ -3524,6 +3532,23 @@ class TestTCPostInitCompile:
 
         inp = torch.ones(3)
         torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
+
+    @pytest.mark.parametrize("cls", [_PostInitTC, _SkipRebuildPostInitTC])
+    def test_skip_post_init_on_rebuild_under_compile(self, cls):
+        # Compiled code makes the same __post_init__ calls as eager code: the
+        # flag is a class attribute, which Dynamo reads as a constant
+        def fn(x):
+            tc = cls(x=x)
+            td = TensorDict(x=x, batch_size=())
+            return tc.clone().x, tc[...].x, cls.from_tensordict(td).x
+
+        inp = torch.ones(3)
+        expected = fn(inp)
+        doubled = torch.full((3,), 2.0)
+        rebuilt = doubled if cls is _SkipRebuildPostInitTC else doubled * 2
+        torch.testing.assert_close(expected, (rebuilt, rebuilt, doubled))
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        torch.testing.assert_close(compiled(inp), expected)
 
 
 class TestTCDefaultsCompile:
