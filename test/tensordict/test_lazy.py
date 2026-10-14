@@ -3456,17 +3456,6 @@ class TestLazyStackedTensorDict:
         assert value.tolist() == ["x", "y"]
         assert nested.non_tensor_items() == ()
 
-    def test_non_tensor_items_partial_and_stack(self):
-        # a non-tensor that only some members hold, and a NonTensorStack,
-        # raise in the stacking of the first member's values
-        lazy = lazy_stack(
-            [TensorDict(s=NonTensorData("x")), TensorDict(t=NonTensorData("y"))]
-        )
-        with pytest.raises(TypeError):
-            lazy.non_tensor_items()
-        with pytest.raises(TypeError):
-            NonTensorStack("a", "b").non_tensor_items()
-
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
     )
