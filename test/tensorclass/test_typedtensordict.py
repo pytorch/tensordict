@@ -1366,64 +1366,71 @@ class TestBackends:
         ]
         return Flat.from_tensordict(lazy_stack(tds)), tds
 
-    @pytest.mark.parametrize(
-        "op",
-        [
-            pytest.param(
-                lambda s: s.flatten(0, 1, inplace=True),
-                id="flatten",
-            ),
-            pytest.param(
-                lambda s: s.unflatten(1, (3, 1), inplace=True),
-                id="unflatten",
-            ),
-            pytest.param(
-                lambda s: s.repeat(1, 2, inplace=True),
-                id="repeat",
-            ),
-            pytest.param(
-                lambda s: s.gather(
-                    1, torch.zeros(4, 2, dtype=torch.long), inplace=True
-                ),
-                id="gather_new_size",
-            ),
-            pytest.param(lambda s: s.reshape(12, inplace=True), id="reshape"),
-            pytest.param(
-                lambda s: s.repeat_interleave(2, dim=1, inplace=True),
-                id="repeat_interleave",
-            ),
-            pytest.param(
-                lambda s: s.masked_select(
-                    torch.ones(4, 3, dtype=torch.bool), inplace=True
-                ),
-                id="masked_select",
-            ),
-        ],
-    )
-    def test_inplace_shape_ops_flat_lazy_source(self, op):
-        # the in-place shape ops refuse a lazy source before writing anything
-        state, tds = self._flat_lazy_state()
-        before = [td.clone() for td in tds]
-        with pytest.raises(NotImplementedError, match="inplace=True"):
-            op(state)
-        assert state.batch_size == (4, 3)
-        for td, expected in zip(tds, before):
-            assert td.batch_size == (3,)
-            torch.testing.assert_close(td, expected)
+    # (op, outcome): "raise" before any write, "self" without a warning, or
+    # "warn" (returns self with a FutureWarning, until 0.17)
+    _FLAT_LAZY_INPLACE_OPS = {
+        "flatten": (lambda s: s.flatten(0, 1, inplace=True), "raise"),
+        "unflatten": (lambda s: s.unflatten(1, (3, 1), inplace=True), "raise"),
+        "repeat": (lambda s: s.repeat(1, 2, inplace=True), "raise"),
+        "gather_new_size": (
+            lambda s: s.gather(1, torch.zeros(4, 2, dtype=torch.long), inplace=True),
+            "raise",
+        ),
+        "reshape": (lambda s: s.reshape(12, inplace=True), "raise"),
+        "repeat_interleave": (
+            lambda s: s.repeat_interleave(2, dim=1, inplace=True),
+            "raise",
+        ),
+        "masked_select": (
+            lambda s: s.masked_select(torch.ones(4, 3, dtype=torch.bool), inplace=True),
+            "raise",
+        ),
+        "flatten_same": (lambda s: s.flatten(1, 1, inplace=True), "self"),
+        "unflatten_same": (lambda s: s.unflatten(1, (3,), inplace=True), "self"),
+        "repeat_ones": (lambda s: s.repeat(1, 1, inplace=True), "self"),
+        "gather_same_shape": (
+            lambda s: s.gather(1, torch.tensor([[2, 0, 1]] * 4), inplace=True),
+            "warn",
+        ),
+    }
 
-    def test_gather_inplace_same_shape_flat_lazy_source(self):
-        # an index of the batch shape keeps the members' shapes, and the
-        # members get the gathered values; until 0.17 it warns
+    @pytest.mark.parametrize("parent", [False, True], ids=["direct", "parent"])
+    @pytest.mark.parametrize("op", list(_FLAT_LAZY_INPLACE_OPS))
+    def test_inplace_shape_ops_flat_lazy_source(self, op, parent):
+        # A call that changes the batch size raises before it writes anything,
+        # also through a tensordict that holds the typed tensordict, whose
+        # leaves before it stay unchanged. The other calls give the result of
+        # a dense copy and keep the members' shapes.
+        fn, outcome = self._FLAT_LAZY_INPLACE_OPS[op]
         state, tds = self._flat_lazy_state()
-        index = torch.zeros(4, 3, dtype=torch.long)
-        expected = state.to_tensordict().gather(1, index)
-        with pytest.warns(FutureWarning, match="gather.*0.17"):
-            assert state.gather(1, index, inplace=True) is state
-        assert state.batch_size == (4, 3)
+        if parent:
+            obj = TensorDict(
+                x=torch.arange(12.0).reshape(4, 3), t=state, batch_size=[4, 3]
+            )
+        else:
+            obj = state
+        before = obj.to_tensordict()
+        if outcome == "raise":
+            with pytest.raises(NotImplementedError, match="inplace=True|in-place"):
+                fn(obj)
+            assert obj.batch_size == (4, 3)
+            torch.testing.assert_close(obj.to_tensordict(), before)
+        else:
+            expected = fn(before.clone())
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                assert fn(obj) is obj
+            future = [w for w in record if issubclass(w.category, FutureWarning)]
+            if outcome == "warn":
+                assert len(future) == 1
+                assert "0.17" in str(future[0].message)
+            else:
+                assert not future
+            torch.testing.assert_close(obj.to_tensordict(), expected)
         assert isinstance(state._source, LazyStackedTensorDict)
-        assert all(td.batch_size == (3,) for td in tds)
-        torch.testing.assert_close(state.to_tensordict(), expected)
-        torch.testing.assert_close(lazy_stack(tds).to_tensordict(), expected)
+        for td in tds:
+            assert td.batch_size == (3,)
+            assert td["a"].shape == (3,)
 
     @pytest.mark.parametrize(
         "op",

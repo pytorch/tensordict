@@ -1784,11 +1784,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # start_dim > end_dim it inserted a dim of size 1 before 0.15: until 0.17
     # it still does, with a FutureWarning, where the others raise a ValueError.
     _flatten_lenient: bool = False
-    # Set by TypedTensorDict, whose source can be lazy: there,
-    # gather(inplace=True) with an index of the batch shape keeps the shapes
-    # of the members and writes into them. Until 0.17 it warns, where the
-    # lazy tensordicts raise.
-    _gather_inplace_lenient: bool = False
+    # Set by a TypedTensorDict over a lazy stack: gather(inplace=True) with an
+    # index of the batch shape writes into the members there, and until 0.17
+    # it warns, where the lazy stacks raise.
+    _gather_inplace_warns: bool = False
     # Whether get() ignores as_list and as_nested_tensor, and warns about them
     # (see _warn_get_kwargs). False for lazy stacks, which honor them.
     _get_ignores_kwargs: bool = True
@@ -7101,16 +7100,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         provided and differs from the current one — bypassing the redundant
         shape check in ``_batch_size_setter``.
         """
-        if (
-            not self._inplace_batch_size_change
-            and new_batch_size is not None
-            and tuple(new_batch_size) != tuple(self.batch_size)
+        if new_batch_size is not None and tuple(new_batch_size) != tuple(
+            self.batch_size
         ):
-            raise NotImplementedError(
-                "An in-place shape operation that changes the batch size is not "
-                f"supported on {type(self).__name__}: call to_tensordict() first, "
-                "or use inplace=False."
-            )
+            if not self._inplace_batch_size_change:
+                raise NotImplementedError(
+                    "An in-place shape operation that changes the batch size is "
+                    f"not supported on {type(self).__name__}: call "
+                    "to_tensordict() first, or use inplace=False."
+                )
+            if not _inplace_shape_state.nested:
+                # the nested tensordicts are resized one by one after the
+                # leaves before them: check them all before any write
+                self._raise_if_holds_fixed_batch_size()
         keys = list(self.keys())
         for key in keys:
             leaf = self._get_str(key, default=None)
@@ -7144,6 +7146,33 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ):
             self._change_batch_size(torch.Size(new_batch_size))
         return self
+
+    def _raise_if_holds_fixed_batch_size(self, prefix: tuple[str, ...] = ()) -> None:
+        """Raise if a nested tensordict cannot change its batch size in place.
+
+        Called by ``_inplace_rebind_leaves`` before an in-place shape op that
+        changes the batch size writes anything, so that a nested tensordict
+        whose ``_inplace_batch_size_change`` is False, such as a file or a
+        ``TypedTensorDict`` over a lazy stack, raises before the leaves of
+        ``self`` are rewritten.
+        """
+        for key, value in self.items():
+            cls = type(value)
+            if cls is Tensor:
+                continue
+            if not isinstance(value, TensorDictBase):
+                if not _is_tensorclass(cls) or _is_non_tensor(cls):
+                    continue
+                value = value._tensordict
+            nested_key = prefix + (key,)
+            if not value._inplace_batch_size_change:
+                raise NotImplementedError(
+                    "An in-place shape operation that changes the batch size is "
+                    f"not supported on {type(value).__name__}, found at key "
+                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}: "
+                    "call to_tensordict() first, or use inplace=False."
+                )
+            value._raise_if_holds_fixed_batch_size(nested_key)
 
     def _raise_if_holds_lazy_stack(
         self, op_name: str, prefix: tuple[str, ...] = ()

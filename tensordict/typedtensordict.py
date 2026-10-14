@@ -539,7 +539,6 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     """
 
     _source: TensorDictBase
-    _gather_inplace_lenient = True
 
     # Override: the flag lives on the source.
     @_StateFromSource._is_shared.setter
@@ -557,6 +556,26 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         return self._source._reads_return_copies or isinstance(
             self._source, LazyStackedTensorDict
         )
+
+    # Override: a lazy source, a file or a sub-tensordict refuses the in-place
+    # shape ops; reshape, repeat_interleave and masked_select check it first.
+    @property
+    def _inplace_shape_ops_unsupported(self):
+        return self._source._inplace_shape_ops_unsupported
+
+    # Override: the members of a lazy source keep their batch size, so an
+    # in-place shape op that changes the batch size raises before it writes,
+    # also through a tensordict that holds self.
+    @property
+    def _inplace_batch_size_change(self):
+        source = self._source
+        return source._inplace_batch_size_change and not source._lazy
+
+    # Override: a lazy source writes a gather with an index of the batch shape
+    # into its members; the lazy stacks refuse it.
+    @property
+    def _gather_inplace_warns(self):
+        return isinstance(self._source, LazyStackedTensorDict)
 
     # ------------------------------------------------------------------
     # Internal helper: wrap a TensorDictBase without key validation
@@ -1164,14 +1183,6 @@ _TUPLE_WRAP_DELEGATES = [
     "_split",
 ]
 
-# Traits read from the source: a lazy source, a file or a view makes the
-# in-place shape ops raise before they write.
-_SOURCE_TRAITS = [
-    "_lazy",
-    "_inplace_shape_ops_unsupported",
-    "_inplace_batch_size_change",
-]
-
 for _name in _DIRECT_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate(_name))
 
@@ -1183,10 +1194,3 @@ for _name in _INPLACE_DELEGATES:
 
 for _name in _TUPLE_WRAP_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_tuple_wrap(_name))
-
-for _name in _SOURCE_TRAITS:
-    setattr(
-        TypedTensorDict,
-        _name,
-        property(lambda self, _name=_name: getattr(self._source, _name)),
-    )

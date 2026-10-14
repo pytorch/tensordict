@@ -1792,14 +1792,13 @@ class _ShapeOps:
                     "`out` and `inplace=True` are mutually exclusive in gather."
                 )
             if self._lazy:
-                if not (
-                    self._gather_inplace_lenient
-                    and tuple(index.shape) == tuple(self.batch_size)
-                ):
-                    raise NotImplementedError(
-                        "gather(inplace=True) is not supported on LazyStackedTensorDict; "
-                        "call .to_tensordict() first or use inplace=False."
-                    )
+                raise NotImplementedError(
+                    "gather(inplace=True) is not supported on LazyStackedTensorDict; "
+                    "call .to_tensordict() first or use inplace=False."
+                )
+            if self._gather_inplace_warns and tuple(index.shape) == tuple(
+                self.batch_size
+            ):
                 warnings.warn(
                     f"gather(inplace=True) on a {type(self).__name__} over a "
                     "lazy tensordict works when the index has the batch shape. "
