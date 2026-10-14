@@ -357,11 +357,12 @@ LAST_OP_MAPS["rot90"] = _reverse_rot90
 
 
 def _reverse_atleast_1d(self, args, kwargs, out):
-    # Remove added dimensions
+    # ``self`` is the expanded result and ``out`` is the original.
+    # atleast_* prepends size-1 dims; squeeze only those before write-back.
     out_ndim = out.ndim
     self_ndim = self.ndim
-    if out_ndim > self_ndim:
-        for _ in range(out_ndim - self_ndim):
+    if self_ndim > out_ndim:
+        for _ in range(self_ndim - out_ndim):
             self = self.squeeze(0)
     if not out.is_locked:
         return out.update(self, inplace=False)
