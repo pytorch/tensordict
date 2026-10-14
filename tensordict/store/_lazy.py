@@ -58,6 +58,7 @@ from tensordict.store._utils import (
     _compute_covering_range,
     _decode_meta,
     _dtype_to_str,
+    _expand_batch_ellipsis,
     _get_local_idx,
     _getitem_result_shape,
     _is_scattered_index,
@@ -369,6 +370,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
             return self.set(index_unravel, value, inplace=True)
 
         _check_indexed_value(self, value)
+        index = _expand_batch_ellipsis(index, self.batch_size)
         if isinstance(value, Number):
             # a scalar is written to every entry, which casts it to its dtype
             items = [
@@ -1694,6 +1696,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
         if isinstance(index, list):
             index = torch.tensor(index)
+        index = _expand_batch_ellipsis(index, self.batch_size)
 
         _check_indexed_value(self, value)
         if isinstance(value, Number):

@@ -1413,6 +1413,29 @@ class TestTensorDictStore:
         sub = store_td[...]
         assert torch.allclose(sub["obs"], obs)
 
+    @pytest.mark.parametrize(
+        "index", [(..., 1), (0, ..., 1), (1, ...)], ids=["front", "middle", "end"]
+    )
+    def test_indexed_write_ellipsis_feature_dims(self, store_kwargs, index):
+        """An Ellipsis in an index written to the store stands for the batch dims, as on a TensorDict (#2599)."""
+        td = TensorDict(
+            a=torch.arange(6.0).view(2, 3),
+            b=torch.arange(24.0).view(2, 3, 4),
+            n=TensorDict(c=torch.arange(30).view(2, 3, 5), batch_size=[2, 3]),
+            batch_size=[2, 3],
+        )
+        store_td = TensorDictStore.from_tensordict(td.clone(), **store_kwargs)
+        try:
+            value = td[index].apply(lambda x: -x)
+            for dest in (store_td, td):
+                dest[index] = 7.0
+                dest[index] = value.exclude("a")
+            assert (store_td.to_tensordict() == td).all()
+            assert (store_td[index] == td[index]).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_indexed_read_step_slice(self, store_td):
         """td[::2] should return every other row via covering range."""
         obs = torch.randn(10, 3)
@@ -2702,6 +2725,37 @@ class TestLazyStackedTensorDictStore:
                 store_td.clear_redis()
                 store_td.close()
         assert counts["upload"] == counts["set"]
+
+    @pytest.mark.parametrize(
+        "index",
+        [(..., 1), (0, ..., 1), (1, ...), (...,)],
+        ids=["front", "middle", "end", "only"],
+    )
+    @pytest.mark.parametrize("written", ["upload", "set"])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_setitem_ellipsis(self, store_kwargs, stack_dim, written, index):
+        """An Ellipsis in an index written to the store stands for the batch dims, as on the lazy stack (#2599).
+
+        Before, the store applied the index to the full shape of each entry,
+        so store[..., 1] = 7.0 wrote column 1 of the feature dim of ("n", "b")
+        and a tensordict value raised.
+        """
+        lazy_td = self._layout_lazy_td(stack_dim, 2, [3, 4])
+        store_td = self._layout_store(store_kwargs, lazy_td, written, False)
+        try:
+            value = lazy_td[index].to_tensordict().apply(lambda x: -x)
+            for td, element in (
+                (store_td, _StoreStackElementView(store_td, 1)),
+                (lazy_td, lazy_td.tensordicts[1]),
+            ):
+                td[index] = 7.0
+                element[index] = 8.0
+                td[index] = value.exclude("a")
+            assert (store_td.to_tensordict() == lazy_td).all()
+            assert (store_td[index] == lazy_td[index]).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     @pytest.mark.parametrize("legacy", [False, True])
     @pytest.mark.parametrize("written", ["upload", "set"])
