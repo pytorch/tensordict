@@ -8564,6 +8564,263 @@ class TestGeneric:
         dest.update({"x": value})
         assert dest["x"].device.type == "meta"
 
+    def test_update_nested_tensordict_values(self):
+        # Merging TensorDict values keeps the destination's nested object,
+        # batch size and untouched keys, and matches TensorDictBase.update.
+        def make(states, action):
+            return TensorDict(
+                {"data": TensorDict(states=states, action=action, batch_size=[3])},
+                batch_size=[3],
+            )
+
+        states = torch.zeros(3, 1, dtype=torch.int32)
+        action = torch.ones(3, 1)
+        src_states = torch.arange(3).view(3, 1).to(dtype=torch.int32)
+        src_done = torch.ones(3, 1, dtype=torch.bool)
+        nested = TensorDict(states=src_states, done=src_done, batch_size=[3])
+        sources = ({"data": nested}, TensorDict(data=nested, batch_size=[3]))
+        expected = {("data", "states"), ("data", "action"), ("data", "done")}
+        for source in sources:
+            held_action = action.clone()
+            dest = make(states.clone(), held_action)
+            slow = make(states.clone(), action.clone())
+            data = dest.get("data")
+            assert dest.update(source) is dest
+            TensorDictBase.update(slow, source)
+            assert (dest == slow).all()
+            assert dest.batch_size == slow.batch_size == torch.Size([3])
+            assert data.batch_size == torch.Size([3])
+            assert dest.get("data") is data
+            assert dest.get(("data", "states")) is src_states
+            assert dest.get(("data", "done")) is src_done
+            assert dest.get(("data", "action")) is held_action
+            assert set(dest.keys(True, True)) == expected
+            assert set(slow.keys(True, True)) == expected
+
+        # A nested entry that was not there is installed, not wrapped again.
+        fresh = TensorDict({"keep": torch.zeros(3)}, [3])
+        added = TensorDict(x=torch.ones(3), batch_size=[3])
+        fresh.update({"n": added})
+        assert fresh.get("n") is added
+        assert fresh.batch_size == torch.Size([3])
+        assert set(fresh.keys()) == {"keep", "n"}
+
+    def test_exclude_nested_tuple_key(self):
+        states = torch.zeros(3, 1, dtype=torch.int32)
+        action = torch.ones(3, 1)
+        td = TensorDict(
+            {
+                "data": TensorDict(
+                    states=states,
+                    action=action,
+                    done=torch.zeros(3, 1, dtype=torch.bool),
+                    terminated=torch.zeros(3, 1, dtype=torch.bool),
+                    batch_size=[3],
+                ),
+                "next": TensorDict(
+                    {
+                        "data": TensorDict(
+                            states=torch.zeros(3, 1, dtype=torch.int32),
+                            reward=torch.zeros(3, 1),
+                            batch_size=[3],
+                        )
+                    }
+                ),
+            }
+        )
+        out = td.exclude(
+            ("next",),
+            ("data", "done"),
+            ("data", "terminated"),
+            ("data", "_reset"),
+            ("data", "reward"),
+        )
+        assert out is not td
+        assert list(out.keys()) == ["data"]
+        assert set(out.get("data").keys()) == {"states", "action"}
+        assert out.get(("data", "states")) is states
+        assert out.get(("data", "action")) is action
+        assert set(td.get("data").keys()) == {
+            "states",
+            "action",
+            "done",
+            "terminated",
+        }
+        assert "next" in td.keys()
+
+        deep_c = torch.ones(2)
+        deep_d = torch.zeros(2)
+        deep = TensorDict({"a": {"b": {"c": deep_c, "d": deep_d}}}, [2])
+        excluded = deep.exclude(("a", "b", "c"))
+        assert list(excluded.keys(True, True)) == [("a", "b", "d")]
+        assert excluded.get(("a", "b", "d")) is deep_d
+        # A nested tuple is the same key once it has been unravelled.
+        also = deep.exclude(("a", ("b", "c")))
+        assert list(also.keys(True, True)) == [("a", "b", "d")]
+        assert also.get(("a", "b", "d")) is deep_d
+        # Missing keys are ignored, and the other leaves stay shared.
+        missed = deep.exclude(("a", "missing"), ("nope", "x"), ("a", "b", "nope"))
+        assert set(missed.keys(True, True)) == {("a", "b", "c"), ("a", "b", "d")}
+        assert missed.get(("a", "b", "c")) is deep_c
+
+    def test_update_exclude_locked_nested(self):
+        states = torch.zeros(3, 1, dtype=torch.int32)
+        action = torch.ones(3, 1)
+        td = TensorDict(
+            data=TensorDict(states=states, action=action, batch_size=[3]),
+            batch_size=[3],
+        )
+        td.lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            td.update(
+                {"data": TensorDict(states=torch.ones_like(states), batch_size=[3])}
+            )
+        assert td.get(("data", "states")) is states
+        assert td.get(("data", "action")) is action
+        assert set(td.get("data").keys()) == {"states", "action"}
+        assert td.is_locked
+
+        nested = TensorDict(
+            {"a": {"b": torch.zeros(2), "c": torch.ones(2)}},
+            [2],
+        ).lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            nested.exclude(("a", "b"), inplace=True)
+        assert set(nested.keys(True, True)) == {("a", "b"), ("a", "c")}
+        assert nested.is_locked
+
+    def test_update_nested_nontensor(self):
+        child = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td = TensorDict(a=torch.zeros(3), n=child, batch_size=[3])
+        td.set_non_tensor("meta", "hello")
+        child.set_non_tensor("tag", 1)
+        src_x = torch.ones(3)
+        src_n = TensorDict(x=src_x, batch_size=[3])
+        src = TensorDict(a=torch.ones(3), n=src_n, batch_size=[3])
+        src.set_non_tensor("meta", "bye")
+        src_n.set_non_tensor("tag", 2)
+        src_n.set_non_tensor("extra", "z")
+        assert td.update(src) is td
+        assert td.get_non_tensor("meta") == "bye"
+        assert td.get_non_tensor(("n", "tag")) == 2
+        assert td.get_non_tensor(("n", "extra")) == "z"
+        assert td.get("a") is src.get("a")
+        assert td.get(("n", "x")) is src_x
+        assert td.get("n") is child
+
+        # Strings are stored as non-tensors and merged into an existing child.
+        td.update({"s": "hello", "n": {"label": "inner"}})
+        assert td.get_non_tensor("s") == "hello"
+        assert td.get_non_tensor(("n", "label")) == "inner"
+        assert td.get(("n", "x")) is src_x
+        assert td.get_non_tensor(("n", "tag")) == 2
+        assert td.get("n") is child
+
+    def test_update_nested_error_order(self):
+        # A source batch mismatch raises before any leaf is written.
+        td = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "n": TensorDict(b=torch.zeros(3), batch_size=[3]),
+            },
+            [3],
+        )
+        held_a = td.get("a")
+        held_b = td.get(("n", "b"))
+        with pytest.raises(RuntimeError, match="update_batch_size"):
+            td.update(
+                TensorDict(
+                    {"n": TensorDict(b=torch.ones(4), batch_size=[4])},
+                    [4],
+                )
+            )
+        assert td.get("a") is held_a and td.get(("n", "b")) is held_b
+
+        # Earlier keys stick when a later nested source has the wrong batch.
+        written = torch.ones(3)
+        with pytest.raises(RuntimeError, match="update_batch_size"):
+            td.update(
+                {
+                    "a": written,
+                    "n": TensorDict(b=torch.ones(4), batch_size=[4]),
+                    "z": torch.ones(3),
+                }
+            )
+        assert td.get("a") is written
+        assert "z" not in td.keys()
+        assert td.get(("n", "b")) is held_b
+
+        # A leaf whose shape disagrees with its tensordict is still rejected.
+        # _new_unsafe skips the check the constructor would have done.
+        bad = TensorDict._new_unsafe({"b": torch.ones(4)}, batch_size=torch.Size([3]))
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            td.update({"a": torch.ones(3), "n": bad})
+        assert td.get(("n", "b")) is held_b
+
+        # keys_to_update does not create or replace the other entries.
+        src_y = torch.ones(3)
+        src_z = torch.ones(3) * 2
+        td.update(
+            TensorDict(
+                n=TensorDict(b=torch.ones(3) * 3, y=src_y, batch_size=[3]),
+                z=src_z,
+                batch_size=[3],
+            ),
+            keys_to_update=[("n", "y"), "z"],
+        )
+        assert td.get(("n", "y")) is src_y
+        assert td.get("z") is src_z
+        assert td.get(("n", "b")) is held_b
+
+        fresh = TensorDict(
+            n=TensorDict(x=torch.zeros(3), batch_size=[3]), batch_size=[3]
+        )
+        ptr = fresh.get(("n", "x")).data_ptr()
+        src_x = torch.ones(3)
+        fresh.update(
+            TensorDict(n=TensorDict(x=src_x, batch_size=[3]), batch_size=[3]),
+            inplace=True,
+        )
+        assert fresh.get(("n", "x")).data_ptr() == ptr
+        assert fresh.get(("n", "x")) is not src_x
+        assert fresh.get(("n", "x")).tolist() == [1.0, 1.0, 1.0]
+
+        # Copying a meta leaf onto CPU fails after the leading tensor is written.
+        cpu = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "n": TensorDict(x=torch.zeros(3), batch_size=[3]),
+            },
+            [3],
+            device="cpu",
+        )
+        cpu_a = torch.ones(3)
+        with pytest.raises(NotImplementedError, match="meta"):
+            cpu.update(
+                {
+                    "a": cpu_a,
+                    "n": TensorDict(
+                        x=torch.ones(3, device="meta"),
+                        batch_size=[3],
+                        device="meta",
+                    ),
+                }
+            )
+        assert cpu.get("a") is cpu_a
+        assert cpu.get(("n", "x")).tolist() == [0.0, 0.0, 0.0]
+        assert cpu.get("n").device.type == "cpu"
+
+        # A name clash on a new nested tensordict still raises, after earlier keys.
+        named = TensorDict(a=torch.zeros(3), batch_size=[3])
+        named.rename_("batch")
+        child = TensorDict(x=torch.ones(3), batch_size=[3])
+        child.rename_("other")
+        renamed = torch.ones(3)
+        with pytest.raises(RuntimeError, match="refine_names"):
+            named.update({"a": renamed, "n": child})
+        assert named.get("a") is renamed
+        assert "n" not in named.keys()
+
     def test_eager_mutation_custom_validation(self):
         class ValidatedTD(TensorDict):
             def _validate_value_generic(self, value, **kwargs):
