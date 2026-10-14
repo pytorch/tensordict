@@ -51,12 +51,19 @@ class TDGraphModule(nn.Module):
         **kwargs,
     ) -> TensorDictBase:
         outputs = self._gm(tensordict, **kwargs)
+        # One output is the tensor itself. A tuple or a list is several outputs.
+        # Iterating a tensor walks dim 0, so zip would not pair out_keys with
+        # outputs.
+        if not isinstance(outputs, (tuple, list)):
+            outputs = (outputs,)
 
         if tensordict_out is None:
             tensordict_out = tensordict
 
         for out_key, output in _zip_strict(self.out_keys, outputs):
-            if out_key != "_":
+            # Stored keys are unraveled, so the skip sentinel is ("_",).
+            # ("_", "y") is a real nested key and must be written.
+            if out_key != ("_",):
                 tensordict_out._set_tuple(
                     out_key, output, inplace=False, validated=True, non_blocking=False
                 )
