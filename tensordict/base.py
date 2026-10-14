@@ -5850,6 +5850,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
                 the transformation. This is a keyword only argument.
+                With a ``batch_size``, the call is treated as a shape operation:
+                ``fn`` is not called on :class:`~tensordict.UnbatchedTensor`
+                entries, which keep their data and take the new batch size.
             device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
@@ -6021,6 +6024,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
                 the transformation. This is a keyword only argument.
+                With a ``batch_size``, the call is treated as a shape operation:
+                ``fn`` is not called on :class:`~tensordict.UnbatchedTensor`
+                entries, which keep their data and take the new batch size.
             device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
