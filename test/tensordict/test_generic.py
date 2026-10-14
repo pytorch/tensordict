@@ -1902,6 +1902,58 @@ class TestGeneric:
         elif td_type == "stack":
             assert (td[-1] == other_td.to(device)).all()
 
+    def test_unflatten_keys_builds_groups_once(self, monkeypatch):
+        # unflatten_keys builds each new sub-tensordict once, without a
+        # rename_key_ per key, and gives the result the rename loop gave (#2614)
+        calls = []
+        rename_key_ = TensorDict.rename_key_
+
+        def counting_rename_key_(self, *args, **kwargs):
+            calls.append(args)
+            return rename_key_(self, *args, **kwargs)
+
+        monkeypatch.setattr(TensorDict, "rename_key_", counting_rename_key_)
+        sub = TensorDict({"z": torch.ones(3, 4)}, [3, 4])
+        td = TensorDict(
+            {
+                "a.b": torch.zeros(3),
+                "c": torch.ones(3),
+                "a.d.e": torch.ones(3, 2),
+                "x.y": sub,
+                "n": {"q.r": torch.ones(3)},
+            },
+            [3],
+            device="cpu",
+        )
+        out = td.unflatten_keys(".")
+        assert calls == []
+        assert list(out.keys()) == ["c", "n", "a", "x"]
+        assert list(out.keys(True, True)) == [
+            "c",
+            ("n", "q.r"),
+            ("a", "b"),
+            ("a", "d", "e"),
+            ("x", "y", "z"),
+        ]
+        for key in ("a", ("a", "d"), "x"):
+            assert type(out.get(key)) is TensorDict
+            assert out.get(key).batch_size == (3,)
+            assert out.get(key).device == torch.device("cpu")
+        assert out.get(("x", "y")).batch_size == (3, 4)
+        assert out.get(("a", "b")) is td.get("a.b")
+        # a sub-tensordict is moved as a shallow copy, as by the rename loop
+        assert out.get(("x", "y")) is not sub
+        assert out.get(("x", "y", "z")) is sub.get("z")
+        out["x", "y", "w"] = torch.zeros(3, 4)
+        assert "w" not in sub.keys()
+        assert list(td.keys()) == ["a.b", "c", "a.d.e", "x.y", "n"]
+        # a key that meets another key still goes through rename_key_ and raises
+        with pytest.raises(KeyError, match="will override an existing"):
+            TensorDict(
+                {"a.b": torch.zeros(3), "a.b.c": torch.zeros(3)}
+            ).unflatten_keys()
+        assert calls
+
     @pytest.mark.parametrize("inplace", [True, False])
     @pytest.mark.parametrize("separator", [",", "-"])
     def test_flatten_unflatten_key_collision(self, inplace, separator):

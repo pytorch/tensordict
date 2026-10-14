@@ -502,6 +502,14 @@ def test_unflatten_speed(benchmark):
     benchmark(lambda: td.unflatten_keys())
 
 
+def test_unflatten_wide_speed(benchmark):
+    # 20 dotted keys in 4 groups, as in a flat result that is nested afterwards
+    td = TensorDict(
+        {f"g{i // 5}.f{i}": torch.zeros(1000) for i in range(20)}, batch_size=[1000]
+    )
+    benchmark(lambda: td.unflatten_keys())
+
+
 def test_common_ops(benchmark):
     benchmark(main)
 
