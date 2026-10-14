@@ -294,7 +294,7 @@ class TensorDict(TensorDictBase):
 
     def __init__(
         self,
-        source: T | Mapping[NestedKey, CompatibleType] | None = None,
+        source: T | Mapping[Any, Any] | None = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
@@ -1064,7 +1064,7 @@ class TensorDict(TensorDictBase):
     @classmethod
     def from_dict(
         cls,
-        input_dict: dict[NestedKey, CompatibleType] | TensorDictBase,
+        input_dict: dict[Any, Any] | TensorDictBase,
         *,
         auto_batch_size: bool | None = None,
         batch_size: Sequence[int] | torch.Size | None = None,
