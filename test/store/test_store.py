@@ -17,6 +17,7 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     lazy_stack,
+    LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
     TensorDict,
@@ -2475,7 +2476,6 @@ class TestLazyStackedTensorDictStore:
             for read in (
                 lambda: store_td["a"],
                 store_td.to_tensordict,
-                lambda: store_td[0:2],
                 lambda: store_td.fill_("a", 1.0),
                 lambda: store_td.set_("a", torch.ones(2, 3, 4)),
                 lambda: store_td.update_(a=torch.ones(2, 3, 4)),
@@ -2514,6 +2514,38 @@ class TestLazyStackedTensorDictStore:
             for i in range(2):
                 assert store_td[i]["a"].shape == tds[i]["a"].shape
                 assert (store_td[i]["a"] == 0).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize(
+        "index", [slice(0, 2), slice(None, None, -1), (slice(None), 1)]
+    )
+    def test_index_several_elements_heterogeneous(self, store_kwargs, index):
+        """An index that picks several elements of a store whose elements differ in shape (#2030).
+
+        As on a lazy stack, it gives the lazy stack of the elements, each
+        with its own shapes. Before, it raised.
+        """
+        tds = [
+            TensorDict(
+                a=torch.arange(12.0 * (i + 1)).view(3, 4 * (i + 1)),
+                b=torch.arange(3.0) + 10 * i,
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            result = store_td[index]
+            expected = lazy_td[index]
+            assert isinstance(result, LazyStackedTensorDict)
+            assert result.batch_size == expected.batch_size
+            for got, want in zip(result.tensordicts, expected.tensordicts, strict=True):
+                assert (got == want).all()
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -3015,19 +3047,23 @@ class TestLazyStackedTensorDictStore:
     def test_masked_fill_heterogeneous(self, store_kwargs):
         """masked_fill_ on a store whose elements differ in shape (#2030).
 
-        A 0-d mask fills each element; a batch-shaped mask cannot be split
-        over the elements of the entries that differ in shape.
+        As on a lazy stack, a batch-shaped mask fills each element with its
+        slice of the mask, and a 0-d mask fills each element.
         """
         tds = [
             TensorDict(a=torch.zeros(3), h=torch.zeros(3, 2 + i), batch_size=[3])
             for i in range(2)
         ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
         store_td = LazyStackedTensorDictStore.from_lazy_stack(
             lazy_stack(tds), **store_kwargs
         )
         try:
-            with pytest.raises(RuntimeError, match=r"^masked_fill_ cannot split"):
-                store_td.masked_fill_(torch.ones(2, 3, dtype=torch.bool), 1.0)
+            mask = torch.tensor([[True, False, True], [False, True, False]])
+            assert store_td.masked_fill_(mask, 2.0) is store_td
+            lazy_td.masked_fill_(mask, 2.0)
+            for i in range(2):
+                assert (store_td[i] == lazy_td[i]).all()
             assert store_td.masked_fill_(torch.tensor(True), 1.0) is store_td
             torch.testing.assert_close(store_td["a"], torch.ones(2, 3))
             for i in range(2):

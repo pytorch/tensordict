@@ -166,6 +166,15 @@ class set_interaction_type(_DecoratorContextManager):
             ``None`` makes each module use its ``default_interaction_type``.
             Defaults to ``InteractionType.DETERMINISTIC``.
 
+    Keyword Args:
+        thread_local (bool, optional): if ``True``, the interaction type
+            applies to the calling thread only, and blocks that other threads
+            enter do not change it. Inside the block, blocks without this flag
+            that the same thread enters stay in that thread too. Threads
+            started inside the block see the process-wide interaction type.
+            If ``False``, the interaction type applies to the whole process.
+            Defaults to ``False``.
+
     Examples:
         >>> import torch
         >>> from torch import distributions as d
@@ -197,7 +206,10 @@ class set_interaction_type(_DecoratorContextManager):
     """
 
     def __init__(
-        self, type: InteractionType | str | None = InteractionType.DETERMINISTIC
+        self,
+        type: InteractionType | str | None = InteractionType.DETERMINISTIC,
+        *,
+        thread_local: bool = False,
     ) -> None:
         super().__init__()
         if not isinstance(type, InteractionType) and type is not None:
@@ -206,17 +218,25 @@ class set_interaction_type(_DecoratorContextManager):
             else:
                 raise ValueError(f"{type} is not a valid InteractionType")
         self.type = type
+        self.thread_local = thread_local
 
     def clone(self) -> set_interaction_type:
         # override this method if your children class takes __init__ parameters
-        return type(self)(self.type)
+        return type(self)(self.type, thread_local=self.thread_local)
 
     def __enter__(self) -> None:
-        self.prev = _interaction_type.get_mode()
-        _interaction_type.set_mode(self.type)
+        if self.thread_local:
+            self.prev = _interaction_type.get_thread_mode()
+            _interaction_type.set_thread_mode(self.type)
+        else:
+            self.prev = _interaction_type.get_mode()
+            _interaction_type.set_mode(self.type)
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        _interaction_type.set_mode(self.prev)
+        if self.thread_local:
+            _interaction_type.set_thread_mode(self.prev)
+        else:
+            _interaction_type.set_mode(self.prev)
 
 
 @contextlib.contextmanager
@@ -251,6 +271,25 @@ def _use_generator(generator: torch.Generator | None):
                 generator.set_state(torch.get_rng_state())
 
 
+def _get_joint_sample_and_log_prob(
+    dist: D.Distribution,
+) -> Callable[[torch.Size], tuple[Any, Tensor | TensorDictBase]] | None:
+    """Return the method of ``dist`` that draws a sample and scores the same draw.
+
+    ``rsample_and_log_prob`` is used when ``dist.has_rsample``, and
+    ``sample_and_log_prob`` otherwise. Returns ``None`` when the distribution
+    does not define the method, as for the :mod:`torch.distributions` classes,
+    and for an object that is not a distribution, which ``_dist_sample``
+    rejects with a ``TypeError``.
+    """
+    if not isinstance(dist, D.Distribution):
+        return None
+    name = "rsample_and_log_prob" if dist.has_rsample else "sample_and_log_prob"
+    if callable(getattr(type(dist), name, None)):
+        return getattr(dist, name)
+    return None
+
+
 class ProbabilisticTensorDictModule(TensorDictModuleBase):
     """A module that builds a distribution from entries of a tensordict and writes a value from it.
 
@@ -267,6 +306,19 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     :class:`~tensordict.nn.set_interaction_type`). Otherwise it uses
     ``default_interaction_type``. See :class:`~tensordict.nn.InteractionType`
     for what each type reads from the distribution.
+
+    With ``return_log_prob=True`` and the ``RANDOM`` interaction type, the
+    module draws and scores the value in one call if the distribution class
+    defines the method: ``dist.rsample_and_log_prob(sample_shape)`` if
+    ``dist.has_rsample``, ``dist.sample_and_log_prob(sample_shape)``
+    otherwise. The method returns a ``(sample, log_prob)`` tuple, with
+    ``log_prob`` in the layout of ``dist.log_prob``. Define it when
+    ``dist.log_prob(sample)`` cannot recover the draw exactly, for example
+    for a tanh-squashed normal that saturates. Otherwise the module calls
+    ``dist.log_prob`` on the sample. The :mod:`torch.distributions` classes
+    do not define these methods;
+    :class:`~tensordict.nn.distributions.CompositeDistribution` defines both,
+    and calls them on its components when they define them.
 
     The default ``distribution_class`` is
     :class:`~tensordict.nn.distributions.Delta`, which always returns its
@@ -855,9 +907,30 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         dist = self.get_dist(tensordict)
         if _requires_sample:
             generator, writeback = self._resolve_generator(tensordict)
-            out_tensors = self._dist_sample(
-                dist, interaction_type=interaction_type(), generator=generator
-            )
+            log_prob = None
+            joint_sample_and_log_prob = None
+            if (
+                self.return_log_prob
+                and (interaction_type() or self.default_interaction_type)
+                is InteractionType.RANDOM
+            ):
+                joint_sample_and_log_prob = _get_joint_sample_and_log_prob(dist)
+            if joint_sample_and_log_prob is not None:
+                # Score the draw the distribution sampled, not a value recovered
+                # from the sample (e.g. atanh of a saturated tanh)
+                lp_context = (
+                    set_composite_lp_aggregate(False)
+                    if isinstance(dist, CompositeDistribution)
+                    else contextlib.nullcontext()
+                )
+                with _use_generator(generator), lp_context:
+                    out_tensors, log_prob = joint_sample_and_log_prob(
+                        self.num_samples or torch.Size(())
+                    )
+            else:
+                out_tensors = self._dist_sample(
+                    dist, interaction_type=interaction_type(), generator=generator
+                )
             if writeback is not None:
                 writeback(generator)
             if self.num_samples is not None:
@@ -877,9 +950,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                             )
                         )
                     if clpa:
-                        with set_composite_lp_aggregate(False):
-                            # We want the tensordict to do the sum and such
-                            log_prob = dist.log_prob(out_tensors)
+                        if log_prob is None:
+                            with set_composite_lp_aggregate(False):
+                                # We want the tensordict to do the sum and such
+                                log_prob = dist.log_prob(out_tensors)
                         if log_prob is not out_tensors:
                             # Composite dists return the tensordict_out directly when aggrgate_prob is False
                             out_tensors.update(log_prob)
@@ -888,7 +962,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                             sum(log_prob.sum(dim="feature").values(True, True)),
                         )
                     else:
-                        log_prob = dist.log_prob(out_tensors)
+                        if log_prob is None:
+                            log_prob = dist.log_prob(out_tensors)
                         out_tensors.update(log_prob)
                         self._update_td_lp(log_prob)
                 tensordict_out.update(out_tensors)
@@ -899,7 +974,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     dict(_zip_strict(self.dist_sample_keys, out_tensors))
                 )
                 if self.return_log_prob:
-                    log_prob = dist.log_prob(*out_tensors)
+                    if log_prob is None:
+                        log_prob = dist.log_prob(*out_tensors)
                     tensordict_out.set(self.log_prob_key, log_prob)
         elif self.return_log_prob:
             out_tensors = [
