@@ -1456,6 +1456,49 @@ class TestBackends:
             with pytest.raises(ValueError, match="zip"):
                 op(state)
 
+    @pytest.mark.parametrize(
+        "key",
+        ["a", ("n", "c"), "missing", (), ("a", "x"), 0],
+        ids=["top", "nested", "missing", "empty", "through_tensor", "int"],
+    )
+    def test_del_(self, source, key):
+        # del_ deletes in the source, which checks the key, as on a dense copy
+        kind, td = source
+        state = _BackendState.from_tensordict(td, check=False)
+        dense = _BackendState.from_tensordict(td.to_tensordict(), check=False)
+        try:
+            dense.del_(key)
+        except Exception as err:
+            error = type(err)
+        else:
+            error = None
+        if kind == "h5" and key in ((), 0):
+            # a file raises ValueError for an empty key until 0.17
+            error = ValueError
+        elif kind == "h5" and key == ("a", "x"):
+            # and h5py's KeyError for a path through a tensor
+            error = KeyError
+        if error is not None:
+            with pytest.raises(error):
+                state.del_(key)
+            torch.testing.assert_close(td.to_tensordict(), dense.to_tensordict())
+            return
+        assert state.del_(key) is state
+        assert sorted(td.keys(True, True), key=str) == sorted(
+            dense.keys(True, True), key=str
+        )
+
+    def test_del_locked_source(self, source):
+        kind, td = source
+        if kind == "subtd":
+            td._source.lock_()
+        else:
+            td.lock_()
+        state = _BackendState.from_tensordict(td, check=False)
+        with pytest.raises(RuntimeError, match="locked"):
+            state.del_("a")
+        assert "a" in td.keys()
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
     def test_rename_key_locked_h5_source(self, tmp_path):
         # a locked file renames, with a FutureWarning, as the file does

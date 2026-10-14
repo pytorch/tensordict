@@ -4722,6 +4722,25 @@ class TestTensorDictParams:
         assert isinstance(params["a"], nn.Parameter)
         assert params["a"].shape == (5, 3)
 
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_del_(self, lock, no_convert):
+        params = self._params(lock=lock, no_convert=no_convert)
+        assert params.del_("a") is params
+        assert params.del_(("n", "c")) is params
+        assert list(params.keys(True)) == ["b", "n"]
+        assert dict(params.named_parameters()) == {}
+        assert list(dict(params.named_buffers())) == ["b"]
+        assert params._param_td.is_locked is lock
+        with pytest.raises(KeyError):
+            params.del_("missing")
+        with pytest.raises(KeyError):
+            params.del_(())
+        params.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            params.del_("b")
+        assert "b" in params.keys()
+
     @pytest.mark.parametrize("lock", [False, True])
     def test_iter_popitem_rename_key_get_at(self, lock):
         params = self._params(lock=lock)
