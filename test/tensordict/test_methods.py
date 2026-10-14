@@ -36,6 +36,7 @@ from tensordict import (
     pack_memmap,
     PersistentTensorDict,
     refresh_archive_checksums,
+    TensorClass,
     TensorDict,
     unpack_memmap,
 )
@@ -6235,6 +6236,46 @@ class TestMemmapArchive:
             TensorDict.load_memmap(prefix, subpath="does/not/exist")
         with pytest.raises(ValueError, match="No tensordict found under subpath"):
             TensorDict.load_memmap(prefix, subpath=("does", ("not", "exist")))
+
+    @pytest.mark.parametrize("archive", [True, False])
+    def test_subpath_tensorclass(self, tmp_path, archive):
+        class Part(TensorClass):
+            x: torch.Tensor
+
+        class Assembly(TensorClass):
+            parts: TensorDict
+
+        class Outer(TensorClass):
+            inner: Assembly
+
+        obj = Outer(
+            inner=Assembly(parts=TensorDict(a=Part(x=torch.arange(3.0)))),
+            batch_size=[],
+        )
+        prefix = tmp_path / ("obj.tdz" if archive else "obj")
+        obj.memmap(prefix, archive=archive)
+        # a nested key loads the entry that obj.get(key) returns
+        for subpath in (
+            ("inner", "parts", "a"),
+            "inner/parts/a",
+            "_tensordict/inner/_tensordict/parts/a",
+        ):
+            part = Part.load_memmap(prefix, subpath=subpath)
+            assert isinstance(part, Part)
+            assert (part.x == torch.arange(3.0)).all()
+        parts = TensorDict.load_memmap(prefix, subpath=("inner", "parts"))
+        assert (parts["a"].x == torch.arange(3.0)).all()
+        with pytest.raises(ValueError, match="No tensordict found under subpath"):
+            Part.load_memmap(prefix, subpath=("inner", "missing"))
+
+        # a tensordict with a key named "_tensordict" is not a tensorclass
+        td = TensorDict({"_tensordict": {"b": {"y": torch.zeros(2)}}})
+        prefix = tmp_path / ("td.tdz" if archive else "td")
+        td.memmap(prefix, archive=archive)
+        loaded = TensorDict.load_memmap(prefix, subpath="_tensordict")
+        assert (loaded["b", "y"] == 0).all()
+        with pytest.raises(ValueError, match="No tensordict found under subpath"):
+            TensorDict.load_memmap(prefix, subpath="b")
 
     def test_archive_meta_device(self, tmp_path):
         td = self._nested_td()

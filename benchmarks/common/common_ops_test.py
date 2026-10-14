@@ -509,12 +509,25 @@ def test_unflatten_speed(benchmark):
     benchmark(lambda: td.unflatten_keys())
 
 
+def test_unflatten_wide_speed(benchmark):
+    # 20 dotted keys in 4 groups, as in a flat result that is nested afterwards
+    td = TensorDict(
+        {f"g{i // 5}.f{i}": torch.zeros(1000) for i in range(20)}, batch_size=[1000]
+    )
+    benchmark(lambda: td.unflatten_keys())
+
+
 def test_common_ops(benchmark):
     benchmark(main)
 
 
 def test_creation(benchmark):
     benchmark(TensorDict, {}, [3, 4])
+
+
+@pytest.mark.parametrize("device", ["cpu", torch.device("cpu")])
+def test_creation_device(benchmark, device):
+    benchmark(TensorDict, {}, [3, 4], device=device)
 
 
 def test_creation_empty(benchmark, a, b):
@@ -544,6 +557,10 @@ def test_creation_nested_many_keys(benchmark, num_keys):
 
 def test_clone(benchmark, td):
     benchmark(td.clone)
+
+
+def test_clone_device(benchmark, td):
+    benchmark(td.to("cpu").clone)
 
 
 @pytest.mark.parametrize(
@@ -589,6 +606,28 @@ def test_getitem(benchmark, td, c, index):
         _ = td[index]
 
     benchmark(exec_getitem)
+
+
+@pytest.mark.parametrize(
+    "device", [None, "cpu"] + (["cuda"] if torch.cuda.is_available() else [])
+)
+def test_getitem_mask_many_leaves(benchmark, device):
+    # the cells of a mesh: several leaves, some nested, filtered by a mask
+    leaf_device = "cpu" if device is None else device
+    td = TensorDict(
+        {
+            "a": torch.randn(1000, 3, device=leaf_device),
+            "b": torch.randn(1000, device=leaf_device),
+            "nest": {
+                "c": torch.randn(1000, 4, device=leaf_device),
+                "d": {"e": torch.randn(1000, device=leaf_device)},
+            },
+        },
+        [1000],
+        device=device,
+    )
+    mask = torch.rand(1000, device=leaf_device) > 0.5
+    benchmark(td.__getitem__, mask)
 
 
 @pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])

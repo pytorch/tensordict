@@ -25,6 +25,12 @@ _JSON_BACKENDS = ("json", "orjson")
 _JSON_BACKEND = "orjson" if importlib.util.find_spec("orjson") is not None else "json"
 
 
+_FS_UNSAFE_CHARS = set('/<>:"|?*\\ \0%')
+_FS_UNSAFE_CHARS.update(chr(i) for i in range(32))
+_FS_UNSAFE_CHARS.add(chr(127))
+_FS_ENCODE_TABLE = str.maketrans({c: f"%{ord(c):02X}" for c in _FS_UNSAFE_CHARS})
+
+
 def _encode_key_for_filesystem(key: str, *, robust: bool = True) -> str:
     """Encode a TensorDict key to be safe for filesystem paths."""
     if not robust:
@@ -38,18 +44,7 @@ def _encode_key_for_filesystem(key: str, *, robust: bool = True) -> str:
     if key in (".", ".."):
         return "%2E" * len(key)
 
-    unsafe_chars = set('/<>:"|?*\\ \0%')
-    unsafe_chars.update(chr(i) for i in range(32))
-    unsafe_chars.add(chr(127))
-
-    encoded_parts = []
-    for char in key:
-        if char in unsafe_chars:
-            encoded_parts.append(f"%{ord(char):02X}")
-        else:
-            encoded_parts.append(char)
-
-    return "".join(encoded_parts)
+    return key.translate(_FS_ENCODE_TABLE)
 
 
 def _is_safe_legacy_key(key: str, *, is_collection: bool = False) -> bool:

@@ -391,6 +391,31 @@ def _getitem_batch_size(batch_size, index):
     return torch.Size(out)
 
 
+def _mask_to_indices(index, batch_size, device):
+    """Turn the index ``(mask,)`` of ``td[mask]`` into the indices of the mask.
+
+    A boolean mask is read (``nonzero``) once for the batch size and once per
+    leaf it indexes, and each read is a device sync on CUDA: this reads it
+    once. A CPU mask is kept unless ``device``, the device of the tensordict, is
+    the CPU: CUDA leaves read a CPU mask without a sync, but not CPU indices.
+    The caller checks that ``index`` is a 1-tuple holding a plain boolean
+    ``torch.Tensor``, so that other indices pay nothing for this. A mask that
+    does not match the leading batch dims, or a meta mask, is returned as it
+    is, so that indexing raises the same errors.
+    """
+    mask = index[0]
+    if mask.is_cpu:
+        if device is None or device.type != "cpu":
+            return index
+    elif mask.is_meta:
+        return index
+    if not mask.ndim or mask.shape != batch_size[: mask.ndim]:
+        return index
+    if mask.ndim == 1:
+        return (mask.nonzero().squeeze(-1),)
+    return mask.nonzero(as_tuple=True)
+
+
 def _getitem_names(names, index):
     """Return the dim names that indexing a tensor with dim names ``names`` with ``index`` gives.
 
