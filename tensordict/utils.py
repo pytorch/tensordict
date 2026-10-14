@@ -2624,6 +2624,52 @@ def _any_unbatched(tensors) -> bool:
     return False
 
 
+# Python picks the overload of torch._foreach_add and torch._foreach_sub that
+# takes a number for a 0-dim tensor, and reading the number of a CUDA tensor
+# synchronizes the device. The overload of _foreach_add that takes a 0-dim
+# tensor does not, and computes ``tensor + alpha * other`` in one kernel.
+# Passing alpha makes Python pick it, since the number overload has no alpha.
+_FOREACH_ADD_TENSOR = frozenset({"add", "add_", "sub", "sub_"})
+_FLOAT32_64 = (torch.float32, torch.float64)
+# A subclass with __torch_function__ would see get_device and, for a sub,
+# _foreach_add
+_PLAIN_TENSOR_TYPES = (Tensor, torch.nn.Parameter)
+# The check costs about 0.2 us per tensor, about a tenth of what add_ costs per
+# leaf; the cap keeps it to about 25 us, the order of the sync it saves.
+_FOREACH_ADD_TENSOR_MAX = 128
+
+
+def _is_cuda_scalar_of(other, tensors) -> bool:
+    # The overload that takes a 0-dim tensor casts it to the dtype of each
+    # tensor first, the one that takes a number does not: integer tensors with
+    # a float64 0-dim tensor give float64 instead of float32, and float16 or
+    # bfloat16 tensors with a wider or integer 0-dim tensor round differently.
+    # Both give the same dtypes and values for float32 and float64 tensors, and
+    # for tensors of the dtype of a floating-point 0-dim tensor. A subclass
+    # of Tensor would turn the results into that subclass. Under a torch
+    # function mode, every attribute read below would go through the mode.
+    if torch._C._is_torch_function_mode_enabled():
+        return False
+    if not (
+        type(other) is Tensor
+        and other.is_cuda
+        and not other.ndim
+        and other.is_floating_point()
+        and not other.requires_grad
+    ):
+        return False
+    # get_device() is cheaper than building a torch.device for every tensor
+    device, dtype = other.get_device(), other.dtype
+    for tensor in tensors:
+        if (
+            type(tensor) not in _PLAIN_TENSOR_TYPES
+            or tensor.get_device() != device
+            or (tensor.dtype not in _FLOAT32_64 and tensor.dtype is not dtype)
+        ):
+            return False
+    return True
+
+
 def _foreach(name: str, tensors, *args, **kwargs):
     """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func or with an unbatched tensor.
 
@@ -2645,6 +2691,23 @@ def _foreach(name: str, tensors, *args, **kwargs):
         _any_unbatched(tensors)
         or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
     ):
+        if (
+            name in _FOREACH_ADD_TENSOR
+            and len(tensors) <= _FOREACH_ADD_TENSOR_MAX
+            # sign * True would turn a bool alpha, which torch rejects for
+            # floating-point results, into an int
+            and type(kwargs.get("alpha")) is not bool
+            and _is_cuda_scalar_of(args[0], tensors)
+        ):
+            # Pass a copy, read once as the number would be: the in-place kernel
+            # can read other after writing a tensor that holds it, and autograd
+            # saves other for backward, which fails if other was made in
+            # inference mode or is changed in place before backward. Without
+            # alpha, the number also dropped the forward-mode tangent of other.
+            other = args[0].clone() if "alpha" in kwargs else args[0].detach().clone()
+            op = torch._foreach_add_ if name.endswith("_") else torch._foreach_add
+            sign = -1 if name.startswith("sub") else 1
+            return op(tensors, other, alpha=sign * kwargs.get("alpha", 1))
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [
