@@ -3438,12 +3438,10 @@ class TestGeneric:
             assert len(keys) == len(expected)
 
     @pytest.mark.parametrize("leaves_only", [False, True])
-    @pytest.mark.parametrize(
-        "is_leaf",
-        [None, is_leaf_nontensor, lambda cls: True, lambda cls: cls is torch.Tensor],
-        ids=["default", "nontensor", "all", "tensor"],
-    )
-    def test_keys_nested_tensordict_entries(self, leaves_only, is_leaf, monkeypatch):
+    @pytest.mark.parametrize("is_leaf_name", ["default", "nontensor", "all", "tensor"])
+    def test_keys_nested_tensordict_entries(
+        self, leaves_only, is_leaf_name, monkeypatch
+    ):
         # The nested keys view of a TensorDict does not check its TensorDict
         # entries with _is_tensor_collection (#2618). Its generator, len() and
         # sort=True list the same keys, in the same order, and call is_leaf
@@ -3469,6 +3467,12 @@ class TestGeneric:
             z=torch.zeros(3),
             batch_size=[3],
         )
+        is_leaf = {
+            "default": None,
+            "nontensor": is_leaf_nontensor,
+            "all": lambda cls: True,
+            "tensor": lambda cls: cls is torch.Tensor,
+        }[is_leaf_name]
         checked = []
         is_tensor_collection = tensordict._td._is_tensor_collection
 
@@ -3493,22 +3497,12 @@ class TestGeneric:
         keys, calls = listed(
             lambda is_leaf: list(iter(td.keys(True, leaves_only, is_leaf=is_leaf)))
         )
-        if is_leaf is None and leaves_only:
-            assert keys == [
-                "a",
-                ("nested", "b"),
-                ("nested", "c", "d"),
-                ("tc", "x"),
-                "u",
-                ("stack", "f"),
-                ("stack", "g", "h"),
-                "z",
-            ]
-        elif is_leaf is None:
-            assert keys == [
-                "a",
-                ("nested", "b"),
-                ("nested", "c", "d"),
+        # The order on main: a sub-tensordict comes after its entries
+        common = ["a", ("nested", "b"), ("nested", "c", "d")]
+        stack_leaves = [("stack", "f"), ("stack", "g", "h")]
+        if not leaves_only or is_leaf_name == "all":
+            expected = [
+                *common,
                 ("nested", "c"),
                 ("nested", "empty"),
                 "nested",
@@ -3516,12 +3510,18 @@ class TestGeneric:
                 "tc",
                 "nt",
                 "u",
-                ("stack", "f"),
-                ("stack", "g", "h"),
+                *stack_leaves,
                 ("stack", "g"),
                 "stack",
                 "z",
             ]
+        elif is_leaf_name == "default":
+            expected = [*common, ("tc", "x"), "u", *stack_leaves, "z"]
+        elif is_leaf_name == "nontensor":
+            expected = [*common, ("tc", "x"), "nt", "u", *stack_leaves, "z"]
+        else:
+            expected = [*common, ("tc", "x"), *stack_leaves, "z"]
+        assert keys == expected
         assert listed(
             lambda is_leaf: len(td.keys(True, leaves_only, is_leaf=is_leaf))
         ) == (len(keys), calls)

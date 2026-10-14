@@ -634,6 +634,45 @@ class TestTD:
         for val, val_c in zip(vals, vals_c):
             assert (val == val_c).all()
 
+    def test_keys_nested(self, mode):
+        # Iterating, counting and sorting the nested keys compiles to one
+        # frame, without a recompile (#2618).
+        def keys(td):
+            out = 0
+            for key in td.keys(True, True):
+                out = out + td.get(key).sum()
+            return (
+                out,
+                len(td.keys(True, False)),
+                list(td.keys(True, True, sort=True)),
+            )
+
+        data = TensorDict(
+            {
+                "a": torch.arange(4.0),
+                "b": {"c": torch.ones(4), "d": {"e": torch.ones(4)}},
+            },
+            [4],
+        )
+        for td in (
+            data,
+            data.clone().lock_(),
+            MyClass(a=MyClass(a=None, b=torch.ones(())), b=torch.zeros(())),
+        ):
+            torch._dynamo.reset_code_caches()
+            cnt = CompileCounterWithBackend("eager")
+            if mode is None:
+                keys_c = torch.compile(keys, fullgraph=True, backend=cnt)
+            else:
+                keys_c = torch.compile(keys, fullgraph=True, mode=mode)
+            expected = keys(td)
+            for _ in range(2):
+                out, length, sorted_keys = keys_c(td)
+                torch.testing.assert_close(out, expected[0])
+                assert (length, sorted_keys) == expected[1:]
+            if mode is None:
+                assert cnt.frame_count == 1
+
     @pytest.mark.parametrize("recurse", [True, False])
     @pytest.mark.parametrize("lock", [True, False])
     def test_clone(self, recurse, lock, mode):
