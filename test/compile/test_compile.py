@@ -3909,6 +3909,46 @@ class TestGuardCount:
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
 
+    def test_getitem_str_key_guards(self):
+        """``td["k"]`` guards little more than reading the entry from the dict."""
+
+        def read_td(td):
+            return td["a"] + td["sub"]["b"]
+
+        def read_dict(td):
+            return td._tensordict["a"] + td._tensordict["sub"]._tensordict["b"]
+
+        from torch._dynamo.eval_frame import _debug_get_cache_entry_list
+
+        def guards(fn, td):
+            torch._dynamo.reset()
+            cnt = CompileCounterWithBackend("eager")
+            torch.testing.assert_close(
+                torch.compile(fn, backend=cnt, fullgraph=True)(td), fn(td)
+            )
+            assert cnt.frame_count == 1
+            (entry,) = _debug_get_cache_entry_list(fn.__code__)
+            tree = str(entry.guard_manager)
+            leaves = [
+                line
+                for line in tree.splitlines()
+                if "+- " in line and "GuardManager" not in line.split("+- ")[1][:30]
+            ]
+            return len(leaves), tree
+
+        td = TensorDict(
+            a=torch.zeros(3),
+            sub=TensorDict(b=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        n_td, tree = guards(read_td, td)
+        n_dict, _ = guards(read_dict, td)
+        # The generic path guards each method it calls (_get_tuple_maybe_non_tensor,
+        # _get_tuple, _pass_through...). torch 2.14: 22 guards for the dict
+        # reads, 49 on the generic path, 33 here.
+        assert "_get_tuple_maybe_non_tensor" not in tree
+        assert n_td <= n_dict + 18, (n_td, n_dict)
+
     def test_locked_clone_recurse_false_schema_fast_path(self):
         """A locked TD's ``clone(recurse=False)`` must:
 

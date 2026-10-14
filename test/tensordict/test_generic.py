@@ -3481,6 +3481,89 @@ class TestGeneric:
         assert sub_tensordict.shape == torch.Size([4, 5])
         assert sub_sub_tensordict.shape == torch.Size([4, 5, 6])
 
+    @staticmethod
+    def _getitem_str_key_td(cls=TensorDict):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        td = cls(
+            a=torch.zeros(3),
+            sub=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            s=NonTensorData("text", batch_size=[3]),
+            ns=NonTensorStack(*[NonTensorData(i) for i in range(3)]),
+            lazy_ns=lazy_stack(
+                [NonTensorData("x"), NonTensorData("y"), NonTensorData("z")]
+            ),
+            tc=TC(x=torch.zeros(3), batch_size=[3]),
+            lazy=lazy_stack([TensorDict(c=torch.zeros(())) for _ in range(3)]),
+            p=nn.Parameter(torch.zeros(3)),
+            u=tensordict.UnbatchedTensor(torch.zeros(2)),
+            batch_size=[3],
+        )
+        td["a.b"] = torch.ones(3)
+        return td
+
+    def test_getitem_str_key(self):
+        # td["k"] on an exact TensorDict reads the entry from its dict, without
+        # the generic path; subclasses and nested keys keep the generic path
+        class SubTD(TensorDict):
+            pass
+
+        class Key(str):
+            pass
+
+        generic = TensorDictBase._get_tuple_maybe_non_tensor
+        read = []
+
+        def spy(self, key, default, **kwargs):
+            read.append(key)
+            return generic(self, key, default, **kwargs)
+
+        td = self._getitem_str_key_td()
+        subtd = self._getitem_str_key_td(SubTD)
+        with mock.patch.object(TensorDictBase, "_get_tuple_maybe_non_tensor", spy):
+            for key in ("a", "sub", "a.b", "p", "u", Key("a")):
+                assert td[key] is td._tensordict[key]
+            assert type(td["a"]) is torch.Tensor
+            assert type(td["sub"]) is TensorDict
+            assert td["s"] == "text"
+            assert td["ns"] == [0, 1, 2]
+            with pytest.raises(KeyError, match='key "missing" not found in TensorDict'):
+                td["missing"]
+            assert read == []
+            assert td["sub", "b"] is td["sub"]["b"]
+            assert read == [("sub", "b")]
+            read.clear()
+            assert subtd["a"] is subtd._tensordict["a"]
+            assert read == [("a",)]
+
+    @pytest.mark.parametrize(
+        "key",
+        ["a", "sub", "a.b", "s", "ns", "lazy_ns", "tc", "lazy", "p", "u", "missing"],
+    )
+    def test_getitem_str_key_as_get_tuple(self, key):
+        # __getitem__ repeats the tail of _get_tuple_maybe_non_tensor for a str
+        # key of a TensorDict: both must return the same
+        td = self._getitem_str_key_td()
+        if key == "missing":
+            with pytest.raises(KeyError) as generic:
+                td._get_tuple_maybe_non_tensor((key,), tensordict_base.NO_DEFAULT)
+            with pytest.raises(KeyError) as fast:
+                td[key]
+            assert str(fast.value) == str(generic.value)
+            assert type(fast.value.__context__) is type(generic.value.__context__)
+            return
+        generic = td._get_tuple_maybe_non_tensor((key,), tensordict_base.NO_DEFAULT)
+        fast = td[key]
+        assert type(fast) is type(generic)
+        if isinstance(generic, (torch.Tensor, TensorDictBase)) or is_tensorclass(
+            generic
+        ):
+            assert fast is generic
+        else:
+            assert fast == generic
+
     def test_get_nested_reads_dicts(self, monkeypatch):
         # A nested get through TensorDicts reads their dicts, without a
         # _get_str call per level, and keeps the results and errors of the

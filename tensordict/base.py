@@ -812,6 +812,16 @@ def _resolve_tensorclass_type(type_str: str):
     return getattr(module, class_name)
 
 
+# TensorDict, which _td.py sets once it defines the class: __getitem__ reads a
+# str key of an exact TensorDict straight from its dict.
+_TENSORDICT_TYPE = None
+
+
+def _set_tensordict_type(cls):
+    global _TENSORDICT_TYPE
+    _TENSORDICT_TYPE = cls
+
+
 def _register_tensor_class(cls):
     global _ACCEPTED_CLASSES
     _ACCEPTED_CLASSES = set(_ACCEPTED_CLASSES)
@@ -914,6 +924,15 @@ def is_tensor_collection(datatype: type | Any) -> bool:
     if not isinstance(datatype, type):
         datatype = type(datatype)
     return _is_tensor_collection(datatype)
+
+
+def _non_tensor_content(value):
+    # What td[key] returns for a non-tensor entry: its content, or a list for
+    # a stack of non-tensor data. Shared by TensorDictBase.__getitem__ and
+    # _get_tuple_maybe_non_tensor.
+    if isinstance(value, TensorDictBase):
+        return value.tolist(as_linked_list=True)
+    return value.data
 
 
 def _default_is_leaf(cls: Type) -> bool:
@@ -1687,6 +1706,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
+            if not istuple and type(self) is _TENSORDICT_TYPE:
+                # An exact TensorDict reads a str key straight from its dict,
+                # as TensorDict._get_str does, and non-tensor entries as
+                # _get_tuple_maybe_non_tensor returns them.
+                try:
+                    result = self._tensordict[index]
+                except KeyError:
+                    return self._default_get(index, NO_DEFAULT)
+                cls = type(result)
+                if cls is Tensor or cls is _TENSORDICT_TYPE:
+                    return result
+                if _pass_through(result) and not _is_unbatched(result):
+                    return _non_tensor_content(result)
+                return result
             # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
@@ -3807,9 +3840,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
         result = self._get_tuple(key, default, **kwargs)
         if _pass_through(result) and not _is_unbatched(result):
-            if isinstance(result, TensorDictBase):
-                return result.tolist(as_linked_list=True)
-            return result.data
+            return _non_tensor_content(result)
         return result
 
     @overload

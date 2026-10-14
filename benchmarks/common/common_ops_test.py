@@ -872,6 +872,17 @@ def test_get_by_key(benchmark, kind):
     benchmark(td.get, _KEYS[kind])
 
 
+@pytest.mark.parametrize("key", ["x", "sub", "text", ("sub", "y")])
+def test_getitem_by_key(benchmark, key):
+    td = TensorDict(
+        x=torch.zeros(3),
+        sub=TensorDict(y=torch.zeros(3), batch_size=[3]),
+        batch_size=[3],
+    )
+    td.set_non_tensor("text", "value")
+    benchmark(td.__getitem__, key)
+
+
 @pytest.mark.parametrize("key", [("nest", "c"), ("nest", "zz")], ids=["hit", "miss"])
 def test_get_nested_with_default(benchmark, key):
     # reading an optional nested entry, such as a cached value

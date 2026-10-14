@@ -50,6 +50,7 @@ from tensordict.base import (
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
+    _set_tensordict_type,
     _UNSET,
     _warn_scalar_over_non_tensor,
     _wrap_extra_state,
@@ -3906,6 +3907,7 @@ def _str_to_index(index: Any) -> IndexType:
 
 
 _register_tensor_class(TensorDict)
+_set_tensordict_type(TensorDict)
 _register_tensor_class(_SubTensorDict)
 
 
