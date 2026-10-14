@@ -330,6 +330,14 @@ class _InplaceShapeState(local):
 _inplace_shape_state = _InplaceShapeState()
 
 
+class _KeyThroughLeafError(ValueError):
+    """The ValueError raised when a nested key runs through a leaf.
+
+    :meth:`~TensorDictBase.get` called with a default returns the default
+    instead.
+    """
+
+
 def _raise_if_not_a_tensordict(
     err: AttributeError, key: tuple, i: int, value: Any
 ) -> None:
@@ -341,7 +349,7 @@ def _raise_if_not_a_tensordict(
     """
     if "has no attribute" in str(err):
         rest = key[i] if len(key) == i + 1 else key[i:]
-        raise ValueError(
+        raise _KeyThroughLeafError(
             f"{key[i - 1]!r} is a {type(value).__name__}, not a tensordict, "
             f"so it has no entry {rest!r}."
         )
@@ -3950,7 +3958,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             key (NestedKey): the key to read. A tuple reads a nested entry:
                 ``td.get(("a", "b"))`` is ``td["a"]["b"]``. See :ref:`keys`.
             default (optional): the value returned if the key is missing.
-                Defaults to ``None``, as for :meth:`dict.get`.
+                Defaults to ``None``, as for :meth:`dict.get`. A nested key
+                that runs through a tensor is missing too: ``get`` returns
+                the default passed to it, and without one raises a
+                ``ValueError`` that names the tensor.
 
         .. versionchanged:: 0.7
             A missing key returns ``None`` instead of raising ``KeyError``.
@@ -3981,6 +3992,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         # Find what the default is
+        passed_default = True
         if args:
             default = args[0]
             if len(args) > 1:
@@ -3993,9 +4005,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raise TypeError("'default' arg was passed twice.")
         elif _GET_DEFAULTS_TO_NONE:
             default = None
+            passed_default = False
         else:
             default = NO_DEFAULT
-        result = self._get_tuple(key_tuple, default=default, **kwargs)
+        try:
+            result = self._get_tuple(key_tuple, default=default, **kwargs)
+        except _KeyThroughLeafError:
+            # A key that runs through a leaf is missing for a caller that
+            # passed a default; without one, the error names the leaf.
+            if not passed_default or default is NO_DEFAULT:
+                raise
+            return default
         if (
             kwargs
             and (
@@ -5675,7 +5695,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             key (NestedKey): the entry to look for. A tuple removes a nested
                 entry, and keeps the sub-tensordict that held it.
-            default (Any, optional): the value to return if the key cannot be found.
+            default (Any, optional): the value to return if the key cannot be found,
+                including a nested key that runs through a tensor (without a
+                default, that key raises a ``ValueError`` that names the tensor).
 
         Examples:
             >>> from tensordict import TensorDict
@@ -5693,6 +5715,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if out is _UNSET:
             # Key not found
             if default is NO_DEFAULT:
+                if len(key_tuple) > 1:
+                    # a key that runs through a leaf raises get's ValueError
+                    try:
+                        self.get(key_tuple, NO_DEFAULT)
+                    except KeyError:
+                        pass
                 raise KeyError(
                     _KEY_ERROR.format(
                         key_tuple[0] if len(key_tuple) == 1 else key_tuple,

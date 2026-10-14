@@ -33,6 +33,7 @@ from tensordict._td_functions import lazy_stack
 from tensordict.base import (
     _has_lazy_stack,
     _is_leaf_nontensor,
+    _KeyThroughLeafError,
     _register_tensor_class,
     is_tensor_collection,
     T,
@@ -1823,7 +1824,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 for i in range(1, len(key)):
                     if _KEY_SEP.join(key[:i]) in all_keys:
                         rest = key[i] if len(key) == i + 1 else key[i:]
-                        raise ValueError(
+                        raise _KeyThroughLeafError(
                             f"{key[i - 1]!r} is a Tensor, not a tensordict, "
                             f"so it has no entry {rest!r}."
                         )

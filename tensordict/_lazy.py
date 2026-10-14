@@ -59,6 +59,7 @@ from tensordict.base import (
     _has_lazy_stack,
     _is_leaf_nontensor,
     _is_tensor_collection,
+    _KeyThroughLeafError,
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _PACKAGE_DIR,
@@ -2313,7 +2314,7 @@ class LazyStackedTensorDict(TensorDictBase):
         except AttributeError as err:
             if "has no attribute" in str(err):
                 rest = key[1] if len(key) == 2 else key[1:]
-                raise ValueError(
+                raise _KeyThroughLeafError(
                     f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
                     f"so it has no entry {rest!r}."
                 )
@@ -3970,8 +3971,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     # Override: with a default, a key three or more levels deep that
-    # keys(True) does not hold returns the default, even when its path runs
-    # through a tensor (get raises there).
+    # keys(True) does not hold returns the default without reading it.
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         if default is not NO_DEFAULT:
             key_tuple = _unravel_key_to_tuple(key)

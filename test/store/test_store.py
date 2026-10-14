@@ -2836,8 +2836,9 @@ class TestLazyStackedTensorDictStore:
             torch.testing.assert_close(store_td.get_at("a", 1), tds[1]["a"])
             torch.testing.assert_close(store_td[1:2]["a"], lazy_td[1:2]["a"])
             assert store_td.get(("n", "zz"), None) is None
+            assert store_td.get(("a", "x"), None) is None
             with pytest.raises(ValueError, match="not a tensordict"):
-                store_td.get(("a", "x"), None)
+                store_td.get(("a", "x"))
             for td in (store_td, lazy_td):
                 td[1, 0] = 7.0
                 td[0:1] = 3.0

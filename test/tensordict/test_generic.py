@@ -3859,11 +3859,13 @@ class TestGeneric:
             KeyError, match=r'key "z" not found in TensorDict with keys \[\W*c\W*\]'
         ):
             td["a", "b", "z"]
+        # with a default, a key that runs through a leaf is missing (#2678)
+        assert td.get(("a", "b", "c", "z"), None) is None
         with pytest.raises(
             ValueError,
             match="'c' is a Tensor, not a tensordict, so it has no entry 'z'",
         ):
-            td.get(("a", "b", "c", "z"), None)
+            td.get(("a", "b", "c", "z"))
         with pytest.raises(
             ValueError,
             match=r"'t' is a Tensor, not a tensordict, so it has no entry \('y', 'z'\)",
@@ -7483,6 +7485,53 @@ class TestGeneric:
         td_select = td.select(("a", "b"), "r", ("a", "z"), strict=False)
         assert ("a", "b") in list(td_select.keys(True, True))
         assert ("a", "b") in td_select.keys(True, True)
+
+    @pytest.mark.parametrize(
+        "key", [("x", "q"), ("x", "q", "r"), ("n", "y", "q")], ids=str
+    )
+    @pytest.mark.parametrize(
+        "container",
+        ["td", "lazy", "tensorclass", "td_of_lazy", "td_of_tensorclass"],
+    )
+    def test_get_pop_default_through_leaf(self, container, key):
+        # With a default, get and pop return it for a key that runs through a
+        # leaf; without one, get, pop and indexing raise the error that names
+        # the leaf (#2678)
+        @tensorclass
+        class Leaves:
+            x: torch.Tensor
+            n: TensorDict
+
+        td = TensorDict(
+            x=torch.zeros(3),
+            n=TensorDict(y=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        if container.endswith("lazy"):
+            td = lazy_stack(list(td.unbind(0)))
+        elif container.endswith("tensorclass"):
+            td = Leaves(x=td["x"], n=td["n"], batch_size=[3])
+        if container.startswith("td_of"):
+            td = TensorDict(t=td, batch_size=[3])
+            key = ("t", *key)
+        keys = set(td.keys(True))
+        assert td.get(key, None) is None
+        assert td.get(key, default="D") == "D"
+        assert td.pop(key, "D") == "D"
+        assert td.pop(key, default=None) is None
+        assert set(td.keys(True)) == keys
+        reads = [lambda: td.pop(key)]
+        if container != "tensorclass":
+            # a tensorclass is indexed by batch index only
+            reads.append(lambda: td[key])
+        if container != "tensorclass" or key[0] != "x":
+            # a tensorclass returns None for a field that is a tensor
+            reads.append(lambda: td.get(key))
+        match = f"'{'x' if 'x' in key else 'y'}' is a Tensor, not a tensordict"
+        for read in reads:
+            with pytest.raises(ValueError, match=match):
+                read()
+        assert set(td.keys(True)) == keys
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_select_exclude_nested_through_leaf(self, inplace):
