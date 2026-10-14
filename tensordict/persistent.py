@@ -125,8 +125,12 @@ class _PersistentTDKeysView(_TensorDictKeysView):
         # paths by the storage library: such keys cannot be stored entries
         if any("/" in subkey or subkey in ("", ".", "..") for subkey in key_tuple):
             return False
+        # contains does not open the node or read dataset payloads.
+        td = self.tensordict
+        if not td._backend.contains(td.file, td._process_key(key_tuple)):
+            return False
         try:
-            metadata = self.tensordict._get_metadata(key)
+            metadata = td._get_metadata(key)
         except (KeyError, ValueError):
             return False
         return self._accepts(key, metadata)
@@ -1469,7 +1473,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         except KeyError:
             if default is not NO_DEFAULT:
                 return default
-            raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
+            # Do not format self: its repr reads every dataset.
+            raise KeyError(f"key {key} not found in {type(self).__name__}")
 
     def _process_array(self, key, array):
         if self._backend.is_array(array):
