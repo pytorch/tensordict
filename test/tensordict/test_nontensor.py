@@ -2313,6 +2313,20 @@ class TestNonTensorData:
         assert tdv.view(60).tolist() == [str(i) for i in range(60)]
         assert tdv.flatten().tolist() == [str(i) for i in range(60)]
 
+    @pytest.mark.parametrize("shape", [(3, 0), (0, 3), (0, 3, 1), (1, 0)])
+    def test_view_empty_batch(self, shape):
+        # Regression test for #2588: view of a batch with no elements used to
+        # return batch [0], and view(0, 3) locked the input.
+        stack = NonTensorStack(*[NonTensorStack(batch_size=[0])] * 3, stack_dim=1)
+        assert stack.batch_size == (0, 3, 0)
+        assert not stack.is_locked
+        expected = torch.zeros(0, 3, 0).view(*shape)
+        result = stack.view(*shape)
+        assert isinstance(result, NonTensorStack)
+        assert result.batch_size == expected.shape
+        assert result.tolist() == expected.tolist()
+        assert not stack.is_locked
+
     def test_view_drop_size_one_dim(self):
         strings = [["00", "01", "02"], ["10", "11", "12"]]
         stack = NonTensorStack.from_list(strings).unsqueeze(1)
