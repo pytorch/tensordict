@@ -2108,6 +2108,8 @@ class TestNonTensorData:
         )
         proc.start()
         proc.join()
+        # a crashed child must show as a crash, not as a missing write (#2669)
+        assert proc.exitcode == 0
 
         # Test that the Value is unpacked
         assert _from_shared_nontensor(td.get("val")._non_tensordict["data"]) == val1
@@ -2691,6 +2693,8 @@ class TestNonTensorData:
         proc = mp.get_context(mp_ctx).Process(target=self._update_stack, args=(td,))
         proc.start()
         proc.join()
+        # a crashed child must show as a crash, not as a missing write (#2669)
+        assert proc.exitcode == 0
         if share_non_tensor in (True, None):
             assert td.get("val").tolist() == [0, 3] * 5
         else:
