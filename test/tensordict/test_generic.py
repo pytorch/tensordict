@@ -3365,10 +3365,8 @@ class TestGeneric:
         assert ("a", "b", "c") in tensordict.keys(include_nested=True)
         assert ("a", "c", "b") not in tensordict.keys(include_nested=True)
 
-        with pytest.raises(
-            TypeError, match="checks with tuples of strings is only supported"
-        ):
-            ("a", "b", "c") in tensordict.keys()  # noqa: B015
+        assert ("a", "b", "c") not in tensordict.keys()
+        assert ("a", "b") not in tensordict.keys(leaves_only=True)
 
         with pytest.raises(TypeError, match="TensorDict keys are always strings."):
             42 in tensordict.keys()  # noqa: B015
