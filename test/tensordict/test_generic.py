@@ -3443,10 +3443,11 @@ class TestGeneric:
         [None, is_leaf_nontensor, lambda cls: True, lambda cls: cls is torch.Tensor],
         ids=["default", "nontensor", "all", "tensor"],
     )
-    def test_keys_nested_one_walk(self, leaves_only, is_leaf, monkeypatch):
-        # The nested keys of a TensorDict are listed in one walk, without a
-        # generator per level (#2618). They come in the order of that
-        # generator, and is_leaf gets the same classes.
+    def test_keys_nested_tensordict_entries(self, leaves_only, is_leaf, monkeypatch):
+        # The nested keys view of a TensorDict does not check its TensorDict
+        # entries with _is_tensor_collection (#2618). Its generator, len() and
+        # sort=True list the same keys, in the same order, and call is_leaf
+        # with the same classes.
         @tensorclass
         class MyClass:
             x: torch.Tensor
@@ -3468,6 +3469,16 @@ class TestGeneric:
             z=torch.zeros(3),
             batch_size=[3],
         )
+        checked = []
+        is_tensor_collection = tensordict._td._is_tensor_collection
+
+        def recorded_is_tensor_collection(cls):
+            checked.append(cls)
+            return is_tensor_collection(cls)
+
+        monkeypatch.setattr(
+            tensordict._td, "_is_tensor_collection", recorded_is_tensor_collection
+        )
 
         def listed(list_keys):
             calls = []
@@ -3478,26 +3489,88 @@ class TestGeneric:
 
             return list_keys(recorded_is_leaf if is_leaf else None), calls
 
-        def from_generator(is_leaf):
-            view = _TensorDictKeysView(td, True, leaves_only, is_leaf)
-            return list(view._iter_helper(td))
+        # iter(): list() of the view would also call is_leaf for its len()
+        keys, calls = listed(
+            lambda is_leaf: list(iter(td.keys(True, leaves_only, is_leaf=is_leaf)))
+        )
+        if is_leaf is None and leaves_only:
+            assert keys == [
+                "a",
+                ("nested", "b"),
+                ("nested", "c", "d"),
+                ("tc", "x"),
+                "u",
+                ("stack", "f"),
+                ("stack", "g", "h"),
+                "z",
+            ]
+        elif is_leaf is None:
+            assert keys == [
+                "a",
+                ("nested", "b"),
+                ("nested", "c", "d"),
+                ("nested", "c"),
+                ("nested", "empty"),
+                "nested",
+                ("tc", "x"),
+                "tc",
+                "nt",
+                "u",
+                ("stack", "f"),
+                ("stack", "g", "h"),
+                ("stack", "g"),
+                "stack",
+                "z",
+            ]
+        assert listed(
+            lambda is_leaf: len(td.keys(True, leaves_only, is_leaf=is_leaf))
+        ) == (len(keys), calls)
 
-        expected, expected_calls = listed(from_generator)
-        assert expected
+        def keyfunc(key):
+            return ".".join(key) if isinstance(key, tuple) else key
 
-        def iter_helper(*args, **kwargs):
-            raise AssertionError("the keys are listed by a generator per level")
+        assert listed(
+            lambda is_leaf: list(
+                iter(td.keys(True, leaves_only, is_leaf=is_leaf, sort=True))
+            )
+        ) == (sorted(keys, key=keyfunc), calls)
+        assert TensorDict not in checked
 
-        monkeypatch.setattr(_TensorDictKeysView, "_iter_helper", iter_helper)
+    def test_keys_nested_lazy(self, monkeypatch):
+        # Iterating the nested keys of a TensorDict reads each level when it
+        # gets to it (#2618).
+        td = TensorDict(
+            a=torch.zeros(3),
+            nest=TensorDict(c=torch.zeros(3), batch_size=[3]),
+            other=TensorDict(d=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        keys = []
+        for key in td.keys(True, True):
+            keys.append(key)
+            if key == "a":
+                td["nest"] = TensorDict(x=torch.zeros(3), batch_size=[3])
+                del td["other", "d"]
+                td["other", "e"] = torch.zeros(3)
+        assert keys == ["a", ("nest", "x"), ("other", "e")]
 
-        def from_keys(is_leaf):
-            # iter(): list() of the view would also call is_leaf for its len()
-            return list(iter(td.keys(True, leaves_only, is_leaf=is_leaf)))
+        # The first key reads the levels it goes through, not the others.
+        wide = TensorDict(
+            {f"g{i}": TensorDict(x=torch.zeros(3), batch_size=[3]) for i in range(50)},
+            batch_size=[3],
+        )
+        read = []
+        items = _TensorDictKeysView._items
 
-        assert listed(from_keys) == (expected, expected_calls)
-        keys = td.keys(True, leaves_only, is_leaf=is_leaf)
-        assert list(keys) == expected
-        assert len(keys) == len(expected)
+        def recorded_items(self, tensordict=None):
+            read.append(tensordict)
+            return items(self, tensordict)
+
+        monkeypatch.setattr(_TensorDictKeysView, "_items", recorded_items)
+        assert next(iter(wide.keys(True, True))) == ("g0", "x")
+        assert len(read) == 2
+        assert read[0] is wide
+        assert read[1] is wide.get("g0")
 
     @pytest.mark.parametrize("stack", [False, True])
     def test_items_nested_deep(self, stack):
