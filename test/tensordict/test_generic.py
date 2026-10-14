@@ -25,6 +25,7 @@ from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, get_type_hints
 from unittest import mock
 
@@ -1407,6 +1408,19 @@ class TestGeneric:
             TensorDict(a=1, source={"b": 2})
         td = TensorDict(a=1, b=1, batch_size=[])
         assert td.batch_size == ()
+
+    def test_construct_from_mapping(self):
+        # Any Mapping is read like a dict (#2680).
+        x = torch.zeros(3, 2)
+        source = MappingProxyType({"x": x, ("child", "y"): torch.ones(3)})
+        for batch_size in (None, [3]):
+            td = TensorDict(source, batch_size=batch_size)
+            assert type(td) is TensorDict
+            assert td.batch_size == (() if batch_size is None else (3,))
+            assert td["x"] is x
+            assert (td["child", "y"] == 1).all()
+        with pytest.raises(ValueError, match="Mapping"):
+            TensorDict([("x", x)])
 
     @pytest.mark.parametrize("device", [None, "cpu", "meta"])
     def test_construct_mixed_tensor_validation(self, device):
