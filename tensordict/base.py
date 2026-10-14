@@ -4218,12 +4218,25 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self._get_at_tuple(key_tuple, _entry_index(index), default, **kwargs)
 
     def _get_at_str(self, key, idx, default, **kwargs):
+        """Reads the entry ``key`` (a string) at ``idx``; see :meth:`_get_at_tuple`."""
         out = self._get_str(key, default, **kwargs)
         if out is default:
             return out
         return out[idx]
 
     def _get_at_tuple(self, key, idx, default, **kwargs):
+        """Reads the entry ``key`` at ``idx``, for :meth:`get_at`.
+
+        :meth:`get_at` has unravelled ``key`` into a non-empty tuple of
+        strings, normalized ``idx`` with ``_entry_index`` and resolved
+        ``default`` (``NO_DEFAULT`` when the key must exist); ``kwargs`` are
+        the remaining keyword arguments of the call. The hook returns
+        ``default`` itself when the entry is missing and ``default`` is not
+        ``NO_DEFAULT``, raises ``KeyError`` when it is, and otherwise returns
+        the entry indexed with ``idx``. The default reads the whole entry
+        with :meth:`_get_tuple` and indexes it; a class that can read only the
+        indexed part overrides it.
+        """
         out = self._get_tuple(key, default, **kwargs)
         if out is default:
             return out
@@ -6971,7 +6984,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return result
 
     def _is_dense_node(self) -> bool:
-        # Whether _fast_apply can use _dense_apply: see TensorDict._is_dense_node.
+        """Whether :meth:`_fast_apply` can use ``_dense_apply``: see ``TensorDict._is_dense_node``."""
         return False
 
     def _fast_apply(
@@ -8620,6 +8633,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _contiguous_inplace(self, canonical: bool) -> Self:
+        """Makes the leaves contiguous in place, for ``contiguous(inplace=True)``.
+
+        :meth:`contiguous` calls it with ``inplace=True`` and its ``canonical``
+        argument, and checks nothing before. The hook replaces each leaf with
+        its contiguous copy (rematerialized with ``torch.contiguous_format``
+        when ``canonical`` is ``True``), recursing into the sub-tensordicts,
+        and returns ``self``. The default raises ``NotImplementedError``: only
+        the classes that can rebind their leaves override it.
+        """
         raise NotImplementedError(
             f"contiguous(inplace=True) is not supported on {type(self).__name__}. "
             "Call .to_tensordict() first or use inplace=False."
