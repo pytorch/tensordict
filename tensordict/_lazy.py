@@ -4646,14 +4646,13 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _view(self, shape: torch.Size) -> Self:
         has_neg_dim = any(dim < 0 for dim in shape)
-        if not self.batch_size.numel() and (has_neg_dim or not is_non_tensor(self)):
+        if not self.batch_size.numel():
             # With no elements, the flatten and unflatten checks match shapes
             # they cannot regroup, and regrouping can lose the keys. Keep the
             # regrouped stack only for a -1-free shape it gets right;
             # otherwise reshape a dense copy, which has the shared keys. A
-            # NonTensorStack is its own contiguous(), whose reshape gives
-            # torch's shape: only a -1 is sent there, and a view to explicit
-            # sizes regroups or raises as for a non-empty stack.
+            # NonTensorStack takes the same path: it is its own contiguous(),
+            # whose reshape gives torch's shape.
             shape = torch.Size(_infer_size_impl(shape, 0))
             if shape == self.batch_size:
                 return self

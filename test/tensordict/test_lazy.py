@@ -4186,6 +4186,7 @@ class TestLazyStackedTensorDict:
         assert out["a"].shape == (*expected, 4)
         assert out["n", "b"].shape == expected
         assert not out.is_locked
+        assert not td.is_locked
         assert getattr(td.lock_(), method)(shape).is_locked
 
     @pytest.mark.parametrize("method", ["reshape", "view"])
