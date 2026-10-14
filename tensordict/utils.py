@@ -2686,6 +2686,9 @@ def _foreach(name: str, tensors, *args, **kwargs):
         if (
             name in _FOREACH_ADD_TENSOR
             and len(tensors) <= _FOREACH_ADD_TENSOR_MAX
+            # sign * True would turn a bool alpha, which torch rejects for
+            # floating-point results, into an int
+            and type(kwargs.get("alpha")) is not bool
             and _is_cuda_scalar_of(args[0], tensors)
         ):
             # Pass a copy, read once as the number would be: the in-place kernel

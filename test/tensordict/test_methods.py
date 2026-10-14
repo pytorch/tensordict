@@ -5486,10 +5486,13 @@ def test_add_cuda_scalar_tensor_other_leaves():
     td = TensorDict(a=torch.arange(3, device="cuda"), b=torch.ones(3, device="cuda"))
     assert (td + t)["a"].dtype == torch.float32
     assert (td.cpu() + t)["a"].device == torch.device("cpu")
-    with pytest.raises(NotImplementedError, match="bool tensor"):
+    with pytest.raises((NotImplementedError, RuntimeError), match="bool tensor"):
         td.exclude("a") - torch.tensor(True, device="cuda")
-    with pytest.raises(NotImplementedError, match="bool tensor"):
+    with pytest.raises((NotImplementedError, RuntimeError), match="bool tensor"):
         torch.tensor(True, device="cuda") - td.exclude("a")
+    # A bool alpha keeps the path of main, where sub takes no alpha
+    with pytest.raises(TypeError):
+        td.exclude("a").sub(torch.tensor(0.5, device="cuda"), alpha=True)
 
     class SubTensor(torch.Tensor):
         pass
@@ -5621,8 +5624,10 @@ def test_add_sub_cuda_scalar_tensor_forward_ad(op, number):
     # alpha, the 0-dim tensor overload keeps it, as Tensor.add does
     with fwAD.dual_level():
         with warnings.catch_warnings():
-            # make_dual loads its decompositions with torch.jit.script once
+            # make_dual loads its decompositions with torch.jit.script once,
+            # which warns that it is deprecated
             warnings.simplefilter("ignore", FutureWarning)
+            warnings.simplefilter("ignore", DeprecationWarning)
             t = fwAD.make_dual(
                 torch.tensor(0.25, device="cuda"), torch.tensor(1.0, device="cuda")
             )
