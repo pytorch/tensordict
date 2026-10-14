@@ -2973,6 +2973,31 @@ def test_to_context(original_device, new_device, tc):
         assert x.device == original_device
 
 
+class _TanhNormalJoint(distributions.TransformedDistribution):
+    # tanh(Normal) with joint sample-and-score methods. Without a cache, its
+    # log_prob recovers the draw as atanh(sample), which fails once tanh
+    # saturates in float32.
+    def __init__(self, loc, scale):
+        super().__init__(
+            distributions.Normal(loc, scale), [distributions.TanhTransform()]
+        )
+
+    def _score(self, x):
+        transform = self.transforms[0]
+        y = transform(x)
+        return y, self.base_dist.log_prob(x) - transform.log_abs_det_jacobian(x, y)
+
+    def rsample_and_log_prob(self, sample_shape=()):
+        return self._score(self.base_dist.rsample(sample_shape))
+
+    def sample_and_log_prob(self, sample_shape=()):
+        return self._score(self.base_dist.sample(sample_shape))
+
+
+class _TanhNormalJointNoRsample(_TanhNormalJoint):
+    has_rsample = False
+
+
 class TestProbabilisticTensorDictModule:
     def test_cache_dist_deprecation(self):
         with warnings.catch_warnings():
@@ -3259,6 +3284,75 @@ class TestProbabilisticTensorDictModule:
             assert (td[key] == loc).all()
             if return_log_prob:
                 assert td[f"{key}_log_prob"].shape == (3, 2, 4)
+
+    @pytest.mark.parametrize(
+        "dist_class", [_TanhNormalJoint, _TanhNormalJointNoRsample]
+    )
+    @pytest.mark.parametrize("num_samples", [None, 3])
+    @set_composite_lp_aggregate(False)
+    def test_joint_sample_and_log_prob(self, dist_class, num_samples):
+        # The module scores the draw with the distribution's joint method,
+        # rsample_and_log_prob or sample_and_log_prob depending on has_rsample
+        loc = torch.tensor([[20.0, -20.0]])
+        scale = torch.full_like(loc, 0.1)
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=dist_class,
+            default_interaction_type="random",
+            return_log_prob=True,
+            num_samples=num_samples,
+        )
+        torch.manual_seed(0)
+        td = module(TensorDict(loc=loc, scale=scale, batch_size=[1]))
+        dist = dist_class(loc, scale)
+        joint = (
+            dist.rsample_and_log_prob if dist.has_rsample else dist.sample_and_log_prob
+        )
+        torch.manual_seed(0)
+        action, log_prob = joint(module.num_samples or ())
+        assert log_prob.isfinite().all()
+        assert (td["action"] == action).all()
+        torch.testing.assert_close(td["action_log_prob"], log_prob)
+
+    @set_composite_lp_aggregate(False)
+    def test_torch_dist_sample_then_log_prob(self):
+        # torch distributions have no joint method: the module scores the
+        # sample with log_prob
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=Normal,
+            default_interaction_type="random",
+            return_log_prob=True,
+        )
+        loc, scale = torch.randn(3, 2), torch.rand(3, 2) + 0.1
+        torch.manual_seed(0)
+        td = module(TensorDict(loc=loc, scale=scale, batch_size=[3]))
+        torch.manual_seed(0)
+        action = Normal(loc, scale).rsample()
+        assert (td["action"] == action).all()
+        torch.testing.assert_close(
+            td["action_log_prob"], Normal(loc, scale).log_prob(action)
+        )
+
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_not_a_distribution(self, return_log_prob):
+        # The check for a joint method must not hide the TypeError for an
+        # object that is not a distribution
+        class NotADist:
+            def __init__(self, loc):
+                self.loc = loc
+
+        module = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["action"],
+            distribution_class=NotADist,
+            default_interaction_type="random",
+            return_log_prob=return_log_prob,
+        )
+        with pytest.raises(TypeError, match="Expected Distribution"):
+            module(TensorDict(loc=torch.zeros(3), batch_size=[3]))
 
     @pytest.mark.parametrize("return_log_prob", [True, False])
     @pytest.mark.parametrize("return_composite", [True, False])
@@ -4699,6 +4793,85 @@ class TestCompositeDist:
         lp = dist.log_prob(sample)
         assert isinstance(lp, TensorDict)
         assert lp.requires_grad
+
+    @pytest.mark.parametrize("aggregate", [False, True])
+    @pytest.mark.parametrize("method", ["sample", "rsample"])
+    def test_sample_and_log_prob(self, aggregate, method):
+        # The joint methods give the log-probability in the layout of log_prob
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        with set_composite_lp_aggregate(aggregate):
+            torch.manual_seed(0)
+            sample, lp = getattr(dist, f"{method}_and_log_prob")((2,))
+            torch.manual_seed(0)
+            expected_sample = getattr(dist, method)((2,))
+            expected_lp = dist.log_prob(expected_sample)
+        assert (sample == expected_sample).all()
+        assert sample.batch_size == (2, 3)
+        if aggregate:
+            assert isinstance(lp, torch.Tensor)
+        else:
+            assert isinstance(lp, TensorDict)
+            assert set(lp.keys(True, True)) == set(expected_lp.keys(True, True))
+        torch.testing.assert_close(lp, expected_lp)
+
+    @pytest.mark.parametrize("aggregate", [False, True])
+    def test_prob_module_joint_sample_and_log_prob(self, aggregate):
+        # Components with a joint method are scored with it, the others with
+        # sample then log_prob
+        loc = torch.tensor([[20.0, -20.0]])
+        scale = torch.full_like(loc, 0.1)
+        logits = torch.randn(1, 5)
+        with set_composite_lp_aggregate(aggregate):
+            module = ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=["act", ("nested", "disc")],
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={
+                    "distribution_map": {
+                        "act": _TanhNormalJoint,
+                        ("nested", "disc"): distributions.Categorical,
+                    }
+                },
+                default_interaction_type="random",
+                return_log_prob=True,
+            )
+            td = TensorDict(
+                params={
+                    "act": {"loc": loc, "scale": scale},
+                    ("nested", "disc"): {"logits": logits},
+                },
+                batch_size=[1],
+            )
+            torch.manual_seed(0)
+            td = module(td)
+        torch.manual_seed(0)
+        act, act_lp = _TanhNormalJoint(loc, scale).sample_and_log_prob()
+        disc_dist = distributions.Categorical(logits=logits)
+        disc = disc_dist.sample()
+        disc_lp = disc_dist.log_prob(disc)
+        assert act_lp.isfinite().all()
+        assert (td["act"] == act).all()
+        assert (td["nested", "disc"] == disc).all()
+        torch.testing.assert_close(td["act_log_prob"], act_lp)
+        torch.testing.assert_close(td["nested", "disc_log_prob"], disc_lp)
+        if aggregate:
+            torch.testing.assert_close(td["sample_log_prob"], act_lp.sum(-1) + disc_lp)
+        else:
+            assert "sample_log_prob" not in td
 
     @set_composite_lp_aggregate(True)
     def test_log_prob_composite_legacy(self):
