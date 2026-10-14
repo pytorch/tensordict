@@ -52,6 +52,7 @@ from tensordict.base import (
     _UNSET,
     _warn_scalar_over_non_tensor,
     _wrap_extra_state,
+    _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -2437,6 +2438,46 @@ class TensorDict(TensorDictBase):
             leaves_only=leaves_only,
             is_leaf=is_leaf,
             sort=sort,
+        )
+
+    # Override: the method runs on a copy of self in which each nested lazy
+    # stack whose members read copies, such as h5 files, is replaced by a
+    # stack of copies of their leaves, and each such member writes its copy
+    # back, as the in-place methods of the lazy stack do (#2592).
+    def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
+        # the public name of a hook such as _zero_
+        name = method.__name__.lstrip("_")
+        written = []
+        copies = self._tree_of_copies(written)
+        result = method(copies, *args, **kwargs)
+        if result is not copies:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        _write_back_members(written, name)
+        return self
+
+    def _tree_of_copies(self, written: list) -> TensorDict:
+        """A shallow copy of ``self``, with each nested lazy stack whose members read copies replaced by a stack of copies.
+
+        Called by ``_inplace_on_nested_copies``. Appends each such member and
+        its copy to ``written``, for the member to write the copy back.
+        """
+        from tensordict._lazy import LazyStackedTensorDict
+
+        source = {}
+        for key, value in self._tensordict.items():
+            if isinstance(value, TensorDict):
+                value = value._tree_of_copies(written)
+            elif (
+                isinstance(value, LazyStackedTensorDict) and value._reads_return_copies
+            ):
+                value = value._stack_of_copies(written)
+            source[key] = value
+        return self._new_unsafe(
+            source=source,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self._maybe_names(),
         )
 
     # some custom methods for efficiency

@@ -531,6 +531,48 @@ def test_inplace_methods_write_lazy_stack(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_methods_write_nested_lazy_stack(tmp_path):
+    # #2592: the in-place methods of a tensordict write to the h5 members of a
+    # lazy stack that it holds, also beside a dense member and two levels deep
+    def make():
+        return TensorDict(
+            {"a": torch.ones(3), "nested": {"b": torch.ones(3, 2)}}, batch_size=[3]
+        )
+
+    def outer(first, second):
+        return TensorDict(
+            {"x": torch.ones(2, 3), "s": first, "n": {"s": second}}, batch_size=[2]
+        )
+
+    files = [
+        PersistentTensorDict.from_dict(make(), filename=tmp_path / f"{i}.h5")
+        for i in range(3)
+    ]
+    dense = make()
+    data = outer(lazy_stack(files[:2]), lazy_stack([files[2], dense]))
+    expected = outer(lazy_stack([make(), make()]), lazy_stack([make(), make()]))
+    end = expected * 0 + 10
+    for td in (data, expected):
+        assert td.add_(1.0) is td
+        assert td.lerp_(end, 0.5) is td
+        assert td.mul_(torch.tensor(2.0)) is td
+        assert td.addcmul_(end, end, value=0.01) is td
+    members = expected["s"].tensordicts + expected["n", "s"].tensordicts
+    for td, member in zip(files + [dense], members):
+        torch.testing.assert_close(td.to_tensordict(), member)
+    torch.testing.assert_close(data["x"], expected["x"])
+    # zero_, fill_, masked_fill_, apply_ and detach_ write as before
+    assert data.zero_() is data
+    assert data.fill_(("s", "a"), 2.0) is data
+    assert data.masked_fill_(torch.tensor([True, False]), 3.0) is data
+    assert data.apply_(lambda x: x.add_(1)) is data
+    assert data.detach_() is data
+    for td, a, b in zip(files + [dense], (4, 3, 4, 1), (4, 1, 4, 1)):
+        assert (td["a"] == a).all()
+        assert (td["nested", "b"] == b).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_read_only_warns(tmp_path):
     # from_h5 opens files read-only by default: the in-place methods leave the
     # file unchanged, as before they wrote to files, and warn that this will
@@ -560,6 +602,8 @@ def test_inplace_read_only_warns(tmp_path):
         lambda: lazy_stack([h5td[0], h5td[1]]).add_(1.0),
         lambda: lazy_stack([h5td[0], h5td[1]]).zero_(),
         lambda: lazy_stack([h5td, h5td]).zero_(),
+        # #2592: and for a lazy stack of rows held by a tensordict
+        lambda: TensorDict({"s": lazy_stack([h5td[0], h5td[1]])}, [2]).add_(1.0),
         lambda: h5td.update_({"a": torch.zeros(3)}),
         lambda: h5td.copy_(td.clone().zero_()),
     ):
@@ -686,6 +730,9 @@ def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
         # #2570: so does zero_ on a lazy stack of the file and a dense member
         stack = lazy_stack([h5td, td.clone()])
         assert stack.zero_() is stack
+        # #2592: and on a tensordict that holds the stack
+        holder = TensorDict({"n": {"s": stack}}, batch_size=[2])
+        assert holder.zero_() is holder
         assert h5td.zero_() is h5td
     h5td.close()
     reopened = PersistentTensorDict.from_h5(tmp_path / "file.h5")

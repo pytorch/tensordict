@@ -64,10 +64,12 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _PACKAGE_DIR,
+    _raise_if_inplace_call,
     _READ_ONLY_CALL,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
     _warn_read_only,
+    _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
@@ -2967,6 +2969,9 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             for td in self.tensordicts:
+                if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
+                    # an in-place method would change copies (#2592)
+                    _raise_if_inplace_call()
                 yield from td.values(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
@@ -2994,6 +2999,9 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             for i, td in enumerate(self.tensordicts):
+                if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
+                    # an in-place method would change copies (#2592)
+                    _raise_if_inplace_call()
                 for key, val in td.items(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
@@ -3176,15 +3184,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if result is not copies:
             # broadcasting self returns a new tensordict and writes nothing
             return result
-        read_only = False
-        for td, leaves in written:
-            if td._storage_is_read_only():
-                read_only = True
-            else:
-                td._write_back(*leaves._items_list(True, True), name)
-        if read_only:
-            # one warning for the call, as for one file
-            _warn_read_only(name)
+        _write_back_members(written, name)
         return self
 
     def _stack_of_copies(self, written: list) -> LazyStackedTensorDict:
