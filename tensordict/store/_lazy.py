@@ -2362,28 +2362,27 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             )
         return self
 
-    def update(
+    # Override: a sub-tensordict with a leaf whose elements differ in shape is
+    # written leaf by leaf.
+    def _update_entries(
         self,
-        input_dict_or_td=None,
-        clone: bool = False,
-        inplace: bool = False,
+        input_dict_or_td: dict | TensorDictBase,
         *,
-        non_blocking: bool = False,
-        keys_to_update: Sequence[NestedKey] | None = None,
-        is_leaf: Callable[[Type], bool] | None = None,
-        update_batch_size: bool = False,
-        ignore_lock: bool = False,
-        **kwargs,
+        clone: bool,
+        inplace: bool,
+        non_blocking: bool,
+        keys_to_update: list[NestedKey] | None,
+        is_leaf: Callable[[Type], bool],
+        update_batch_size: bool,
+        ignore_lock: bool,
     ) -> Self:
-        # Override: TensorDictBase.update reads each sub-tensordict of self
+        # TensorDictBase._update_entries reads each sub-tensordict of self
         # that the input writes into, and a sub-tensordict with a leaf whose
         # elements differ in shape cannot be read as one tensordict. Each leaf
         # of the input is then written under its full key, which merges the
         # sub-tensordicts as update does.
         try:
-            # keyword arguments: the lock check of update reads inplace and
-            # ignore_lock from them
-            return super().update(
+            return super()._update_entries(
                 input_dict_or_td,
                 clone=clone,
                 inplace=inplace,
@@ -2392,81 +2391,77 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 is_leaf=is_leaf,
                 update_batch_size=update_batch_size,
                 ignore_lock=ignore_lock,
-                **kwargs,
             )
         except _HeterogeneousKeyError:
-            if is_leaf is not None or update_batch_size or ignore_lock:
+            if is_leaf is not _is_leaf_nontensor or update_batch_size or ignore_lock:
                 raise
         if keys_to_update is not None:
             keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
         all_keys = self._get_all_keys()
-        # kwargs come last: they win on key conflict
-        for source in (input_dict_or_td, kwargs):
-            if source is None:
+        if not is_tensor_collection(input_dict_or_td):
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
+        for key, value in input_dict_or_td.items(True, True):
+            key = _unravel_key_to_tuple(key)
+            if keys_to_update is not None and not any(
+                key[: len(k)] == k for k in keys_to_update
+            ):
                 continue
-            if not is_tensor_collection(source):
-                source = TensorDict.from_dict(source, batch_dims=self.batch_dims)
-            for key, value in source.items(True, True):
-                key = _unravel_key_to_tuple(key)
-                if keys_to_update is not None and not any(
-                    key[: len(k)] == k for k in keys_to_update
-                ):
-                    continue
-                if clone:
-                    value = value.clone()
-                if inplace and _KEY_SEP.join(key) in all_keys:
-                    self.set_(key, value, non_blocking=non_blocking)
-                else:
-                    # a locked store raises here, as update does
-                    self.set(key, value, non_blocking=non_blocking)
+            if clone:
+                value = value.clone()
+            if inplace and _KEY_SEP.join(key) in all_keys:
+                self.set_(key, value, non_blocking=non_blocking)
+            else:
+                # a locked store raises here, as update does
+                self.set(key, value, non_blocking=non_blocking)
         return self
 
-    def update_(
+    # Override: a key whose elements differ in shape is written leaf by leaf.
+    def _update_(
         self,
-        input_dict_or_td=None,
-        clone: bool = False,
+        input_dict_or_td: dict | TensorDictBase,
         *,
-        non_blocking: bool = False,
-        keys_to_update: Sequence[NestedKey] | None = None,
-        **kwargs,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
     ) -> Self:
-        # Override: without keys_to_update, TensorDictBase.update_ reads every
-        # entry of self, and a key whose elements differ in shape cannot be
-        # read as one tensor, and with keys_to_update it reads the whole
-        # sub-tensordicts of self. Each leaf of the input is then written
-        # alone, and the leaves that self lacks are handled as in
-        # TensorDictBase.update_.
+        # Without keys_to_update, TensorDictBase._update_ reads every entry of
+        # self, and a key whose elements differ in shape cannot be read as one
+        # tensor, and with keys_to_update it reads the whole sub-tensordicts
+        # of self. Each leaf of the input is then written alone, and the
+        # leaves that self lacks are handled as in TensorDictBase._update_.
         try:
-            return super().update_(
+            return super()._update_(
                 input_dict_or_td,
-                clone,
+                clone=clone,
                 non_blocking=non_blocking,
                 keys_to_update=keys_to_update,
-                **kwargs,
             )
         except _HeterogeneousKeyError:
             pass
-        if keys_to_update is not None:
-            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+        if not is_tensor_collection(input_dict_or_td):
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
         all_keys = self._get_all_keys()
-        # kwargs come last: they win on key conflict
-        for source in (input_dict_or_td, kwargs):
-            if source is None:
+        missing = None
+        written = False
+        for key, value in input_dict_or_td.items(True, True):
+            key = _unravel_key_to_tuple(key)
+            if keys_to_update is not None and not any(
+                key[: len(k)] == k for k in keys_to_update
+            ):
                 continue
-            if not is_tensor_collection(source):
-                source = TensorDict.from_dict(source, batch_dims=self.batch_dims)
-            for key, value in source.items(True, True):
-                key = _unravel_key_to_tuple(key)
-                if keys_to_update is not None and not any(
-                    key[: len(k)] == k for k in keys_to_update
-                ):
-                    continue
-                if _KEY_SEP.join(key) in all_keys:
-                    self.set_(key, value, non_blocking=non_blocking)
-                elif keys_to_update is not None:
-                    raise KeyError(
-                        f"The key {key} was not found in the dest tensordict."
-                    )
+            if _KEY_SEP.join(key) in all_keys:
+                self.set_(key, value, non_blocking=non_blocking)
+                written = True
+            elif keys_to_update is not None:
+                raise KeyError(f"The key {key} was not found in the dest tensordict.")
+            elif missing is None:
+                missing = key
+        if missing is not None and not written:
+            raise KeyError(f"The key {missing} was not found in the dest tensordict.")
         return self
 
     # Override: a TensorDict skeleton, built from the stored keys without reading data.

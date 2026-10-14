@@ -45,6 +45,7 @@ from tensordict._contextlib import LAST_OP_MAPS
 from tensordict._deprecation import (
     deprecated,
     deprecation_message,
+    warn_deprecated,
     warn_deprecated_env_var,
 )
 from tensordict._indexing import (
@@ -1369,6 +1370,57 @@ def _select_entry(key: tuple, value: Any, keys_to_update: list[tuple]) -> Any:
     except NotImplementedError:
         # PersistentTensorDict and the stores have no select
         return value.to_tensordict().select(*leaves)
+
+
+def _stored_value(source, dest):
+    """The source that ``dest.copy_`` writes for ``source``, or ``None`` if ``dest`` is a shared or memory-mapped non-tensor leaf that cannot store its values."""
+    if not (_is_non_tensor(type(dest)) and (dest._is_shared or dest._is_memmap)):
+        return source
+    from tensordict.tensorclass import _stored_non_tensor
+
+    return _stored_non_tensor(dest, source)
+
+
+def _update_at_aliases(update_at_: Callable) -> Callable:
+    """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
+
+    ``LazyStackedTensorDict`` and ``NonTensorStack`` called the index
+    ``index``. ``_SubTensorDict`` called the input ``input_dict``, and took
+    ``discard_idx_attr=True`` to write into its source at an index of the
+    source: classes with a ``_update_source_at_`` method still take it.
+    Each of these names warns, and goes in 0.17.
+    """
+
+    @wraps(update_at_)
+    def wrapper(self, *args, **kwargs):
+        if kwargs:
+            if "discard_idx_attr" in kwargs and hasattr(
+                type(self), "_update_source_at_"
+            ):
+                warn_deprecated(
+                    "update_at_(discard_idx_attr=...)",
+                    removal="0.17",
+                    replacement="get_parent_tensordict().update_at_(...)",
+                )
+                if kwargs.pop("discard_idx_attr"):
+                    return self._update_source_at_(*args, **kwargs)
+            if "index" in kwargs and len(args) < 2:
+                warn_deprecated(
+                    "update_at_(index=...)",
+                    removal="0.17",
+                    replacement="update_at_(idx=...)",
+                )
+                kwargs["idx"] = kwargs.pop("index")
+            if "input_dict" in kwargs and not args:
+                warn_deprecated(
+                    "update_at_(input_dict=...)",
+                    removal="0.17",
+                    replacement="update_at_(input_dict_or_td=...)",
+                )
+                kwargs["input_dict_or_td"] = kwargs.pop("input_dict")
+        return update_at_(self, *args, **kwargs)
+
+    return wrapper
 
 
 class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
@@ -3747,7 +3799,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         return _shape(self.get(key))
 
-    @_lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -3831,8 +3882,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         .. note:: When updating a :class:`~tensordict.LazyStackedTensorDict` with N elements with another
             :class:`~tensordict.LazyStackedTensorDict` with M elements, with M > N, along the stack dimension,
-            the ``update`` method will append copies of the extra tensordicts to the dest (self) lazy stack.
-            This allows users to rely on ``update`` to increment lazy stacks progressively.
+            and ``update_batch_size=True``, the ``update`` method will append copies of the extra tensordicts
+            to the dest (self) lazy stack. This allows users to rely on ``update`` to increment lazy stacks
+            progressively. Without ``update_batch_size=True``, the extra tensordicts are left out.
 
         .. note:: Keyword arguments are treated as top-level keys only. Nested structures still work when
             the kwarg value is itself a dict or tensor collection (e.g. ``td.update(outer={"inner": val})``).
@@ -3872,7 +3924,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         """
         if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
-            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
+            ignore_lock = _warn_update_ignore_lock()
+        if (
+            not (clone or inplace or update_batch_size or ignore_lock)
+            and keys_to_update is None
+            and (is_leaf is None or is_leaf is _is_leaf_nontensor)
+            and (not kwargs or input_dict_or_td is None)
+            and not is_compiling()
+            and self._update_fast(
+                kwargs if input_dict_or_td is None else input_dict_or_td
+            )
+        ):
+            return self
+        if not inplace and not ignore_lock and self.is_locked:
+            raise RuntimeError(_LOCK_ERROR)
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs
@@ -3892,7 +3957,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 input_dict_or_td = kwargs
         elif input_dict_or_td is None:
             return self
-        batch_size_changed = False
         if input_dict_or_td is self:
             # no op
             return self
@@ -3902,7 +3966,55 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
+        return self._update_entries(
+            input_dict_or_td,
+            clone=clone,
+            inplace=inplace,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
+            update_batch_size=update_batch_size,
+            ignore_lock=ignore_lock,
+        )
 
+    def _update_fast(self, source: dict[str, CompatibleType] | T) -> bool:
+        """Writes ``source`` into ``self`` without the checks of :meth:`update`, if that is safe, and returns whether it did.
+
+        :meth:`update` calls it first, and only when it got default arguments
+        (no ``clone``, ``inplace``, ``keys_to_update``, ``update_batch_size``,
+        ``ignore_lock`` or custom ``is_leaf``, and no kwargs besides a missing
+        source), outside of ``torch.compile``. ``source`` may be ``self``.
+        The lock has not been checked yet: return ``False`` when ``self`` is
+        locked.
+        When it returns ``False``, :meth:`update` takes the general path, so a
+        class that overrides it must write nothing before it returns
+        ``False``. The base returns ``False``.
+        """
+        return False
+
+    def _update_entries(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        *,
+        clone: bool,
+        inplace: bool,
+        non_blocking: bool,
+        keys_to_update: list[NestedKey] | None,
+        is_leaf: Callable[[Type], bool],
+        update_batch_size: bool,
+        ignore_lock: bool,
+    ) -> Self:
+        """Writes the entries of ``input_dict_or_td`` into ``self``: the storage part of :meth:`update`.
+
+        :meth:`update` has warned about ``ignore_lock``, checked the lock,
+        merged the kwargs into ``input_dict_or_td`` and returned for ``None``,
+        ``self`` and an empty ``keys_to_update``. ``input_dict_or_td`` is a
+        dict or a tensor collection, ``is_leaf`` is set and ``keys_to_update``
+        is ``None`` or the unravelled keys. The base checks the batch size,
+        replaces it if ``update_batch_size`` asks for it, and writes each key
+        with :meth:`_set_tuple`, merging the sub-tensordicts. Returns ``self``.
+        """
+        batch_size_changed = False
         if (
             _is_tensor_collection(type(input_dict_or_td))
             # here, we do a loose check on the batch sizes: it could be that the source has batch_size (1,) and self (1, 2)
@@ -4161,6 +4273,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             parameters (``clone``, ``non_blocking``, ``keys_to_update``) must be passed through the positional
             dict form.
 
+        .. note:: On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot
+            store (for instance ``None``, or an int where a string is shared) is skipped, with a
+            :class:`UserWarning` that names its key.
+
         Returns:
             self
 
@@ -4180,6 +4296,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> assert (td["a"] == 1).all()
 
         """
+        if (
+            input_dict_or_td is None
+            and "input_dict" in kwargs
+            and "input_dict" not in self.keys()
+        ):
+            # the name of the argument in _SubTensorDict.update_ before 0.15
+            warn_deprecated(
+                "update_(input_dict=...)",
+                removal="0.17",
+                replacement="update_(input_dict_or_td=...)",
+            )
+            input_dict_or_td = kwargs.pop("input_dict")
         if kwargs:
             if input_dict_or_td is None:
                 input_dict_or_td = kwargs
@@ -4198,7 +4326,37 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if input_dict_or_td is self:
             # no op
             return self
+        if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
+            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+        return self._update_(
+            input_dict_or_td,
+            clone=clone,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+        )
 
+    def _update_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> Self:
+        """Copies the leaves of ``input_dict_or_td`` into the leaves of ``self``: the storage part of :meth:`update_`.
+
+        :meth:`update_` has merged the kwargs and returned for ``None``,
+        ``self`` and an empty ``keys_to_update``. ``input_dict_or_td`` is a
+        dict or a tensor collection, and ``keys_to_update`` is ``None`` or a
+        list of key tuples. A key of the input that ``self`` lacks raises
+        ``KeyError``; without ``keys_to_update``, the base ignores such keys
+        when another key matches. A non-tensor value that a shared or
+        memory-mapped leaf of ``self`` cannot store is skipped, and the base
+        warns once with the keys it skipped. The base reads a dict as a
+        ``TensorDict`` with ``batch_dims=self.batch_dims``. Returns ``self``.
+        """
         if not _is_tensor_collection(type(input_dict_or_td)):
             from tensordict import TensorDict
 
@@ -4210,13 +4368,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # lazy stack in the input splits self into its elements: those leaves
         # are not recorded, and stay unchanged.
         written = None
+        # The keys of the non-tensor values that a shared or memory-mapped
+        # leaf of self cannot store: they are skipped on every route (#2487).
+        skipped = []
 
         if keys_to_update is not None:
-            if len(keys_to_update) == 0:
-                return self
             if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
                 written = []
-            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
 
             named = True
 
@@ -4230,6 +4388,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             raise KeyError(
                                 f"The key {name} was not found in the dest tensordict."
                             )
+                        if not isinstance(dest, Tensor):
+                            source = _stored_value(source, dest)
+                            if source is None:
+                                # a str for a flat key, as on the other routes
+                                skipped.append(name if len(name) > 1 else name[0])
+                                return None
                         dest.copy_(source, non_blocking=non_blocking)
                         if written is not None and isinstance(dest, Tensor):
                             written.append((name, dest))
@@ -4261,18 +4425,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 # _items_list leaves out the non-tensor leaves: copy them below.
                 # Like the tensor leaves above, keys missing in self are skipped.
-                # copy_ raises between a NonTensorData and a NonTensorStack, and
-                # for most types in a shared or memmapped dest: these leaves are
-                # skipped too.
+                # copy_ raises for a NonTensorStack into a NonTensorData:
+                # these leaves are skipped too.
                 def inplace_update(name, source, dest):
                     if (
                         _is_non_tensor(type(source))
                         and _is_non_tensor(type(dest))
-                        and not (dest._is_shared or dest._is_memmap)
-                        and isinstance(source, NonTensorStack)
-                        == isinstance(dest, NonTensorStack)
+                        and (
+                            not isinstance(source, NonTensorStack)
+                            or isinstance(dest, NonTensorStack)
+                        )
                     ):
-                        dest.copy_(source, non_blocking=non_blocking)
+                        source = _stored_value(source, dest)
+                        if source is None:
+                            skipped.append(name)
+                        else:
+                            dest.copy_(source, non_blocking=non_blocking)
 
             else:
                 if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
@@ -4285,6 +4453,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         raise KeyError(
                             f"The key {name} was not found in the dest tensordict."
                         )
+                    if not isinstance(dest, Tensor):
+                        source = _stored_value(source, dest)
+                        if source is None:
+                            skipped.append(name)
+                            return None
                     dest.copy_(source, non_blocking=non_blocking)
                     if written is not None and isinstance(dest, Tensor):
                         written.append((name, dest))
@@ -4302,8 +4475,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
         if written:
             self._write_back(*zip(*written), "update_")
+        if skipped:
+            # point to the first frame outside tensordict: the user's call
+            frame, stacklevel = sys._getframe(1), 2
+            while frame is not None and frame.f_code.co_filename.startswith(
+                _PACKAGE_DIR
+            ):
+                frame, stacklevel = frame.f_back, stacklevel + 1
+            warnings.warn(
+                f"update_() skipped the non-tensor entries {skipped} of the source: "
+                "the shared or memory-mapped destination cannot store their values.",
+                UserWarning,
+                stacklevel=stacklevel,
+            )
         return self
 
+    @_update_at_aliases
     def update_at_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
@@ -4360,7 +4547,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> assert (td[1] == 1).all()
 
         """
-        if idx == ():
+        if isinstance(idx, tuple) and not idx:
             return self.update_(
                 input_dict_or_td=input_dict_or_td,
                 keys_to_update=keys_to_update,
@@ -4373,6 +4560,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_update = [
                 _unravel_key_to_tuple(key) for key in unravel_key_list(keys_to_update)
             ]
+        return self._update_at_(
+            input_dict_or_td,
+            _entry_index(idx),
+            clone=clone,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+        )
+
+    def _update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        idx: IndexType,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> Self:
+        """Copies the leaves of ``input_dict_or_td`` into ``self`` at ``idx``: the storage part of :meth:`update_at_`.
+
+        :meth:`update_at_` has sent ``idx == ()`` to :meth:`update_`,
+        returned for an empty ``keys_to_update`` and passed ``idx`` through
+        ``_entry_index``. ``input_dict_or_td`` is a dict or a tensor
+        collection, and ``keys_to_update`` is ``None`` or a list of key
+        tuples. The base writes each leaf as :meth:`set_at_` does. Returns
+        ``self``.
+        """
         if isinstance(input_dict_or_td, dict):
             input_dict_or_td = _flatten_nested_dicts(input_dict_or_td)
         for key, value in input_dict_or_td.items():
@@ -4388,7 +4601,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 )
             if clone:
                 value = value.clone()
-            self.set_at_((firstkey, *nextkeys), value, idx, non_blocking=non_blocking)
+            # as set_at_ does: update_at_ has passed idx through _entry_index
+            self._set_at_tuple(
+                (firstkey, *nextkeys),
+                value,
+                idx,
+                validated=False,
+                non_blocking=non_blocking,
+            )
         return self
 
     def _update_at_fast(

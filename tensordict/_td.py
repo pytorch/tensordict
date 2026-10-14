@@ -41,7 +41,6 @@ from tensordict.base import (
     _foreach_copy_compiled,
     _holds_its_tensors,
     _is_accepted_class,
-    _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
@@ -97,8 +96,6 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
-    _UPDATE_IGNORE_LOCK_WARNED,
-    _warn_update_ignore_lock,
     _zip_strict,
     DeviceType,
     expand_as_right,
@@ -1111,72 +1108,38 @@ class TensorDict(TensorDictBase):
             self._mark_consolidated_stale()
         return item
 
-    def update(
-        self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
-        clone: bool = False,
-        inplace: bool = False,
-        *,
-        non_blocking: bool = False,
-        keys_to_update: Sequence[NestedKey] | None = None,
-        is_leaf: Callable[[Type], bool] | None = None,
-        update_batch_size: bool = False,
-        ignore_lock: bool = False,
-        **kwargs,
-    ) -> Self:
-        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
-            ignore_lock = _warn_update_ignore_lock()
-        if (
-            not is_compiling()
-            and type(self) is TensorDict
-            and not self._is_locked
-            and not (clone or inplace or update_batch_size or ignore_lock)
-            and (not kwargs or input_dict_or_td is None)
-            and keys_to_update is None
-            and (is_leaf is None or is_leaf is _is_leaf_nontensor)
-        ):
-            source = kwargs if input_dict_or_td is None else input_dict_or_td
-            if source is self:
-                return self
-            batch_size = self._batch_size
-            batch_dims = len(batch_size)
-            device = self._device
-            if type(source) is TensorDict:
-                if batch_size[: source.batch_dims] == source.batch_size[:batch_dims]:
-                    source = source._tensordict
-            if type(source) is dict:
-                # Validate before writing so a fallback preserves the general
-                # path's ordering of conversions, errors and partial updates.
-                for key, value in source.items():
-                    if (
-                        type(key) is not str
-                        or type(value) is not Tensor
-                        or (
-                            batch_dims
-                            and (
-                                value.is_nested
-                                or value.shape[:batch_dims] != batch_size
-                            )
-                        )
-                        or (device is not None and value.device != device)
-                    ):
-                        break
-                else:
-                    self._tensordict.update(source)
-                    if "_consolidated" in self.__dict__:
-                        self._mark_consolidated_stale()
-                    return self
-        return super().update(
-            input_dict_or_td,
-            clone=clone,
-            inplace=inplace,
-            non_blocking=non_blocking,
-            keys_to_update=keys_to_update,
-            is_leaf=is_leaf,
-            update_batch_size=update_batch_size,
-            ignore_lock=ignore_lock,
-            **kwargs,
-        )
+    # Override: a dict of valid tensors goes into the dict of entries in one call.
+    def _update_fast(self, source: dict[str, CompatibleType] | T) -> bool:
+        if type(self) is not TensorDict or self._is_locked:
+            return False
+        if source is self:
+            return True
+        batch_size = self._batch_size
+        batch_dims = len(batch_size)
+        device = self._device
+        if type(source) is TensorDict:
+            if batch_size[: source.batch_dims] == source.batch_size[:batch_dims]:
+                source = source._tensordict
+        if type(source) is dict:
+            # Validate before writing so a fallback preserves the general
+            # path's ordering of conversions, errors and partial updates.
+            for key, value in source.items():
+                if (
+                    type(key) is not str
+                    or type(value) is not Tensor
+                    or (
+                        batch_dims
+                        and (value.is_nested or value.shape[:batch_dims] != batch_size)
+                    )
+                    or (device is not None and value.device != device)
+                ):
+                    break
+            else:
+                self._tensordict.update(source)
+                if "_consolidated" in self.__dict__:
+                    self._mark_consolidated_stale()
+                return True
+        return False
 
     def _set_str(
         self,
@@ -2981,55 +2944,23 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
     def _get_tuple(self, key, default, **kwargs):
         return self._source._get_at_tuple(key, self.idx, default=default, **kwargs)
 
-    @_lock_blocked
-    def update(
+    # Override: writes the leaves that the view has into its source, in place.
+    def _update_entries(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorCollection | None = None,
-        clone: bool = False,
-        inplace: bool = False,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         *,
-        non_blocking: bool = False,
-        keys_to_update: Sequence[NestedKey] | None = None,
-        is_leaf: Callable[[Type], bool] | None = None,
-        update_batch_size: bool = False,
-        ignore_lock: bool = False,
-        **kwargs,
+        clone: bool,
+        inplace: bool,
+        non_blocking: bool,
+        keys_to_update: list[NestedKey] | None,
+        is_leaf: Callable[[Type], bool],
+        update_batch_size: bool,
+        ignore_lock: bool,
     ) -> _SubTensorDict:
-        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
-            ignore_lock = _warn_update_ignore_lock(stacklevel=3)
-        if kwargs:
-            if input_dict_or_td is None:
-                input_dict_or_td = kwargs
-            elif isinstance(input_dict_or_td, dict):
-                input_dict_or_td = {**input_dict_or_td, **kwargs}
-            else:
-                self.update(
-                    input_dict_or_td,
-                    clone=clone,
-                    inplace=inplace,
-                    non_blocking=non_blocking,
-                    keys_to_update=keys_to_update,
-                    is_leaf=is_leaf,
-                    update_batch_size=update_batch_size,
-                    ignore_lock=ignore_lock,
-                )
-                input_dict_or_td = kwargs
-        elif input_dict_or_td is None:
-            return self
-        if input_dict_or_td is self:
-            # no op
-            return self
-        if is_leaf is None:
-            is_leaf = _is_leaf_nontensor
-
         if getattr(self._source, "_has_exclusive_keys", False):
             raise RuntimeError(
                 "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
             )
-        if keys_to_update is not None:
-            if len(keys_to_update) == 0:
-                return self
-            keys_to_update = unravel_key_list(keys_to_update)
         keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(key)
@@ -3095,49 +3026,37 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
                 )
         return self
 
-    def update_(
+    # Override: writes into the source at the index of the view.
+    def _update_(
         self,
-        input_dict: dict[str, CompatibleType] | TensorCollection | None = None,
-        clone: bool = False,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
         *,
-        non_blocking: bool = False,
-        keys_to_update: Sequence[NestedKey] | None = None,
-        **kwargs,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
     ) -> _SubTensorDict:
-        if kwargs:
-            if input_dict is None:
-                input_dict = kwargs
-            elif isinstance(input_dict, dict):
-                input_dict = {**input_dict, **kwargs}
-            else:
-                self.update_(
-                    input_dict,
-                    clone=clone,
-                    non_blocking=non_blocking,
-                    keys_to_update=keys_to_update,
-                )
-                input_dict = kwargs
-        elif input_dict is None:
-            return self
-        return self.update_at_(
-            input_dict,
-            idx=self.idx,
-            discard_idx_attr=True,
+        return self._update_source_at_(
+            input_dict_or_td,
+            self.idx,
             clone=clone,
-            keys_to_update=keys_to_update,
             non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
         )
 
-    def update_at_(
+    def _update_source_at_(
         self,
         input_dict: dict[str, CompatibleType] | TensorCollection,
         idx: IndexType,
         *,
-        discard_idx_attr: bool = False,
         clone: bool = False,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> _SubTensorDict:
+        """Writes the leaves of ``input_dict`` into the source at ``idx``, an index of the source.
+
+        ``update_at_(input_dict, idx, discard_idx_attr=True)`` calls it, and
+        :meth:`_update_` with the index of the view.
+        """
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -3159,18 +3078,9 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
                 )
             if clone:
                 value = value.clone()
-            if discard_idx_attr:
-                self._source._set_at_tuple(
-                    key,
-                    value,
-                    idx,
-                    non_blocking=non_blocking,
-                    validated=False,
-                )
-            else:
-                self._set_at_tuple(
-                    key, value, idx, validated=False, non_blocking=non_blocking
-                )
+            self._source._set_at_tuple(
+                key, value, idx, non_blocking=non_blocking, validated=False
+            )
         return self
 
     def get_parent_tensordict(self) -> Self:

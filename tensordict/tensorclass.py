@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import collections
 import concurrent
+import contextlib
 import ctypes
 import dataclasses
 import functools
@@ -24,7 +25,7 @@ import shutil
 import sys
 import warnings
 import weakref
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -2585,31 +2586,32 @@ def _memmap_(
             os.makedirs(prefix, exist_ok=True)
 
         def save_metadata(cls=cls, _non_tensordict=_non_tensordict, prefix=prefix):
-            with open(prefix / "meta.json", "wb") as f:
-                metadata = {"_type": str(cls)}
-                to_pickle = {}
-                for key, value in _non_tensordict.items():
-                    value = _from_shared_nontensor(value)
-                    if _is_json_serializable(value):
-                        metadata[key] = value
-                    else:
-                        to_pickle[key] = value
-                from tensordict._utils_key_json import json_dumps
+            metadata = {"_type": str(cls)}
+            to_pickle = {}
+            for key, value in _non_tensordict.items():
+                value = _from_shared_nontensor(value)
+                if _is_json_serializable(value):
+                    metadata[key] = value
+                else:
+                    to_pickle[key] = value
+            from tensordict._utils_key_json import json_dumps
 
-                json_str = json_dumps(metadata)
-                # Ensure we write bytes to the binary file
-                if isinstance(json_str, str):
-                    f.write(json_str.encode("utf-8"))
-                else:
-                    f.write(json_str)
-                if to_pickle:
-                    pickled = pickle.dumps(to_pickle)
-                    with open(prefix / "other.pickle", "wb") as pickle_file:
-                        pickle_file.write(pickled)
-                    _save_json_types(prefix, to_pickle, pickled)
-                else:
-                    (prefix / "other.pickle").unlink(missing_ok=True)
-                    (prefix / _JSON_TYPES_FILE).unlink(missing_ok=True)
+            json_str = json_dumps(metadata)
+            # Ensure we write bytes to the binary file
+            if isinstance(json_str, str):
+                json_str = json_str.encode("utf-8")
+            # Serialize before opening any file, so that a value that cannot be
+            # pickled leaves the files on disk as they were.
+            pickled = pickle.dumps(to_pickle) if to_pickle else None
+            with open(prefix / "meta.json", "wb") as f:
+                f.write(json_str)
+            if pickled is not None:
+                with open(prefix / "other.pickle", "wb") as pickle_file:
+                    pickle_file.write(pickled)
+                _save_json_types(prefix, to_pickle, pickled)
+            else:
+                (prefix / "other.pickle").unlink(missing_ok=True)
+                (prefix / _JSON_TYPES_FILE).unlink(missing_ok=True)
 
         if executor is None:
             save_metadata()
@@ -7125,19 +7127,23 @@ class NonTensorStack(LazyStackedTensorDict):
                 json_serializable = _is_json_serializable(data)
                 if json_serializable:
                     jsondict["data"] = data
+                    pickled = None
                 else:
                     jsondict["data"] = "pickle.pkl"
-                    with open(prefix / "pickle.pkl", "wb") as f:
-                        pickle.dump(data, f)
-                with open(prefix / "meta.json", "wb") as f:
-                    from tensordict._utils_key_json import json_dumps
+                    # Serialize before opening any file, so that data that cannot be
+                    # pickled leaves the files on disk as they were.
+                    pickled = pickle.dumps(data)
+                from tensordict._utils_key_json import json_dumps
 
-                    json_str = json_dumps(jsondict, separators=(",", ":"))
-                    # Ensure we write bytes to the binary file
-                    if isinstance(json_str, str):
-                        f.write(json_str.encode("utf-8"))
-                    else:
-                        f.write(json_str)
+                json_str = json_dumps(jsondict, separators=(",", ":"))
+                # Ensure we write bytes to the binary file
+                if isinstance(json_str, str):
+                    json_str = json_str.encode("utf-8")
+                if pickled is not None:
+                    with open(prefix / "pickle.pkl", "wb") as f:
+                        f.write(pickled)
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json_str)
                 if json_serializable:
                     (prefix / "pickle.pkl").unlink(missing_ok=True)
 
@@ -7229,6 +7235,7 @@ class NonTensorStack(LazyStackedTensorDict):
             stack_dim=0,
         )
 
+    # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -7261,6 +7268,7 @@ class NonTensorStack(LazyStackedTensorDict):
             ignore_lock=ignore_lock,
         )
 
+    # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -7404,29 +7412,40 @@ class NonTensorStack(LazyStackedTensorDict):
                 raise RuntimeError(_LOCK_ERROR)
         td[member_index] = piece
 
-    def update_at_(
-        self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
-        index: IndexType,
-        clone: bool = False,
-        *,
-        non_blocking: bool = False,
-    ) -> T:
-        memmap = False
-        if self._is_memmap and hasattr(self, "_path_to_memmap"):
-            global _BREAK_ON_MEMMAP
+    @contextlib.contextmanager
+    def _rewrite_memmap(self):
+        """Lets the members of a memory-mapped stack be written, and writes the stack to its path again at the end."""
+        global _BREAK_ON_MEMMAP
+        memmap = self._is_memmap and hasattr(self, "_path_to_memmap")
+        if memmap:
             _BREAK_ON_MEMMAP = False
-            memmap = True
         try:
-            super().update_at_(
-                input_dict_or_td, index, clone=clone, non_blocking=non_blocking
-            )
+            yield
             if memmap:
                 self._memmap_(
                     prefix=self._path_to_memmap, inplace=True, robust_key=True
                 )
         finally:
             _BREAK_ON_MEMMAP = True
+
+    # Override: a memory-mapped stack is written again after its members.
+    def _update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
+        idx: IndexType,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> T:
+        with self._rewrite_memmap():
+            super()._update_at_(
+                input_dict_or_td,
+                idx,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+            )
         return self
 
     @property
@@ -7556,3 +7575,100 @@ def _update_shared_nontensor(nontensor, val):
         raise NotImplementedError(
             f"Updating {type(nontensor).__name__} within a shared/memmaped structure is not supported."
         )
+
+
+def _shared_nontensor_value(nontensor, val):
+    """The value that :func:`_update_shared_nontensor` writes into ``nontensor`` for ``val``, or ``NO_DEFAULT`` if the write would raise.
+
+    The manager of a shared list or dict pickles the value it is given, so a
+    generator cannot be written. These take a list or dict built from a value
+    that pickles: the write stores that one, so an iterator is read once.
+    """
+    try:
+        if isinstance(nontensor, multiprocessing.managers.ListProxy):
+            pickle.dumps(val)
+            # extend takes any iterable
+            val = list(val)
+        elif isinstance(nontensor, multiprocessing.managers.DictProxy):
+            pickle.dumps(val)
+            # update takes a mapping or an iterable of pairs
+            val = dict(val)
+        elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+            # ctypes converts with __index__ in an int or bool slot, and also
+            # with __float__ in a float slot
+            if isinstance(nontensor.get_obj(), ctypes.c_double) and hasattr(
+                type(val), "__float__"
+            ):
+                float(val)
+            else:
+                operator.index(val)
+        elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+            if not isinstance(val, str):
+                return NO_DEFAULT
+        else:
+            return NO_DEFAULT
+    except Exception:
+        return NO_DEFAULT
+    return val
+
+
+def _stored_non_tensor(dest, source, break_on_memmap: bool | None = None):
+    """The source that ``dest.copy_`` writes into ``dest``, a shared or memory-mapped non-tensor leaf, for ``source``.
+
+    That is ``source``, or a copy holding the list or dict that a shared
+    ``dest`` stores, or ``None`` if ``dest`` cannot store the values of
+    ``source``. A memory-mapped value that does not share its data takes any
+    value that it can write to its files: JSON or pickle. A member of a
+    memory-mapped stack takes none, unless the write goes through the stack
+    (``break_on_memmap=False``, as in :meth:`NonTensorDataBase._update`). The
+    pairs that ``copy_`` rejects whatever the storage are left to ``copy_``.
+    """
+    if not is_non_tensor(source):
+        return source
+    if isinstance(dest, NonTensorStack):
+        broadcast = not isinstance(source, NonTensorStack)
+        if broadcast:
+            sources = [source] * len(dest.tensordicts)
+        else:
+            sources = source.unbind(dest.stack_dim)
+            if len(sources) != len(dest.tensordicts):
+                return source
+        if dest._is_memmap and hasattr(dest, "_path_to_memmap"):
+            # the stack lets its members be written, then saves itself again
+            break_on_memmap = False
+        stored = []
+        for member, value in zip(dest.tensordicts, sources):
+            if broadcast and stored and isinstance(source.data, Iterator):
+                # an iterator is read once: the other members take what the
+                # first one read
+                value = stored[0]
+            value = _stored_non_tensor(member, value, break_on_memmap)
+            if value is None:
+                return None
+            stored.append(value)
+        if all(new is old for new, old in zip(stored, sources)):
+            return source
+        return NonTensorStack(*stored, stack_dim=dest.stack_dim)
+    if isinstance(source, NonTensorStack):
+        return source
+    if break_on_memmap is None:
+        break_on_memmap = _BREAK_ON_MEMMAP
+    if dest._is_memmap and dest._is_memmaped_from_above() and break_on_memmap:
+        # the write raises: only the stack writes its members
+        return None
+    if dest._tensordict._is_shared or (
+        dest._is_memmap and dest._metadata.get("_share_non_tensor")
+    ):
+        data = _shared_nontensor_value(dest._non_tensordict["data"], source.data)
+        if data is NO_DEFAULT:
+            return None
+        if data is source.data:
+            return source
+        return NonTensorData(data, batch_size=dest.batch_size, device=dest.device)
+    if dest._is_memmap and not _is_json_serializable(source.data):
+        # the write pickles the value: try it before any entry is written
+        try:
+            pickle.dumps(source.data)
+        except Exception:
+            return None
+    return source

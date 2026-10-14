@@ -8564,6 +8564,283 @@ class TestGeneric:
         dest.update({"x": value})
         assert dest["x"].device.type == "meta"
 
+    class _SlowPathTensorDict(TensorDict):
+        """A TensorDict subclass: update() never takes the fast path of TensorDict."""
+
+    @staticmethod
+    def _update_outcome(cls, make, call):
+        """What ``call`` does to the tensordict that ``make(cls)`` builds."""
+        made = []
+
+        def tensor(*shape, value=1.0):
+            made.append(torch.full(shape, value))
+            return made[-1]
+
+        td = make(cls)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                result = call(td, tensor)
+            except Exception as err:
+                outcome = (type(err), str(err).replace(cls.__name__, "TensorDict"))
+            else:
+                outcome = result is td
+        state = {
+            key: (
+                type(leaf).__name__,
+                leaf.shape,
+                leaf.tolist(),
+                any(leaf is tensor for tensor in made),
+            )
+            for key, leaf in td.items(True, True, is_leaf=is_leaf_nontensor)
+        }
+        warned = [
+            (w.category, str(w.message), os.path.basename(w.filename)) for w in caught
+        ]
+        return (
+            outcome,
+            state,
+            td.batch_size,
+            td.names if td._has_names() else None,
+            td.is_locked,
+            warned,
+        )
+
+    _UPDATE_FIXTURES = {
+        "flat": lambda cls: cls(a=torch.zeros(3, 4), b=torch.zeros(3), batch_size=[3]),
+        "nested": lambda cls: cls(
+            a=torch.zeros(3, 4),
+            n=TensorDict(x=torch.zeros(3, 2), batch_size=[3]),
+            batch_size=[3],
+        ),
+        "0-d": lambda cls: cls(a=torch.zeros(4), b=torch.zeros(()), batch_size=[]),
+        "zero-size": lambda cls: cls(a=torch.zeros(0, 3, 2), batch_size=[0, 3]),
+        "named": lambda cls: cls(a=torch.zeros(3, 4), batch_size=[3], names=["t"]),
+        "locked": lambda cls: cls(a=torch.zeros(3, 4), batch_size=[3]).lock_(),
+    }
+
+    _UPDATE_CASES = {
+        "new key": lambda td, t: td.update({"new": t(*td.batch_size, 2)}),
+        "overwrite": lambda td, t: td.update({"a": t(*td["a"].shape)}),
+        "new shape": lambda td, t: td.update({"a": t(*td.batch_size, 7)}),
+        "tuple key": lambda td, t: td.update({("m", "x"): t(*td.batch_size)}),
+        "tuple key over a tensor": lambda td, t: td.update(
+            {("a", "x"): t(*td.batch_size)}
+        ),
+        "nested dict": lambda td, t: td.update({"n": {"y": t(*td.batch_size)}}),
+        "td source": lambda td, t: td.update(
+            TensorDict(a=t(*td["a"].shape), batch_size=td.batch_size)
+        ),
+        "td source, prefix batch": lambda td, t: td.update(
+            TensorDict(a=t(*td["a"].shape), batch_size=td.batch_size[:-1])
+        ),
+        "td source, bad batch": lambda td, t: td.update(
+            TensorDict(a=t(5, 4), batch_size=[5])
+        ),
+        "clone": lambda td, t: td.update({"a": t(*td["a"].shape)}, clone=True),
+        "inplace": lambda td, t: td.update({"a": t(*td["a"].shape)}, inplace=True),
+        "keys_to_update": lambda td, t: td.update(
+            {"a": t(*td["a"].shape), "new": t(*td.batch_size)}, keys_to_update=["a"]
+        ),
+        "nested keys_to_update": lambda td, t: td.update(
+            {"n": {"y": t(*td.batch_size)}, "new": t(*td.batch_size)},
+            keys_to_update=[("n", "y")],
+        ),
+        "empty keys_to_update": lambda td, t: td.update(
+            {"new": t(*td.batch_size)}, keys_to_update=[]
+        ),
+        "kwargs": lambda td, t: td.update(new=t(*td.batch_size)),
+        "dict and kwargs": lambda td, t: td.update(
+            {"new": t(*td.batch_size)}, new=t(*td.batch_size, value=2.0)
+        ),
+        "td and kwargs": lambda td, t: td.update(
+            TensorDict(new=t(*td.batch_size), batch_size=td.batch_size),
+            new2=t(*td.batch_size),
+        ),
+        "None": lambda td, t: td.update(None),
+        "self": lambda td, t: td.update(td),
+        "empty dict": lambda td, t: td.update({}),
+        "str value": lambda td, t: td.update({"s": "text"}),
+        "non-tensor value": lambda td, t: td.update(
+            {"s": NonTensorData("text", batch_size=td.batch_size)}
+        ),
+        "float value": lambda td, t: td.update({"f": 1.5}),
+        "empty key": lambda td, t: td.update({(): t(*td.batch_size)}),
+        "int key": lambda td, t: td.update({1: t(*td.batch_size)}),
+        "parameter": lambda td, t: td.update({"p": nn.Parameter(t(*td.batch_size, 2))}),
+        "td value": lambda td, t: td.update(
+            {"m": TensorDict(x=t(*td.batch_size), batch_size=td.batch_size)}
+        ),
+        "update_batch_size": lambda td, t: td.update(
+            TensorDict(a=t(2, 4), batch_size=[2]), update_batch_size=True
+        ),
+        "ignore_lock": lambda td, t: td.update(
+            {"a": t(*td["a"].shape)}, ignore_lock=True
+        ),
+        "ignore_lock, inplace": lambda td, t: td.update(
+            {"a": t(*td["a"].shape)}, inplace=True, ignore_lock=True
+        ),
+        "is_leaf": lambda td, t: td.update(
+            {"n": {"y": t(*td.batch_size)}}, is_leaf=lambda cls: True
+        ),
+        "default is_leaf": lambda td, t: td.update(
+            {"new": t(*td.batch_size)}, is_leaf=is_leaf_nontensor
+        ),
+        "lazy source": lambda td, t: td.update(
+            lazy_stack([TensorDict(a=t(*td["a"].shape[1:])) for _ in td.unbind(0)])
+            if td.batch_dims
+            else lazy_stack([TensorDict(a=t(4)), TensorDict(a=t(4))])
+        ),
+        "dict with a sub-tensordict last": lambda td, t: td.update(
+            {
+                "new": t(*td.batch_size),
+                "m": TensorDict(x=t(*td.batch_size), batch_size=td.batch_size),
+            }
+        ),
+    }
+
+    @pytest.mark.parametrize("fixture", list(_UPDATE_FIXTURES))
+    @pytest.mark.parametrize("case", list(_UPDATE_CASES))
+    def test_update_fast_path_matches_general(self, fixture, case):
+        # TensorDict.update writes a dict or TensorDict of tensors without the
+        # per-key loop of the general path, which a subclass of TensorDict takes.
+        # Both give the same result, errors, warnings and storage sharing.
+        make, call = self._UPDATE_FIXTURES[fixture], self._UPDATE_CASES[case]
+        expected = self._update_outcome(self._SlowPathTensorDict, make, call)
+        assert self._update_outcome(TensorDict, make, call) == expected
+
+    def test_update__intersection_ignores_unknown(self):
+        # Without keys_to_update, update_ writes the keys of the source that
+        # self has and ignores the others, as long as one key matches.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.update_({"a": torch.ones(3), "zz": torch.ones(3)})
+        assert (td["a"] == 1).all() and "zz" not in td.keys()
+        with pytest.raises(KeyError, match="zz"):
+            td.update_({"zz": torch.ones(3)})
+        with pytest.raises(KeyError, match="zz"):
+            td.update_({"a": torch.ones(3), "zz": torch.ones(3)}, keys_to_update=["zz"])
+        with pytest.raises(KeyError):
+            td.update_at_({"a": torch.ones(()), "zz": torch.ones(())}, 0)
+        # a lazy stack at an int index writes into one member, with update_
+        lazy = lazy_stack([TensorDict(a=torch.zeros(3), batch_size=[3])] * 2)
+        lazy.update_at_({"a": torch.full((3,), 2.0), "zz": torch.ones(3)}, 0)
+        assert (lazy[0]["a"] == 2).all() and "zz" not in lazy.keys()
+        lazy.update_({"a": torch.ones(2, 3), "zz": torch.ones(2, 3)})
+        assert (lazy["a"] == 1).all() and "zz" not in lazy.keys()
+        # a sub-tensordict raises
+        sub = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])._get_sub_tensordict(0)
+        with pytest.raises(KeyError, match="zz"):
+            sub.update_({"a": torch.ones(3), "zz": torch.ones(3)})
+
+    def test_sub_td_update_overwrites_in_place(self):
+        # A sub-tensordict writes the entries it has into its source, in place,
+        # and adds the others to the source
+        source = TensorDict(
+            a=torch.zeros(2, 3), n=TensorDict(x=torch.zeros(2, 3)), batch_size=[2, 3]
+        )
+        ptr = source["a"].data_ptr()
+        sub = source._get_sub_tensordict(0)
+        assert sub.update({"a": torch.ones(3), "new": torch.ones(3)}) is sub
+        assert source["a"].data_ptr() == ptr
+        assert (source["a"][0] == 1).all() and (source["a"][1] == 0).all()
+        assert (source["new"][0] == 1).all() and (source["new"][1] == 0).all()
+        assert sub.update(n={"x": torch.ones(3)}, b=torch.ones(3)) is sub
+        assert (source["n", "x"][0] == 1).all() and (source["b"][0] == 1).all()
+        assert sub.update({("n", "x"): torch.full((3,), 2.0)}) is sub
+        assert (source["n", "x"][0] == 2).all()
+        sub.update(
+            TensorDict(a=torch.full((3,), 3.0), batch_size=[3]),
+            n={"x": torch.full((3,), 3.0)},
+        )
+        assert (source["a"][0] == 3).all() and (source["n", "x"][0] == 3).all()
+        assert sub.update(None) is sub and sub.update(sub) is sub
+        assert sub.update({"a": torch.zeros(3)}, keys_to_update=[]) is sub
+        assert (source["a"][0] == 3).all()
+        sub.update({"a": torch.zeros(3), "b": torch.zeros(3)}, keys_to_update=["b"])
+        assert (source["a"][0] == 3).all() and (source["b"][0] == 0).all()
+        with pytest.raises(ValueError, match="incompatible object"):
+            sub.update({"n": torch.zeros(3)})
+        with pytest.raises(IndexError):
+            sub.update({1: torch.zeros(3)})
+        exclusive = lazy_stack(
+            [TensorDict(a=torch.zeros(3)), TensorDict(b=torch.zeros(3))]
+        )
+        with pytest.raises(RuntimeError, match="exclusive keys"):
+            exclusive._get_sub_tensordict(0).update({"a": torch.ones(3)})
+        source.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            sub.update({"a": torch.ones(3)})
+        assert sub.update({"a": torch.ones(3)}, inplace=True) is sub
+
+    def test_sub_td_update_at_arguments(self):
+        # _SubTensorDict.update_at_ and update_ take the arguments of
+        # TensorDictBase, and still discard_idx_attr and input_dict
+        source = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])
+        sub = source._get_sub_tensordict(0)
+        assert sub.update_at_({"a": torch.ones(())}, 0, True) is sub
+        assert sub.update_at_({"a": torch.ones(())}, 0, clone=True) is sub
+        assert source["a"][0, 0] == 1 and source["a"][0, 1] == 0
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"discard_idx_attr=.*removed in TensorDict 0\.17.*get_parent_tensordict",
+        ) as record:
+            assert (
+                sub.update_at_({"a": torch.ones(())}, 1, discard_idx_attr=True) is sub
+            )
+        assert record[0].filename == __file__
+        assert (source["a"][1] == 1).all()
+        with pytest.warns(DeprecationWarning, match="discard_idx_attr"):
+            sub.update_at_({"a": torch.ones(())}, 0, discard_idx_attr=False)
+        assert source["a"][0, 0] == 1 and source["a"][0, 1] == 0
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(input_dict=.*0\.17.*update_at_\(input_dict_or_td=",
+        ) as record:
+            sub.update_at_(input_dict={"a": torch.ones(())}, idx=0)
+        assert record[0].filename == __file__
+        assert sub.update_at_({"a": torch.zeros(())}, 0, keys_to_update=[]) is sub
+        assert source["a"][0, 0] == 1
+        with pytest.raises(TypeError, match="Expected value"):
+            sub.update_at_({"a": "text"}, 0)
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_\(input_dict=.*0\.17.*update_\(input_dict_or_td=",
+        ) as record:
+            assert sub.update_(input_dict={"a": torch.full((3,), 2.0)}) is sub
+        assert record[0].filename == __file__
+        assert (source["a"][0] == 2).all()
+        assert sub.update_(a=torch.full((3,), 3.0)) is sub
+        assert (source["a"][0] == 3).all()
+        assert sub.update_({"a": torch.full((3,), 4.0)}, a=torch.full((3,), 5.0)) is sub
+        assert (source["a"][0] == 5).all()
+        sub.update_(
+            TensorDict(a=torch.full((3,), 6.0), batch_size=[3]), a=torch.ones(3)
+        )
+        assert (source["a"][0] == 1).all()
+        assert sub.update_(None) is sub
+        assert sub.update_(input_dict_or_td={"a": torch.full((3,), 7.0)}) is sub
+        assert (source["a"][0] == 7).all()
+        assert sub.update_at_({"a": torch.full((3,), 8.0)}, ()) is sub
+        assert (source["a"][0] == 8).all()
+        # a NumPy index is not compared with ()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert sub.update_at_({"a": torch.ones(())}, np.array([0, 1])) is sub
+            assert sub.update_at_({"a": torch.ones(())}, np.int64(2)) is sub
+        assert (source["a"][0] == 1).all()
+        # discard_idx_attr writes leaf by leaf, so a lazy source broadcasts
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3]) for _ in range(2)], 1
+        )
+        sub = lazy._get_sub_tensordict((slice(None), 0))
+        with pytest.warns(DeprecationWarning, match="discard_idx_attr"):
+            sub.update_at_({"a": torch.tensor(4.0)}, 0, discard_idx_attr=True)
+        assert (lazy["a"][0] == 4).all() and (lazy["a"][1:] == 0).all()
+        # only a _SubTensorDict takes discard_idx_attr
+        for td in (source, lazy, source.permute(1, 0)):
+            with pytest.raises(TypeError, match="discard_idx_attr"):
+                td.update_at_({"a": torch.ones(())}, 0, discard_idx_attr=True)
+
     def test_eager_mutation_custom_validation(self):
         class ValidatedTD(TensorDict):
             def _validate_value_generic(self, value, **kwargs):
