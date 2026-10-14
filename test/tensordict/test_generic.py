@@ -4904,6 +4904,35 @@ class TestGeneric:
         assert (out == ref).all()
 
     @pytest.mark.parametrize("inplace", [True, False])
+    def test_repeat_tensor(self, inplace):
+        # a tensor of counts is a sequence of integers, and inplace is kept
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat(2, 1)
+        leaf = td["a"]
+        out = td.repeat(torch.tensor([2, 1]), inplace=inplace)
+        assert (out is td) is inplace
+        if inplace:
+            assert td.batch_size == torch.Size([6, 4])
+        else:
+            assert td.batch_size == torch.Size([3, 4])
+            assert td["a"] is leaf
+        assert out.batch_size == torch.Size([6, 4])
+        assert (out == ref).all()
+
+    def test_repeat_zero_dim_tensor(self):
+        # a 0-dim tensor is one repeat count, the same as passing that int
+        td = self._build_nested_td(batch_size=(4,))
+        ref = self._build_nested_td(batch_size=(4,)).repeat(2)
+        out = td.repeat(torch.tensor(2))
+        assert out is not td
+        assert td.batch_size == torch.Size([4])
+        assert out.batch_size == torch.Size([8])
+        assert (out == ref).all()
+        td2 = self._build_nested_td()
+        with pytest.raises(ValueError, match="number of repeat elements"):
+            td2.repeat(torch.tensor(2))
+
+    @pytest.mark.parametrize("inplace", [True, False])
     def test_repeat_interleave_inplace(self, inplace):
         td = self._build_nested_td()
         ref = self._build_nested_td().repeat_interleave(2, dim=0)
