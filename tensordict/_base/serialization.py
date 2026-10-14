@@ -1556,7 +1556,9 @@ class _Serialization:
                 or as a ``"/"``-separated string path (e.g. ``"module/0"``).
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
-                archives.
+                archives. A nested key reaches the entries of a saved
+                tensorclass as ``obj.get(key)`` does, without its
+                ``_tensordict`` level.
             mode (str, optional): how the files are memory-mapped. With
                 ``"r"``, the mapping is copy-on-write: in-place writes to the
                 leaves stay in memory. They reach the files only if the
