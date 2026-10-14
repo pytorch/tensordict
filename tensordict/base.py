@@ -2072,6 +2072,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         num_none = 0
         for v in value:
             num_none += v is None
+        # Length before the all-None shortcut. A longer list can hold exactly
+        # batch_dims Nones, and that must not clear the names.
+        if len(value) != self.batch_dims:
+            raise ValueError(
+                "the length of the dimension names must equate the tensordict batch_dims attribute. "
+                f"Got {value} for batch_dims {self.batch_dims}."
+            )
         if num_none == self.batch_dims:
             self._set_names(None)
             return
@@ -2079,11 +2086,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             num_none -= 1
         if len(set(value)) != len(value) - num_none:
             raise ValueError(f"Some dimension names are non-unique: {value}.")
-        if len(value) != self.batch_dims:
-            raise ValueError(
-                "the length of the dimension names must equate the tensordict batch_dims attribute. "
-                f"Got {value} for batch_dims {self.batch_dims}."
-            )
         self._rename_subtds(value)
         self._td_dim_names = list(value)
 
