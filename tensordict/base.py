@@ -979,6 +979,21 @@ _READ_ONLY_CALL = local()
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
+def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
+    """Checks the batch-size arguments of a ``from_dict`` that writes to a file or a store.
+
+    Raises if both ``batch_size`` and ``batch_dims`` are given, as
+    ``TensorDict.from_dict`` does. Returns ``batch_size``, else the batch size
+    of a tensor collection ``input_dict``, else ``None``: the caller then
+    infers it from the entries.
+    """
+    if batch_dims is not None and batch_size is not None:
+        raise ValueError("Cannot pass both batch_size and batch_dims to `from_dict`.")
+    if batch_size is None and _is_tensor_collection(type(input_dict)):
+        return input_dict.batch_size
+    return batch_size
+
+
 def _raise_on_exclusive_keys(method: str) -> None:
     """Raises because ``method`` would drop the keys that some members of a lazy stack lack."""
     raise RuntimeError(

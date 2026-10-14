@@ -296,18 +296,8 @@ class TestTensorDictStore:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            pytest.param(
-                {"batch_dims": 1},
-                marks=pytest.mark.xfail(
-                    strict=True, raises=TypeError, reason="passed to the client"
-                ),
-            ),
-            pytest.param(
-                {"batch_size": [5, 3], "names": ["x", "y"]},
-                marks=pytest.mark.xfail(
-                    strict=True, raises=TypeError, reason="passed to the client"
-                ),
-            ),
+            {"batch_dims": 1},
+            {"batch_size": [5, 3], "names": ["x", "y"]},
         ],
     )
     def test_from_dict_batch_dims_names(self, store_kwargs, kwargs):
@@ -342,7 +332,6 @@ class TestTensorDictStore:
         finally:
             _delete_namespace(prefix, store_kwargs)
 
-    @pytest.mark.xfail(strict=True, reason="nested keys are not joined")
     def test_from_schema_nested(self, store_kwargs):
         prefix = f"td-test-{uuid.uuid4().hex}"
         try:

@@ -573,7 +573,6 @@ def test_from_h5_auto_batch_size(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
-@pytest.mark.xfail(strict=True, raises=TypeError, reason="rejects batch_dims")
 def test_from_dict_batch_dims(tmp_path):
     h5td = PersistentTensorDict.from_dict(
         {"a": torch.zeros(4, 3)}, filename=tmp_path / "f.h5", batch_dims=1

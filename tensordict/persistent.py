@@ -34,6 +34,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
+    _normalize_from_dict_args,
     _PACKAGE_DIR,
     _register_tensor_class,
     is_tensor_collection,
@@ -1019,6 +1020,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         batch_size=None,
         device=None,
         backend: str = "h5",
+        batch_dims: int | None = None,
         **kwargs,
     ):
         """Converts a dictionary or a TensorDict to a h5 file or zarr store.
@@ -1042,6 +1044,9 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 (on cpu by default).
             backend (str, optional): storage backend, ``"h5"`` or ``"zarr"``.
                 Defaults to ``"h5"``.
+            batch_dims (int, optional): for a dict input without
+                ``batch_size``, the number of leading dims of the inferred
+                batch size. Exclusive with ``batch_size``.
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`
                 (h5 backend) or :meth:`zarr.Group.create_array` (zarr backend).
 
@@ -1066,9 +1071,12 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         return cls._from_dict(
             input_dict,
             filename,
-            batch_size=batch_size,
+            batch_size=_normalize_from_dict_args(
+                input_dict, batch_size=batch_size, batch_dims=batch_dims
+            ),
             device=device,
             backend=backend,
+            batch_dims=batch_dims,
             **kwargs,
         )
 
@@ -1082,6 +1090,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         device=None,
         backend: str = "h5",
         names=None,
+        batch_dims=None,
         **kwargs,
     ):
         # from_dict, which also sets the dimension names before writing the
@@ -1115,6 +1124,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         out._backend.metadata_on_create = False
         if not _has_batch_size:
             _set_max_batch_size(out)
+            if batch_dims is not None:
+                out.auto_batch_size_(batch_dims=batch_dims)
         if names is not None:
             out.names = names
         out._write_attrs_metadata()
