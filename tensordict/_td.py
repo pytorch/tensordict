@@ -41,6 +41,7 @@ from tensordict.base import (
     _foreach_copy_compiled,
     _holds_its_tensors,
     _is_accepted_class,
+    _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
@@ -1166,7 +1167,8 @@ class TensorDict(TensorDictBase):
             self._mark_consolidated_stale()
         return item
 
-    # Override: a dict of valid tensors goes into the dict of entries in one call.
+    # Override: a dict of valid tensors goes into the dict of entries in one
+    # call. With sub-tensordicts or dicts among them, see _update_fast_merge.
     def _update_fast(self, source: dict[str, CompatibleType] | T) -> bool:
         if type(self) is not TensorDict or self._is_locked:
             return False
@@ -1197,7 +1199,61 @@ class TensorDict(TensorDictBase):
                 if "_consolidated" in self.__dict__:
                     self._mark_consolidated_stale()
                 return True
+            if type(key) is str and (type(value) is TensorDict or type(value) is dict):
+                self._update_fast_merge(source)
+                return True
         return False
+
+    def _update_fast_merge(self, source: dict[str, CompatibleType]) -> None:
+        """Writes ``source`` into ``self`` key by key, in the order of the general path of :meth:`update`.
+
+        :meth:`_update_fast` calls it for a ``source`` dict that holds a
+        sub-tensordict or a dict. A valid tensor is written as the general
+        path writes it, and a :class:`TensorDict` or dict whose key holds a
+        :class:`TensorDict` in ``self`` is merged into it with the same
+        ``update`` call. Any other entry goes through the general path, one
+        key at a time, so the result, the errors and the entries written
+        before an error are those of the general path.
+        """
+        batch_size = self._batch_size
+        batch_dims = len(batch_size)
+        device = self._device
+        entries = self._tensordict
+        consolidated = "_consolidated" in self.__dict__
+        # Iterate over source itself, as the general path does: a merge that
+        # writes into source (if source is a sub-tensordict of self) shows.
+        for key, value in source.items():
+            if type(key) is str:
+                if type(value) is Tensor:
+                    if not (
+                        (
+                            batch_dims
+                            and (
+                                value.is_nested
+                                or value.shape[:batch_dims] != batch_size
+                            )
+                        )
+                        or (device is not None and value.device != device)
+                    ):
+                        entries[key] = value
+                        if consolidated:
+                            self._mark_consolidated_stale()
+                        continue
+                elif type(value) is TensorDict or type(value) is dict:
+                    child = entries.get(key)
+                    if type(child) is TensorDict:
+                        child.update(value)
+                        continue
+            self._update_entries(
+                {key: value},
+                clone=False,
+                inplace=False,
+                non_blocking=False,
+                keys_to_update=None,
+                is_leaf=_is_leaf_nontensor,
+                update_batch_size=False,
+                ignore_lock=False,
+            )
 
     def _set_str(
         self,
