@@ -358,7 +358,7 @@ class TensorDict(TensorDictBase):
             # Exact tensors need neither conversion nor collection dispatch.
             # Keep subclasses (including TensorDict subclasses with custom
             # validation), nested tensors and device moves on the general path.
-            validate_tensor = is_eager and type(self) is TensorDict
+            validate_tensor = type(self) is TensorDict
             batch_size = self._batch_size
             batch_dims = len(batch_size)
             for key in list(_tensordict):
@@ -1212,16 +1212,12 @@ class TensorDict(TensorDictBase):
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
-        if (
-            not validated
-            and type(value) is Tensor
-            and type(self) is TensorDict
-            and not is_compiling()
-        ):
+        if not validated and type(value) is Tensor and type(self) is TensorDict:
             batch_size = self._batch_size
             device = self._device
+            # len(): `not` on a torch.Size makes Dynamo specialize its sizes
             validated = (
-                not batch_size
+                not len(batch_size)
                 or (
                     not value.is_nested and value.shape[: len(batch_size)] == batch_size
                 )

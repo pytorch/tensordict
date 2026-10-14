@@ -861,15 +861,12 @@ def _is_tensor_collection(datatype: type) -> bool:
     if datatype is Tensor:
         # The most common entry type: skip is_compiling() and the memo lookup.
         return False
-    is_dynamo = is_compiling()
-    out = None
-    if not is_dynamo:
-        out = _TENSOR_COLLECTION_MEMO.get(datatype)
-
+    if is_compiling():
+        return issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
+    out = _TENSOR_COLLECTION_MEMO.get(datatype)
     if out is None:
         out = issubclass(datatype, TensorDictBase) or _is_tensorclass(datatype)
-        if not is_dynamo:
-            _TENSOR_COLLECTION_MEMO[datatype] = out
+        _TENSOR_COLLECTION_MEMO[datatype] = out
     return out
 
 
@@ -7302,7 +7299,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value._with_batch_size(self.batch_size)
             return value
         batch_size = self.batch_size
-        if check_shape and _shape(value)[: self.batch_dims] != batch_size:
+        # A tensor collection's shape is its batch size
+        if (
+            check_shape
+            and (value.batch_size if is_tc else _shape(value))[: len(batch_size)]
+            != batch_size
+        ):
             # if TensorDict, let's try to map it to the desired shape
             if is_tc:
                 # we must clone the value before not to corrupt the data passed to set()
@@ -7404,7 +7406,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return value
 
         batch_size = self.batch_size
-        if check_shape and _shape(value)[: self.batch_dims] != batch_size:
+        # A tensor collection's shape is its batch size
+        if (
+            check_shape
+            and (value.batch_size if is_tc else _shape(value))[: len(batch_size)]
+            != batch_size
+        ):
             # if TensorDict, let's try to map it to the desired shape
             if is_tc:
                 # we must clone the value before not to corrupt the data passed to set()

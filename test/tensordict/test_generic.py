@@ -8907,6 +8907,38 @@ class TestGeneric:
         td.update({"y": value})
         assert (td["x"] == 1).all() and (td["y"] == 1).all()
 
+    def test_eager_set_validation(self):
+        # Only exact tensors that match the batch size and device are stored
+        # without validation; every other value is validated as before.
+        value = torch.zeros(2, 3)
+        for td in (
+            TensorDict(batch_size=[2]),
+            TensorDict(batch_size=[2], device="cpu"),
+            TensorDict({"x": value}, batch_size=[2]),
+        ):
+            td.set("x", value)
+            param = nn.Parameter(value.clone())
+            td.set("p", param)
+            nested = torch.nested.nested_tensor([torch.zeros(3), torch.zeros(4)])
+            td.set("n", nested)
+            assert td["x"] is value and td["p"] is param and td["n"] is nested
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                td.set("bad", torch.zeros(3))
+            assert "bad" not in td.keys()
+            td.set("s", "abc")
+            assert td["s"] == "abc" and is_non_tensor(td.get("s"))
+            # a tensordict value gives its leading dim names to its parent
+            sub = TensorDict({"a": value}, [2, 3], names=["a", "b"])
+            td.set("sub", sub)
+            assert td["sub"].batch_size == (2, 3) and td.names == ["a"]
+            assert td["sub", "a"] is value
+        meta = TensorDict(batch_size=[2], device="meta")
+        meta.set("x", value)
+        assert meta["x"].device.type == "meta"
+        batch_free = TensorDict()
+        batch_free.set("x", value)
+        assert batch_free["x"] is value
+
     @pytest.mark.parametrize("operand", [None, "abc"])
     def test_comparison_unsupported_operand(self, operand):
         # An operand that is not a tensor, number, dict or tensor collection

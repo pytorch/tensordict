@@ -8,6 +8,7 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
+import sys
 import warnings
 import weakref
 from pathlib import Path
@@ -20,6 +21,7 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    is_leaf_nontensor,
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
@@ -28,6 +30,7 @@ from tensordict import (
     NonTensorStack,
     tensorclass,
     TensorDict,
+    TensorDictBase,
     TensorDictParams,
     TypedTensorDict,
 )
@@ -3480,6 +3483,11 @@ class TestTCCustomInitCompile:
         assert data.is_locked
 
 
+# Module level: under compile, appends to a list read from the closure of a
+# function set as a method are lost.
+_TRACED_CALLS = []
+
+
 def _count_compiles(fn, *args):
     """Compile fn, run it twice, return (frame_count_first, frame_count_second).
 
@@ -4031,6 +4039,163 @@ class TestGuardCount:
             compiled(td)
             assert "a" not in td.keys()
         assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    @staticmethod
+    def _build_and_set():
+        @tensorclass(tensor_only=True)
+        class Data:
+            a: torch.Tensor
+            td: TensorDict
+
+        def fn(x, td, extra):
+            batch_size = x.shape[:1]
+            out = TensorDict(
+                {"a": x, "nested": TensorDict({"b": x + 1}, batch_size)}, batch_size
+            )
+            out["c"] = x * 2
+            out["nested", "d"] = x - 1
+            for key, value in extra.items():
+                out[key] = value
+            data = Data(a=x, td=out, batch_size=batch_size)
+            data.a = x + 3
+            data.td = extra
+            td["cache", "y"] = td["x"] * 2
+            return out, data, td
+
+        def make(n, full, batched=True):
+            x = torch.arange(float(n))
+            batch_size = [n] if batched else []
+            td = TensorDict(
+                {"x": x, "cache": TensorDict(batch_size=batch_size)}, batch_size
+            )
+            extra = {"e": x * 5, "f": {"g": x}} if full else {}
+            return x, td, extra
+
+        def flat(result):
+            out, data, td = result
+            return [
+                (type(obj).__name__, tuple(obj.batch_size), key, val.tolist())
+                for obj in (out, data.td, td)
+                for key, val in obj.items(True, True)
+            ] + [data.a.tolist(), type(data).__name__]
+
+        return fn, make, flat
+
+    def test_set_matching_tensor_skips_validation(self, monkeypatch):
+        # Exact tensors whose shape and device match are stored without
+        # tracing the validators, as in eager mode, and a tensorclass
+        # attribute write traces neither _convert_mapping_for_field nor
+        # is_non_tensor.
+        tc_module = sys.modules["tensordict.tensorclass"]
+        calls = _TRACED_CALLS
+        calls.clear()
+        validate = TensorDictBase._validate_value_generic
+        convert = tc_module._convert_mapping_for_field
+        non_tensor = tc_module.is_non_tensor
+
+        def record_validate(self, value, *args, **kwargs):
+            _TRACED_CALLS.append(("validate", type(value).__name__, kwargs.get("key")))
+            return validate(self, value, *args, **kwargs)
+
+        def record_convert(key, *args):
+            _TRACED_CALLS.append(("convert", key))
+            return convert(key, *args)
+
+        def record_non_tensor(obj):
+            _TRACED_CALLS.append(("is_non_tensor",))
+            return non_tensor(obj)
+
+        monkeypatch.setattr(TensorDictBase, "_validate_value_generic", record_validate)
+        monkeypatch.setattr(tc_module, "_convert_mapping_for_field", record_convert)
+        monkeypatch.setattr(tc_module, "is_non_tensor", record_non_tensor)
+        fn, make, flat = self._build_and_set()
+        expected = flat(fn(*make(3, True)))
+        torch._dynamo.reset_code_caches()
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        calls.clear()
+        assert flat(compiled(*make(3, True))) == expected
+        # Only the tensorclass constructor validates its tensors
+        assert [call for call in calls if call[:2] == ("validate", "Tensor")] == [
+            ("validate", "Tensor", "a")
+        ]
+        assert [call for call in calls if call[0] != "validate"] == [
+            ("convert", "a"),
+            ("convert", "td"),
+        ]
+        calls.clear()
+
+    def test_set_no_recompile_across_sizes(self):
+        fn, make, flat = self._build_and_set()
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True, dynamic=None)
+        frames = []
+        for n in (3, 4, 5):
+            assert flat(compiled(*make(n, True))) == flat(fn(*make(n, True)))
+            frames.append(cnt.frame_count)
+        # The second size makes the graph dynamic, the third reuses it
+        assert frames == [1, 2, 2]
+
+    def test_set_empty_and_full_sources(self):
+        # Results match eager when the sources and batch sizes alternate
+        # between empty and non-empty.
+        fn, make, flat = self._build_and_set()
+        torch._dynamo.reset_code_caches()
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        for n, full, batched in (
+            (3, False, True),
+            (4, True, True),
+            (5, False, False),
+            (6, True, False),
+            (3, True, True),
+            (4, False, True),
+            (5, True, False),
+            (6, False, False),
+        ):
+            args = make(n, full, batched)
+            assert flat(compiled(*args)) == flat(fn(*make(n, full, batched)))
+
+    @pytest.mark.parametrize(
+        "value",
+        ["tensor", "parameter", "short", "mismatch", "meta", "td", "str", "dict"],
+    )
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_set_validation_compiled_matches_eager(self, value, device):
+        # Values that need validation are still validated under compile
+        def fn(x, param):
+            td = TensorDict(batch_size=[2, 3], device=device, names=["a", None])
+            if value == "tensor":
+                td.set("v", x)
+            elif value == "parameter":
+                td.set("v", param)
+            elif value == "short":
+                td.set("v", x[0])
+            elif value == "mismatch":
+                td.set("v", x.transpose(0, 1))
+            elif value == "meta":
+                td.set("v", x.to("meta"))
+            elif value == "td":
+                td.set("v", TensorDict({"y": x.unsqueeze(-1)}, [2, 3, 1]))
+            elif value == "str":
+                td.set("v", "abc")
+            else:
+                td.set("v", {"y": x})
+            td["w"] = x + 1
+            return td
+
+        def describe(f, x, param):
+            try:
+                td = f(x, param)
+            except Exception as err:
+                return type(err)
+            return [
+                (key, type(val).__name__, tuple(val.shape), str(val.device))
+                for key, val in td.items(True, True, is_leaf=is_leaf_nontensor)
+            ] + [td.names, td["v"].names if value == "td" else None]
+
+        x, param = torch.zeros(2, 3), torch.nn.Parameter(torch.zeros(2, 3))
+        compiled = torch.compile(fn, backend="eager")
+        assert describe(compiled, x, param) == describe(fn, x, param)
 
 
 class TestNestedCompileRegion:
