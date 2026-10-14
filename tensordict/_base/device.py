@@ -352,7 +352,8 @@ class _DeviceOps:
                 in-place. When every node is an unlocked
                 :class:`~tensordict.TensorDict` or
                 :class:`~tensordict.LazyStackedTensorDict` (or a tensorclass
-                over one) and no leaf is memory-mapped, shared, sparse, jagged or an
+                over one) and no leaf is a :class:`~tensordict.MemoryMappedTensor`, in
+                shared memory, sparse, jagged or an
                 :class:`~tensordict.UnbatchedTensor`, each leaf is replaced by
                 its pinned copy, and the tensordict and every nested node stay
                 the same objects; keys that hold the same tensor share its

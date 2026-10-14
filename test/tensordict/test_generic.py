@@ -4157,6 +4157,15 @@ class TestGeneric:
         self._check_written_back(td, num_threads)
         assert td["nested"].is_locked
         self._check_written_back(TensorDict(a=torch.ones(3)).lock_(), num_threads)
+        # a lazy stack with a locked member falls back as a whole
+        unlocked = TensorDict(a=torch.ones(3))
+        locked = TensorDict(a=torch.ones(3)).lock_()
+        leaves = [unlocked["a"], locked["a"]]
+        stack = lazy_stack([unlocked, locked])
+        assert stack.pin_memory(num_threads=num_threads, inplace=True) is stack
+        for member, leaf in zip(stack.tensordicts, leaves):
+            assert member["a"] is leaf
+            assert not leaf.is_pinned()
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     @pytest.mark.parametrize("num_threads", [None, 2])
@@ -4184,6 +4193,12 @@ class TestGeneric:
             p=TensorDictParams(TensorDict(w=torch.ones(3)), no_convert=True),
         )
         self._check_written_back(td, num_threads)
+        # a leaf that is not strided makes the whole tree fall back
+        c = torch.ones(3)
+        td = TensorDict(c=c, s=torch.eye(3).to_sparse())
+        assert td.pin_memory(num_threads=num_threads, inplace=True) is td
+        assert td["c"] is c
+        assert not c.is_pinned()
         if _has_h5py:
             persistent = PersistentTensorDict.from_dict(
                 source, filename=str(tmpdir / "file.h5")
