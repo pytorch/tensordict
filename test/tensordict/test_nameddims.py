@@ -564,6 +564,90 @@ class TestNamedDims(TestTensorDictsBase):
         ):
             td.names = ["a", "b", "c"]
 
+    def test_set_names_length_before_none_shortcut(self):
+        # A list with exactly batch_dims Nones used to clear every name and
+        # return before the length check. Too long must raise, and the names
+        # that were already there must stay.
+        length = (
+            "the length of the dimension names must equate the tensordict batch_dims"
+        )
+        td = TensorDict({"a": torch.zeros(3)}, [3], names=["prev"])
+        with pytest.raises(ValueError, match=length):
+            td.names = ["s", None]
+        assert td.names == ["prev"]
+        with pytest.raises(ValueError, match=length):
+            td.names = ["s", "t"]
+        assert td.names == ["prev"]
+        with pytest.raises(ValueError, match=length):
+            TensorDict({"a": torch.zeros(3)}, [3], names=["s", None])
+
+        child = TensorDict({"x": torch.zeros(3, 2)}, [3, 2], names=["prev", "trail"])
+        td = TensorDict({"child": child}, [3], names=["prev"])
+        with pytest.raises(ValueError, match=length):
+            td.names = ["s", None]
+        assert td.names == ["prev"]
+        assert child.names == ["prev", "trail"]
+
+        td = TensorDict({"a": torch.zeros(3, 4)}, [3, 4], names=["a", "b"])
+        with pytest.raises(ValueError, match=length):
+            td.names = [None, "x", None]
+        assert td.names == ["a", "b"]
+
+        # all-None of the right length is the documented clear
+        td.names = [None, None]
+        assert td.names == [None, None]
+        assert not td._has_names()
+        # a mix of strings and Nones, one per batch dim, still assigns
+        td.names = ["time", None]
+        assert td.names == ["time", None]
+        td = TensorDict({"a": torch.zeros(3)}, [3], names=["prev"])
+        td.names = [None]
+        assert td.names == [None]
+        assert not td._has_names()
+
+    def test_lazy_stack_set_names_length_before_none_shortcut(self):
+        # ["s", "t", None] on a stack of batch-[3] members hands ["t", None]
+        # to each member. That list has exactly one None, so the shortcut
+        # dropped "t". Reject it, and do not update only some of the stack.
+        length = (
+            "the length of the dimension names must equate the tensordict batch_dims"
+        )
+        members = [
+            TensorDict({"a": torch.zeros(3)}, [3], names=["prev"]),
+            TensorDict({"a": torch.zeros(3)}, [3], names=["prev"]),
+        ]
+        stack = LazyStackedTensorDict(*members)
+        assert stack.names == [None, "prev"]
+        with pytest.raises(ValueError, match=length):
+            stack.names = ["s", "t", None]
+        assert [member.names for member in stack.tensordicts] == [
+            ["prev"],
+            ["prev"],
+        ]
+        assert stack.tensordicts[0].names == stack.tensordicts[1].names
+        # member dims keep "prev"; "t" must not be stored in its place
+        reported = list(stack.names)
+        del reported[stack.stack_dim]
+        assert reported == ["prev"]
+        assert "t" not in stack.names
+
+        bare = [
+            TensorDict({"a": torch.zeros(3)}, [3]),
+            TensorDict({"a": torch.zeros(3)}, [3]),
+        ]
+        stack = LazyStackedTensorDict(*bare)
+        with pytest.raises(ValueError, match=length):
+            stack.names = ["s", "t", None]
+        assert [member._has_names() for member in stack.tensordicts] == [
+            False,
+            False,
+        ]
+        assert stack.tensordicts[0].names == stack.tensordicts[1].names
+        reported = list(stack.names)
+        del reported[stack.stack_dim]
+        assert reported == [None]
+        assert "t" not in reported
+
     def test_permute(self):
         td = TensorDict({"sub": {}}, batch_size=[3, 4, 5, 6], names=None, lock=True)
         td.names = ["a", "b", "c", "d"]
