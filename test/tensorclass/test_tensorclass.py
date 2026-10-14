@@ -658,6 +658,20 @@ class MyData2:
     z: list
 
 
+_RAGGED_POST_INIT_CALLS = []
+
+
+@tensorclass
+class Ragged:
+    offsets: torch.Tensor
+    indices: torch.Tensor
+
+    def __post_init__(self):
+        _RAGGED_POST_INIT_CALLS.append(self.offsets)
+        if self.offsets is None or int(self.offsets[0]) != 0:
+            raise ValueError(f"offsets must start at 0, got {self.offsets}")
+
+
 @dataclasses.dataclass
 class MyDataClass:
     a: int
@@ -1296,6 +1310,30 @@ class TestTensorClass:
         assert data_load.z == "a string!"
         assert data_load.batch_size == data.batch_size
         assert (data_load == data).all()
+
+    def test_consolidate_nested_post_init(self):
+        # consolidate must not run __post_init__ on an empty tensorclass while
+        # it collects the leaves of a nested one
+        calls = _RAGGED_POST_INIT_CALLS
+        adj = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.tensor([5, 6, 7]))
+        calls.clear()
+        adj.consolidate()
+        assert len(calls) == 1
+
+        td = TensorDict(adj=adj, x=torch.zeros(4))
+        calls.clear()
+        td_c = td.consolidate()
+        assert len(calls) == 1
+        assert isinstance(td_c["adj"], Ragged)
+        torch.testing.assert_close(td_c["adj"].offsets, adj.offsets)
+        torch.testing.assert_close(td_c["adj"].indices, adj.indices)
+        torch.testing.assert_close(td_c["x"], td["x"])
+
+        td_load = pickle.loads(pickle.dumps(td_c))
+        assert isinstance(td_load["adj"], Ragged)
+        torch.testing.assert_close(td_load["adj"].offsets, adj.offsets)
+        torch.testing.assert_close(td_load["adj"].indices, adj.indices)
+        torch.testing.assert_close(td_load["x"], td["x"])
 
     def test_dataclass(self):
         data = MyData(
