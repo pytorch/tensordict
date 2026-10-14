@@ -31,6 +31,7 @@ from tensordict._td import (
 )
 from tensordict._td_functions import lazy_stack
 from tensordict.base import (
+    _has_lazy_stack,
     _is_leaf_nontensor,
     _register_tensor_class,
     is_tensor_collection,
@@ -50,6 +51,7 @@ from tensordict.store._store import (
     _rename_plan,
     Self,
     STORE_BACKENDS,
+    TensorDictStore,
 )
 from tensordict.store._utils import (
     _bytes_to_tensor,
@@ -76,6 +78,7 @@ from tensordict.utils import (
     _lock_blocked,
     _LOCK_ERROR,
     _warn_nested_key_in_flat_keys,
+    _zip_strict,
     is_non_tensor,
     NestedKey,
     unravel_key,
@@ -301,6 +304,10 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
         return first._get_at_tuple(key[1:], idx, default=default, **kwargs)
 
     # ---- writes ----
+
+    # Override: a lazy stack in the input is read as one TensorDict first,
+    # as on TensorDictStore.
+    _update_ = TensorDictStore._update_
 
     def _set_str(
         self,
@@ -2456,7 +2463,8 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 self.set(key, value, non_blocking=non_blocking)
         return self
 
-    # Override: a key whose elements differ in shape is written leaf by leaf.
+    # Override: a key whose elements differ in shape, or a lazy stack in the
+    # input, is written leaf by leaf.
     def _update_(
         self,
         input_dict_or_td: dict | TensorDictBase,
@@ -2468,32 +2476,48 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         # Without keys_to_update, TensorDictBase._update_ reads every entry of
         # self, and a key whose elements differ in shape cannot be read as one
         # tensor, and with keys_to_update it reads the whole sub-tensordicts
-        # of self. Each leaf of the input is then written alone, and the
-        # leaves that self lacks are handled as in TensorDictBase._update_.
-        try:
-            return super()._update_(
-                input_dict_or_td,
-                clone=clone,
-                non_blocking=non_blocking,
-                keys_to_update=keys_to_update,
-            )
-        except _HeterogeneousKeyError:
-            pass
+        # of self. A lazy stack in the input splits self into element views
+        # there, whose copies it changes without writing them (#2593). Each
+        # leaf of the input is then written alone, and the leaves that self
+        # lacks are handled as in TensorDictBase._update_.
         if not is_tensor_collection(input_dict_or_td):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
+        lazy = _has_lazy_stack(input_dict_or_td)
+        if not lazy:
+            try:
+                return super()._update_(
+                    input_dict_or_td,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+            except _HeterogeneousKeyError:
+                pass
         all_keys = self._get_all_keys()
         missing = None
         written = False
-        for key, value in input_dict_or_td.items(True, True):
+        elements = None
+        for key in input_dict_or_td.keys(True, True):
             key = _unravel_key_to_tuple(key)
             if keys_to_update is not None and not any(
                 key[: len(k)] == k for k in keys_to_update
             ):
                 continue
-            if _KEY_SEP.join(key) in all_keys:
-                self.set_(key, value, non_blocking=non_blocking)
+            key_path = _KEY_SEP.join(key)
+            if key_path in all_keys:
+                if lazy and not self._run_sync(self._ais_homogeneous([key_path]))[0]:
+                    # the elements of the input, which a lazy stack does not
+                    # stack into one tensor, are written one by one
+                    if elements is None:
+                        elements = input_dict_or_td.unbind(self._stack_dim)
+                    for i, element in _zip_strict(range(self._count), elements):
+                        _StoreStackElementView(self, i).set_(
+                            key, element.get(key), non_blocking=non_blocking
+                        )
+                else:
+                    self.set_(key, input_dict_or_td.get(key), non_blocking=non_blocking)
                 written = True
             elif keys_to_update is not None:
                 raise KeyError(f"The key {key} was not found in the dest tensordict.")

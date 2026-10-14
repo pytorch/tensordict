@@ -722,6 +722,44 @@ class TestTensorDictStore:
         assert torch.allclose(store_td["obs"], source["obs"])
         assert torch.allclose(store_td["action"], source["action"])
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_update__copy__lazy_source(self, store_td, stack_dim):
+        """copy_ and update_ write a lazy stack into the store (#2593).
+
+        Before, they changed copies of the stored entries and wrote nothing.
+        """
+        store_td.batch_size = [2, 2]
+
+        def source(value, heterogeneous=False):
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.full((2,), value + i),
+                        n=TensorDict(b=torch.full((2, 3), value - i), batch_size=[2]),
+                        **(
+                            {"h": torch.full((2, 1 + i), value)}
+                            if heterogeneous
+                            else {}
+                        ),
+                        batch_size=[2],
+                    )
+                    for i in range(2)
+                ],
+                stack_dim,
+            )
+
+        expected = source(0.0).to_tensordict()
+        store_td.update(expected)
+        for td in (store_td, expected):
+            assert td.copy_(source(1.0)) is td
+            assert td.update_(source(2.0), keys_to_update=[("n", "b")]) is td
+            # a lazy stack nested in the input
+            td.update_(TensorDict(n=source(3.0).get("n"), batch_size=[2, 2]))
+            td["n"].copy_(source(4.0).get("n"))
+            # keys_to_update leaves out a key whose elements differ in shape
+            td.update_(source(5.0, heterogeneous=True), keys_to_update=["a"])
+        assert_allclose_td(store_td.to_tensordict(), expected)
+
     def test_clone_recurse(self, store_td):
         """Test deep clone."""
 
@@ -3833,6 +3871,68 @@ class TestLazyStackedTensorDictStore:
             for i in range(2):
                 assert (store_td[i]["h"] == 0).all()
             assert (store_td["a"] == 0).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_update__copy__lazy_source(self, store_kwargs, stack_dim, heterogeneous):
+        """copy_ and update_ write a lazy stack into the store, as into a lazy stack (#2593).
+
+        Before, they changed copies of the stored entries and wrote nothing,
+        or raised for a key whose elements differ in shape.
+        """
+
+        def source(value):
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.full((3,), value + i),
+                        n=TensorDict(b=torch.full((3, 2), value - i), batch_size=[3]),
+                        **(
+                            {"h": torch.full((3, 1 + i), value)}
+                            if heterogeneous
+                            else {}
+                        ),
+                        batch_size=[3],
+                    )
+                    for i in range(2)
+                ],
+                stack_dim,
+            )
+
+        def element_source(value):
+            # a lazy stack for the element at 1, along its batch dim
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.tensor(value + j),
+                        n=TensorDict(b=torch.full((2,), value)),
+                        **({"h": torch.full((2,), value - j)} if heterogeneous else {}),
+                    )
+                    for j in range(3)
+                ]
+            )
+
+        lazy_td = source(0.0)
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            source(0.0), **store_kwargs
+        )
+        try:
+            for td, element in (
+                (store_td, _StoreStackElementView(store_td, 1)),
+                (lazy_td, lazy_td.tensordicts[1]),
+            ):
+                assert td.copy_(source(1.0)) is td
+                assert td.update_(source(2.0), keys_to_update=[("n", "b")]) is td
+                td.update_(source(3.0), keys_to_update=["a", "h"])
+                element.copy_(element_source(4.0))
+            for i in range(2):
+                assert_allclose_td(
+                    _StoreStackElementView(store_td, i).to_tensordict(),
+                    lazy_td.tensordicts[i],
+                )
         finally:
             store_td.clear_redis()
             store_td.close()
