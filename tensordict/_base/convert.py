@@ -49,6 +49,7 @@ from tensordict.base import (
     _PACKAGE_DIR,
     _raise_on_exclusive_keys,
     _set_tensor_dict,
+    _wrap_extra_state,
     Buffer,
     is_compiling,
     is_tensor_collection,
@@ -70,9 +71,10 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import nn, Tensor
+from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.nn.utils._named_member_accessor import swap_tensor
-from torch.utils._pytree import is_structseq_instance
+from torch.utils._pytree import is_structseq_instance, tree_map
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -158,6 +160,121 @@ def _warn_structseq_keys(obj) -> None:
         FutureWarning,
         stacklevel=stacklevel,
     )
+
+
+def _swap_extra_state(module, value, return_swap):
+    """Loads the extra state ``value`` into ``module`` and returns the old one if ``return_swap``.
+
+    ``value`` is the extra state that ``from_module(use_state_dict=True)``
+    saves with ``get_extra_state()``. It is loaded as ``load_state_dict``
+    does.
+    """
+    out = None
+    if return_swap:
+        # Clone the tensors: set_extra_state may copy into them.
+        out = _wrap_extra_state(
+            tree_map(
+                lambda x: x.clone() if isinstance(x, Tensor) else x,
+                module.get_extra_state(),
+            )
+        )
+    if is_tensor_collection(value):
+        value = value.to_dict()
+    module.set_extra_state(value)
+    return out
+
+
+def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
+    """Writes the leaves of ``td`` into ``module`` and returns the old ones in a dict.
+
+    The fast path of ``_to_module`` for a module with the native
+    ``__setattr__``, with ``return_swap=True``, not in place, without
+    ``use_state_dict`` and outside dynamo. It recurses into the submodules
+    without going through ``_to_module``, whose checks cost more than the swap
+    of the leaves.
+    """
+    hooks = memo["hooks"]
+    __dict__ = module.__dict__
+    _parameters = __dict__["_parameters"]
+    _buffers = __dict__["_buffers"]
+    _modules = __dict__["_modules"]
+    swap = memo[weakref.ref(module)] = {}
+    for key, value in td.items():
+        if key == _EXTRA_STATE_KEY_SUFFIX:
+            local_out = _swap_extra_state(module, value, True)
+        elif isinstance(value, (Tensor, ftdim.Tensor)):
+            local_out = _set_tensor_dict(
+                __dict__,
+                _parameters,
+                _buffers,
+                hooks,
+                module,
+                key,
+                value,
+                False,
+                return_swap=True,
+                preserve_module_state=preserve_module_state,
+            )
+        else:
+            child = _modules[key]
+            local_out = memo.get(weakref.ref(child), NO_DEFAULT)
+            if local_out is NO_DEFAULT:
+                if (
+                    type(value)._to_module is _Conversion._to_module
+                    and type(child).__setattr__ is __base__setattr__
+                    and not _is_tensor_collection(type(child))
+                ):
+                    local_out = _swap_into_module(
+                        value, child, memo, non_blocking, preserve_module_state
+                    )
+                else:
+                    local_out = value._to_module(
+                        child,
+                        swap_dest={},
+                        memo=memo,
+                        non_blocking=non_blocking,
+                        preserve_module_state=preserve_module_state,
+                        is_dynamo=False,
+                    )
+        swap[key] = local_out
+    return swap
+
+
+def _replaced_entries(swap: dict, td, entries: list) -> list:
+    """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``."""
+    for key, val in swap.items():
+        if key == _EXTRA_STATE_KEY_SUFFIX:
+            # Restored with set_extra_state, nothing to write.
+            continue
+        if isinstance(val, dict):
+            _replaced_entries(val, td._get_str(key, default=NO_DEFAULT), entries)
+        elif td._get_str(key, None) is not val:
+            entries.append((td, key, val))
+    return entries
+
+
+def _restore_module(swap, args, kwargs, out):
+    """Writes ``swap`` back into the module when ``with out.to_module(...)`` exits.
+
+    The tensors that the module holds at the exit and that are not in ``out``
+    (for example the materialized parameters of a lazy module) are written
+    into ``out``. ``out`` is unlocked only if there are any, as unlocking and
+    relocking it costs more than the swap.
+    """
+    hooks = torch.nn.modules.module._global_parameter_registration_hooks
+    memo = {"hooks": tuple(hooks.values())}
+    current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
+    if not isinstance(current, dict):
+        return current
+    replaced = _replaced_entries(current, out, [])
+    if replaced:
+        non_blocking = kwargs.get("non_blocking", False)
+        with out.unlock_():
+            for td, key, val in replaced:
+                td._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=non_blocking
+                )
+    return out
 
 
 class _Conversion:
@@ -1209,6 +1326,21 @@ class _Conversion:
                 module.update(self)
                 return
 
+        if (
+            return_swap
+            and not inplace
+            and not use_state_dict
+            and not is_dynamo
+            and (swap_dest is None or isinstance(swap_dest, dict))
+            and type(module).__setattr__ is __base__setattr__
+        ):
+            _swap = _swap_into_module(
+                self, module, memo, non_blocking, preserve_module_state
+            )
+            if swap_dest is None:
+                return self._new_unsafe(_swap, batch_size=torch.Size(()))
+            return _swap
+
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
@@ -1263,7 +1395,9 @@ class _Conversion:
             __dict__ = None
 
         for key, value in input.items():
-            if isinstance(value, (Tensor, ftdim.Tensor)):
+            if key == _EXTRA_STATE_KEY_SUFFIX:
+                local_out = _swap_extra_state(module, value, return_swap)
+            elif isinstance(value, (Tensor, ftdim.Tensor)):
                 # For Dynamo, we use regular set/delattr as we're not
                 #  much afraid by overhead (and dynamo doesn't like those
                 #  hacks we're doing).
@@ -1324,21 +1458,14 @@ class _Conversion:
             if isinstance(swap_dest, dict):
                 return _swap
             elif swap_dest is not None:
-
-                def _quick_set(swap_dict, swap_td):
-                    for key, val in swap_dict.items():
-                        if isinstance(val, dict):
-                            _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
-                        elif swap_td._get_str(key, None) is not val:
-                            swap_td._set_str(
-                                key,
-                                val,
-                                inplace=False,
-                                validated=True,
-                                non_blocking=non_blocking,
-                            )
-
-                _quick_set(_swap, swap_dest)
+                for td, key, val in _replaced_entries(_swap, swap_dest, []):
+                    td._set_str(
+                        key,
+                        val,
+                        inplace=False,
+                        validated=True,
+                        non_blocking=non_blocking,
+                    )
                 return swap_dest
             else:
                 return self._new_unsafe(_swap, batch_size=torch.Size(()))
@@ -1379,7 +1506,12 @@ class _Conversion:
         get a regular, unlocked tensordict in memory from a lazy stack, a
         memory-mapped or locked tensordict, a
         :class:`~tensordict.PersistentTensorDict` or a tensorclass. The batch
-        size, device and dimension names are kept.
+        size, device and dimension names are kept, with one exception: if the
+        tensordicts of a lazy stack have no names, the result has no names
+        either, even when the stack dimension has a name (from
+        ``stack_dim_name`` or the ``names`` setter). ``densify()`` and
+        ``clone()`` of the lazy stack keep that name. To keep it here, name
+        the dimension again with :meth:`refine_names`.
 
         Keyword Args:
             retain_none (bool, optional): if ``True``, the ``None`` fields of
@@ -1398,6 +1530,11 @@ class _Conversion:
             >>> td = stack.to_tensordict()
             >>> type(td).__name__, td.batch_size
             ('TensorDict', torch.Size([2]))
+            >>> stack.names = ["s"]
+            >>> stack.to_tensordict().names
+            [None]
+            >>> stack.to_tensordict().refine_names("s").names
+            ['s']
 
         """
         return self._to_tensordict(retain_none=retain_none)

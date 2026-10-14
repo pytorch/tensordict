@@ -108,6 +108,29 @@ write to it does not change the original tensordicts:
 ``contiguous()`` raises a ``RuntimeError`` if the stacked entries have
 different shapes. See :ref:`stacking-variable-size` for that case.
 
+A lazy stack can name its stack dimension, with ``stack_dim_name`` in
+:func:`~tensordict.lazy_stack`, or by setting its ``names``. If the stacked
+tensordicts have no names, ``contiguous()``, ``to_tensordict()`` and
+:func:`~tensordict.pad` give a TensorDict without that name. ``clone()``,
+which returns a lazy stack, and
+:meth:`~tensordict.LazyStackedTensorDict.densify` keep it. To keep it in a
+TensorDict, call ``densify()``, or name the dimension again with
+:meth:`~tensordict.TensorDict.refine_names`:
+
+  >>> named = lazy_stack(tds, stack_dim_name="robot")
+  >>> named.names
+  ['robot', None]
+  >>> named.contiguous().names
+  [None, None]
+  >>> named.contiguous().refine_names("robot", ...).names
+  ['robot', None]
+  >>> named.densify().names
+  ['robot', None]
+  >>> named.clone().names
+  ['robot', None]
+
+If the stacked tensordicts have names, all of these methods keep every name.
+
 .. note::
 
    Only stacking is lazy. Shape operations such as ``squeeze``, ``unsqueeze``,
@@ -237,6 +260,11 @@ arguments to :meth:`~tensordict.LazyStackedTensorDict.get`:
   ``padding_side`` (``"right"`` or ``"left"``).
 - ``as_nested_tensor=True`` returns a nested tensor (:mod:`torch.nested`). The
   default layout is ``torch.jagged``. Set another one with ``layout``.
+
+A dense tensordict returns the stored tensor for ``as_list=True`` and
+``as_nested_tensor=True``, and warns. Starting with TensorDict 0.17, the
+default will change to returning ``list(tensor.unbind(0))`` and a nested
+tensor, as a lazy stack does.
 
 For example, with three graphs of 2, 3, and 1 nodes, and 2 features for each
 node:

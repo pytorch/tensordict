@@ -9,8 +9,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.persistent as tensordict_persistent
 import torch
-from tensordict import NonTensorData, PersistentTensorDict, TensorClass, TensorDict
+from tensordict import (
+    lazy_stack,
+    NonTensorData,
+    NonTensorStack,
+    PersistentTensorDict,
+    TensorClass,
+    TensorDict,
+)
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
@@ -150,6 +158,64 @@ class TestH5Serialization:
             assert h5td.to_tensordict()["s"] == b"dog"
         h5td.close()
 
+    def test_h5_nontensor_stack(self, tmp_path):
+        # one value per row is written as a dataset of the stack's shape and
+        # read back as a NonTensorStack (#2544)
+        grid = NonTensorStack(*(NonTensorStack(f"{i}0", f"{i}1") for i in range(3)))
+        td = TensorDict(
+            {
+                "x": torch.zeros(3, 2),
+                "text": NonTensorStack("a", "b", "c"),
+                ("n", "y"): torch.zeros(3, 2),
+                ("n", "grid"): grid,
+                ("info", "mission"): NonTensorStack("u", "v", "w"),
+                "ints": NonTensorStack(1, 2, 3),
+                "bytes": NonTensorStack(b"a", b"bb", b"c"),
+            },
+            [3],
+        )
+        PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5").close()
+        with h5py.File(tmp_path / "file.h5") as f:
+            assert h5py.check_string_dtype(f["text"].dtype)
+            assert f["text"].shape == (3,)
+            assert f["n/grid"].shape == (3, 2)
+        # the batch size is inferred from the stacks too
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+        assert h5td.batch_size == (3,)
+        assert h5td["info"].batch_size == (3,)
+        with warnings.catch_warnings():
+            # the strings of a stack are read as str
+            warnings.simplefilter("error")
+            assert h5td.entry_class("text") is NonTensorStack
+            text = h5td.get("text")
+            assert isinstance(text, NonTensorStack)
+            assert text.batch_size == (3,)
+            assert text.tolist() == ["a", "b", "c"]
+            assert h5td[1]["text"] == "b"
+            assert h5td.get(("n", "grid")).batch_size == (3, 2)
+            assert h5td.get(("n", "grid")).tolist() == grid.tolist()
+            assert h5td[2]["n", "grid"] == ["20", "21"]
+            assert h5td.get("ints").tolist() == [1, 2, 3]
+            assert h5td.get("bytes").tolist() == [b"a", b"bb", b"c"]
+            assert h5td.to_tensordict()["text"] == ["a", "b", "c"]
+            assert h5td.to_tensordict()["info", "mission"] == ["u", "v", "w"]
+            copy = h5td.clone(newfile=tmp_path / "copy.h5")
+            assert copy.get("text").tolist() == ["a", "b", "c"]
+        # a stack is written whole: an in-place write raises, a whole one works
+        with pytest.raises(RuntimeError, match="in place"):
+            copy.set_at_("text", "q", 0)
+        assert copy.get("text").tolist() == ["a", "b", "c"]
+        copy["text"] = NonTensorStack("x", "yy", "z")
+        assert copy.get("text").tolist() == ["x", "yy", "z"]
+        # values that h5 cannot keep exactly raise
+        with pytest.raises(TypeError, match="single type"):
+            copy.set("mixed", NonTensorStack("a", 1, "c"))
+        with pytest.raises(ValueError, match="NUL"):
+            copy.set("nul", NonTensorStack("a\x00b", "c", "d"))
+        assert "nul" not in copy.keys()
+        copy.close()
+        h5td.close()
+
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
@@ -179,15 +245,38 @@ class TestH5Serialization:
         h5td.close()
 
     def test_rename_key_into_own_child(self, tmp_path):
-        # a key is not moved into, or replaced by, one of its own entries: the
-        # backends raise, and the file keeps its data
-        td = TensorDict({"n": {"sub": torch.zeros(3), "c": torch.ones(3)}}, [3])
+        # an entry replaces the key that holds it, as in TensorDict: the file
+        # raised a KeyError
+        td = TensorDict(
+            {
+                "n": {"sub": {"x": torch.full((3,), 2.0)}, "c": torch.ones(3)},
+                "n_": torch.ones(3),
+            },
+            [3],
+        )
         h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
         with pytest.raises(KeyError, match="already present"):
-            h5td.rename_key_("n", ("n", "sub"))
-        with pytest.raises(KeyError, match="already present"):
-            h5td.rename_key_(("n", "sub"), "n")
-        assert set(h5td.keys(True, True)) == {("n", "sub"), ("n", "c")}
+            h5td.rename_key_(("n", "sub"), "n", safe=True)
+        h5td.rename_key_(("n", "sub"), "n")
+        assert set(h5td.keys(True, True)) == {("n", "x"), "n_"}
+        h5td.rename_key_(("n", "x"), "n")
+        assert set(h5td.keys(True, True)) == {"n", "n_"}
+        assert (h5td["n"] == 2).all()
+        assert (h5td["n_"] == 1).all()
+        del h5td["n"]
+        h5td["n"] = TensorDict(sub=torch.zeros(3), c=torch.ones(3), batch_size=[3])
+        # a key moved into one of its own entries moves there, as in
+        # TensorDict: the file raised, or lost the key
+        h5td.rename_key_("n", ("n", "sub"))
+        assert set(h5td.keys(True, True)) == {
+            ("n", "sub", "sub"),
+            ("n", "sub", "c"),
+            "n_",
+        }
+        assert (h5td["n", "sub", "sub"] == 0).all()
+        assert (h5td["n", "sub", "c"] == 1).all()
+        h5td.rename_key_(("n", "sub", "c"), ("n", "sub", "c", "d", "e"))
+        assert (h5td["n", "sub", "c", "d", "e"] == 1).all()
         h5td.close()
 
     def test_del_read_group_then_set(self, tmp_path):
@@ -409,6 +498,39 @@ def test_inplace_methods_write(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_methods_write_lazy_stack(tmp_path):
+    # #2570: the in-place methods of a lazy stack write to its h5 members, also
+    # beside a dense member and in a stack of stacks
+    def make():
+        return TensorDict(
+            {"a": torch.ones(3), "nested": {"b": torch.ones(3, 2)}}, batch_size=[3]
+        )
+
+    files = [
+        PersistentTensorDict.from_dict(make(), filename=tmp_path / f"{i}.h5")
+        for i in range(4)
+    ]
+    dense = make()
+    expected = lazy_stack([make() for _ in range(3)])
+    for data in (lazy_stack([files[0], dense, files[1]]), expected):
+        assert data.add_(1.0) is data
+        assert data.lerp_(expected.to_tensordict() * 0 + 10, 0.5) is data
+        assert data.mul_(torch.arange(3.0).unsqueeze(-1).expand(3, 3)) is data
+    for td, member in zip((files[0], dense, files[1]), expected.tensordicts):
+        torch.testing.assert_close(td.to_tensordict(), member)
+    stack = lazy_stack([lazy_stack(files[:2]), lazy_stack(files[2:])], dim=1)
+    assert stack.zero_() is stack
+    for td in files:
+        assert (td["a"] == 0).all()
+        assert (td["nested", "b"] == 0).all()
+    # masked_fill_ writes as before
+    assert stack.masked_fill_(torch.ones(2, 2, 3, dtype=torch.bool), 5.0) is stack
+    for td in files:
+        assert (td["a"] == 5).all()
+        assert (td["nested", "b"] == 5).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_read_only_warns(tmp_path):
     # from_h5 opens files read-only by default: the in-place methods leave the
     # file unchanged, as before they wrote to files, and warn that this will
@@ -434,6 +556,10 @@ def test_inplace_read_only_warns(tmp_path):
         iadd,
         lambda: h5td[0:2].add_(1.0),
         lambda: h5td[0:2].zero_(),
+        # #2570: one warning for a lazy stack of rows of the file
+        lambda: lazy_stack([h5td[0], h5td[1]]).add_(1.0),
+        lambda: lazy_stack([h5td[0], h5td[1]]).zero_(),
+        lambda: lazy_stack([h5td, h5td]).zero_(),
         lambda: h5td.update_({"a": torch.zeros(3)}),
         lambda: h5td.copy_(td.clone().zero_()),
     ):
@@ -445,6 +571,33 @@ def test_inplace_read_only_warns(tmp_path):
     assert (h5td["a"] == -1).all()
     with pytest.raises(OSError):
         h5td.zero_()
+    # #2570: zero_ on a lazy stack writes the writable files and leaves the
+    # read-only ones unchanged, with one warning, also in nested stacks
+    nested = TensorDict({"a": torch.ones(3), "n": {"b": torch.ones(3)}}, [3])
+    nested.to_h5(tmp_path / "nested.h5").close()
+    read_only = PersistentTensorDict.from_h5(tmp_path / "nested.h5")
+    writable = PersistentTensorDict.from_dict(nested, filename=tmp_path / "w.h5")
+    stack = lazy_stack(
+        [lazy_stack([writable, read_only]), lazy_stack([read_only, writable])]
+    )
+    with pytest.warns(
+        FutureWarning, match="zero_.*leaves the file unchanged"
+    ) as record:
+        assert stack.zero_() is stack
+    assert len(record) == 1
+    assert record[0].filename == __file__
+    torch.testing.assert_close(writable.to_tensordict(), nested.zero_())
+    assert (read_only["a"] == 1).all()
+    assert (read_only["n", "b"] == 1).all()
+    # masked_fill_ raises on the rows of the file too, as it did before
+    mask = torch.tensor([True, False])
+    for call in (
+        lambda: h5td[0:2].masked_fill_(mask, 0.0),
+        lambda: lazy_stack([h5td[0], h5td[1]]).masked_fill_(mask, 0.0),
+    ):
+        with pytest.raises(OSError):
+            call()
+    assert (h5td["a"] == -1).all()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
@@ -607,6 +760,89 @@ def test_update_from_h5_reads(tmp_path, monkeypatch, keys_to_update):
     dest.update_(source, keys_to_update=keys_to_update)
     assert reads.count(source.file.filename) == expected
     assert (dest["a"] == 1).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_zero_empty(tmp_path):
+    # fill_ and zero_ of a file with batch size [0]
+    td = TensorDict({"a": torch.ones(0, 3), "n": {"b": torch.ones(0)}}, [0])
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    assert h5td.fill_("a", 2.0) is h5td
+    assert h5td.fill_("n", 1.0) is h5td
+    assert h5td.zero_() is h5td
+    assert h5td["a"].shape == (0, 3)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_zero_masked_fill_no_read(tmp_path, monkeypatch):
+    # fill_, zero_, masked_fill_ and detach_ write to the file without reading it
+    td = TensorDict(
+        {"a": torch.ones(3, 2), "nested": {"b": torch.ones(3, 2, 4)}}, batch_size=[3]
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+
+    def no_read(*args, **kwargs):
+        raise AssertionError("the file was read")
+
+    backend = type(h5td._backend)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "read_full", no_read)
+        patch.setattr(backend, "read_at", no_read)
+        assert h5td.detach_() is h5td
+        mask = torch.tensor([True, False, True])
+        for dest in (h5td, td):
+            assert dest.fill_("a", 2.0) is dest
+            assert dest.fill_("nested", 3.0) is dest
+            assert dest.masked_fill_(mask, -1.0) is dest
+    torch.testing.assert_close(h5td.to_tensordict(), td)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "read_full", no_read)
+        patch.setattr(backend, "read_at", no_read)
+        # #2570: so does zero_ on a lazy stack of the file and a dense member
+        stack = lazy_stack([h5td, td.clone()])
+        assert stack.zero_() is stack
+        assert h5td.zero_() is h5td
+    h5td.close()
+    reopened = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    torch.testing.assert_close(reopened.to_tensordict(), td.zero_())
+    reopened.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_fill_write_blocks(tmp_path, monkeypatch):
+    # fill_ writes a dataset in blocks of rows, a 0-d dataset at once, and
+    # nothing into an empty dataset
+    monkeypatch.setattr(tensordict_persistent, "_WRITE_FULL_BLOCK_BYTES", 100)
+    td = TensorDict(
+        {
+            "a": torch.zeros(7, 3, dtype=torch.int64),
+            "big": torch.zeros(2, 40),
+            "s": 0.0,
+            "empty": torch.zeros(0, 3),
+        },
+        batch_size=[],
+    )
+    h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+    for key in td.keys():
+        assert h5td.fill_(key, 2.5) is h5td
+        td.fill_(key, 2.5)
+    torch.testing.assert_close(h5td.to_tensordict(), td)
+    assert h5td.zero_() is h5td
+    torch.testing.assert_close(h5td.to_tensordict(), td.zero_())
+    # a value that is not a scalar is broadcast into the whole dataset, as
+    # before, also when it is larger than one block
+    value = torch.arange(21).view(7, 3)
+    assert h5td.fill_("a", value) is h5td
+    assert (h5td["a"] == value).all()
+    assert h5td.fill_("a", torch.arange(3)) is h5td
+    assert (h5td["a"] == torch.arange(3)).all()
+    with pytest.raises(TypeError, match="Can't broadcast"):
+        h5td.fill_("a", torch.arange(7))
+    # the value is cast as h5py casts it: a complex value raises for a real
+    # dataset, even an empty one
+    for key in ("a", "empty"):
+        with pytest.raises(TypeError, match="complex"):
+            h5td.fill_(key, 1 + 2j)
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")

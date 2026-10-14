@@ -891,6 +891,37 @@ class TestFromTensordict:
         state.copy_(other)
         torch.testing.assert_close(state.to_tensordict(), other)
 
+    def _make_nested_lazy_state(self):
+        class NestedState(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.arange(3.0), n={"x": torch.ones(3, 2) * i}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        return NestedState.from_tensordict(lazy_stack(tds)), tds
+
+    def test_from_tensordict_lazy_stack_nested_masked_fill_detach_(self):
+        # masked_fill_ and detach_ write into the members of a stack with a
+        # nested entry
+        state, tds = self._make_nested_lazy_state()
+        expected = state.to_tensordict()
+        mask = torch.tensor([[True, False, True]] * 2 + [[False] * 3] * 2)
+        for td in (state, expected):
+            assert td.masked_fill_(mask, -1.0) is td
+            assert td.detach_() is td
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        torch.testing.assert_close(lazy_stack(tds).to_tensordict(), expected)
+
+    def test_from_tensordict_lazy_stack_nested_zero_(self):
+        state, tds = self._make_nested_lazy_state()
+        assert state.zero_() is state
+        for td in tds:
+            assert (td == 0).all()
+
     @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
     def test_from_tensordict_lazy_stack_read_only_inplace(self, tmp_path):
         # A stack of files opened read-only stays unchanged, and warns
@@ -905,6 +936,44 @@ class TestFromTensordict:
         with pytest.warns(FutureWarning, match="leaves the file unchanged"):
             state.update_(before + 1)
         torch.testing.assert_close(state.to_tensordict(), before)
+
+    @pytest.mark.parametrize("hetero", [False, True], ids=["same", "hetero"])
+    def test_from_tensordict_lazy_stack_nested_inplace(self, hetero):
+        # #2519: the in-place methods write into the members of a stack with a
+        # nested entry, also when the nested members differ in shape
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.ones(3), n={"x": torch.ones(3, 2 + hetero * i)}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        state = Nested.from_tensordict(lazy_stack(tds))
+        other = lazy_stack(tds).apply(lambda x: torch.full_like(x, 2.0))
+        assert state.zero_() is state
+        assert state.add_(1.0) is state
+        assert state.add_(other, alpha=2.0) is state
+        assert state.lerp_(other, 0.5) is state
+        for td in tds:
+            assert (td["a"] == 3.5).all()
+            assert (td["n", "x"] == 3.5).all()
+
+    def test_from_tensordict_lazy_stack_exclusive_keys_inplace(self):
+        # the in-place methods leave the keys that only some members hold
+        class Flat(TypedTensorDict):
+            a: Tensor
+
+        tds = [
+            TensorDict(a=torch.ones(3), batch_size=[3]),
+            TensorDict(a=torch.ones(3), c=torch.ones(3), batch_size=[3]),
+        ]
+        state = Flat.from_tensordict(lazy_stack(tds))
+        assert state.add_(1.0) is state
+        assert (tds[1]["a"] == 2).all()
+        assert (tds[1]["c"] == 1).all()
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -186,11 +186,30 @@ _OPS = {
         "masked_fill(mask, -1)": lambda td: td.masked_fill(_MASK, -1),
         "masked_select(mask)": lambda td: td.masked_select(_MASK),
         "masked_fill_(mask, -1)": _inplace(lambda td: td.masked_fill_(_MASK, -1)),
+        "masked_fill_(mask[:, 0, 0, 0], -1)": _inplace(
+            lambda td: td.masked_fill_(_MASK[:, 0, 0, 0], -1)
+        ),
+        "masked_fill_(tensor(True), -1)": _inplace(
+            lambda td: td.masked_fill_(torch.tensor(True), -1)
+        ),
+    },
+    "filling": {
+        "fill_('a', 2.0)": _inplace(lambda td: td.fill_("a", 2.0)),
+        "fill_('my_nested_td', 2.0)": _inplace(
+            lambda td: td.fill_("my_nested_td", 2.0)
+        ),
+        "fill_('missing', 2.0)": _inplace(lambda td: td.fill_("missing", 2.0)),
+        "zero_()": _inplace(lambda td: td.zero_()),
+        "detach_()": _inplace(lambda td: td.detach_()),
     },
     "apply": {
         "apply(x + 1)": lambda td: td.apply(lambda x: x + 1),
         "apply(x + y, td)": lambda td: td.apply(lambda x, y: x + y, td),
         "apply_(x + 1)": _inplace(lambda td: td.apply_(lambda x: x + 1)),
+        "apply_(None)": _inplace(lambda td: td.apply_(lambda x: None)),
+        "apply_(x + 1, propagate_lock=True)": _inplace(
+            lambda td: td.apply_(lambda x: x + 1, propagate_lock=True)
+        ),
     },
     "serialization": {
         "to_dict()": lambda td: td.to_dict(),

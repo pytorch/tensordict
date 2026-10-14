@@ -18,6 +18,7 @@ from tensordict import (
     assert_allclose_td,
     is_tensor_collection,
     lazy_stack,
+    LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
     TensorDict,
@@ -117,6 +118,62 @@ _MISSING_KEY_WARNING = (
     r"of a missing key .* does nothing today\. Starting with TensorDict 0\.17, "
     r"the default will change to raising a KeyError"
 )
+
+
+def _rename_source():
+    """A tensordict for the rename_key_ tests of the stores."""
+    return TensorDict(
+        a=torch.arange(3.0),
+        b={"c": torch.arange(3)},
+        other={"d": torch.zeros(3)},
+        nested={"d": {"y": torch.ones(3), "d": {"y": torch.full((3,), 2.0)}}},
+        s={"t": torch.zeros(3)},
+        batch_size=[3],
+    )
+
+
+# (old_key, new_key) with a destination that is not free
+_RENAME_OCCUPIED = [
+    ("b", "a"),
+    ("b", "other"),
+    (("nested", "d"), ("other", "d")),
+    ("a", "b"),
+    (("b", "c"), "nested"),
+    # nested.d.y moves to nested.y before nested.d.d.y moves to nested.d.y
+    (("nested", "d"), "nested"),
+]
+
+# (old_key, new_key, safe, match): renames that raise and change nothing
+_RENAME_INVALID = [
+    ("b", ("a", "q"), False, "below a leaf"),
+    ("a", ("b", "c", "q"), False, "below a leaf"),
+    ("b", "other", True, "already present"),
+    ("a", "b", True, "already present"),
+]
+
+# (old_key, new_key): a new key inside the old one, where the entry moves
+_RENAME_INSIDE = [
+    ("s", ("s", "s")),
+    ("s", ("s", "x", "y")),
+    ("a", ("a", "b")),
+    # s.t moves to s.t.u.t: the leaf above the destination moves too
+    ("s", ("s", "t", "u")),
+    # nested.d.d.y moves to nested.d.d.d.y before nested.d.y moves to
+    # nested.d.d.y
+    (("nested", "d"), ("nested", "d", "d")),
+]
+
+
+def _assert_store_matches(store, expected):
+    assert set(store.keys(True, True)) == set(expected.keys(True, True))
+    # the store reads, element by element too (it keeps no empty
+    # sub-tensordict, so only the leaves are compared)
+    store[0:1]
+    elements = [store[i].to_tensordict() for i in range(len(expected))]
+    for key in expected.keys(True, True):
+        torch.testing.assert_close(store[key], expected[key])
+        for i, element in enumerate(elements):
+            torch.testing.assert_close(element[key], expected[i][key])
 
 
 class TestTensorDictStore:
@@ -493,6 +550,20 @@ class TestTensorDictStore:
         assert ("nested", "val") in store_td.keys(include_nested=True)
         assert "nonexistent" not in store_td.keys()
 
+    def test_contains_nested_key_without_include_nested(self, store_td):
+        # The store finds a nested key in a view without nesting, with a
+        # FutureWarning: it returns False in 0.17, as TensorDict does (#2060).
+        store_td["nested", "val"] = torch.randn(10, 2)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert "nested" in store_td.keys()
+            assert ("nested",) in store_td.keys()
+            assert ("nested", "val") in store_td.keys(include_nested=True)
+            assert ("nested", "x") not in store_td.keys()
+        for keys in (store_td.keys(), store_td.keys(leaves_only=True)):
+            with pytest.warns(FutureWarning, match="returns False"):
+                assert ("nested", "val") in keys
+
     def test_del(self, store_td):
         """Test key deletion."""
         store_td["obs"] = torch.randn(10, 3)
@@ -787,6 +858,36 @@ class TestTensorDictStore:
         result = store_td["obs"]
         assert torch.allclose(result, torch.full((10, 3), 42.0))
 
+    def test_fill_nested(self, store_td):
+        """fill_ on a nested key fills each of its leaves on the server."""
+        store_td["nested"] = TensorDict(
+            a=torch.zeros(10, 3),
+            m=TensorDict(b=torch.zeros(10), batch_size=[10]),
+            batch_size=[10],
+        )
+        assert store_td.fill_("nested", 2.0) is store_td
+        assert (store_td["nested", "a"] == 2).all()
+        assert (store_td["nested", "m", "b"] == 2).all()
+
+    @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
+    def test_fill_missing_key(self, store_td, key):
+        """fill_ of a missing key raises a KeyError, as on a TensorDict."""
+        store_td["obs"] = torch.zeros(10, 3)
+        with pytest.raises(KeyError):
+            store_td.fill_(key, 1.0)
+
+    def test_detach_no_read(self, store_td, monkeypatch):
+        """detach_ returns the store without calling the server."""
+        store_td["obs"] = torch.zeros(10, 3)
+
+        def no_round_trip(self, coro):
+            coro.close()
+            raise AssertionError("the server was called")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(TensorDictStore, "_run_sync", no_round_trip)
+            assert store_td.detach_() is store_td
+
     def test_inplace_methods_write(self, store_td):
         """The in-place methods, update_ and copy_ write to the server (#2242)."""
         source = TensorDict(
@@ -880,6 +981,18 @@ class TestTensorDictStore:
         expected = source.masked_fill_(mask, 1.0)
         for key in expected.keys(include_nested=True, leaves_only=True):
             torch.testing.assert_close(store_td[key], expected[key])
+
+    def test_masked_fill_non_tensor(self, store_td):
+        """masked_fill_ leaves a non-tensor entry unchanged, as on a TensorDict."""
+        store_td["a"] = torch.zeros(10, 3)
+        store_td["text"] = "hello"
+        mask = torch.zeros(10, dtype=torch.bool)
+        mask[[1, 4]] = True
+        assert store_td.masked_fill_(mask, 1.0) is store_td
+        torch.testing.assert_close(
+            store_td["a"], torch.zeros(10, 3).masked_fill_(mask[:, None], 1.0)
+        )
+        assert store_td["text"] == "hello"
 
     def test_masked_select_inplace(self, store_td):
         """masked_select(inplace=True) masks the entries of the store itself."""
@@ -1084,6 +1197,49 @@ class TestTensorDictStore:
         with pytest.raises(KeyError, match="key nested already present"):
             store_td.rename_key_("obs", "nested", safe=True)
         assert set(store_td.keys(True, True)) == {"obs", ("nested", "a")}
+
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_OCCUPIED)
+    def test_rename_key_occupied_destination(self, store_kwargs, old_key, new_key):
+        # the entry replaces what is at the destination, as in TensorDict: the
+        # store kept the old leaves there, or a leaf that was also a
+        # sub-tensordict, and could not be read
+        expected = _rename_source().rename_key_(old_key, new_key)
+        store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
+        try:
+            store_td.rename_key_(old_key, new_key)
+            _assert_store_matches(store_td, expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("old_key,new_key,safe,match", _RENAME_INVALID)
+    def test_rename_key_invalid_destination(
+        self, store_kwargs, old_key, new_key, safe, match
+    ):
+        # the store moved the entry below a leaf
+        store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
+        try:
+            with pytest.raises(KeyError, match=match):
+                store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, _rename_source())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("safe", [False, True])
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_INSIDE)
+    def test_rename_key_inside_old_key(self, store_kwargs, old_key, new_key, safe):
+        # the entry moves, as pop and set do on a TensorDict, and no data is
+        # lost
+        expected = _rename_source()
+        expected.set(new_key, expected.pop(old_key))
+        store_td = TensorDictStore.from_tensordict(_rename_source(), **store_kwargs)
+        try:
+            store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     def test_from_tensordict(self, store_kwargs):
         """Test from_tensordict classmethod."""
@@ -2095,6 +2251,21 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    def test_contains_nested_key_without_include_nested(self, store_stack):
+        # As on a lazy stack, a nested key in a view without nesting is found,
+        # with a FutureWarning: it returns False in 0.17 (#2060).
+        store_td, _, _ = store_stack
+        store_td["nested", "val"] = torch.zeros(5, 4)
+        # the store and the view of one of its elements
+        for store in (store_td, store_td[0]):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                assert "nested" in store.keys()
+                assert ("nested", "val") in store.keys(include_nested=True)
+                assert ("nested", "x") not in store.keys()
+            with pytest.warns(FutureWarning, match="returns False"):
+                assert ("nested", "val") in store.keys()
+
     def test_repr(self, store_stack):
         store_td, _, _ = store_stack
         r = repr(store_td)
@@ -2496,7 +2667,6 @@ class TestLazyStackedTensorDictStore:
             for read in (
                 lambda: store_td["a"],
                 store_td.to_tensordict,
-                lambda: store_td[0:2],
                 lambda: store_td.fill_("a", 1.0),
                 lambda: store_td.set_("a", torch.ones(2, 3, 4)),
                 lambda: store_td.update_(a=torch.ones(2, 3, 4)),
@@ -2535,6 +2705,38 @@ class TestLazyStackedTensorDictStore:
             for i in range(2):
                 assert store_td[i]["a"].shape == tds[i]["a"].shape
                 assert (store_td[i]["a"] == 0).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize(
+        "index", [slice(0, 2), slice(None, None, -1), (slice(None), 1)]
+    )
+    def test_index_several_elements_heterogeneous(self, store_kwargs, index):
+        """An index that picks several elements of a store whose elements differ in shape (#2030).
+
+        As on a lazy stack, it gives the lazy stack of the elements, each
+        with its own shapes. Before, it raised.
+        """
+        tds = [
+            TensorDict(
+                a=torch.arange(12.0 * (i + 1)).view(3, 4 * (i + 1)),
+                b=torch.arange(3.0) + 10 * i,
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            result = store_td[index]
+            expected = lazy_td[index]
+            assert isinstance(result, LazyStackedTensorDict)
+            assert result.batch_size == expected.batch_size
+            for got, want in zip(result.tensordicts, expected.tensordicts, strict=True):
+                assert (got == want).all()
         finally:
             store_td.clear_redis()
             store_td.close()
@@ -2740,6 +2942,56 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_OCCUPIED)
+    def test_rename_key_occupied_destination(self, store_kwargs, old_key, new_key):
+        # the entry replaces what is at the destination, as in TensorDict: the
+        # store was left unchanged, or with a leaf that was also a
+        # sub-tensordict, and could not be read
+        expected = _rename_source().rename_key_(old_key, new_key)
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(_rename_source().unbind(0)), **store_kwargs
+        )
+        try:
+            store_td.rename_key_(old_key, new_key)
+            _assert_store_matches(store_td, expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("old_key,new_key,safe,match", _RENAME_INVALID)
+    def test_rename_key_invalid_destination(
+        self, store_kwargs, old_key, new_key, safe, match
+    ):
+        # the store moved a leaf below a leaf, and was left unchanged for a
+        # sub-tensordict
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(_rename_source().unbind(0)), **store_kwargs
+        )
+        try:
+            with pytest.raises(KeyError, match=match):
+                store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, _rename_source())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("safe", [False, True])
+    @pytest.mark.parametrize("old_key,new_key", _RENAME_INSIDE)
+    def test_rename_key_inside_old_key(self, store_kwargs, old_key, new_key, safe):
+        # the entry moves, as pop and set do on a TensorDict, and no data is
+        # lost
+        expected = _rename_source()
+        expected.set(new_key, expected.pop(old_key))
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(_rename_source().unbind(0)), **store_kwargs
+        )
+        try:
+            store_td.rename_key_(old_key, new_key, safe=safe)
+            _assert_store_matches(store_td, expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     # ---- Write-through view tests ----
 
     def test_view_set_propagates(self, store_stack):
@@ -2806,6 +3058,57 @@ class TestLazyStackedTensorDictStore:
         monkeypatch.undo()
         assert (store_td.to_tensordict() == lazy_td).all()
 
+    @pytest.mark.parametrize("key", ["missing", ("missing", "x")])
+    def test_fill_missing_key(self, store_stack, key):
+        """fill_ of a missing key raises a KeyError, on the stack and on an element view."""
+        store_td, tds, lazy_td = store_stack
+        for td in (store_td, store_td[1]):
+            with pytest.raises(KeyError):
+                td.fill_(key, 1.0)
+
+    def test_detach_no_read(self, store_stack, monkeypatch):
+        """detach_ returns the stack or the element view without calling the server."""
+        store_td, tds, lazy_td = store_stack
+        view = store_td[1]
+
+        def no_round_trip(self, coro):
+            coro.close()
+            raise AssertionError("the server was called")
+
+        with monkeypatch.context() as patch:
+            for cls in (LazyStackedTensorDictStore, _StoreStackElementView):
+                patch.setattr(cls, "_run_sync", no_round_trip)
+            assert store_td.detach_() is store_td
+            assert view.detach_() is view
+
+    def test_view_fill_nested(self, store_kwargs):
+        """fill_ on a nested key of an element view fills that element only."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(3),
+                    n=TensorDict(
+                        b=torch.zeros(3, 2),
+                        m=TensorDict(c=torch.zeros(3), batch_size=[3]),
+                        batch_size=[3],
+                    ),
+                    batch_size=[3],
+                )
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            for td in (store_td, lazy_td):
+                view = td[1]
+                assert view.fill_("n", 5.0) is view
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+            assert (store_td["n", "m", "c"][1] == 5).all()
+            assert (store_td["n", "b"][2] == 0).all()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     def test_view_masked_fill_(self, store_stack):
         """rltd[1].masked_fill_ fills the masked rows of element 1 only."""
         store_td, tds, lazy_td = store_stack
@@ -2851,11 +3154,11 @@ class TestLazyStackedTensorDictStore:
 
     @pytest.mark.parametrize("batch_size,mask_shape", [[(5, 4), (4,)], [(5, 5), (5,)]])
     def test_masked_fill_trailing_mask(self, store_kwargs, batch_size, mask_shape):
-        """A mask that is not batch-shaped still broadcasts from the right.
+        """A mask that is not batch-shaped still broadcasts from the right, with a warning.
 
-        TensorDict.masked_fill_ rejects these masks, but the store has always
-        accepted them for entries without feature dims. The behaviour is kept
-        for compatibility.
+        TensorDict.masked_fill_ aligns a mask with the leading batch dims, but
+        the store has always broadcast these masks from the right. This is
+        kept until TensorDict 0.17.
         """
         lazy_td = lazy_stack(
             [
@@ -2867,10 +3170,95 @@ class TestLazyStackedTensorDictStore:
         try:
             mask = torch.zeros(mask_shape, dtype=torch.bool)
             mask[1] = True
-            store_td.masked_fill_(mask, 1.0)
+            match = (
+                r"^Calling LazyStackedTensorDictStore\.masked_fill_ with a mask of "
+                r"shape .* broadcasts the mask from the right .* will be removed "
+                r"in TensorDict 0\.17\."
+            )
+            with pytest.warns(FutureWarning, match=match) as record:
+                assert store_td.masked_fill_(mask, 1.0) is store_td
+            assert record[0].filename == __file__
             torch.testing.assert_close(
                 store_td["b"], torch.zeros(batch_size).masked_fill(mask, 1.0)
             )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_entry_shaped_mask(self, store_kwargs):
+        """A mask of the shape of every entry fills it as TensorDict does, without a warning."""
+        lazy_td = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3]) for _ in range(4)]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.zeros(4, 3, 2, dtype=torch.bool)
+            mask[1, 2, 0] = True
+            expected = torch.zeros(4, 3, 2).masked_fill(mask, 1.0)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                assert store_td.masked_fill_(mask, 1.0) is store_td
+            torch.testing.assert_close(store_td["a"], expected)
+            # a mask with the entry's dims that broadcasts from a dim of size 1
+            # fills the same elements either way
+            for mask in (
+                torch.ones(4, 1, 2, dtype=torch.bool),
+                torch.ones(1, 3, 2, dtype=torch.bool),
+            ):
+                mask[0, 0, 1] = False
+                expected = store_td["a"].masked_fill(mask, 2.0)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", FutureWarning)
+                    assert store_td.masked_fill_(mask, 2.0) is store_td
+                torch.testing.assert_close(store_td["a"], expected)
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_warns_before_writing(self, store_kwargs):
+        """The FutureWarning for a mask that is not batch-shaped comes before any write."""
+        lazy_td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3, 2), d=torch.zeros(3, 2, 5), batch_size=[3])
+                for _ in range(4)
+            ]
+        )
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(lazy_td, **store_kwargs)
+        try:
+            mask = torch.ones(4, 3, 2, dtype=torch.bool)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                with pytest.raises(FutureWarning, match="broadcasts the mask"):
+                    store_td.masked_fill_(mask, 1.0)
+            assert_allclose_td(store_td.to_tensordict(), lazy_td.to_tensordict())
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_masked_fill_heterogeneous(self, store_kwargs):
+        """masked_fill_ on a store whose elements differ in shape (#2030).
+
+        As on a lazy stack, a batch-shaped mask fills each element with its
+        slice of the mask, and a 0-d mask fills each element.
+        """
+        tds = [
+            TensorDict(a=torch.zeros(3), h=torch.zeros(3, 2 + i), batch_size=[3])
+            for i in range(2)
+        ]
+        lazy_td = lazy_stack([td.clone() for td in tds])
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            mask = torch.tensor([[True, False, True], [False, True, False]])
+            assert store_td.masked_fill_(mask, 2.0) is store_td
+            lazy_td.masked_fill_(mask, 2.0)
+            for i in range(2):
+                assert (store_td[i] == lazy_td[i]).all()
+            assert store_td.masked_fill_(torch.tensor(True), 1.0) is store_td
+            torch.testing.assert_close(store_td["a"], torch.ones(2, 3))
+            for i in range(2):
+                torch.testing.assert_close(store_td[i]["h"], torch.ones(3, 2 + i))
         finally:
             store_td.clear_redis()
             store_td.close()

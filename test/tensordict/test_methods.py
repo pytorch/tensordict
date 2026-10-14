@@ -1518,6 +1518,25 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert not td.isneginf().any()
 
+    def test_keys_contains_nested_key_without_include_nested(self, td_name, device):
+        # A nested key is not among the keys of a view without nesting. A lazy
+        # stack still finds it, with a FutureWarning, until 0.17 (#2060).
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td["nested", "leaf"] = torch.zeros(td.shape, device=device)
+        td["leaf"] = torch.zeros(td.shape, device=device)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            for key in [("nested", "leaf", "x"), ("leaf", "x")]:
+                assert key not in td.keys()
+            assert ("nested", "leaf") not in td.keys(leaves_only=True)
+            assert ("nested", "leaf") in td.keys(include_nested=True)
+            if not isinstance(td, LazyStackedTensorDict):
+                assert ("nested", "leaf") not in td.keys()
+                return
+        with pytest.warns(FutureWarning, match="returns False"):
+            assert ("nested", "leaf") in td.keys()
+
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -2966,6 +2985,26 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.rename_key_("a", "b") is td
         assert "a" not in td.keys()
         torch.testing.assert_close(td.get("b"), a)
+
+    @pytest.mark.parametrize(
+        "old_key,new_key",
+        [("s", ("s", "s")), ("s", ("s", "x", "y")), ("a", ("a", "b"))],
+    )
+    @pytest.mark.parametrize("safe", [False, True])
+    def test_rename_key_inside_old_key(self, td_name, device, old_key, new_key, safe):
+        # a new key inside the old one moves the entry there, as pop and set
+        # do: a sub-tensordict was deleted with everything below it, and a
+        # leaf raised
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td["s", "t"] = torch.zeros(td.shape)
+        td["s", "s", "u"] = torch.ones(td.shape)
+        expected = td.to_tensordict()
+        expected.set(new_key, expected.pop(old_key))
+        assert td.rename_key_(old_key, new_key, safe=safe) is td
+        assert set(td.keys(True, True)) == set(expected.keys(True, True))
+        for key in expected.keys(True, True):
+            torch.testing.assert_close(td[key], expected[key])
 
     def test_repeat(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -5210,6 +5249,21 @@ class TestTensorDicts(TestTensorDictsBase):
         assert new_td is td
         for k in td.keys():
             assert (td.get(k) == 0).all()
+
+    def test_detach_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(RuntimeError, match="sub-tensordict in-place"):
+                td.detach_()
+            return
+        if td_name in ("idx_td", "memmap_td"):
+            # the leaves are views, which torch cannot detach in place
+            with pytest.raises(RuntimeError, match="Can't detach views in-place"):
+                td.detach_()
+            return
+        assert td.detach_() is td
+        for value in td.values(True, True):
+            assert not value.requires_grad
 
     @pytest.mark.parametrize("set_to_none", [True, False])
     def test_zero_grad(self, td_name, device, set_to_none):

@@ -573,6 +573,18 @@ class TestTD:
         assert "a" not in data_c.keys()
         assert (data_c == data).all()
 
+    @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor"])
+    def test_dense_get_ignored_kwargs(self, kwarg, mode):
+        # a dense get warns about these keywords in eager mode only (#2551)
+        def get(td):
+            return td.get("x", **{kwarg: True}) + 1
+
+        get_c = torch.compile(get, fullgraph=True, mode=mode)
+        data = torch.stack([TensorDict(x=torch.arange(4.0) + i) for i in range(2)])
+        with pytest.warns(FutureWarning):
+            x = get(data)
+        torch.testing.assert_close(get_c(data), x)
+
     def test_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)
@@ -2165,6 +2177,30 @@ class TestNN:
         prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
         prob_mod_c(TensorDict(inp=torch.randn(3)))
 
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_joint_sample_and_log_prob(self, mode):
+        # With return_log_prob=True under RANDOM, the module samples and scores
+        # in one call when the distribution defines rsample_and_log_prob. The
+        # compiled module must take that path without graph breaks.
+        class JointNormal(torch.distributions.Normal):
+            def rsample_and_log_prob(self, sample_shape=()):
+                sample = self.loc.expand(torch.Size(sample_shape) + self.loc.shape)
+                # log_prob(sample) would give about -0.92 here
+                return sample, torch.full_like(sample, 7.0)
+
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=JointNormal,
+            default_interaction_type=InteractionType.RANDOM,
+            return_log_prob=True,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        out = prob_mod_c(td.copy())
+        torch.testing.assert_close(out["action"], td["loc"])
+        torch.testing.assert_close(out["action_log_prob"], torch.full((3,), 7.0))
+
     @pytest.mark.parametrize("mean_raises", [False, True])
     def test_prob_module_mean(self, mode, mean_raises):
         class NoMeanNormal(torch.distributions.Normal):
@@ -2206,6 +2242,29 @@ class TestNN:
         with set_interaction_type(InteractionType.MEAN):
             sample = prob_mod_c(td.copy())["sample"]
         torch.testing.assert_close(sample, td["loc"])
+
+    def test_prob_module_thread_local_interaction_type(self, mode):
+        # A thread_local interaction type is read from a threading.local slot:
+        # the compiled module must follow it, and fall back to the
+        # process-wide one outside of the block.
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["sample"],
+            distribution_class=torch.distributions.Normal,
+        )
+        td = TensorDict(loc=torch.zeros(1000), scale=torch.ones(1000))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        with set_interaction_type(InteractionType.MEAN):
+            sample = prob_mod_c(td.copy())["sample"]
+            torch.testing.assert_close(sample, td["loc"])
+            with set_interaction_type(InteractionType.RANDOM, thread_local=True):
+                sample = prob_mod_c(td.copy())["sample"]
+            assert (sample != td["loc"]).all()
+            sample = prob_mod_c(td.copy())["sample"]
+            torch.testing.assert_close(sample, td["loc"])
+            with set_interaction_type(InteractionType.RANDOM, thread_local=True):
+                sample = prob_mod_c(td.copy())["sample"]
+            assert (sample != td["loc"]).all()
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
@@ -3026,6 +3085,47 @@ class TestCudaGraphs:
             assert {w.filename for w in record if w.category is FutureWarning} == {
                 __file__
             }
+
+    def test_interaction_type_change_warns(self, compiled):
+        # pytorch/tensordict#2547: the replay repeats the branch that the
+        # probabilistic modules took at capture, whatever the interaction type.
+        if not torch.cuda.is_available():
+            pytest.skip("CudaGraphModule only replays graphs on CUDA")
+        policy = Prob(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=torch.distributions.Normal,
+            distribution_kwargs={"validate_args": False},
+        )
+        td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3), batch_size=[3])
+        random = self._make_cudagraph(policy, compiled, warmup=3)
+        default = self._make_cudagraph(policy, compiled, warmup=3)
+        linear = self._make_cudagraph(
+            Mod(torch.nn.Linear(3, 3), in_keys=["loc"], out_keys=["y"]), compiled
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", "CudaGraphModule was captured")
+            with set_interaction_type("random"):
+                for _ in range(4):
+                    random(td.clone())
+                    linear(td.clone())
+            for _ in range(4):
+                default(td.clone())
+            # The default interaction type of the policy is "deterministic".
+            with set_interaction_type("deterministic"):
+                default(td.clone())
+                linear(td.clone())
+        with set_interaction_type("deterministic"):
+            with pytest.warns(
+                UserWarning, match="Capture one CudaGraphModule per interaction type"
+            ) as record:
+                random(td.clone())
+            assert [w.filename for w in record] == [__file__]
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error", "CudaGraphModule was captured")
+                random(td.clone())
+        with set_interaction_type("random"), pytest.warns(UserWarning):
+            default(td.clone())
 
     def test_state_dict(self, compiled):
         # Create a linear layer and wrap it in CudaGraphModule

@@ -175,6 +175,10 @@ class _PointwiseOps:
             A new TensorDict instance with the same key set as the original,
             but with all tensors having performed a AND operation with the given value.
         """
+        if _mixes_lazy_stacks(self, (other,)):
+            # as for | and ^: the foreach path below flattens a lazy stack
+            # into keys such as ("0", "a"), which a dense operand lacks
+            return self._compare(other, "__and__", "__and__", default=False)
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(True, True, sorting_keys=keys)
@@ -2662,9 +2666,17 @@ class _PointwiseOps:
         )
 
     # Filling
-    @_write_back_inplace
     def zero_(self) -> Self:
         """Zeros all tensors in the tensordict in-place."""
+        if self._fills_without_reading:
+            for key in self.keys():
+                self._fill_((key,), 0)
+            return self
+        return self._zero_()
+
+    @_write_back_inplace
+    def _zero_(self) -> Self:
+        """Zeros the leaves in place: :meth:`zero_` without ``_fills_without_reading``."""
 
         def fn(item):
             item.zero_()
@@ -2683,18 +2695,41 @@ class _PointwiseOps:
             self
 
         """
-        key = _unravel_key_to_tuple(key)
+        self._fill_(_unravel_key_to_tuple(key), value)
+        return self
+
+    def _fill_(self, key: tuple[str, ...], value: float | bool) -> None:
+        """Fills the entry at ``key``, a leaf or every leaf of a nested tensordict, with ``value``.
+
+        Called by :meth:`fill_` with the key as a tuple; :meth:`fill_` returns
+        ``self`` afterwards, and so does :meth:`zero_`, which calls it with
+        ``0`` for each key when ``_fills_without_reading`` is set. A missing key
+        raises a ``KeyError``. The base implementation reads the entry, fills
+        it and writes it back; when ``_nested_reads_return_copies`` is set, it
+        writes each leaf of a nested tensordict back under its full key.
+        Override it when the storage can write a constant without reading the
+        entry.
+        """
         data = self._get_tuple(key, NO_DEFAULT)
-        if _is_tensor_collection(type(data)):
+        if not _is_tensor_collection(type(data)):
+            data = data.fill_(value)
+            self._set_tuple(key, data, inplace=True, validated=True, non_blocking=False)
+        elif self._nested_reads_return_copies:
+            # data is a new tensordict: its leaves are written back
+            for subkey, leaf in data.items(True, True):
+                self._set_tuple(
+                    key + _unravel_key_to_tuple(subkey),
+                    leaf.fill_(value),
+                    inplace=True,
+                    validated=True,
+                    non_blocking=False,
+                )
+        else:
 
             def fill(x):
                 return x.fill_(value)
 
             data._fast_apply(fill, inplace=True)
-        else:
-            data = data.fill_(value)
-            self._set_tuple(key, data, inplace=True, validated=True, non_blocking=False)
-        return self
 
     def where(
         self,

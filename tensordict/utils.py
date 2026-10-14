@@ -40,7 +40,11 @@ import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
-from tensordict._deprecation import deprecated_attributes, warn_deprecated
+from tensordict._deprecation import (
+    deprecated_attributes,
+    deprecation_message,
+    warn_deprecated,
+)
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
 from torch import Tensor
@@ -768,9 +772,24 @@ def _erase_cache_first(fun):
     return new_fun
 
 
-_NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
 _GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
+
+
+def _warn_nested_key_in_flat_keys(key: tuple[str, ...], tensordict) -> None:
+    """Warns that ``key in tensordict.keys()`` finds the nested ``key`` today, and returns False in 0.17."""
+    warnings.warn(
+        deprecation_message(
+            f"Finding the nested key {key} in {type(tensordict).__name__}.keys() "
+            "without include_nested=True",
+            removal="0.17",
+        )
+        + " Starting with TensorDict 0.17, the check returns False, as it does "
+        "for TensorDict. Use keys(include_nested=True) to look up a nested key.",
+        FutureWarning,
+        # point to the code that runs `key in view`
+        stacklevel=3,
+    )
 
 
 class _StringKeys(KeysView):
@@ -804,7 +823,8 @@ class _StringKeys(KeysView):
             except Exception:
                 raise TypeError(_NON_STR_KEY_ERR)
             if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+                # A nested key is not a top-level key
+                return False
             else:
                 item = unravel_item[0]
         return self.keys.__contains__(item)
@@ -1964,6 +1984,10 @@ def _set_max_batch_size(
 
     for val in tensor_data:
         if _is_tensor_collection(type(val)):
+            # A lazy tensordict (such as a lazy stack or a NonTensorStack) gets
+            # its batch size from its members and cannot be resized.
+            if val._lazy:
+                continue
             if (
                 batch_dims is not None
                 and keep_compliant_size
@@ -1987,6 +2011,10 @@ def _set_max_batch_size(
         if len(tensor_shapes[0]) > curr_dim:
             curr_dim_size = tensor_shapes[0][curr_dim]
         else:
+            source.batch_size = batch_size
+            return
+        # A ragged dim (-1) cannot be part of a dense batch size
+        if curr_dim_size == -1:
             source.batch_size = batch_size
             return
         for leaf, shape in _zip_strict(tensor_data[1:], tensor_shapes[1:]):
@@ -3196,17 +3224,46 @@ def _is_list_tensor_compatible(t) -> Tuple[bool, tuple | None, type | None]:
         return True, (length_t,), dtype
 
 
+# The per-thread mode of a thread that set none, which reads the process-wide one
+_UNSET_MODE = object()
+
+
+class _ThreadMode(threading.local):
+    # threading.local runs __init__ in each thread on its first access, so
+    # reads never miss the attribute (a miss costs an AttributeError)
+    def __init__(self):
+        self.mode = _UNSET_MODE
+
+
 class _ContextManager:
     # Reading or writing one attribute is atomic, so no lock is needed: the
     # mode is read on every call of a tensordict.nn module.
     def __init__(self, default=None):
         self._mode: Any | None = default
+        self._local = _ThreadMode()
+        # Until a thread sets its own mode, reads skip the slower per-thread slot
+        self._has_thread_modes = False
 
     def get_mode(self) -> Any | None:
+        if self._has_thread_modes:
+            mode = self._local.mode
+            if mode is not _UNSET_MODE:
+                return mode
         return self._mode
 
     def set_mode(self, type: Any | None) -> None:
-        self._mode = type
+        # In a thread that set its own mode, a change stays in that thread
+        if self._has_thread_modes and self._local.mode is not _UNSET_MODE:
+            self._local.mode = type
+        else:
+            self._mode = type
+
+    def get_thread_mode(self) -> Any:
+        return self._local.mode
+
+    def set_thread_mode(self, type: Any) -> None:
+        self._has_thread_modes = True
+        self._local.mode = type
 
 
 def _maybe_correct_neg_dim(
