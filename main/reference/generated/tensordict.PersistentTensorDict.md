@@ -5,7 +5,7 @@ listed by task in [Methods by task](../td.html#api-tensordict-methods). This pag
 methods that `PersistentTensorDict` adds, and the overrides that have their own
 documentation.
 
-*class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***kwargs*)
+*class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
 
 Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
@@ -61,6 +61,14 @@ entries are read on CPU and `ptd.device` is `None`.
 - **validate_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch size is
 checked against the stored array shapes at construction time (this
 requires iterating over the store metadata). Defaults to `True`.
+- **non_tensor_as_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a non-tensor array
+that tensordict did not write, such as a string column written by
+another tool, reads as a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its leading
+dims equal the batch size, so that indexing the tensordict selects
+its rows. Otherwise it reads as one
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole array.
+Defaults to `False`.
 - ****kwargs** - kwargs to be passed to `h5py.File.create_dataset()` (h5
 backend) or [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array) (zarr backend). With the
 zarr backend, arrays are stored as a single chunk without compression
@@ -165,7 +173,7 @@ Examples
 torch.Size([3]) tensor([1., 1., 1.])
 ```
 
-*classmethod*from_h5(*filename*, ***, *mode='r'*, *batch_size: torch.size | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
+*classmethod*from_h5(*filename*, ***, *mode='r'*, *batch_size: torch.size | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Creates a PersistentTensorDict from a h5 file.
 
@@ -183,6 +191,13 @@ Keyword Arguments:
 (see `PersistentTensorDict`). Defaults to `"r"`.
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to None (batch-size automatically
 determined).
+- **non_tensor_as_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a non-tensor
+dataset that tensordict did not write, such as a string column
+with one string per row, reads as a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
+leading dims equal the batch size. Otherwise it reads as one
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+dataset. Defaults to `False`.
 
 Returns:
 
@@ -212,7 +227,7 @@ PersistentTensorDict(
  is_shared=False)
 ```
 
-*classmethod*from_zarr(*filename*, ***, *mode='r'*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
+*classmethod*from_zarr(*filename*, ***, *mode='r'*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Creates a PersistentTensorDict from a zarr store.
 
@@ -233,6 +248,13 @@ Keyword Arguments:
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
 Defaults to `None` (batch-size read from metadata or
 automatically determined).
+- **non_tensor_as_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a non-tensor
+array that tensordict did not write, such as a string column
+with one string per row, reads as a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of its rows when its
+leading dims equal the batch size. Otherwise it reads as one
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
+array. Defaults to `False`.
 
 Returns:
 
