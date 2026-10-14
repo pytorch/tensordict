@@ -72,6 +72,7 @@ from tensordict.base import (
     _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
+    _warn_stack_dim_name_taken,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -842,6 +843,15 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         if stack_dim_name is not None:
             self._td_dim_name = stack_dim_name
+            # the stack has names only if its members share them
+            if num_tds and td0._has_names():
+                try:
+                    taken = stack_dim_name in td0.names
+                except ValueError:
+                    # a lazy stack whose members disagree on names has none
+                    taken = False
+                if taken:
+                    _warn_stack_dim_name_taken(stack_dim_name)
 
     def _new_impl(
         self,
@@ -1259,14 +1269,15 @@ class LazyStackedTensorDict(TensorDictBase):
             self._empty_stack_names = None
             return
         # An empty stack has no members, so any list that reaches the stack
-        # dim is kept. With members, reject a stack dim name any member
-        # already uses before the stack dim or a member is written, and undo
-        # the members already renamed if a later rename_ fails.
+        # dim is kept. With members, the stack dim name may not be one the
+        # members use after the rename, as on a TensorDict: undo the rename
+        # if it is, or if a rename_ fails. A name the members use only after
+        # the rename was accepted before 0.15, so it warns until 0.17.
         names_list = list(names)
         stack_name = names_list.pop(self.stack_dim)
-        for td in self.tensordicts:
-            if td._check_dim_name(stack_name):
-                raise ValueError(f"The dimension name {stack_name} is already taken.")
+        taken = stack_name is not None and any(
+            td._check_dim_name(stack_name) for td in self.tensordicts
+        )
         member_dims = self.batch_dims - 1
         if (
             len(names_list) != member_dims
@@ -1286,6 +1297,20 @@ class LazyStackedTensorDict(TensorDictBase):
             for td in self.tensordicts:
                 renamed.append((td, _names_snapshot(td)))
                 td.rename_(*names_list)
+            # The rename gives the members names_list and keeps the names of
+            # the dims their nested tensordicts add, so a name free before
+            # the rename is taken after it only if it is in names_list.
+            if taken:
+                if stack_name in names_list or any(
+                    td._check_dim_name(stack_name) for td in self.tensordicts
+                ):
+                    raise ValueError(
+                        f"The dimension name {stack_name} is already taken."
+                    )
+            elif (
+                self.tensordicts and stack_name is not None and stack_name in names_list
+            ):
+                _warn_stack_dim_name_taken(stack_name)
         except Exception:
             self._td_dim_name = previous_stack_name
             self._empty_stack_names = previous_empty_names
