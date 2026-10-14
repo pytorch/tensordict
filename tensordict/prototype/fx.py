@@ -60,7 +60,9 @@ class TDGraphModule(nn.Module):
             tensordict_out = tensordict
 
         for out_key, output in _zip_strict(self.out_keys, outputs):
-            if out_key != "_":
+            # Stored keys are unraveled, so the skip sentinel is ("_",).
+            # ("_", "y") is a real nested key and must be written.
+            if out_key != ("_",):
                 tensordict_out._set_tuple(
                     out_key, output, inplace=False, validated=True, non_blocking=False
                 )
