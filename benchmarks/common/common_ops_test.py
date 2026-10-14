@@ -1109,6 +1109,23 @@ def test_cat_nested(benchmark):
     benchmark(torch.cat, [td] * 4, 0)
 
 
+@pytest.mark.parametrize("op", ["pack", "unpack"])
+def test_pack_nested(benchmark, op):
+    td = TensorDict(
+        {
+            "a": torch.randn(64, 3),
+            "b": torch.randn(64),
+            "n": {"c": torch.randn(64, 3, 3)},
+        },
+        [64],
+    )
+    flat, layout = td.pack()
+    if op == "pack":
+        benchmark(td.pack)
+    else:
+        benchmark(layout.unpack, flat)
+
+
 def test_apply_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(td.apply, lambda x: x)

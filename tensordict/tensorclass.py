@@ -237,6 +237,7 @@ _METHOD_FROM_TD = [
     "memmap_",
     "memmap_like",
     "memmap_refresh_",
+    "pack",
     "save",
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result

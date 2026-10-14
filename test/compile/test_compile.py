@@ -593,6 +593,24 @@ class TestTD:
         data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         assert (cat_tds(data0, data1) == cat_tds_c(data0, data1)).all()
 
+    @pytest.mark.parametrize("dim", [-1, 1])
+    def test_pack(self, mode, dim):
+        data = TensorDict(
+            {"a": torch.randn(2, 4), "b": {"c": torch.randn(2, 4, 3, 2)}}, [2, 4]
+        )
+        _, layout = data.pack(dim=dim)
+
+        def pack_unpack(td):
+            flat, _ = td.pack(dim=dim, layout=layout)
+            return layout.unpack(flat * 2)
+
+        pack_unpack_c = torch.compile(pack_unpack, fullgraph=True, mode=mode)
+        out = pack_unpack_c(data)
+        assert (out == data * 2).all()
+        assert out["b"].batch_size == (2, 4)
+        out = pack_unpack_c(data)
+        assert (out == data * 2).all()
+
     def test_reshape(self, mode):
         def reshape(td):
             return td.reshape(2, 2)
