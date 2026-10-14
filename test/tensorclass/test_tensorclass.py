@@ -920,6 +920,30 @@ class TestTensorClass:
             assert obj.is_locked
         assert not obj.is_locked
 
+    @pytest.mark.parametrize(
+        "op,args,kwargs",
+        [
+            ("squeeze", (0,), {}),
+            ("squeeze", (-1,), {}),
+            ("flatten", (0, None), {}),
+            ("flatten", (), {"end_dim": None}),
+            ("transpose", (), {"dim0": 0, "dim1": 1}),
+            ("swapaxes", (), {"axis0": 0, "axis1": 1}),
+        ],
+    )
+    def test_shape_op_context_manager(self, op, args, kwargs):
+        # the shape op is undone on exit and the values written in the block stay
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+
+        obj = MyClass(X=torch.zeros(2, 3), batch_size=[2, 3])
+        with getattr(obj, op)(*args, **kwargs) as obj_op:
+            obj_op.X += 1
+        assert obj.batch_size == (2, 3)
+        assert obj.X.shape == (2, 3)
+        assert (obj.X == 1).all()
+
     def test_lock_context_manager_restores_on_error(self):
         # lock_() and unlock_() undo their change also when the body raises
         @tensorclass

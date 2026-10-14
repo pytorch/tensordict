@@ -1329,6 +1329,28 @@ class TestTensorDicts(TestTensorDictsBase):
             with td_flat.unflatten(new_start_dim, td.shape[start_dim:]) as td_unflat:
                 assert (td_unflat == td).all()
 
+    @pytest.mark.parametrize(
+        "args,kwargs",
+        [
+            ((0, None), {}),
+            ((None,), {}),
+            ((), {"start_dim": None}),
+            ((), {"end_dim": None}),
+        ],
+    )
+    def test_flatten_decorator_none_dims(self, td_name, device, args, kwargs):
+        # None means the first or the last dim, also when the block exits
+        td = getattr(self, td_name)(device)
+        batch_size = td.batch_size
+        with td.unlock_(), td.flatten(*args, **kwargs) as td_flat:
+            assert (td_flat == td.flatten(0, -1)).all()
+            if not td_flat.requires_grad:
+                td_flat.apply_(lambda x: x * 0 + 1)
+            else:
+                td_flat.apply(lambda x: x.data.mul_(0).add_(1))
+        assert td.batch_size == batch_size
+        assert (td == 1).all()
+
     def test_flatten_unflatten_bis(self, td_name, device):
         td = getattr(self, td_name)(device)
         shape = td.shape[1:4]
@@ -3910,6 +3932,27 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         assert (td == 1).all()
 
+    @pytest.mark.parametrize("dim", [0, -2])
+    def test_squeeze_decorator_noop_dim(self, td_name, device, dim):
+        # squeezing a dim whose size is not 1 changes nothing, on exit too
+        td = getattr(self, td_name)(device)
+        batch_size = td.batch_size
+        shapes = {key: val.shape for key, val in td.items(True, True)}
+        with td.unlock_().squeeze(dim) as tdt:
+            assert tdt.batch_size == batch_size
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        assert td.batch_size == batch_size
+        assert {key: val.shape for key, val in td.items(True, True)} == shapes
+        assert (td == 1).all()
+        # A plain call leaves the reversal on td for a later bare `with td:`
+        td.squeeze(dim)
+        with td:
+            pass
+        assert td.batch_size == batch_size
+
     @legacy_lazy_mode()
     def test_squeeze_with_none_legacy(self, td_name, device, squeeze_dim=None):
         torch.manual_seed(1)
@@ -4513,6 +4556,41 @@ class TestTensorDicts(TestTensorDictsBase):
             else contextlib.nullcontext()
         )
         with error_dec, td.unlock_().transpose(0, 1) as tdt:
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
+
+    @set_lazy_legacy(False)
+    @pytest.mark.parametrize(
+        "op,args,kwargs",
+        [
+            ("transpose", (), {"dim0": 0, "dim1": 1}),
+            ("transpose", (0,), {"dim1": 1}),
+            ("swapaxes", (), {"axis0": 0, "axis1": 1}),
+            ("swapdims", (0,), {"axis1": 1}),
+        ],
+    )
+    def test_transpose_decorator_keywords(self, td_name, device, op, args, kwargs):
+        # the reversal reads the dims passed as keywords
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="to_tensordict")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, getattr(td.unlock_(), op)(*args, **kwargs) as tdt:
             if not tdt.requires_grad:
                 tdt.apply_(lambda x: x * 0 + 1)
             else:
