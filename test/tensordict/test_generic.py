@@ -6688,6 +6688,11 @@ class TestGeneric:
             td.split("1", 0)
         with pytest.raises(TypeError, match="must be int or list of ints"):
             td.split(["1", 2], 0)
+        with pytest.raises(TypeError, match="must be int or list of ints"):
+            td.split(torch.tensor([1.0, 2.0]), 0)
+        # integer sizes in a tensor or a numpy array
+        for sizes in (torch.tensor([1, 2]), np.array([1, 2])):
+            assert [t.shape[0] for t in td.split(sizes, 0)] == [1, 2]
 
         # Test invalid split_size sum
         with pytest.raises(
@@ -7305,6 +7310,33 @@ class TestGeneric:
         assert isinstance(unsqueeze.squeeze(), SubTD)
         assert isinstance(unsqueeze.reshape(-1), SubTD)
         assert isinstance(unsqueeze.view(-1), SubTD)
+
+    def test_sub_td_expand_shares_parent(self):
+        td = TensorDict(
+            {
+                "a": torch.arange(24.0).view(2, 4, 3),
+                ("n", "b"): torch.zeros(2, 4, 3, 1),
+            },
+            [2, 4, 3],
+        )
+        for index in (1, slice(0, 1), torch.tensor([1, 0])):
+            sub = td._get_sub_tensordict(index)
+            out = sub.expand(5, *sub.batch_size)
+            assert type(out) is TensorDict
+            assert out.batch_size == (5, *sub.batch_size)
+            assert (out[0] == sub).all()
+            if not isinstance(index, torch.Tensor):
+                assert out["a"].untyped_storage().data_ptr() == (
+                    td["a"].untyped_storage().data_ptr()
+                )
+            assert out.expand(-1, *sub.batch_size).batch_size == out.batch_size
+        # names, as for a TensorDict
+        td.names = ["x", "y", "z"]
+        sub = td._get_sub_tensordict(1)
+        out = sub.expand(2, 4, 3)
+        assert out.names == sub.to_tensordict().expand(2, 4, 3).names
+        assert out.names == [None, "y", "z"]
+        assert out["n"].names == [None, "y", "z"]
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_subtensordict_construction(self, device):

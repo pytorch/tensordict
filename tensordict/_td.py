@@ -74,7 +74,6 @@ from tensordict.utils import (
     _encode_key_for_filesystem,
     _get_leaf_tensordict,
     _get_robust_key_setting_with_warning,
-    _get_shape_from_args,
     _import_and_wrap_functorch,
     _infer_size_impl,
     _is_non_tensor,
@@ -84,13 +83,11 @@ from tensordict.utils import (
     _lock_blocked,
     _LOCK_ERROR,
     _LockedSchema,
-    _maybe_correct_neg_dim,
     _NON_STR_KEY_ERR,
     _parse_to,
     _pass_through,
     _pass_through_cls,
     _prune_selected_keys,
-    _resolve_expand_shape,
     _set_item,
     _set_max_batch_size,
     _shape,
@@ -786,12 +783,7 @@ class TensorDict(TensorDictBase):
         )
         return result
 
-    def _view(
-        self,
-        *args,
-        **kwargs,
-    ) -> Self:
-        shape = _get_shape_from_args(*args, **kwargs)
+    def _view(self, shape: torch.Size) -> Self:
         shape = _infer_size_impl(shape, self.batch_size.numel())
         if torch.Size(shape) == self.shape:
             return self
@@ -833,9 +825,7 @@ class TensorDict(TensorDictBase):
         self._maybe_set_shared_attributes(result)
         return result
 
-    def _permute(self, *args, **kwargs):
-        dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
-        dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
+    def _permute(self, dims_list: list[int]):
         if any(dim < 0 or dim >= self.ndim for dim in dims_list):
             raise ValueError(
                 "Received an permutation order incompatible with the tensordict shape."
@@ -906,10 +896,6 @@ class TensorDict(TensorDictBase):
                 call_on_nested=True,
                 propagate_lock=True,
             )
-        # make the dim positive
-        newdim = _maybe_correct_neg_dim(dim, batch_size)
-        if batch_size[dim] != 1:
-            return self
         batch_size = list(batch_size)
         batch_size.pop(dim)
         batch_size = list(batch_size)
@@ -918,7 +904,7 @@ class TensorDict(TensorDictBase):
             names.pop(dim)
 
         def squeeze(x):
-            return x.squeeze(newdim)
+            return x.squeeze(dim)
 
         result = self._fast_apply(
             squeeze,
@@ -932,28 +918,16 @@ class TensorDict(TensorDictBase):
         return result
 
     def _unsqueeze(self, dim: int):
-        # make the dim positive
-        if dim < 0:
-            newdim = self.batch_dims + dim + 1
-        else:
-            newdim = dim
-
-        if (newdim > self.batch_dims) or (newdim < 0):
-            raise RuntimeError(
-                f"unsqueezing is allowed for dims comprised between "
-                f"`-td.batch_dims - 1` and `td.batch_dims` only. Got "
-                f"dim={dim} with a batch size of {self.batch_size}."
-            )
         batch_size = list(self.batch_size)
-        batch_size.insert(newdim, 1)
+        batch_size.insert(dim, 1)
         batch_size = torch.Size(batch_size)
 
         names = list(self.names) if self._has_names() else None
         if names is not None:
-            names.insert(newdim, None)
+            names.insert(dim, None)
 
         def _unsqueeze(tensor):
-            return tensor.unsqueeze(newdim)
+            return tensor.unsqueeze(dim)
 
         result = self._fast_apply(
             _unsqueeze,
@@ -3155,22 +3129,10 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
             )
         return self.to_tensordict()
 
+    # Override: keeps accepting, and ignoring, the inplace keyword argument
+    # of the expand that _SubTensorDict had.
     def expand(self, *args: int, inplace: bool = False) -> Self:
-        if len(args) == 1 and isinstance(args[0], Sequence):
-            shape = tuple(args[0])
-        else:
-            shape = args
-        if -1 in shape:
-            shape = _resolve_expand_shape(shape, self.batch_size)
-
-        def expand(x):
-            return x.expand((*shape, *x.shape[self.ndim :]))
-
-        return self._fast_apply(
-            expand,
-            batch_size=shape,
-            propagate_lock=True,
-        )
+        return super().expand(*args)
 
     @classmethod
     def from_dict(

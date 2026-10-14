@@ -363,8 +363,88 @@ class TestNonTensorData:
         grid = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
         assert grid.reshape(2, 3) is grid
         assert grid.reshape(6, 1).tolist() == [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]
-        with pytest.raises(RuntimeError, match="invalid for input of size 6"):
+        with pytest.raises(
+            RuntimeError, match=r"invalid shape \[4, 2\] for a batch of 6"
+        ):
             grid.reshape(4, 2)
+
+    def test_non_tensor_stack_shape_op_types(self):
+        values = [["a", "b", "c"], ["d", "e", "f"]]
+        ref = np.array(values, dtype=object)
+        calls = {
+            "flip": (lambda x: x.flip(1), lambda a: np.flip(a, 1)),
+            "roll": (lambda x: x.roll(1, 1), lambda a: np.roll(a, 1, 1)),
+            "roll()": (lambda x: x.roll(1), lambda a: np.roll(a, 1)),
+            "rot90": (lambda x: x.rot90(1, (0, 1)), lambda a: np.rot90(a, 1, (0, 1))),
+            "tile": (lambda x: x.tile((2, 1)), lambda a: np.tile(a, (2, 1))),
+            "narrow": (lambda x: x.narrow(1, 1, 2), lambda a: a[:, 1:3]),
+            "broadcast_to": (
+                lambda x: x.broadcast_to((2, 2, 3)),
+                lambda a: np.broadcast_to(a, (2, 2, 3)),
+            ),
+            "expand": (
+                lambda x: x.expand(2, 2, 3),
+                lambda a: np.broadcast_to(a, (2, 2, 3)),
+            ),
+            "reshape(3, 2)": (lambda x: x.reshape(3, 2), lambda a: a.reshape(3, 2)),
+            "reshape(6)": (lambda x: x.reshape(6), lambda a: a.reshape(6)),
+            "reshape(2, 3, 1)": (
+                lambda x: x.reshape(2, 3, 1),
+                lambda a: a.reshape(2, 3, 1),
+            ),
+        }
+        for name, (call, ref_call) in calls.items():
+            stack = NonTensorStack.from_list(values)
+            out = call(stack)
+            assert isinstance(out, NonTensorStack), name
+            assert out.tolist() == ref_call(ref).tolist(), name
+            assert stack.tolist() == values, name
+
+        # narrow and a reshape that regroups the stack share the entries;
+        # the other ops make new ones, which hold the same data
+        def leaves(x):
+            if isinstance(x, LazyStackedTensorDict):
+                return [leaf for m in x.tensordicts for leaf in leaves(m)]
+            return [x]
+
+        stack = NonTensorStack.from_list(values)
+        ids = {id(leaf) for leaf in leaves(stack)}
+        data_ids = {id(leaf.data) for leaf in leaves(stack)}
+        for name, (call, _) in calls.items():
+            out = leaves(call(stack))
+            shared = sum(id(leaf) in ids for leaf in out)
+            regroups = ("narrow", "reshape(6)", "reshape(2, 3, 1)")
+            assert shared == (len(out) if name in regroups else 0), name
+            assert all(id(leaf.data) in data_ids for leaf in out), name
+
+        # broadcast_to expands the members, as expand does: a locked stack
+        # broadcast to its own shape gives a locked stack
+        stack = NonTensorStack.from_list(values).lock_()
+        assert stack.broadcast_to((-1, -1)).is_locked
+
+    def test_non_tensor_stack_reshape_inplace_raises(self):
+        stack = NonTensorStack.from_list([["a", "b", "c"], ["d", "e", "f"]])
+        with pytest.raises(
+            NotImplementedError,
+            match="reshape.inplace=True. is not supported on NonTensorStack",
+        ):
+            stack.reshape(6, inplace=True)
+        assert stack.batch_size == (2, 3)
+
+    def test_non_tensor_stack_lazy_stack_types(self):
+        out = NonTensorStack.lazy_stack([NonTensorData("a"), NonTensorData("b")])
+        assert type(out) is NonTensorStack
+        assert out.tolist() == ["a", "b"]
+        out = NonTensorStack.lazy_stack(
+            [NonTensorStack("a", "b"), NonTensorStack("c", "d")], 1
+        )
+        assert type(out) is NonTensorStack
+        assert out.tolist() == [["a", "c"], ["b", "d"]]
+        out = LazyStackedTensorDict.lazy_stack([NonTensorData("a"), NonTensorData("b")])
+        assert type(out) is NonTensorStack
+        # tensordicts give a lazy stack, as LazyStackedTensorDict.lazy_stack
+        out = NonTensorStack.lazy_stack([TensorDict(), TensorDict()])
+        assert type(out) is LazyStackedTensorDict
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize(
@@ -386,6 +466,32 @@ class TestNonTensorData:
         assert result.device == stack.device
         assert not result.is_locked
         assert stack.lock_().reshape(shape).is_locked
+
+    @pytest.mark.parametrize(
+        "call,shape",
+        [
+            (lambda x: x.flatten(), (0,)),
+            (lambda x: x.unflatten(1, (3, 1)), (0, 3, 1, 0)),
+            (lambda x: x.unflatten(0, (2, 0)), (2, 0, 3, 0)),
+        ],
+        ids=["flatten", "unflatten_3_1", "unflatten_2_0"],
+    )
+    def test_flatten_unflatten_non_tensor_stack_zero_size(self, call, shape):
+        # flatten and unflatten give the stack that reshape gives, locked
+        # like the input, which they leave as it is
+        def make():
+            return NonTensorStack(*[NonTensorStack(batch_size=[0])] * 3, stack_dim=1)
+
+        stack = make()
+        assert stack.batch_size == (0, 3, 0)
+        out = call(stack)
+        expected = make().reshape(shape)
+        assert isinstance(out, NonTensorStack)
+        assert out.batch_size == expected.batch_size
+        assert out.tolist() == expected.tolist()
+        assert not out.is_locked
+        assert not stack.is_locked
+        assert call(make().lock_()).is_locked
 
     def test_comparison(self, non_tensor_data):
         non_tensor_data = non_tensor_data.exclude(("nested", "str"))
