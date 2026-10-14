@@ -1167,10 +1167,8 @@ _BACKEND_OPS = {
 # What raises on main, with the type of the error
 _BACKEND_RAISES = {
     ("h5", "share_memory_"): NotImplementedError,
-    ("h5", "popitem"): NotImplementedError,
     ("subtd", "detach_"): RuntimeError,
     ("subtd", "share_memory_"): RuntimeError,
-    ("subtd", "popitem"): NotImplementedError,
 }
 
 # The class of the result of the operations that do not return a typed
@@ -1229,9 +1227,12 @@ class TestBackends:
         elif op in ("all",):
             assert result is True
         elif op == "popitem":
-            # the source pops: a lazy stack gives a dense nested tensordict
+            # the source pops: a lazy stack and a file give their own class
             assert result[0] == "n"
-            assert type(result[1]) is TensorDict
+            assert type(result[1]) is {
+                "lazy": LazyStackedTensorDict,
+                "h5": PersistentTensorDict,
+            }.get(kind, TensorDict)
             result, expected = result[1], expected[1]
         elif op in ("split", "chunk"):
             assert all(type(r) is _BackendState for r in result)
