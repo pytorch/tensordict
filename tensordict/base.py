@@ -330,6 +330,23 @@ class _InplaceShapeState(local):
 _inplace_shape_state = _InplaceShapeState()
 
 
+def _raise_if_not_a_tensordict(
+    err: AttributeError, key: tuple, i: int, value: Any
+) -> None:
+    """Raises a ValueError if ``err`` comes from reading ``key[i:]`` in a leaf.
+
+    ``value`` is the entry at ``key[i - 1]`` and ``err`` the AttributeError
+    that ``value._get_tuple(key[i:], ...)`` raised. Other AttributeErrors are
+    left to the caller, which returns ``None``.
+    """
+    if "has no attribute" in str(err):
+        rest = key[i] if len(key) == i + 1 else key[i:]
+        raise ValueError(
+            f"{key[i - 1]!r} is a {type(value).__name__}, not a tensordict, "
+            f"so it has no entry {rest!r}."
+        )
+
+
 def _is_inside(key: NestedKey, other: NestedKey) -> bool:
     """Returns whether the nested key ``key`` lies strictly inside ``other``."""
     key = (key,) if isinstance(key, str) else key
@@ -3731,12 +3748,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         try:
             return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:
-            if "has no attribute" in str(err):
-                rest = key[1] if len(key) == 2 else key[1:]
-                raise ValueError(
-                    f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
-                    f"so it has no entry {rest!r}."
-                )
+            _raise_if_not_a_tensordict(err, key, 1, first)
 
     def _get_tuple_maybe_non_tensor(self, key, default, **kwargs):
         # __getitem__ repeats the non-tensor handling below for a str key of

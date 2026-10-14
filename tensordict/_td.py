@@ -41,10 +41,12 @@ from tensordict.base import (
     _foreach_copy_compiled,
     _holds_its_tensors,
     _is_accepted_class,
+    _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS,
+    _raise_if_not_a_tensordict,
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
@@ -303,7 +305,11 @@ class TensorDict(TensorDictBase):
 
         self._tensordict = _StringOnlyDict()
         is_eager = not is_compiling()
-        is_empty = source is None or (type(source) is dict and not source)
+        # Eager only: under compile, Dynamo does not guard on the emptiness
+        # read here, and would reuse the empty-source graph for a full source.
+        is_empty = is_eager and (
+            source is None or (type(source) is dict and not source)
+        )
 
         if is_empty and names is None and not lock and type(self) is TensorDict:
             # Nothing to validate, move, sync or rename: this ends in the
@@ -328,6 +334,11 @@ class TensorDict(TensorDictBase):
             if is_cuda:
                 # CUDA does its sync by itself
                 call_sync = False
+            elif non_blocking is None and not is_eager:
+                # Under compile, copy with blocking calls instead of marking
+                # the device recorder and syncing: the sync breaks the graph,
+                # and a mark nested in another TensorDict() raises.
+                sub_non_blocking = False
             else:
                 # An empty source has no transfer to record.
                 call_sync = non_blocking is None and not is_empty
@@ -1217,7 +1228,8 @@ class TensorDict(TensorDictBase):
             self._mark_consolidated_stale()
         return item
 
-    # Override: a dict of valid tensors goes into the dict of entries in one call.
+    # Override: a dict of valid tensors goes into the dict of entries in one
+    # call. With sub-tensordicts or dicts among them, see _update_fast_merge.
     def _update_fast(self, source: dict[str, CompatibleType] | T) -> bool:
         if type(self) is not TensorDict or self._is_locked:
             return False
@@ -1248,7 +1260,61 @@ class TensorDict(TensorDictBase):
                 if "_consolidated" in self.__dict__:
                     self._mark_consolidated_stale()
                 return True
+            if type(key) is str and (type(value) is TensorDict or type(value) is dict):
+                self._update_fast_merge(source)
+                return True
         return False
+
+    def _update_fast_merge(self, source: dict[str, CompatibleType]) -> None:
+        """Writes ``source`` into ``self`` key by key, in the order of the general path of :meth:`update`.
+
+        :meth:`_update_fast` calls it for a ``source`` dict that holds a
+        sub-tensordict or a dict. A valid tensor is written as the general
+        path writes it, and a :class:`TensorDict` or dict whose key holds a
+        :class:`TensorDict` in ``self`` is merged into it with the same
+        ``update`` call. Any other entry goes through the general path, one
+        key at a time, so the result, the errors and the entries written
+        before an error are those of the general path.
+        """
+        batch_size = self._batch_size
+        batch_dims = len(batch_size)
+        device = self._device
+        entries = self._tensordict
+        consolidated = "_consolidated" in self.__dict__
+        # Iterate over source itself, as the general path does: a merge that
+        # writes into source (if source is a sub-tensordict of self) shows.
+        for key, value in source.items():
+            if type(key) is str:
+                if type(value) is Tensor:
+                    if not (
+                        (
+                            batch_dims
+                            and (
+                                value.is_nested
+                                or value.shape[:batch_dims] != batch_size
+                            )
+                        )
+                        or (device is not None and value.device != device)
+                    ):
+                        entries[key] = value
+                        if consolidated:
+                            self._mark_consolidated_stale()
+                        continue
+                elif type(value) is TensorDict or type(value) is dict:
+                    child = entries.get(key)
+                    if type(child) is TensorDict:
+                        child.update(value)
+                        continue
+            self._update_entries(
+                {key: value},
+                clone=False,
+                inplace=False,
+                non_blocking=False,
+                keys_to_update=None,
+                is_leaf=_is_leaf_nontensor,
+                update_batch_size=False,
+                ignore_lock=False,
+            )
 
     def _set_str(
         self,
@@ -1703,6 +1769,41 @@ class TensorDict(TensorDictBase):
             return self._tensordict[key]
         except KeyError:
             return self._default_get(key, default)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Subclasses keep the generic walk, which calls their _get_str and
+        # _default_get, without going through the _get_tuple below.
+        if cls._get_tuple is TensorDict._get_tuple:
+            cls._get_tuple = TensorDictBase._get_tuple
+
+    # Override: reads the levels that are exact TensorDicts from their dicts,
+    # without a _get_str and a _get_tuple call per level.
+    def _get_tuple(self, key, default, **kwargs):
+        if type(self) is not TensorDict:
+            # a subclass's own _get_tuple calling super()._get_tuple
+            return TensorDictBase._get_tuple(self, key, default, **kwargs)
+        try:
+            value = self._tensordict[key[0]]
+        except KeyError:
+            return self._default_get(key[0], default)
+        if len(key) == 1:
+            return value
+        for i in range(1, len(key)):
+            if value is default:
+                return value
+            if type(value) is not TensorDict:
+                # a lazy stack, a tensorclass, a tensor...: it reads the rest
+                try:
+                    return value._get_tuple(key[i:], default=default, **kwargs)
+                except AttributeError as err:
+                    _raise_if_not_a_tensordict(err, key, i, value)
+                    return None
+            td = value
+            value = td._tensordict.get(key[i], NO_DEFAULT)
+            if value is NO_DEFAULT:
+                return td._default_get(key[i], default)
+        return value
 
     # Override: shares the dense leaves and marks the tensordict shared.
     def share_memory_(self) -> Self:
