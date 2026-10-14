@@ -551,8 +551,11 @@ class TestTensorDictStore:
             FutureWarning, match=rf"^TensorDictStore\.{method} {_MISSING_KEY_WARNING}"
         ) as record:
             assert getattr(store_td, method)(*args) is store_td
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        # count only FutureWarnings: under xdist on free-threaded Python, the
+        # record once held 12 other warnings from code outside the call
+        warned = [w for w in record if issubclass(w.category, FutureWarning)]
+        assert len(warned) == 1, [str(w.message) for w in record]
+        assert warned[0].filename == __file__
         assert set(store_td.keys(True, True)) == {("nested", "a")}
 
     def test_locking(self, store_td):
@@ -1049,8 +1052,11 @@ class TestTensorDictStore:
             r"tensordict today\. Starting with TensorDict 0\.17",
         ) as record:
             assert store_td.rename_key_("obs", "renamed") is store_td
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        # count only FutureWarnings: under xdist on free-threaded Python, the
+        # record once held 12 other warnings from code outside the call
+        warned = [w for w in record if issubclass(w.category, FutureWarning)]
+        assert len(warned) == 1, [str(w.message) for w in record]
+        assert warned[0].filename == __file__
         assert set(store_td.keys()) == {"renamed"}
 
     def test_rename_key_bad_new_key(self, store_td):
@@ -2882,8 +2888,11 @@ class TestLazyStackedTensorDictStore:
             r"locked tensordict today\. Starting with TensorDict 0\.17",
         ) as record:
             assert store_td.rename_key_("a", "c") is store_td
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        # count only FutureWarnings: under xdist on free-threaded Python, the
+        # record once held 12 other warnings from code outside the call
+        warned = [w for w in record if issubclass(w.category, FutureWarning)]
+        assert len(warned) == 1, [str(w.message) for w in record]
+        assert warned[0].filename == __file__
         assert set(store_td.keys()) == {"b", "c"}
 
     def test_rename_key_leaf_kinds(self, store_kwargs):
@@ -3803,8 +3812,11 @@ class TestLazyStackedTensorDictStore:
                 match=rf"^LazyStackedTensorDictStore\.{method} {_MISSING_KEY_WARNING}",
             ) as record:
                 assert getattr(store_td, method)(*args) is store_td
-            assert len(record) == 1
-            assert record[0].filename == __file__
+            # count only FutureWarnings: under xdist on free-threaded Python, the
+            # record once held 12 other warnings from code outside the call
+            warned = [w for w in record if issubclass(w.category, FutureWarning)]
+            assert len(warned) == 1, [str(w.message) for w in record]
+            assert warned[0].filename == __file__
             assert set(store_td.keys(True, True)) == set(lazy_td.keys(True, True))
         finally:
             store_td.clear_redis()
