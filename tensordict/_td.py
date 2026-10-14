@@ -3472,6 +3472,10 @@ class _TensorDictKeysView:
 
     def _iter(self) -> Iterator[str | tuple[str, ...]]:
         if self.include_nested:
+            if type(self.tensordict) is TensorDict:
+                # A list built in one walk, as TensorDict.items() does, costs
+                # less than a chain of generators, one per level.
+                return iter(self._nested_key_list(self.tensordict, None, []))
             return self._iter_helper(self.tensordict)
         if self.leaves_only:
             return self._iter_leaves()
@@ -3509,8 +3513,42 @@ class _TensorDictKeysView:
             if not leaves_only or is_leaf(cls):
                 yield key if prefix is None else full_key
 
+    def _nested_key_list(
+        self, tensordict: T, prefix: tuple | None, result: list
+    ) -> list[str | tuple[str, ...]]:
+        # Appends to result the keys that _iter_helper() yields, in its order.
+        leaves_only = self.leaves_only
+        is_leaf = self.is_leaf
+        for key, value in self._items(tensordict):
+            cls = type(value)
+            if cls is Tensor:
+                if not leaves_only or is_leaf is _default_is_leaf or is_leaf(cls):
+                    result.append(key if prefix is None else prefix + (key,))
+                continue
+            full_key = (key,) if prefix is None else prefix + (key,)
+            if cls is TensorDict:
+                # Skip the checks below: a TensorDict is a tensor collection
+                # to recurse into, and not a leaf for the default is_leaf.
+                self._nested_key_list(value, full_key, result)
+                if not leaves_only or (
+                    is_leaf is not _default_is_leaf and is_leaf(cls)
+                ):
+                    result.append(key if prefix is None else full_key)
+                continue
+            while cls is list:
+                value = value[0]
+                cls = type(value)
+            if _is_tensor_collection(cls):
+                if not is_non_tensor(cls) and not _pass_through(value):
+                    self._nested_key_list(value, full_key, result)
+            if not leaves_only or is_leaf(cls):
+                result.append(key if prefix is None else full_key)
+        return result
+
     def __len__(self) -> int:
-        return sum(1 for _ in self)
+        # list(self) would call __len__ again. Counting the keys of a list
+        # iterator does not iterate them in Python.
+        return len(list(iter(self)))
 
     def _items(
         self, tensordict: TensorDictBase | None = None

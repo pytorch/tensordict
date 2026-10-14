@@ -45,7 +45,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
-from tensordict._td import is_tensor_collection
+from tensordict._td import _TensorDictKeysView, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, TensorDictBase
 from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
@@ -3436,6 +3436,68 @@ class TestGeneric:
         # top-level keys: the lazy-keys-len branch fixes it.
         if not stack:
             assert len(keys) == len(expected)
+
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    @pytest.mark.parametrize(
+        "is_leaf",
+        [None, is_leaf_nontensor, lambda cls: True, lambda cls: cls is torch.Tensor],
+        ids=["default", "nontensor", "all", "tensor"],
+    )
+    def test_keys_nested_one_walk(self, leaves_only, is_leaf, monkeypatch):
+        # The nested keys of a TensorDict are listed in one walk, without a
+        # generator per level (#2618). They come in the order of that
+        # generator, and is_leaf gets the same classes.
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                c=TensorDict(d=torch.zeros(3, 2), batch_size=[3]),
+                empty=TensorDict(batch_size=[3]),
+                batch_size=[3],
+            ),
+            tc=MyClass(x=torch.zeros(3, 4), batch_size=[3]),
+            nt=NonTensorData("a string", batch_size=[3]),
+            u=tensordict.UnbatchedTensor(torch.zeros(2)),
+            stack=lazy_stack(
+                [TensorDict(f=torch.zeros(()), g=TensorDict(h=torch.zeros(())))] * 3
+            ),
+            z=torch.zeros(3),
+            batch_size=[3],
+        )
+
+        def listed(list_keys):
+            calls = []
+
+            def recorded_is_leaf(cls):
+                calls.append(cls)
+                return is_leaf(cls)
+
+            return list_keys(recorded_is_leaf if is_leaf else None), calls
+
+        def from_generator(is_leaf):
+            view = _TensorDictKeysView(td, True, leaves_only, is_leaf)
+            return list(view._iter_helper(td))
+
+        expected, expected_calls = listed(from_generator)
+        assert expected
+
+        def iter_helper(*args, **kwargs):
+            raise AssertionError("the keys are listed by a generator per level")
+
+        monkeypatch.setattr(_TensorDictKeysView, "_iter_helper", iter_helper)
+
+        def from_keys(is_leaf):
+            # iter(): list() of the view would also call is_leaf for its len()
+            return list(iter(td.keys(True, leaves_only, is_leaf=is_leaf)))
+
+        assert listed(from_keys) == (expected, expected_calls)
+        keys = td.keys(True, leaves_only, is_leaf=is_leaf)
+        assert list(keys) == expected
+        assert len(keys) == len(expected)
 
     @pytest.mark.parametrize("stack", [False, True])
     def test_items_nested_deep(self, stack):
