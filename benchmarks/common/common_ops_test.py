@@ -235,6 +235,28 @@ def test_keys_nested_leaf_loop(benchmark):
     benchmark(lambda: [key for key in td.keys(True, True)])  # noqa: C416
 
 
+def _small_nested_td():
+    # A few leaves on three levels, as in the data of a mesh
+    return TensorDict(
+        {
+            "a": torch.zeros(3),
+            "b": torch.zeros(3),
+            "nested": {"c": torch.zeros(3), "d": {"e": torch.zeros(3)}},
+        },
+        batch_size=[3],
+    )
+
+
+def test_keys_nested_leaf_small(benchmark):
+    td = _small_nested_td()
+    benchmark(lambda: list(td.keys(True, True)))
+
+
+def test_keys_nested_leaf_small_len(benchmark):
+    td = _small_nested_td()
+    benchmark(lambda: len(td.keys(True, True)))
+
+
 def test_keys_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
     benchmark(lambda: list(td.keys(True)))
@@ -1065,6 +1087,20 @@ def test_cat_nested(benchmark):
 def test_apply_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(td.apply, lambda x: x)
+
+
+@pytest.mark.parametrize("op", ["neg", "mul_scalar", "add"])
+def test_pointwise_nested(benchmark, op):
+    td = TensorDict(
+        {"a": torch.randn(8, 3), "b": torch.randn(8), "n": {"c": torch.randn(8, 4)}},
+        [8],
+    )
+    fn = {
+        "neg": lambda td: -td,
+        "mul_scalar": lambda td: td * 2.0,
+        "add": lambda td: td + td,
+    }[op]
+    benchmark(fn, td)
 
 
 def test_split(benchmark):

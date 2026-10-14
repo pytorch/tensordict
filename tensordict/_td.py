@@ -475,6 +475,56 @@ class TensorDict(TensorDictBase):
             _check_invariants(self)
         return self
 
+    def _is_dense_node(self) -> bool:
+        # An exact TensorDict without dim names: _dense_apply rebuilds it.
+        return type(self) is TensorDict and self._td_dim_names is None
+
+    def _dense_apply(self, fn, named, nested_keys, prefix, filter_empty, is_leaf):
+        # What _apply_nest returns for a node that passes _is_dense_node, with
+        # checked=True and no others, out, inplace, batch size, device or
+        # names: each node gets the batch size and device of its source node.
+        # Entries other than tensors and such nodes take the steps of
+        # _apply_nest for one entry.
+        result = self._new_unsafe(batch_size=self._batch_size, device=self._device)
+        _tensordict = result._tensordict
+        for key, item in self._tensordict.items():
+            cls = type(item)
+            if cls is TensorDict and item._td_dim_names is None:
+                item_trsf = item._dense_apply(
+                    fn, named, nested_keys, prefix + (key,), filter_empty, is_leaf
+                )
+            elif cls is not Tensor and not is_leaf(cls):
+                # the call _apply_nest makes for a nested collection
+                item_trsf = item._apply_nest(
+                    fn,
+                    inplace=False,
+                    batch_size=None,
+                    device=NO_DEFAULT,
+                    checked=True,
+                    named=named,
+                    nested_keys=nested_keys,
+                    default=NO_DEFAULT,
+                    prefix=prefix + (key,),
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    out=None,
+                    call_on_unbatched=False,
+                )
+            elif named:
+                if nested_keys:
+                    item_trsf = fn(prefix + (key,) if prefix != () else key, item)
+                else:
+                    item_trsf = fn(key, item)
+            else:
+                item_trsf = fn(item)
+            if item_trsf is not None:
+                _tensordict[key] = item_trsf
+        if not _tensordict and (
+            filter_empty or (filter_empty is None and not self.is_empty())
+        ):
+            return None
+        return result
+
     @classmethod
     def from_module(
         cls,
@@ -3498,7 +3548,12 @@ class _TensorDictKeysView:
             def keyfunc(key):
                 return ".".join(key) if isinstance(key, tuple) else key
 
-            return iter(sorted(self._iter(), key=keyfunc))
+            if self.include_nested and type(self.tensordict) is TensorDict:
+                # sorted() reads every key anyway: list them in one walk.
+                keys = self._nested_key_list(self.tensordict, None, [])
+            else:
+                keys = self._iter()
+            return iter(sorted(keys, key=keyfunc))
         return self._iter()
 
     def _iter(self) -> Iterator[str | tuple[str, ...]]:
@@ -3529,6 +3584,15 @@ class _TensorDictKeysView:
                     yield key if prefix is None else prefix + (key,)
                 continue
             full_key = (key,) if prefix is None else prefix + (key,)
+            if cls is TensorDict:
+                # Skip the checks below: a TensorDict is a tensor collection
+                # to recurse into, and not a leaf for the default is_leaf.
+                yield from self._iter_helper(value, prefix=full_key)
+                if not leaves_only or (
+                    is_leaf is not _default_is_leaf and is_leaf(cls)
+                ):
+                    yield key if prefix is None else full_key
+                continue
             while cls is list:
                 # For lazy stacks
                 value = value[0]
@@ -3540,7 +3604,43 @@ class _TensorDictKeysView:
             if not leaves_only or is_leaf(cls):
                 yield key if prefix is None else full_key
 
+    def _nested_key_list(
+        self, tensordict: T, prefix: tuple | None, result: list
+    ) -> list[str | tuple[str, ...]]:
+        # Appends to result the keys that _iter_helper() yields, in its order,
+        # in one walk without a generator per level. For the callers that read
+        # every key before they return.
+        leaves_only = self.leaves_only
+        is_leaf = self.is_leaf
+        for key, value in self._items(tensordict):
+            cls = type(value)
+            if cls is Tensor:
+                if not leaves_only or is_leaf is _default_is_leaf or is_leaf(cls):
+                    result.append(key if prefix is None else prefix + (key,))
+                continue
+            full_key = (key,) if prefix is None else prefix + (key,)
+            if cls is TensorDict:
+                # Skip the checks below: a TensorDict is a tensor collection
+                # to recurse into, and not a leaf for the default is_leaf.
+                self._nested_key_list(value, full_key, result)
+                if not leaves_only or (
+                    is_leaf is not _default_is_leaf and is_leaf(cls)
+                ):
+                    result.append(key if prefix is None else full_key)
+                continue
+            while cls is list:
+                value = value[0]
+                cls = type(value)
+            if _is_tensor_collection(cls):
+                if not is_non_tensor(cls) and not _pass_through(value):
+                    self._nested_key_list(value, full_key, result)
+            if not leaves_only or is_leaf(cls):
+                result.append(key if prefix is None else full_key)
+        return result
+
     def __len__(self) -> int:
+        if self.include_nested and type(self.tensordict) is TensorDict:
+            return len(self._nested_key_list(self.tensordict, None, []))
         return sum(1 for _ in self)
 
     def _items(

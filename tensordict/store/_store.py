@@ -69,6 +69,7 @@ from tensordict.store._utils import (  # noqa: F401
     _compute_covering_range,
     _decode_meta,
     _dtype_to_str,
+    _expand_batch_ellipsis,
     _get_local_idx,
     _getitem_result_shape,
     _is_scattered_index,
@@ -1352,6 +1353,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         # Index-based assignment: bypass _SubTensorDict, batch SETRANGE
         if isinstance(index, list):
             index = torch.tensor(index)
+        index = _expand_batch_ellipsis(index, self.batch_size)
 
         _check_indexed_value(self, value)
         if isinstance(value, Number):

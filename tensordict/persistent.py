@@ -1471,7 +1471,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         except KeyError:
             if default is not NO_DEFAULT:
                 return default
-            raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
+            # name the file, not the tensordict: its repr reads every dataset
+            raise KeyError(f"key {key} not found in PersistentTensorDict {self.file}")
 
     def _process_array(self, key, array):
         if self._backend.is_array(array):
