@@ -730,12 +730,17 @@ class TestTensorDictStore:
         """
         store_td.batch_size = [2, 2]
 
-        def source(value):
+        def source(value, heterogeneous=False):
             return lazy_stack(
                 [
                     TensorDict(
                         a=torch.full((2,), value + i),
                         n=TensorDict(b=torch.full((2, 3), value - i), batch_size=[2]),
+                        **(
+                            {"h": torch.full((2, 1 + i), value)}
+                            if heterogeneous
+                            else {}
+                        ),
                         batch_size=[2],
                     )
                     for i in range(2)
@@ -751,6 +756,8 @@ class TestTensorDictStore:
             # a lazy stack nested in the input
             td.update_(TensorDict(n=source(3.0).get("n"), batch_size=[2, 2]))
             td["n"].copy_(source(4.0).get("n"))
+            # keys_to_update leaves out a key whose elements differ in shape
+            td.update_(source(5.0, heterogeneous=True), keys_to_update=["a"])
         assert_allclose_td(store_td.to_tensordict(), expected)
 
     def test_clone_recurse(self, store_td):

@@ -2390,6 +2390,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         # of a lazy stack in the input, and changes their copies without
         # writing them (#2593).
         if is_tensor_collection(input_dict_or_td) and _has_lazy_stack(input_dict_or_td):
+            if keys_to_update is not None:
+                # the other keys may have elements that differ in shape
+                input_dict_or_td = input_dict_or_td.select(
+                    *keys_to_update, strict=False
+                )
             input_dict_or_td = input_dict_or_td.to_tensordict()
         # not super(): LazyStackedTensorDictStore[i] shares this method
         return TensorDictBase._update_(
