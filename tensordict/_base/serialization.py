@@ -66,6 +66,19 @@ if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
 
 
+def _is_saved_tensorclass(prefix: Path) -> bool:
+    """Returns True if the ``meta.json`` in ``prefix`` is that of a tensorclass."""
+    import tensordict
+
+    if not (prefix / "meta.json").exists():
+        return False
+    type_name = _load_metadata(prefix).get("_type")
+    return any(
+        str(cls) == type_name and _is_tensorclass(cls)
+        for cls in tensordict.base._ACCEPTED_CLASSES
+    )
+
+
 def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
     """Returns a leaf that ``memmap_like`` can pass to ``_memmap_(like=True)`` without copying values."""
     _raise_if_jagged(x, key)
@@ -1548,7 +1561,9 @@ class _Serialization:
                 or as a ``"/"``-separated string path (e.g. ``"module/0"``).
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
-                archives.
+                archives. A nested key reaches the entries of a saved
+                tensorclass as ``obj.get(key)`` does, without its
+                ``_tensordict`` level.
             mode (str, optional): how the files are memory-mapped. With
                 ``"r"``, the mapping is copy-on-write: in-place writes to the
                 leaves stay in memory. They reach the files only if the
@@ -1675,6 +1690,15 @@ class _Serialization:
                 safe_part = _encode_key_for_filesystem(
                     part, robust=effective_robust_key
                 )
+                if (
+                    part != "_tensordict"
+                    and not (prefix / safe_part).exists()
+                    and (prefix / "_tensordict" / "meta.json").exists()
+                    and _is_saved_tensorclass(prefix)
+                ):
+                    # A tensorclass saves its content under _tensordict:
+                    # resolve the nested key as tensorclass.get(key) does.
+                    prefix = prefix / "_tensordict"
                 candidate = prefix / safe_part
                 if (
                     effective_robust_key
