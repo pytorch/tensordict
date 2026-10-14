@@ -740,6 +740,89 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 assert "a" not in td
 
+    def test_cat_tensors_shape_mismatch_preserves_entries(self, td_name, device):
+        # Last dims differ, and dim=1 is not that dim, so cat raises.
+        if td_name != "td":
+            pytest.skip("failure atomicity is independent of the container type")
+        a = torch.zeros(2, 3, 4, device=device)
+        b = torch.ones(2, 3, 5, device=device)
+        td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.cat_tensors("a", "b", out_key="c", dim=1)
+        assert "a" in td
+        assert "b" in td
+        assert "c" not in td
+        assert td.get("a") is a
+        assert td.get("b") is b
+        assert torch.equal(td.get("a"), torch.zeros(2, 3, 4, device=device))
+        assert torch.equal(td.get("b"), torch.ones(2, 3, 5, device=device))
+
+        a = torch.zeros(2, 3, 4, device=device)
+        b = torch.ones(2, 3, 5, device=device)
+        td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.cat_tensors("a", "b", out_key="a", dim=1)
+        assert "a" in td
+        assert "b" in td
+        assert td.get("a") is a
+        assert td.get("b") is b
+
+    def test_cat_tensors_set_failure_preserves_entries(self, td_name, device):
+        if td_name != "td":
+            pytest.skip("failure atomicity is independent of the container type")
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        c = torch.full((2, 1), 4.0, device=device)
+        td = TensorDict({"a": a, "b": b, "c": c}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.cat_tensors("a", "b", out_key="d", dim=0)
+        assert "a" in td
+        assert "b" in td
+        assert "d" not in td
+        assert td.get("a") is a
+        assert td.get("b") is b
+        assert td.get("c") is c
+
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        c = torch.full((2, 1), 4.0, device=device)
+        td = TensorDict({"a": a, "b": b, "c": c}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.cat_tensors("a", "b", out_key="c", dim=0)
+        assert td.get("a") is a
+        assert td.get("b") is b
+        assert td.get("c") is c
+
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.cat_tensors("a", "b", out_key="a", dim=0)
+        assert td.get("a") is a
+        assert td.get("b") is b
+
+    def test_cat_tensors_out_key_is_input(self, td_name, device):
+        if td_name != "td":
+            pytest.skip("out_key policy is covered on TensorDict")
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        z = torch.full((2, 1), 2.0, device=device)
+        td = TensorDict({"z": z, "a": a, "b": b}, batch_size=[2], device=device)
+        td.cat_tensors("a", "b", out_key="a", dim=-1)
+        assert list(td.keys()) == ["z", "a"]
+        assert torch.equal(td.get("a"), torch.cat([a, b], -1))
+        assert td.get("z") is z
+
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        z = torch.full((2, 1), 2.0, device=device)
+        td = TensorDict({"a": a, "b": b, "z": z}, batch_size=[2], device=device)
+        td.cat_tensors("a", "b", out_key="a", dim=-1, keep_entries=True)
+        assert list(td.keys()) == ["a", "b", "z"]
+        assert torch.equal(td.get("a"), torch.cat([a, b], -1))
+        assert td.get("b") is b
+        assert td.get("z") is z
+
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("chunks", [1, 2])
     def test_chunk(self, td_name, device, dim, chunks):
@@ -3893,6 +3976,78 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert "a" in td
             else:
                 assert "a" not in td
+
+    def test_stack_tensors_shape_mismatch_preserves_entries(self, td_name, device):
+        if td_name != "td":
+            pytest.skip("failure atomicity is independent of the container type")
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 4, device=device)
+        td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.stack_tensors("a", "b", out_key="c")
+        assert "a" in td
+        assert "b" in td
+        assert "c" not in td
+        assert td.get("a") is a
+        assert td.get("b") is b
+        assert torch.equal(td.get("a"), torch.zeros(2, 3, device=device))
+        assert torch.equal(td.get("b"), torch.ones(2, 4, device=device))
+
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 4, device=device)
+        td = TensorDict({"a": a, "b": b}, batch_size=[2], device=device)
+        with pytest.raises(RuntimeError):
+            td.stack_tensors("a", "b", out_key="a")
+        assert "a" in td
+        assert "b" in td
+        assert td.get("a") is a
+        assert td.get("b") is b
+
+    def test_stack_tensors_set_failure_preserves_entries(self, td_name, device):
+        if td_name != "td":
+            pytest.skip("failure atomicity is independent of the container type")
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        td = TensorDict({"a": a, "b": b}, batch_size=[2, 3], device=device)
+        with pytest.raises(RuntimeError):
+            td.stack_tensors("a", "b", out_key="c", dim=0)
+        assert "a" in td
+        assert "b" in td
+        assert "c" not in td
+        assert td.get("a") is a
+        assert td.get("b") is b
+
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        c = torch.full((2, 3), 4.0, device=device)
+        td = TensorDict({"a": a, "b": b, "c": c}, batch_size=[2, 3], device=device)
+        with pytest.raises(RuntimeError):
+            td.stack_tensors("a", "b", out_key="c", dim=0)
+        assert td.get("a") is a
+        assert td.get("b") is b
+        assert td.get("c") is c
+
+    def test_stack_tensors_out_key_is_input(self, td_name, device):
+        if td_name != "td":
+            pytest.skip("out_key policy is covered on TensorDict")
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        z = torch.full((2, 1), 2.0, device=device)
+        td = TensorDict({"z": z, "a": a, "b": b}, batch_size=[2], device=device)
+        td.stack_tensors("a", "b", out_key="b", dim=0)
+        assert list(td.keys()) == ["z", "b"]
+        assert torch.equal(td.get("b"), torch.stack([a, b], 0))
+        assert td.get("z") is z
+
+        a = torch.zeros(2, 3, device=device)
+        b = torch.ones(2, 3, device=device)
+        z = torch.full((2, 1), 2.0, device=device)
+        td = TensorDict({"a": a, "b": b, "z": z}, batch_size=[2], device=device)
+        td.stack_tensors("a", "b", out_key="b", dim=0, keep_entries=True)
+        assert list(td.keys()) == ["a", "b", "z"]
+        assert torch.equal(td.get("b"), torch.stack([a, b], 0))
+        assert td.get("a") is a
+        assert td.get("z") is z
 
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
