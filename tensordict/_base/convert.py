@@ -544,15 +544,18 @@ class _Conversion:
             round-trip through :meth:`~.to_pytree`:
 
             - a list of numbers comes back as a tensor;
-            - a dict holding a str, list or tuple, or an empty dict, comes
-              back as a ``GenericDict`` named tuple;
-            - a tuple holding anything but tensors, numbers, dicts and named
-              tuples (such as a str or a list), or holding one of the dicts
-              above, makes :meth:`~.to_pytree` raise a ``ValueError``, and an
-              empty tuple comes back as an empty ``GenericDict``.
+            - a dict holding a str, list or tuple, and an empty dict or named
+              tuple (or a dict or named tuple holding one), come back as a
+              ``GenericDict`` named tuple;
+            - a tuple subclass, such as a ``torch.return_types`` result, and
+              a plain tuple holding anything but tensors, Python ints and
+              floats, dicts and named tuples (such as a str, a list or a NumPy
+              number), or holding one of the dicts or named tuples above, make
+              :meth:`~.to_pytree` raise a ``ValueError``, and an empty tuple
+              comes back as an empty ``GenericDict``.
 
-            The other dict, named tuple and tuple fields come back with their
-            own type.
+            The other dict, named tuple and plain tuple fields come back with
+            their own type.
 
         Examples:
             >>> import torch
