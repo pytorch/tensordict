@@ -162,7 +162,14 @@ _TENSOR_ONLY_TYPE_ERR = TypeError(
     "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
 )
 # flags accepted by the bracket form TensorClass["autocast", ...]
-_TENSORCLASS_FLAGS = ("autocast", "nocast", "frozen", "tensor_only", "shadow")
+_TENSORCLASS_FLAGS = (
+    "autocast",
+    "nocast",
+    "frozen",
+    "tensor_only",
+    "shadow",
+    "skip_post_init_on_rebuild",
+)
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
 
@@ -237,6 +244,7 @@ _METHOD_FROM_TD = [
     "memmap_",
     "memmap_like",
     "memmap_refresh_",
+    "pack",
     "save",
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict', no wrap of result
@@ -454,7 +462,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "div",
     "div_",
     "double",
-    "empty",
     "erf",
     "erf_",
     "erfc",
@@ -670,6 +677,7 @@ class _tensorclass_dec:
     nocast: bool
     shadow: bool
     tensor_only: bool
+    skip_post_init_on_rebuild: bool
 
     def __new__(
         cls,
@@ -678,6 +686,7 @@ class _tensorclass_dec:
         nocast: bool = False,
         shadow: bool = False,
         tensor_only: bool = False,
+        skip_post_init_on_rebuild: bool = False,
     ):
         if not isinstance(autocast, bool):
             clz = autocast
@@ -699,6 +708,7 @@ class _tensorclass_dec:
         nocast: bool = False,
         shadow: bool = False,
         tensor_only: bool = False,
+        skip_post_init_on_rebuild: bool = False,
     ):
         if autocast and nocast:
             raise TypeError("autocast is exclusive with nocast.")
@@ -711,6 +721,7 @@ class _tensorclass_dec:
         self.nocast = nocast
         self.shadow = shadow
         self.tensor_only = tensor_only
+        self.skip_post_init_on_rebuild = skip_post_init_on_rebuild
 
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
@@ -722,6 +733,7 @@ class _tensorclass_dec:
         clz._shadow = self.shadow
         clz._frozen = self.frozen
         clz._tensor_only = self.tensor_only
+        clz._skip_post_init_on_rebuild = self.skip_post_init_on_rebuild
         return clz
 
 
@@ -902,6 +914,7 @@ def tensorclass(
     nocast: bool = False,
     shadow: bool = False,
     tensor_only: bool = False,
+    skip_post_init_on_rebuild: bool = False,
 ) -> T | None:
     """A decorator that turns a class with annotated fields into a tensorclass.
 
@@ -935,6 +948,16 @@ def tensorclass(
             to a tensor are cast. Reading a field then skips the lookup in the
             non-tensor storage. Exclusive with ``autocast`` and ``nocast``.
             Defaults to ``False``.
+        skip_post_init_on_rebuild (bool, optional): if ``True``,
+            ``__post_init__`` runs in the generated ``__init__``,
+            ``from_tensordict``, ``from_dict``, the other constructors such
+            as ``from_any`` or ``fromkeys``, and when the data is loaded or
+            received from another process, but not when tensordict makes a
+            new instance from the data of an existing one, as in indexing,
+            ``clone``, ``to``, ``apply`` or ``torch.stack``. Defaults to
+            ``False``: ``__post_init__`` also runs on these rebuilds, except
+            on the shells that ``empty()`` builds. On a lazy stack it runs on
+            each stacked instance.
 
     Returns:
         the tensorclass, or a decorator if the flags are given without a
@@ -1012,6 +1035,19 @@ def tensorclass(
         >>> # to appropriately cast the data to the right type
         >>> assert isinstance(nesting_data.nested, type(data))
 
+        ``skip_post_init_on_rebuild`` checks the data once, when it comes in:
+
+        >>> @tensorclass(skip_post_init_on_rebuild=True)
+        ... class Ragged:
+        ...     offsets: torch.Tensor
+        ...     indices: torch.Tensor
+        ...     def __post_init__(self):
+        ...         if int(self.offsets[-1]) != len(self.indices):
+        ...             raise ValueError("the last offset must be len(indices)")
+        >>> r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3))
+        >>> r.clone().offsets  # not checked again
+        tensor([0, 2, 3])
+
     """
 
     def wrap(cls):
@@ -1021,6 +1057,7 @@ def tensorclass(
             nocast=nocast,
             shadow=shadow,
             tensor_only=tensor_only,
+            skip_post_init_on_rebuild=skip_post_init_on_rebuild,
         )(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
@@ -1089,6 +1126,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "_nocast",
         "_set_dict_warn_msg",
         "_shadow",
+        "_skip_post_init_on_rebuild",
         "_tensor_only",
         "_tensorclass_fields",
         "_tensordict_fields",
@@ -1455,6 +1493,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.get_at = _get_at
     if not hasattr(cls, "unbind") and "unbind" not in expected_keys:
         cls.unbind = _unbind
+    if not hasattr(cls, "empty"):
+        cls.empty = _empty
     cls._unbind = _unbind
     if not hasattr(cls, "state_dict") and "state_dict" not in expected_keys:
         cls.state_dict = _state_dict
@@ -1632,6 +1672,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
     cls._is_tensorclass = True
+    # The tensorclass decorator sets it from its flag
+    cls._skip_post_init_on_rebuild = False
     return cls
 
 
@@ -2390,6 +2432,8 @@ def _from_tensordict(
     tensordict: TensorDictBase,
     non_tensordict: dict | None = None,
     safe: bool = True,
+    *,
+    rebuild: bool = True,
 ) -> Self:  # noqa: D417
     """Tensor class wrapper to instantiate a new tensor class object.
 
@@ -2397,6 +2441,10 @@ def _from_tensordict(
         tensordict (TensorDictBase): Dictionary of tensor types
         non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
         safe (bool): Whether to raise an error if the tensordict is not a TensorDictBase instance
+        rebuild (bool): Whether the data comes from an existing instance, as in
+            ``clone()`` or indexing, rather than from outside, as in
+            ``from_tensordict()`` or a load. A class with ``skip_post_init_on_rebuild``
+            does not run ``__post_init__`` on a rebuild.
 
     """
     if safe and not isinstance(tensordict, TensorDictBase):
@@ -2472,11 +2520,35 @@ def _from_tensordict(
         object.__setattr__(tc, "_non_tensordict", non_tensordict)
     # since we aren't calling the dataclass __init__, we need to manually
     # check whether a __post_init__ method has been defined and invoke it
-    if hasattr(cls, "__post_init__") and (
-        is_compiling() or not _SKIP_TENSORCLASS_POST_INIT.get()
+    if (
+        hasattr(cls, "__post_init__")
+        and not (rebuild and cls._skip_post_init_on_rebuild)
+        and (is_compiling() or not _SKIP_TENSORCLASS_POST_INIT.get())
     ):
-        tc.__post_init__()
+        if isinstance(tensordict, LazyStackedTensorDict):
+            # Run it on each stacked instance, which sees its own fields: on
+            # the stack, reading a field of uneven shape would raise. The
+            # fields it sets go to the members, which the stack holds.
+            _post_init_members(cls, tensordict, non_tensordict)
+        else:
+            tc.__post_init__()
     return tc
+
+
+def _post_init_members(cls, tensordict: LazyStackedTensorDict, non_tensordict: dict):
+    """Run ``cls.__post_init__`` on an instance built from each member of ``tensordict``.
+
+    The keys were checked on the stack: a member may hold more keys than the
+    stack, which keeps those that all the members share.
+    """
+    for member in tensordict.tensordicts:
+        if isinstance(member, LazyStackedTensorDict):
+            _post_init_members(cls, member, non_tensordict)
+            continue
+        tc = cls.__new__(cls)
+        object.__setattr__(tc, "_tensordict", member)
+        object.__setattr__(tc, "_non_tensordict", dict(non_tensordict))
+        tc.__post_init__()
 
 
 def _tensorclass_keys(cls, tensordict: TensorDict) -> list[str]:
@@ -2502,7 +2574,7 @@ def _set_tensorclass_entries(cls, tensordict: TensorDict, keys: list[str]) -> No
                 _set_tensorclass_entries(tensorclass_type, entry, nested_keys)
         tensordict._set_str(
             key,
-            tensorclass_type._from_tensordict(entry),
+            tensorclass_type._from_tensordict(entry, rebuild=False),
             validated=True,
             inplace=False,
             non_blocking=False,
@@ -2559,7 +2631,7 @@ def _from_tensordict_public(
             _set_tensorclass_entries(cls, tensordict, keys)
             if is_locked:
                 tensordict.lock_()
-    return cls._from_tensordict(tensordict, non_tensordict, safe)
+    return cls._from_tensordict(tensordict, non_tensordict, safe, rebuild=False)
 
 
 def _memmap_(
@@ -2769,7 +2841,7 @@ def _load_memmap(
         if not issubclass(cls, NonTensorDataBase):
             raise ValueError("The _tensordict directory seems to be missing.")
         td = TensorDict(device="cpu") if tc_out is None else tc_out._tensordict
-    result = cls._from_tensordict(td, non_tensordict)
+    result = cls._from_tensordict(td, non_tensordict, rebuild=False)
     if tc_out is not None:
         tc_out._non_tensordict.clear()
         tc_out._non_tensordict.update(result._non_tensordict)
@@ -3799,14 +3871,21 @@ def _update_at_(
     return self
 
 
+# The TensorDict classmethods whose inputs are instances: the others, such as
+# from_any or fromkeys, build an instance from new data.
+_REBUILD_CLASSMETHODS = frozenset({"stack", "cat", "lazy_stack", "maybe_dense_stack"})
+
+
 def _wrap_classmethod(td_cls, cls, func):
+    rebuild = func.__name__ in _REBUILD_CLASSMETHODS
+
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         res = func.__get__(td_cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             # create a new tensorclass from res and copy the metadata from self
-            return cls._from_tensordict(res)
+            return cls._from_tensordict(res, rebuild=rebuild)
         return res
 
     return wrapped_func
@@ -5072,6 +5151,20 @@ def _unbind(self, dim: int):
     )
 
 
+_empty_and_post_init = _wrap_td_method("empty")
+
+
+def _empty(self, *args, **kwargs):
+    # The result is a shell that the caller fills: __post_init__ would see no
+    # fields. Dynamo cannot set a ContextVar, so compiled code still runs it.
+    token = None if is_compiling() else _SKIP_TENSORCLASS_POST_INIT.set(True)
+    try:
+        return _empty_and_post_init(self, *args, **kwargs)
+    finally:
+        if token is not None:
+            _SKIP_TENSORCLASS_POST_INIT.reset(token)
+
+
 ################
 # Custom classes
 # --------------
@@ -5120,6 +5213,7 @@ def _patch_tc(cls):
     cls.non_tensor_items = _non_tensor_items
     cls.unbind = _unbind
     cls._unbind = _unbind
+    cls.empty = _empty
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
     cls._memmap_ = _memmap_
@@ -5185,6 +5279,7 @@ class _TensorClassMeta(abc.ABCMeta):
         frozen=None,
         tensor_only=None,
         shadow=None,
+        skip_post_init_on_rebuild=None,
         **kwargs,
     ):
         # Create the class using the ABCMeta's __new__ method
@@ -5201,6 +5296,10 @@ class _TensorClassMeta(abc.ABCMeta):
             tensor_only = cls._tensor_only
         if shadow is None and hasattr(cls, "_shadow"):
             shadow = cls._shadow
+        if skip_post_init_on_rebuild is None and hasattr(
+            cls, "_skip_post_init_on_rebuild"
+        ):
+            skip_post_init_on_rebuild = cls._skip_post_init_on_rebuild
         if name == "TensorClass":
             # if "tensordict.tensorclass" in namespace.get(
             #     "__module__", ""
@@ -5221,6 +5320,7 @@ class _TensorClassMeta(abc.ABCMeta):
                 autocast=bool(autocast),
                 tensor_only=bool(tensor_only),
                 shadow=bool(shadow),
+                skip_post_init_on_rebuild=bool(skip_post_init_on_rebuild),
             )(cls)
 
         return cls
@@ -5419,6 +5519,21 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
           ...     sum: torch.Tensor
           >>> Foo(sum=torch.ones(3), batch_size=[3]).sum
           tensor([1., 1., 1.])
+
+    - ``skip_post_init_on_rebuild``: ``__post_init__`` runs on the data that
+      comes in (the generated ``__init__``, ``from_tensordict``,
+      ``from_dict``, the other constructors such as ``from_any`` or
+      ``fromkeys``, and loads), but not when tensordict makes a new instance
+      from an existing one (indexing, ``clone``, ``to``, ``apply``, stacking
+      and the other operations). Subclasses inherit the flag.
+
+          >>> class Foo(TensorClass["skip_post_init_on_rebuild"]):
+          ...     x: torch.Tensor
+          ...     def __post_init__(self):
+          ...         print("checked")
+          >>> foo = Foo(x=torch.zeros(3))
+          checked
+          >>> foo = foo.clone()
 
     ``autocast``, ``nocast`` and ``tensor_only`` are exclusive: combining two
     of them raises a ``TypeError``.

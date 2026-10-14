@@ -2629,6 +2629,7 @@ def _any_unbatched(tensors) -> bool:
 # tensor does not, and computes ``tensor + alpha * other`` in one kernel.
 # Passing alpha makes Python pick it, since the number overload has no alpha.
 _FOREACH_ADD_TENSOR = frozenset({"add", "add_", "sub", "sub_"})
+_FOREACH_SUB = frozenset({"sub", "sub_"})
 _FLOAT32_64 = (torch.float32, torch.float64)
 # A subclass with __torch_function__ would see get_device and, for a sub,
 # _foreach_add
@@ -2682,7 +2683,9 @@ def _foreach(name: str, tensors, *args, **kwargs):
     The same per-tensor path is taken when ``tensors`` or a list in ``args``
     holds an unbatched tensor (e.g. :class:`~tensordict.UnbatchedTensor`): its
     ``__torch_dispatch__`` would handle the whole ``_foreach`` call and wrap
-    every output in an unbatched tensor of one batch size.
+    every output in an unbatched tensor of one batch size. It is also taken for
+    ``sub`` and ``sub_`` with one tensor and ``alpha``, for which
+    ``torch._foreach_sub`` has no overload.
     """
     # Dynamo folds the depth to a guarded constant. Do not test
     # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
@@ -2707,7 +2710,16 @@ def _foreach(name: str, tensors, *args, **kwargs):
             op = torch._foreach_add_ if name.endswith("_") else torch._foreach_add
             sign = -1 if name.startswith("sub") else 1
             return op(tensors, other, alpha=sign * kwargs.get("alpha", 1))
-        return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
+        if not (
+            name in _FOREACH_SUB
+            and args
+            and isinstance(args[0], Tensor)
+            and "alpha" in kwargs
+            and type(kwargs["alpha"]) is not bool
+        ):
+            return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
+        # torch._foreach_sub has no overload for one tensor with alpha
+        # (_foreach_add has): subtract it from one tensor at a time
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [
         arg if isinstance(arg, (list, tuple)) else [arg] * len(tensors) for arg in args

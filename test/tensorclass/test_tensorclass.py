@@ -54,6 +54,7 @@ from tensordict import (
     NonTensorData,
     NonTensorDataBase,
     NonTensorStack,
+    pad_sequence,
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_list_to_stack,
@@ -675,6 +676,72 @@ class Ragged:
             raise ValueError(f"offsets must start at 0, got {self.offsets}")
 
 
+_MESH_POST_INIT_CALLS = []
+
+
+class _ValidatingMesh(TensorClass):
+    # __post_init__ reads the shape of a leaf, which raises on a lazy stack of
+    # meshes of different sizes and on a shell without fields.
+    points: torch.Tensor
+    cells: torch.Tensor
+    mask: torch.Tensor = None
+
+    def __post_init__(self):
+        _MESH_POST_INIT_CALLS.append(self.points.shape)
+        if self.points.shape[-1] != 3:
+            raise ValueError(f"points must be (..., 3), got {tuple(self.points.shape)}")
+        if self.mask is None:
+            self.mask = torch.ones(self.points.shape[:-1], dtype=torch.bool)
+
+
+_REBUILD_CALLS = []
+
+
+class _Counted(TensorClass):
+    # Module level, so that loading resolves these classes. __post_init__
+    # records the class of each instance it runs on.
+    offsets: torch.Tensor
+    indices: torch.Tensor
+
+    def __post_init__(self):
+        _REBUILD_CALLS.append(type(self))
+
+
+class _SkipCounted(_Counted["skip_post_init_on_rebuild"]):
+    pass
+
+
+class _CountedHolder(TensorClass):
+    adj: _SkipCounted
+    x: torch.Tensor
+
+    def __post_init__(self):
+        _REBUILD_CALLS.append(type(self))
+
+
+# The ops that rebuild an instance from the data of an existing one
+_REBUILD_OPS = {
+    "getitem": lambda tc: tc[:2],
+    "clone": lambda tc: tc.clone(),
+    "to": lambda tc: tc.to(torch.float64),
+    "apply": lambda tc: tc.apply(lambda t: t),
+    "add": lambda tc: tc + 1,
+    "detach": lambda tc: tc.detach(),
+    "copy": lambda tc: tc.copy(),
+    "select": lambda tc: tc.select(next(iter(tc.keys()))),
+    "exclude": lambda tc: tc.exclude(next(iter(tc.keys()))),
+    "stack": lambda tc: torch.stack([tc, tc]),
+    "lazy_stack": lambda tc: lazy_stack([tc, tc]),
+    "cat": lambda tc: torch.cat([tc, tc]),
+    "stack_classmethod": lambda tc: type(tc).stack([tc, tc]),
+    "lazy_stack_classmethod": lambda tc: type(tc).lazy_stack([tc, tc]),
+    "cat_classmethod": lambda tc: type(tc).cat([tc, tc]),
+    "unbind": lambda tc: tc.unbind(0),
+    "consolidate": lambda tc: tc.consolidate(),
+    "memmap": lambda tc: tc.memmap(),
+}
+
+
 @dataclasses.dataclass
 class MyDataClass:
     a: int
@@ -919,6 +986,30 @@ class TestTensorClass:
                 assert not obj.is_locked
             assert obj.is_locked
         assert not obj.is_locked
+
+    @pytest.mark.parametrize(
+        "op,args,kwargs",
+        [
+            ("squeeze", (0,), {}),
+            ("squeeze", (-1,), {}),
+            ("flatten", (0, None), {}),
+            ("flatten", (), {"end_dim": None}),
+            ("transpose", (), {"dim0": 0, "dim1": 1}),
+            ("swapaxes", (), {"axis0": 0, "axis1": 1}),
+        ],
+    )
+    def test_shape_op_context_manager(self, op, args, kwargs):
+        # the shape op is undone on exit and the values written in the block stay
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+
+        obj = MyClass(X=torch.zeros(2, 3), batch_size=[2, 3])
+        with getattr(obj, op)(*args, **kwargs) as obj_op:
+            obj_op.X += 1
+        assert obj.batch_size == (2, 3)
+        assert obj.X.shape == (2, 3)
+        assert (obj.X == 1).all()
 
     def test_lock_context_manager_restores_on_error(self):
         # lock_() and unlock_() undo their change also when the body raises
@@ -1215,6 +1306,35 @@ class TestTensorClass:
             match=("Multiple dispatch failed|no implementation found"),
         ):
             torch.cat([data1, data3], dim=0)
+
+    def test_pack(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str = None
+            y: "MyDataNested" = None
+
+        data = MyDataNested(
+            X=torch.randn(3, 2),
+            y=MyDataNested(X=torch.randn(3, 4), batch_size=[3, 4]),
+            batch_size=[3],
+        )
+        flat, layout = data.pack()
+        assert flat.shape == (3, 6)
+        assert layout.keys == ("X", ("y", "X"))
+        assert layout.cls is MyDataNested
+        out = layout.unpack(flat)
+        assert type(out) is MyDataNested
+        assert type(out.y) is MyDataNested
+        assert out.y.batch_size == (3, 4)
+        assert out.z is None
+        assert out.y.y is None
+        assert (out == data).all()
+        assert out.X._base is flat
+
+        data.z = "a string"
+        with pytest.raises(TypeError, match="non-tensor entry 'z'"):
+            data.pack()
 
     def test_classvar(self):
         @tensorclass
@@ -2514,6 +2634,175 @@ class TestTensorClass:
             MyDataPostInit._from_tensordict(
                 TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
             )
+
+    def test_post_init_lazy_stack(self):
+        # __post_init__ runs on each stacked instance, not on the stack
+        calls = _MESH_POST_INIT_CALLS
+        small = _ValidatingMesh(points=torch.rand(4, 3), cells=torch.zeros(2, 3))
+        large = _ValidatingMesh(points=torch.rand(6, 3), cells=torch.zeros(2, 3))
+        calls.clear()
+        batch = lazy_stack([small, large])
+        assert isinstance(batch, _ValidatingMesh)
+        assert isinstance(batch._tensordict, LazyStackedTensorDict)
+        assert calls == [(4, 3), (6, 3)]
+        calls.clear()
+        clone = batch.clone()
+        assert isinstance(clone, _ValidatingMesh)
+        assert calls == [(4, 3), (6, 3)]
+        assert clone[1].points.shape == (6, 3)
+        # a stack of stacks
+        calls.clear()
+        assert isinstance(lazy_stack([batch, batch]), _ValidatingMesh)
+        assert len(calls) == 4
+        # dense stacks keep one call, on the stacked instance
+        calls.clear()
+        torch.stack([small, small])
+        assert calls == [(2, 4, 3)]
+
+        # The members of a raw lazy stack are validated, and the fields set by
+        # __post_init__ land in the stack
+        raw = lazy_stack(
+            [
+                TensorDict(points=torch.rand(4, 3), cells=torch.zeros(2, 3)),
+                TensorDict(points=torch.rand(6, 3), cells=torch.zeros(2, 3)),
+            ]
+        )
+        calls.clear()
+        batch = _ValidatingMesh.from_tensordict(raw)
+        assert calls == [(4, 3), (6, 3)]
+        assert batch[0].mask.shape == (4,)
+        assert batch[1].mask.shape == (6,)
+        raw = lazy_stack(
+            [
+                TensorDict(points=torch.rand(4, 3), cells=torch.zeros(2, 3)),
+                TensorDict(points=torch.rand(6), cells=torch.zeros(2, 3)),
+            ]
+        )
+        with pytest.raises(ValueError, match="points must be"):
+            _ValidatingMesh.from_tensordict(raw)
+        # The stack's keys are those that all the members share: a member may
+        # hold one that is not a field
+        raw = lazy_stack(
+            [
+                TensorDict(points=torch.rand(4, 3), cells=torch.zeros(2, 3), foo=1),
+                TensorDict(points=torch.rand(6, 3), cells=torch.zeros(2, 3)),
+            ]
+        )
+        calls.clear()
+        batch = _ValidatingMesh.from_tensordict(raw)
+        assert calls == [(4, 3), (6, 3)]
+        calls.clear()
+        batch.clone()
+        assert calls == [(4, 3), (6, 3)]
+
+    def test_post_init_empty_shell(self):
+        # empty() and pad_sequence build shells that they fill afterwards:
+        # __post_init__ does not run on them
+        calls = _MESH_POST_INIT_CALLS
+        small = _ValidatingMesh(points=torch.rand(4, 3), cells=torch.zeros(2, 3))
+        large = _ValidatingMesh(points=torch.rand(6, 3), cells=torch.zeros(2, 3))
+        calls.clear()
+        for shell in (small.empty(), small.empty(recurse=True)):
+            assert isinstance(shell, _ValidatingMesh)
+            assert shell.points is None
+            assert shell.mask is None
+        shell = TensorDict(mesh=small).empty(recurse=True)
+        assert isinstance(shell["mesh"], _ValidatingMesh)
+        assert shell["mesh"].points is None
+        assert calls == []
+        # With a device, to() rebuilds the shell. The copy that empty() makes
+        # first runs __post_init__ on the full mesh.
+        shell = TensorDict(mesh=small).empty(recurse=True, device="cpu")
+        assert isinstance(shell["mesh"], _ValidatingMesh)
+        assert shell["mesh"].points is None
+        assert calls == [(4, 3)]
+        calls.clear()
+        padded = pad_sequence([small, large])
+        assert isinstance(padded, _ValidatingMesh)
+        assert padded.points.shape == (2, 6, 3)
+        assert padded.mask.shape == (2, 6)
+        assert calls == []
+        # the post-init of the other calls still runs
+        small.clone()
+        assert calls == [(4, 3)]
+
+    @pytest.mark.parametrize("op", list(_REBUILD_OPS))
+    def test_skip_post_init_on_rebuild(self, op):
+        calls = _REBUILD_CALLS
+        assert not _Counted._skip_post_init_on_rebuild
+        assert _SkipCounted._skip_post_init_on_rebuild
+        kwargs = {"offsets": torch.arange(3), "indices": torch.arange(3)}
+        tc = _Counted(**kwargs, batch_size=[3])
+        calls.clear()
+        _REBUILD_OPS[op](tc)
+        assert calls and set(calls) == {_Counted}
+        # The flag skips __post_init__ on rebuilds, and subclasses inherit it
+        tc = _SkipCounted(**kwargs, batch_size=[3])
+        assert calls[-1] is _SkipCounted
+        calls.clear()
+        result = _REBUILD_OPS[op](tc)
+        assert calls == []
+        result = result[0] if op == "unbind" else result
+        assert isinstance(result, _SkipCounted)
+        # Each class follows its own flag
+        holder = _CountedHolder(adj=tc, x=torch.zeros(3), batch_size=[3])
+        calls.clear()
+        _REBUILD_OPS[op](holder)
+        assert calls and set(calls) == {_CountedHolder}
+
+    def test_skip_post_init_on_rebuild_new_data(self, tmp_path):
+        # The calls that bring in data from outside still run __post_init__
+        calls = _REBUILD_CALLS
+        tc = _SkipCounted(offsets=torch.arange(3), indices=torch.arange(3))
+        holder = _CountedHolder(adj=tc, x=torch.zeros(()))
+        calls.clear()
+        _SkipCounted.from_tensordict(tc.to_tensordict())
+        assert calls == [_SkipCounted]
+        calls.clear()
+        _SkipCounted.from_dict(tc.to_dict())
+        assert calls == [_SkipCounted]
+        # The constructors that a tensorclass takes from TensorDict
+        calls.clear()
+        _SkipCounted.from_any(tc.to_dict())
+        assert calls == [_SkipCounted]
+        calls.clear()
+        _SkipCounted.fromkeys(["offsets", "indices"], 0)
+        assert calls == [_SkipCounted]
+        calls.clear()
+        _SkipCounted.from_list([{"offsets": 0, "indices": 1}] * 2)
+        assert calls == [_SkipCounted]
+        calls.clear()
+        _CountedHolder.from_tensordict(holder.to_tensordict())
+        assert calls == [_SkipCounted, _CountedHolder]
+        calls.clear()
+        _SkipCounted.from_tensordict(lazy_stack([tc.to_tensordict()] * 2))
+        assert calls == [_SkipCounted, _SkipCounted]
+        holder.memmap(tmp_path / "memmap")
+        holder.save(tmp_path / "data.tdz")
+        calls.clear()
+        loaded = TensorDict.load_memmap(tmp_path / "memmap")
+        assert isinstance(loaded.adj, _SkipCounted)
+        assert sorted(calls, key=str) == [_CountedHolder, _SkipCounted]
+        calls.clear()
+        TensorDict.load(tmp_path / "data.tdz")
+        assert sorted(calls, key=str) == [_CountedHolder, _SkipCounted]
+
+    def test_skip_post_init_on_rebuild_decorator(self):
+        calls = []
+
+        @tensorclass(skip_post_init_on_rebuild=True)
+        class Graph:
+            x: torch.Tensor
+
+            def __post_init__(self):
+                calls.append(self.x)
+
+        graph = Graph(x=torch.zeros(3), batch_size=[3])
+        assert len(calls) == 1
+        graph.clone()
+        graph[0]
+        assert len(calls) == 1
+        assert not tensorclass(type("Plain", (), {}))._skip_post_init_on_rebuild
 
     def test_pre_allocate(self):
         @tensorclass

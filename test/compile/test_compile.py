@@ -593,6 +593,24 @@ class TestTD:
         data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         assert (cat_tds(data0, data1) == cat_tds_c(data0, data1)).all()
 
+    @pytest.mark.parametrize("dim", [-1, 1])
+    def test_pack(self, mode, dim):
+        data = TensorDict(
+            {"a": torch.randn(2, 4), "b": {"c": torch.randn(2, 4, 3, 2)}}, [2, 4]
+        )
+        _, layout = data.pack(dim=dim)
+
+        def pack_unpack(td):
+            flat, _ = td.pack(dim=dim, layout=layout)
+            return layout.unpack(flat * 2)
+
+        pack_unpack_c = torch.compile(pack_unpack, fullgraph=True, mode=mode)
+        out = pack_unpack_c(data)
+        assert (out == data * 2).all()
+        assert out["b"].batch_size == (2, 4)
+        out = pack_unpack_c(data)
+        assert (out == data * 2).all()
+
     def test_reshape(self, mode):
         def reshape(td):
             return td.reshape(2, 2)
@@ -3462,6 +3480,14 @@ class _PostInitTC:
         self.x = self.x * 2
 
 
+@tensorclass(skip_post_init_on_rebuild=True)
+class _SkipRebuildPostInitTC:
+    x: torch.Tensor
+
+    def __post_init__(self):
+        self.x = self.x * 2
+
+
 @tensorclass
 class _ConcreteDefaultTC:
     cache: torch.Tensor = torch.zeros(3)
@@ -3506,6 +3532,23 @@ class TestTCPostInitCompile:
 
         inp = torch.ones(3)
         torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
+
+    @pytest.mark.parametrize("cls", [_PostInitTC, _SkipRebuildPostInitTC])
+    def test_skip_post_init_on_rebuild_under_compile(self, cls):
+        # Compiled code makes the same __post_init__ calls as eager code: the
+        # flag is a class attribute, which Dynamo reads as a constant
+        def fn(x):
+            tc = cls(x=x)
+            td = TensorDict(x=x, batch_size=())
+            return tc.clone().x, tc[...].x, cls.from_tensordict(td).x
+
+        inp = torch.ones(3)
+        expected = fn(inp)
+        doubled = torch.full((3,), 2.0)
+        rebuilt = doubled if cls is _SkipRebuildPostInitTC else doubled * 2
+        torch.testing.assert_close(expected, (rebuilt, rebuilt, doubled))
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        torch.testing.assert_close(compiled(inp), expected)
 
 
 class TestTCDefaultsCompile:

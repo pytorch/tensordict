@@ -13,6 +13,7 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import operator
 from collections.abc import Iterable
@@ -22,6 +23,7 @@ import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
+    _is_leaf_nontensor,
     _is_tensor_collection,
     is_tensor_collection,
     NO_DEFAULT,
@@ -83,6 +85,151 @@ def _repeat_interleave_batch_size(
         else:
             new_batch_size.append(s)
     return torch.Size(new_batch_size)
+
+
+@dataclasses.dataclass(frozen=True)
+class PackLayout:
+    """The layout of a tensordict packed by :meth:`~tensordict.TensorDictBase.pack`.
+
+    It records the column of each leaf in the packed tensor, and the nesting,
+    batch dimensions and classes needed to rebuild the tensordict with
+    :meth:`unpack`. It is frozen, hashable and compares by value, so a module
+    can cache it and ``torch.compile`` can treat it as a constant.
+
+    Only tensorclasses are rebuilt with their class. Other subclasses of
+    :class:`~tensordict.TensorDictBase`, such as
+    :class:`~tensordict.TypedTensorDict` or
+    :class:`~tensordict.nn.TensorDictParams`, come back as a
+    :class:`~tensordict.TensorDict`.
+
+    Attributes:
+        keys (tuple of NestedKey): the leaf keys in column order.
+        shapes (tuple of torch.Size): the feature shape of each leaf, that is
+            its shape after the batch dimensions of the packed tensordict.
+            Lists and tuples of ints are converted to ``torch.Size``.
+        dim (int): the position of the packed dimension in the packed tensor.
+            :meth:`~tensordict.TensorDictBase.pack` stores it counted from the
+            end (a negative int), so ``td.pack(1)`` and ``td.pack(-1)`` give
+            equal layouts when ``td`` has one batch dimension, and ``flat``
+            may have extra leading batch dimensions.
+        nested (tuple): one ``(key, batch_shape, cls)`` entry per nested tensor
+            collection, where ``batch_shape`` is its batch shape after the
+            batch dimensions of the root and ``cls`` is its tensorclass, or
+            ``None`` for a tensordict. Batch shapes given as lists or tuples
+            of ints are converted to ``torch.Size``.
+        device (torch.device or None): the device of the packed tensordict.
+        cls (type or None): the tensorclass of the packed tensordict, or ``None``.
+        offsets (tuple of int): the first column of each leaf.
+        numel (int): the number of columns of the packed tensor.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(p=torch.zeros(5), v=torch.ones(5, 3), batch_size=[5])
+        >>> flat, layout = td.pack()
+        >>> layout.keys, layout.offsets, layout.numel
+        (('p', 'v'), (0, 1), 4)
+        >>> out = layout.unpack(flat[:2])
+        >>> out["v"].shape
+        torch.Size([2, 3])
+
+    """
+
+    keys: tuple[NestedKey, ...]
+    shapes: tuple[torch.Size, ...]
+    dim: int = -1
+    nested: tuple[tuple[NestedKey, torch.Size, type | None], ...] = ()
+    device: torch.device | None = None
+    cls: type | None = None
+    offsets: tuple[int, ...] = dataclasses.field(init=False)
+    numel: int = dataclasses.field(init=False)
+
+    def __post_init__(self):
+        object.__setattr__(
+            self, "shapes", tuple(torch.Size(shape) for shape in self.shapes)
+        )
+        object.__setattr__(
+            self,
+            "nested",
+            tuple(
+                (key, torch.Size(batch_shape), cls)
+                for key, batch_shape, cls in self.nested
+            ),
+        )
+        offsets = []
+        numel = 0
+        for shape in self.shapes:
+            offsets.append(numel)
+            numel += math.prod(shape)
+        object.__setattr__(self, "offsets", tuple(offsets))
+        object.__setattr__(self, "numel", numel)
+
+    def unpack(self, flat: torch.Tensor) -> TensorDictBase:
+        """Rebuilds a tensordict from a packed tensor.
+
+        The leaves of the result are views of ``flat``. Its batch size is the
+        shape of ``flat`` without the packed dimension, so ``flat`` may have
+        other batch dimensions than the packed tensordict, for instance after
+        an ``index_select``.
+
+        Args:
+            flat (torch.Tensor): a tensor with :attr:`numel` entries along
+                dimension :attr:`dim`.
+
+        Returns:
+            a :class:`~tensordict.TensorDict`, or an instance of :attr:`cls`,
+            on the device of ``flat`` if the packed tensordict had a device.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(p=torch.zeros(5), v=torch.ones(5, 3), batch_size=[5])
+            >>> flat, layout = td.pack()
+            >>> out = layout.unpack(flat)
+            >>> assert (out == td).all()
+            >>> out["p"].data_ptr() == flat.data_ptr()
+            True
+
+        """
+        from tensordict._td import TensorDict
+
+        ndim = flat.ndim
+        dim = self.dim + ndim if self.dim < 0 else self.dim
+        if not 0 <= dim < ndim:
+            raise IndexError(
+                f"dim {self.dim} is out of range for a tensor with {ndim} dimensions."
+            )
+        if flat.shape[dim] != self.numel:
+            raise ValueError(
+                f"Expected {self.numel} entries along dim {self.dim} of the packed "
+                f"tensor, got {flat.shape[dim]}."
+            )
+        flat = flat.movedim(dim, -1)
+        batch_size = flat.shape[:-1]
+        device = flat.device if self.device is not None else None
+        out = TensorDict(batch_size=batch_size, device=device)
+        for key, batch_shape, _ in self.nested:
+            out.set(key, TensorDict(batch_size=batch_size + batch_shape, device=device))
+        for key, shape, offset in zip(self.keys, self.shapes, self.offsets):
+            value = flat.narrow(-1, offset, math.prod(shape))
+            value = value.unflatten(-1, shape) if shape else value.squeeze(-1)
+            out.set(key, value)
+        # children come after their parents in self.nested
+        for key, _, cls in reversed(self.nested):
+            if cls is not None:
+                out.set(key, cls._from_tensordict(out.get(key)))
+        if self.cls is not None:
+            return self.cls._from_tensordict(out)
+        return out
+
+
+def _has_exclusive_keys(data) -> bool:
+    # Whether data is a lazy stack whose members have different keys.
+    from tensordict._lazy import LazyStackedTensorDict
+
+    if _is_tensorclass(type(data)):
+        data = data._tensordict
+    return isinstance(data, LazyStackedTensorDict) and data._has_exclusive_keys
 
 
 class _ShapeOps:
@@ -1106,6 +1253,163 @@ class _ShapeOps:
                 )
             tensors = [self.get(key) for key in keys]
         return torch.cat(tensors, dim, out=out)
+
+    def pack(
+        self, dim: int = -1, *, layout: PackLayout | None = None
+    ) -> tuple[torch.Tensor, PackLayout]:
+        """Packs all the leaves of a tensordict into one tensor of features.
+
+        Each leaf is flattened after the batch dimensions, and the leaves are
+        concatenated in the order of ``keys(True, True, sort=True)``, so the
+        columns depend on the set of keys only. Leaves can have different
+        ranks. The result has shape ``(*batch_size, F)`` for ``dim=-1``, where
+        ``F`` is the sum of the numbers of features of the leaves, and it is
+        contiguous for any ``dim``. :meth:`PackLayout.unpack
+        <tensordict.PackLayout.unpack>` inverts it.
+
+        Packing along the last dim copies the data once, with one
+        :func:`torch.cat`. Along another dim the result can take a second
+        copy: :func:`torch.cat` keeps the channels-last strides that moving
+        the feature dim gives a 4-d or 5-d result, and the result is then made
+        contiguous.
+
+        All the leaves must share one dtype and one device. Non-tensor data
+        cannot be packed: drop it with :meth:`filter_non_tensor_data` first.
+        A lazy stack packs like its dense equivalent if all its members have
+        the same keys and feature shapes.
+
+        Args:
+            dim (int, optional): the position of the packed dimension in the
+                result, in ``[-(batch_dims + 1), batch_dims]`` as for
+                :func:`torch.stack`. Defaults to ``-1``.
+
+        Keyword Args:
+            layout (PackLayout, optional): a layout to pack into. The columns
+                then follow its key order, and a missing, extra or reshaped
+                leaf raises. ``dim`` must match the layout's dim.
+
+        Returns:
+            the packed tensor and its :class:`~tensordict.PackLayout`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     p=torch.zeros(5),
+            ...     v=torch.ones(5, 3),
+            ...     nested={"stress": torch.ones(5, 3, 3)},
+            ...     batch_size=[5],
+            ... )
+            >>> flat, layout = td.pack()
+            >>> flat.shape
+            torch.Size([5, 13])
+            >>> layout.keys
+            (('nested', 'stress'), 'p', 'v')
+            >>> out = layout.unpack(flat.index_select(0, torch.tensor([0, 2])))
+            >>> out.batch_size
+            torch.Size([2])
+            >>> flat2, _ = td.pack(layout=layout)
+            >>> assert (flat2 == flat).all()
+
+        """
+        batch_size = self.batch_size
+        batch_dims = len(batch_size)
+        if not -batch_dims - 1 <= dim <= batch_dims:
+            raise IndexError(
+                f"dim {dim} is out of range for packing a tensordict with "
+                f"{batch_dims} batch dimensions."
+            )
+        pos = dim + batch_dims + 1 if dim < 0 else dim
+        if _has_exclusive_keys(self):
+            raise RuntimeError(
+                "Cannot pack a lazy stack whose members have different keys."
+            )
+        leaves = {}
+        nested = []
+        for key, value in self.items(
+            True, False, is_leaf=_is_leaf_nontensor, sort=True
+        ):
+            if is_non_tensor(value):
+                raise TypeError(
+                    f"Cannot pack the non-tensor entry {key!r}. Drop the "
+                    "non-tensor entries with filter_non_tensor_data() first."
+                )
+            if _is_tensor_collection(type(value)):
+                if _has_exclusive_keys(value):
+                    raise RuntimeError(
+                        f"Cannot pack the lazy stack at {key!r}: its members "
+                        "have different keys."
+                    )
+                cls = type(value)
+                nested.append(
+                    (
+                        key,
+                        value.batch_size[batch_dims:],
+                        cls if _is_tensorclass(cls) else None,
+                    )
+                )
+            else:
+                leaves[key] = value
+        if layout is not None:
+            layout_pos = layout.dim + batch_dims + 1 if layout.dim < 0 else layout.dim
+            if layout_pos != pos:
+                raise ValueError(
+                    f"Cannot pack along dim {dim} with a layout packed along "
+                    f"dim {layout.dim}."
+                )
+            if set(leaves) != set(layout.keys):
+                raise KeyError(
+                    "The leaves of the tensordict differ from the keys of the "
+                    f"layout: {sorted(leaves, key=str)} vs "
+                    f"{sorted(layout.keys, key=str)}."
+                )
+            leaves = {key: leaves[key] for key in layout.keys}
+        keys = tuple(leaves)
+        shapes = tuple(value.shape[batch_dims:] for value in leaves.values())
+        if layout is not None and shapes != layout.shapes:
+            raise ValueError(
+                "The feature shapes of the leaves differ from those of the "
+                f"layout: {shapes} vs {layout.shapes}."
+            )
+        tensors = []
+        dtype = device = None
+        for key, value in leaves.items():
+            if dtype is None:
+                dtype, device = value.dtype, value.device
+            elif value.dtype != dtype:
+                raise TypeError(
+                    f"Cannot pack leaves of different dtypes: {dtype} and "
+                    f"{value.dtype} at {key!r}. Cast the tensordict first, e.g. "
+                    "with float()."
+                )
+            elif value.device != device:
+                raise RuntimeError(
+                    f"Cannot pack leaves on different devices: {device} and "
+                    f"{value.device} at {key!r}."
+                )
+            value = (
+                value.flatten(batch_dims)
+                if value.ndim > batch_dims
+                else value[..., None]
+            )
+            tensors.append(value.movedim(-1, pos))
+        if tensors:
+            # cat follows the memory format of its inputs, which movedim makes
+            # channels-last for some ranks
+            flat = torch.cat(tensors, pos).contiguous()
+        else:
+            flat = torch.empty(
+                (*batch_size[:pos], 0, *batch_size[pos:]), device=self.device
+            )
+        cls = type(self)
+        return flat, PackLayout(
+            keys=keys,
+            shapes=shapes,
+            dim=pos - batch_dims - 1,
+            nested=tuple(nested),
+            device=self.device,
+            cls=cls if _is_tensorclass(cls) else None,
+        )
 
     def stack_from_tensordict(
         self,

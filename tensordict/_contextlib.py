@@ -176,7 +176,7 @@ LAST_OP_MAPS["unlock_"] = _reverse_unlock
 
 
 def _reverse_transpose(self, args, kwargs, out):
-    dim0, dim1 = args
+    dim0, dim1 = (*args, *kwargs.values())
     if not out.is_locked:
         return out.update(self.transpose(dim0, dim1), inplace=False)
     else:
@@ -226,6 +226,10 @@ def _reverse_flatten(self, args, kwargs, out):
         if not out.is_locked:
             return out.update(self, inplace=False)
         return out.update_(self)
+    if dim0 is None:
+        dim0 = 0
+    if dim1 is None:
+        dim1 = -1
     if dim1 < 0:
         dim1 = out.ndim + dim1
     if dim0 < 0:
@@ -419,6 +423,10 @@ def _reverse_squeeze(self, args, kwargs, out):
         raise RuntimeError(
             "Cannot use td.squeeze() as a decorator if the dimension is implicit."
         )
+    if self.batch_dims == out.batch_dims:
+        # The dim was not of size 1: squeeze returned its input, so the block
+        # already wrote into out.
+        return out
     if not out.is_locked:
         return out.update(self.unsqueeze(dim), inplace=False)
     else:

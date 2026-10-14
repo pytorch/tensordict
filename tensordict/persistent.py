@@ -1693,6 +1693,14 @@ class PersistentTensorDict(
                     td_names = list(names) + [
                         None if n in clash else n for n in td_names[self.ndim :]
                     ]
+                if (
+                    item.batch_dims < self.ndim
+                    and sum(n is None for n in td_names) == item.batch_dims
+                ):
+                    # a group that reopens with fewer batch dims (a zip
+                    # store) drops these names: drop them without the
+                    # warning for a list of the wrong length
+                    td_names = [None] * item.batch_dims
                 item.rename_(*td_names)
 
     # Override: deletes the node in the file.

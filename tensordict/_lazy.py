@@ -67,6 +67,7 @@ from tensordict.base import (
     _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
+    _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
     _write_back_members,
@@ -1237,6 +1238,15 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             if td._check_dim_name(stack_name):
                 raise ValueError(f"The dimension name {stack_name} is already taken.")
+        member_dims = self.batch_dims - 1
+        if (
+            len(names_list) != member_dims
+            and self.tensordicts
+            and sum(n is None for n in names_list) == member_dims
+        ):
+            # each member would drop these names and warn: warn once
+            _warn_names_length(list(names), self.batch_dims)
+            names_list = [None] * member_dims
         previous_stack_name = self._td_dim_name
         previous_empty_names = self._empty_stack_names
         renamed = []
@@ -2900,16 +2910,23 @@ class LazyStackedTensorDict(TensorDictBase):
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
         items = self.tensordicts[0].non_tensor_items(include_nested=include_nested)
-        return tuple(
-            (
-                key,
-                torch.stack(
-                    [val0, *[td.get(key) for td in self.tensordicts[1:]]],
-                    self.stack_dim,
-                ),
-            )
-            for (key, val0) in items
-        )
+        if not items:
+            return ()
+        # Only the keys that the stack lists, which every member holds. The
+        # members of a NonTensorStack list their fields, which keys() omits.
+        keys = set(self._key_list())
+        result = []
+        for key, val0 in items:
+            nested = not isinstance(key, str)
+            if (key[0] if nested else key) not in keys:
+                continue
+            vals = [td.get(key) for td in self.tensordicts[1:]]
+            # A nested key that a member lacks. keys(include_nested=True) would
+            # leave it out too, but listing it costs more than this call.
+            if nested and any(val is None for val in vals):
+                continue
+            result.append((key, torch.stack([val0, *vals], self.stack_dim)))
+        return tuple(result)
 
     @_cache_while_locked  # noqa: B019
     def _key_list(self):

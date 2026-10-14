@@ -89,6 +89,7 @@ from tensordict.utils import (
     _REPR_OPTIONS,
     _set_max_batch_size,
     _shape,
+    _SKIP_TENSORCLASS_POST_INIT,
     _split_tensordict,
     _strtobool,
     _td_fields,
@@ -1130,6 +1131,23 @@ def _warn_read_only(method: str) -> None:
         + " From then on, the call raises. Open the file with mode='r+' to "
         "write the result, or call to_tensordict() first to change a copy in "
         "memory.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
+def _warn_names_length(names: list, batch_dims: int) -> None:
+    """Warns that ``names``, of the wrong length, is accepted because of its None entries, which raises from 0.17 (#2600)."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"Got the dimension names {names} for {batch_dims} batch dims. The "
+        "list has the wrong length, but is accepted today because of its None "
+        "entries, and its names are dropped. Starting with TensorDict 0.17, "
+        "the default will change to raising a ValueError, as for any other "
+        "list of the wrong length. Pass one name per batch dim.",
         FutureWarning,
         stacklevel=stacklevel,
     )
@@ -2438,7 +2456,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         num_none = 0
         for v in value:
             num_none += v is None
-        if num_none == self.batch_dims:
+        batch_dims = self.batch_dims
+        if num_none == batch_dims:
+            if len(value) != batch_dims:
+                _warn_names_length(value, batch_dims)
             self._set_names(None)
             return
         if num_none:
@@ -8384,7 +8405,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # simply exclude the leaves. A comprehension walks the keys once:
             # unpacking the view would call its __len__, which walks them too.
             leaves = [key for key in self.keys(True, True)]  # noqa: C416
-            result = self._exclude(*leaves, set_shared=False)
+            # The tensorclass entries become shells that the caller fills:
+            # __post_init__ would see no fields, here or when to() rebuilds
+            # them. Dynamo cannot set a ContextVar, so compiled code still
+            # runs it.
+            token = None if is_compiling() else _SKIP_TENSORCLASS_POST_INIT.set(True)
+            try:
+                result = self._exclude(*leaves, set_shared=False)
+                if device is not NO_DEFAULT and device is not None:
+                    result = result.to(device)
+                    device = NO_DEFAULT
+            finally:
+                if token is not None:
+                    _SKIP_TENSORCLASS_POST_INIT.reset(token)
             if batch_size is not None:
                 # The batch_size setter gives the new batch size to the shorter
                 # sub-tensordicts and skips the empty ones of other shapes:
