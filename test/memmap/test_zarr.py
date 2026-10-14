@@ -135,7 +135,6 @@ class TestZarrRoundTrip:
         )
         assert td_recon.batch_size == torch.Size([3])
 
-    @pytest.mark.xfail(strict=True, raises=TypeError, reason="rejects auto_batch_size")
     def test_auto_batch_size_persistent(self, tmp_path):
         td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
         td.to_zarr(tmp_path / "s.zarr")

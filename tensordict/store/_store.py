@@ -1777,15 +1777,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     # ---- Materialization ----
 
-    def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
-        """Materialize all leaf tensors into a local ``TensorDict``.
-
-        Fetches all the data in one round-trip to the server.
-
-        Keyword Args:
-            retain_none (bool, optional): has no effect on a store. Defaults
-                to ``None``.
-        """
+    # Override: reads all the leaves in one round trip (retain_none has no
+    # effect on a store).
+    def _to_tensordict(self, *, retain_none: bool | None) -> TensorDict:
         all_keys = self._get_all_keys()
         # Filter to keys under our prefix
         if self._prefix:
@@ -2399,18 +2393,15 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             self.set_(key, tensor)
         return self
 
-    def __repr__(self):
-        keys_str = list(self.keys())
-        device = self.device
-        batch_size = self.batch_size
-        return (
-            f"TensorDictStore(\n"
-            f"    keys={keys_str},\n"
-            f"    batch_size={batch_size},\n"
-            f"    device={device},\n"
-            f"    backend={self._backend!r},\n"
-            f"    td_id={self._td_id!r})"
-        )
+    # Override: lists the key names, without reading the entries.
+    def _repr_parts(self) -> list[str]:
+        return [
+            f"    keys={list(self.keys())}",
+            f"    batch_size={self.batch_size}",
+            f"    device={self.device}",
+            f"    backend={self._backend!r}",
+            f"    td_id={self._td_id!r}",
+        ]
 
     # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):

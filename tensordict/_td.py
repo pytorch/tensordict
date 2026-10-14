@@ -240,7 +240,6 @@ class TensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
-    _has_exclusive_keys = False
 
     def __init__(
         self,
@@ -2533,6 +2532,7 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
     _inplace_set = True
     _safe = False
     _masking_on_dense_copy = True
+    _memmap_inplace_unsupported = True
 
     def __init__(
         self,
@@ -3205,16 +3205,6 @@ class _SubTensorDict(_NoShapeOps, TensorDictBase):
         for key, item in self.items():
             self.set_(key, item.masked_fill(expand_as_right(mask, item), value))
         return self
-
-    def memmap_(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> Self:
-        raise RuntimeError(
-            "Converting a sub-tensordict values to memmap cannot be done."
-        )
 
     def _memmap_(
         self,

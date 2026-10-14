@@ -410,11 +410,14 @@ class TestLazyStackedTensorDict:
             for call in (data.to_dict, data.state_dict):
                 with pytest.raises(RuntimeError, match=match):
                     call()
-        for data in (td, nested):
-            with pytest.raises(RuntimeError, match=match):
-                data.to_dict(tolist_first=True)
-        # with tolist_first, a dense tensordict lists the members of the nested
-        # stack, so nothing is lost
+        # with tolist_first, the members of a nested stack are listed one by
+        # one, so only exclusive keys at the top level are lost
+        with pytest.raises(RuntimeError, match=match):
+            td.to_dict(tolist_first=True)
+        result = nested.to_dict(tolist_first=True)
+        assert list(result) == ["a", "n"]
+        assert (result["a"] == torch.zeros(2)).all()
+        assert result["n"] == [{"x": torch.zeros(())}, {"y": torch.ones(())}]
         assert TensorDict(s=nested).to_dict(tolist_first=True) == {
             "s": [
                 {"a": torch.zeros(()), "n": {"x": torch.zeros(())}},

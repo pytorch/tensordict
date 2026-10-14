@@ -36,6 +36,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+    _raise_on_exclusive_keys,
     _sync_cuda_transfer,
     _unflatten_state_dict,
     is_compiling,
@@ -127,6 +128,8 @@ class _Serialization:
             {'': {'batch_size': torch.Size([]), 'device': None}, '3': {'batch_size': torch.Size([]), 'device': None}}
 
         """
+        if self._has_exclusive_keys:
+            _raise_on_exclusive_keys("state_dict")
         if destination is None:
             destination = collections.OrderedDict()
             destination._metadata = collections.OrderedDict()
@@ -1028,6 +1031,10 @@ class _Serialization:
             ``RuntimeError``. Use :meth:`~tensordict.TensorDictBase.memmap` to
             build a memory-mapped copy instead.
         """
+        if self._memmap_inplace_unsupported:
+            raise RuntimeError(
+                "Converting a sub-tensordict values to memmap cannot be done."
+            )
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)

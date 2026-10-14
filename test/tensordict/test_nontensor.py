@@ -1176,9 +1176,6 @@ class TestNonTensorData:
         assert stack.to_tensordict() is stack
         assert stack.to_tensordict(retain_none=True) is stack
 
-    @pytest.mark.xfail(
-        strict=True, raises=TypeError, reason="tolist() rejects convert_nodes"
-    )
     def test_nontensorstack_tolist_convert_nodes(self):
         stack = NonTensorStack.from_list(["a", "b"])
         assert stack.tolist(convert_nodes=True) == ["a", "b"]

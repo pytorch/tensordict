@@ -42,10 +42,12 @@ from tensordict._tabular import (
 from tensordict.base import (
     __base__setattr__,
     _has_h5,
+    _has_top_level_exclusive_keys,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _maybe_preserve_module_state,
     _PACKAGE_DIR,
+    _raise_on_exclusive_keys,
     _set_tensor_dict,
     Buffer,
     is_compiling,
@@ -570,7 +572,9 @@ class _Conversion:
             filename (str): The path to the h5 file.
 
         Keyword Arguments:
-            mode (str, optional): Reading mode. Defaults to ``"r"``.
+            mode (str, optional): how the file is opened: ``"r"`` (read only),
+                ``"r+"`` (read and write), or another mode of :class:`h5py.File`
+                (see :class:`~tensordict.PersistentTensorDict`). Defaults to ``"r"``.
             auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically.
                 Defaults to ``False``.
             batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output
@@ -601,9 +605,9 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        result = PersistentTensorDict.from_h5(
-            filename, mode=mode, batch_size=batch_size
-        )
+        if not issubclass(cls, PersistentTensorDict):
+            cls = PersistentTensorDict
+        result = cls._open_h5(filename, mode=mode, batch_size=batch_size)
         if auto_batch_size:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_h5"))
@@ -663,9 +667,9 @@ class _Conversion:
         """
         from tensordict.persistent import PersistentTensorDict
 
-        result = PersistentTensorDict.from_zarr(
-            filename, mode=mode, batch_size=batch_size
-        )
+        if not issubclass(cls, PersistentTensorDict):
+            cls = PersistentTensorDict
+        result = cls._open_zarr(filename, mode=mode, batch_size=batch_size)
         if auto_batch_size:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_zarr"))
@@ -841,6 +845,10 @@ class _Conversion:
         is the entry ``("layers", "0", "weight")``. Write the parameters back
         with :meth:`~.to_module`.
 
+        The result is a :class:`~tensordict.TensorDict` (or a
+        :class:`~tensordict.nn.TensorDictParams` with ``as_module=True``),
+        whichever class this method is called on.
+
         Args:
             module (nn.Module): the module to get the parameters from.
             as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
@@ -873,7 +881,11 @@ class _Conversion:
                 is_shared=False)
 
         """
-        ...
+        from tensordict import TensorDict
+
+        return TensorDict.from_module(
+            module, as_module=as_module, lock=lock, use_state_dict=use_state_dict
+        )
 
     @classmethod
     def from_modules(
@@ -1388,6 +1400,17 @@ class _Conversion:
             ('TensorDict', torch.Size([2]))
 
         """
+        return self._to_tensordict(retain_none=retain_none)
+
+    def _to_tensordict(self, *, retain_none: bool | None) -> TensorDictBase:
+        """Builds the dense copy that :meth:`to_tensordict` returns.
+
+        ``retain_none`` is the argument of :meth:`to_tensordict`. The base
+        implementation clones each tensor and converts each nested tensordict
+        and tensorclass with its own :meth:`to_tensordict`. A store overrides
+        it to read all the leaves in one round trip; a ``NonTensorStack``,
+        which is already the dense form of its data, returns itself.
+        """
         from tensordict import TensorDict
 
         return TensorDict(
@@ -1502,6 +1525,12 @@ class _Conversion:
             {'a': [[0, 1, 2], [3, 4, 5]], 'b': {'c': [[0, 1], [2, 3]]}}
 
         """
+        # With tolist_first, the members of a nested lazy stack are listed one
+        # by one, so only exclusive keys at the top level would be lost.
+        if self._has_exclusive_keys and (
+            not tolist_first or _has_top_level_exclusive_keys(self)
+        ):
+            _raise_on_exclusive_keys("to_dict")
         result = {}
         for key, value in self.items():
             if _is_tensor_collection(type(value)):

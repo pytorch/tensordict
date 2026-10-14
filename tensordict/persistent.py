@@ -973,45 +973,11 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             self._check_batch_size(self._batch_size)
 
     @classmethod
-    def from_h5(cls, filename, *, mode="r", batch_size: torch.size | None = None):
-        """Creates a PersistentTensorDict from a h5 file.
+    def _open_h5(cls, filename, *, mode="r", batch_size: torch.Size | None = None):
+        """Opens an h5 file; the public :meth:`~.from_h5` calls it.
 
-        This function will automatically determine the batch-size for each nested tensordict (unless ``batch_size``
-        is provided).
-
-        Args:
-            filename (str): The path to the h5 file.
-
-        Keyword Args:
-            mode (str, optional): how the file is opened: ``"r"`` (read only),
-                ``"r+"`` (read and write), or another mode of :class:`h5py.File`
-                (see :class:`PersistentTensorDict`). Defaults to ``"r"``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to None (batch-size automatically
-                determined).
-
-        Returns:
-            A PersistentTensorDict representation of the input h5 file.
-
-        Examples:
-            >>> import os
-            >>> import tempfile
-            >>> import torch
-            >>> from tensordict import PersistentTensorDict
-            >>> with tempfile.TemporaryDirectory() as tmpdir:
-            ...     filename = os.path.join(tmpdir, "file.h5")
-            ...     PersistentTensorDict.from_dict(
-            ...         {"key1": torch.zeros(3), "key2": torch.ones(3)}, filename
-            ...     ).close()
-            ...     ptd = PersistentTensorDict.from_h5(filename)
-            ...     print(ptd)
-            ...     ptd.close()
-            PersistentTensorDict(
-                fields={
-                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+        Without ``batch_size``, each nested tensordict gets the largest batch
+        size that its entries share.
         """
         out = cls(filename=filename, mode=mode, batch_size=batch_size)
         if batch_size is None:
@@ -1020,51 +986,13 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         return out
 
     @classmethod
-    def from_zarr(cls, filename, *, mode="r", batch_size: torch.Size | None = None):
-        """Creates a PersistentTensorDict from a zarr store.
+    def _open_zarr(cls, filename, *, mode="r", batch_size: torch.Size | None = None):
+        """Opens a zarr store; the public :meth:`~.from_zarr` calls it.
 
-        The batch size (and dimension names) are read from the
-        ``"__tensordict__"`` attribute written by :meth:`~.from_dict` /
-        :meth:`~tensordict.TensorDictBase.to_zarr` when present; otherwise the
-        batch size of each nested tensordict is determined automatically
-        (unless ``batch_size`` is provided).
-
-        Args:
-            filename (str, path or zarr store): the path to the zarr store
-                (a directory), or a ``zarr.abc.store.Store`` instance.
-
-        Keyword Args:
-            mode (str, optional): Reading mode. Defaults to ``"r"``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict.
-                Defaults to ``None`` (batch-size read from metadata or
-                automatically determined).
-
-        Returns:
-            A PersistentTensorDict representation of the input zarr store.
-
-        Examples:
-            >>> import os
-            >>> import tempfile
-            >>> import torch
-            >>> from tensordict import PersistentTensorDict
-            >>> with tempfile.TemporaryDirectory() as tmpdir:
-            ...     store = os.path.join(tmpdir, "store.zarr")
-            ...     PersistentTensorDict.from_dict(
-            ...         {"key1": torch.zeros(3), "key2": torch.ones(3)},
-            ...         store,
-            ...         batch_size=[3],
-            ...         backend="zarr",
-            ...     ).close()
-            ...     ptd = PersistentTensorDict.from_zarr(store)
-            ...     print(ptd)
-            ...     ptd.close()
-            PersistentTensorDict(
-                fields={
-                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+        Without ``batch_size``, the batch size (and the dimension names) are
+        read from the ``"__tensordict__"`` attribute that :meth:`~.from_dict`
+        and :meth:`~tensordict.TensorDictBase.to_zarr` write, or else each
+        nested tensordict gets the largest batch size that its entries share.
         """
         out = cls(filename=filename, mode=mode, batch_size=batch_size, backend="zarr")
         if batch_size is None:

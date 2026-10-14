@@ -26,10 +26,8 @@ from typing import (
     Dict,
     Iterator,
     List,
-    Literal,
     Mapping,
     NamedTuple,
-    OrderedDict,
     overload,
     Sequence,
     Tuple,
@@ -904,15 +902,6 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             return False
 
-    @_fails_exclusive_keys
-    def to_dict(
-        self,
-        *,
-        retain_none: bool = True,
-        convert_tensors: bool | Literal["numpy"] = False,
-        tolist_first: bool = False,
-    ) -> dict[str, Any]: ...
-
     def _reduce_get_metadata(self):
         metadata = {}
         metadata["stack_dim"] = self.stack_dim
@@ -1099,15 +1088,6 @@ class LazyStackedTensorDict(TensorDictBase):
             device=device,
             names=names,
         )
-
-    @_fails_exclusive_keys
-    def state_dict(
-        self,
-        destination=None,
-        prefix="",
-        keep_vars=False,
-        flatten=True,
-    ) -> OrderedDict[str, Any]: ...
 
     # Override: raises for keys that are not in every member.
     @_fails_exclusive_keys
@@ -4483,7 +4463,8 @@ class LazyStackedTensorDict(TensorDictBase):
         sub_tds = [item for value in sub_tds.values() for item in value]
         return sub_tds
 
-    def __repr__(self):
+    # Override: adds the exclusive fields and the stack dim.
+    def _repr_parts(self) -> list[str]:
         fields = _td_fields(self)
         parts = [
             indent(f"fields={{{fields}}}", 4 * " "),
@@ -4496,8 +4477,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if _REPR_OPTIONS["show_is_shared"]:
             parts.append(indent(f"is_shared={self.is_shared()}", 4 * " "))
         parts.append(indent(f"stack_dim={self.stack_dim}", 4 * " "))
-        string = ",\n".join(parts)
-        return f"{type(self).__name__}(\n{string})"
+        return parts
 
     def _exclusive_keys(self):
         return {key for td in self.tensordicts for key in td.keys()}

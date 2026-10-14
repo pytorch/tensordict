@@ -562,7 +562,6 @@ def test_to_context_manager(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
-@pytest.mark.xfail(strict=True, raises=TypeError, reason="rejects auto_batch_size")
 def test_from_h5_auto_batch_size(tmp_path):
     TensorDict(a=torch.zeros(4, 3), batch_size=[4, 3]).to_h5(tmp_path / "f.h5").close()
     h5td = PersistentTensorDict.from_h5(

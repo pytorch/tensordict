@@ -463,7 +463,8 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     # ---- materialization ----
 
-    def to_tensordict(self, *, retain_none: bool | None = None) -> TensorDict:
+    # Override: reads all the leaves of the element in one round trip.
+    def _to_tensordict(self, *, retain_none: bool | None) -> TensorDict:
         result_map = self._run_sync(self._parent._abatch_get_element(self._element_idx))
         source: dict = {}
         for kp, tensor in result_map.items():
@@ -539,16 +540,15 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     def __reduce__(self):
         return (TensorDict, (), self.to_tensordict().__getstate__())
 
-    def __repr__(self):
-        keys_str = list(self.keys())
-        return (
-            f"_StoreStackElementView(\n"
-            f"    parent_td_id={self._parent._td_id!r},\n"
-            f"    element_idx={self._element_idx},\n"
-            f"    keys={keys_str},\n"
-            f"    batch_size={self.batch_size},\n"
-            f"    device={self.device})"
-        )
+    # Override: lists the key names, without reading the entries.
+    def _repr_parts(self) -> list[str]:
+        return [
+            f"    parent_td_id={self._parent._td_id!r}",
+            f"    element_idx={self._element_idx}",
+            f"    keys={list(self.keys())}",
+            f"    batch_size={self.batch_size}",
+            f"    device={self.device}",
+        ]
 
     # ---- not-supported stubs (same as parent) ----
 
@@ -2356,18 +2356,17 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             self.set_(key, tensor)
         return self
 
-    def __repr__(self):
-        keys_str = list(self.keys())
-        return (
-            f"LazyStackedTensorDictStore(\n"
-            f"    keys={keys_str},\n"
-            f"    batch_size={self.batch_size},\n"
-            f"    count={self._count},\n"
-            f"    stack_dim={self._stack_dim},\n"
-            f"    device={self.device},\n"
-            f"    backend={self._backend!r},\n"
-            f"    td_id={self._td_id!r})"
-        )
+    # Override: lists the key names, without reading the entries.
+    def _repr_parts(self) -> list[str]:
+        return [
+            f"    keys={list(self.keys())}",
+            f"    batch_size={self.batch_size}",
+            f"    count={self._count}",
+            f"    stack_dim={self._stack_dim}",
+            f"    device={self.device}",
+            f"    backend={self._backend!r}",
+            f"    td_id={self._td_id!r}",
+        ]
 
     # Override: server-side entries cannot be pinned.
     def pin_memory(self, *args, **kwargs):
