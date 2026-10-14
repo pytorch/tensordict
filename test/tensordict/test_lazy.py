@@ -3434,7 +3434,8 @@ class TestLazyStackedTensorDict:
         lazy = lazy_stack(tds)
         key, val = lazy.popitem()
         assert key == "b"
-        assert type(val) is TensorDict
+        # popitem pops as pop does: a sub-tensordict is a lazy stack
+        assert type(val) is LazyStackedTensorDict
         assert (val["c"] == torch.tensor([[0.0], [1.0]])).all()
         key, val = lazy.popitem()
         assert key == "a"
@@ -3458,51 +3459,172 @@ class TestLazyStackedTensorDict:
         assert (lazy.pop(("n", "x"), None) == 1).all()
         assert list(lazy.keys(True)) == ["a", "n"]
 
-    @pytest.mark.parametrize("failure", ["ragged", "missing"])
-    def test_popitem_error_keeps_entries(self, failure):
-        # popitem takes "a" from the first member; the error must leave every
-        # member with the same entries, in the same order.
+    def test_popitem_error_keeps_entries(self):
+        # popitem pops the last key of keys(), "a"; the error of the ragged
+        # stack must leave every member with the same entries, in the same
+        # order.
         tds = [
             TensorDict(b=torch.ones(1), a=torch.zeros(2)),
             TensorDict(a=torch.zeros(2), b=torch.ones(1)),
-            TensorDict(b=torch.ones(1), a=torch.zeros(2)),
+            TensorDict(b=torch.ones(1), a=torch.zeros(3)),
         ]
-        if failure == "ragged":
-            tds[2]["a"] = torch.zeros(3)
-            match = "stack expects each tensor to be equal size"
-        else:
-            del tds[2]["a"]
-            match = "Could not find key a in all tensordicts"
         entries = [list(td.items()) for td in tds]
-        with pytest.raises(RuntimeError, match=match):
+        with pytest.raises(RuntimeError, match="Failed to stack tensors"):
             lazy_stack(tds).popitem()
         for td, td_entries in zip(tds, entries):
             assert list(td.keys()) == [key for key, _ in td_entries]
             assert all(td[key] is value for key, value in td_entries)
 
+    def test_popitem_key_missing_from_a_member(self):
+        # popitem pops the last key that every member has
+        tds = [
+            TensorDict(b=torch.ones(1), a=torch.zeros(2)),
+            TensorDict(a=torch.zeros(2), b=torch.ones(1)),
+            TensorDict(b=torch.ones(1)),
+        ]
+        key, val = lazy_stack(tds).popitem()
+        assert key == "b"
+        assert (val == 1).all()
+        assert [list(td.keys()) for td in tds] == [["a"], ["a"], []]
+
     def test_popitem_repeated_member(self):
-        # A member that is stacked twice has no "a" left after it is popped the
-        # first time, so popitem raises as for a missing key.
+        # A member that is stacked twice is popped once
         td0 = TensorDict(b=torch.ones(1), a=torch.zeros(2))
         td1 = TensorDict(b=torch.ones(1), a=torch.ones(2))
-        with pytest.raises(RuntimeError, match="Could not find key a in all"):
-            lazy_stack([td0, td1, td1]).popitem()
-        assert list(td0.keys()) == ["b", "a"]
-        assert list(td1.keys()) == ["b", "a"]
+        key, val = lazy_stack([td0, td1, td1]).popitem()
+        assert key == "a"
+        assert val.tolist() == [[0.0, 0.0], [1.0, 1.0], [1.0, 1.0]]
+        assert list(td0.keys()) == ["b"]
+        assert list(td1.keys()) == ["b"]
 
     def test_popitem_shared_source(self):
         # Two rows of one tensordict share its entries: deleting "a" from the
-        # first row deletes it from the second, so popitem raises as for a
-        # missing key and puts the values back.
+        # first row deletes it from the second
         td0 = TensorDict(b=torch.ones(1), a=torch.zeros(2))
         src = TensorDict(b=torch.ones(2, 1), a=torch.ones(2, 2), batch_size=[2])
         lazy = LazyStackedTensorDict(
             td0, src._get_sub_tensordict(0), src._get_sub_tensordict(1)
         )
-        with pytest.raises(RuntimeError, match="Could not find key a in all"):
-            lazy.popitem()
-        assert list(td0.keys()) == ["b", "a"]
-        assert (src["a"][0] == 1).all()
+        key, val = lazy.popitem()
+        assert key == "a"
+        assert val.tolist() == [[0.0, 0.0], [1.0, 1.0], [1.0, 1.0]]
+        assert list(td0.keys()) == ["b"]
+        assert list(src.keys()) == ["b"]
+
+    def test_items_values_as_lists_member_prefix(self):
+        # with _NESTED_TENSORS_AS_LISTS, items() and values() walk each member
+        # (items() prefixes the member index), and keys() lists the keys once
+        td = TensorDict(
+            a=torch.zeros(2, 3),
+            n=TensorDict(x=torch.ones(2, 3), batch_size=[2, 3]),
+            batch_size=[2, 3],
+        )
+        lazy = lazy_stack(list(td.unbind(0)))
+        items = list(lazy.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+        assert [key for key, _ in items] == [
+            ("0", "a"),
+            ("0", "n", "x"),
+            ("1", "a"),
+            ("1", "n", "x"),
+        ]
+        assert all(value is lazy.tensordicts[0]["a"] for _, value in items[:1])
+        values = list(lazy.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+        assert all(v is w for v, (_, w) in zip(values, items, strict=True))
+        assert list(lazy.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)) == [
+            "a",
+            ("n", "x"),
+        ]
+        # sort sorts each member, in the order of the members ("10" after "9")
+        lazy = lazy_stack([TensorDict(b=1, a=0) for _ in range(11)])
+        keys = [
+            key
+            for key, _ in lazy.items(
+                True, True, is_leaf=_NESTED_TENSORS_AS_LISTS, sort=True
+            )
+        ]
+        assert keys[:2] == [("0", "a"), ("0", "b")]
+        assert keys[-2:] == [("10", "a"), ("10", "b")]
+        values = list(
+            lazy.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS, sort=True)
+        )
+        assert [v.item() for v in values[:2]] == [0, 1]
+
+    def test_contains_member_identity(self):
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])
+        lazy = lazy_stack(list(td.unbind(0)))
+        assert lazy.tensordicts[0] in lazy
+        assert lazy.tensordicts[0].clone() not in lazy
+        assert "a" in lazy
+        assert ("a",) in lazy
+        with pytest.raises(RuntimeError, match="NestedKey"):
+            td in td  # noqa: B015
+        with pytest.raises(RuntimeError, match="NestedKey"):
+            0 in lazy  # noqa: B015
+
+    def test_get_lazy_kwargs_nested(self):
+        lazy = lazy_stack(
+            [
+                TensorDict(n=TensorDict(x=torch.zeros(2))),
+                TensorDict(n=TensorDict(x=torch.ones(3))),
+            ]
+        )
+        as_list = lazy.get(("n", "x"), as_list=True)
+        assert [t.tolist() for t in as_list] == [[0.0, 0.0], [1.0, 1.0, 1.0]]
+        padded = lazy.get(("n", "x"), as_padded_tensor=True)
+        assert padded.tolist() == [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]
+        padded = lazy.get(("n", "x"), as_padded_tensor=True, padding_value=-1)
+        assert padded.tolist() == [[0.0, 0.0, -1.0], [1.0, 1.0, 1.0]]
+        nested = lazy.get(("n", "x"), as_nested_tensor=True)
+        assert nested.is_nested
+        with pytest.raises(TypeError):
+            lazy.get(("n", "x"), not_a_keyword=True)
+
+    def test_get_missing_tensor_default(self):
+        td = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])
+        lazy = lazy_stack(list(td.unbind(0)))
+        default = torch.zeros(1)
+        assert lazy.get("zz", default) is default
+        assert lazy.get(("zz", "y"), default) is default
+        assert lazy.get("zz") is None
+
+    @pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_flatten_keys_exclusive_keys_keeps_members(self, op, inplace):
+        if op == "flatten_keys":
+            tds = [
+                TensorDict(a=0, n=TensorDict(x=1)),
+                TensorDict(a=0, n=TensorDict(x=1, y=2)),
+            ]
+        else:
+            tds = [
+                TensorDict({"a": 0, "n.x": 1}),
+                TensorDict({"a": 0, "n.x": 1, "n.y": 2}),
+            ]
+        keys = [list(td.keys(True)) for td in tds]
+        with pytest.raises(RuntimeError, match=f"the method {op} cannot complete"):
+            getattr(lazy_stack(tds), op)(inplace=inplace)
+        assert [list(td.keys(True)) for td in tds] == keys
+
+    def test_non_tensor_items_ragged_tensors(self):
+        lazy = lazy_stack(
+            [
+                TensorDict(s=NonTensorData("x"), a=torch.zeros(2)),
+                TensorDict(s=NonTensorData("y"), a=torch.zeros(3)),
+            ]
+        )
+        ((key, value),) = lazy.non_tensor_items()
+        assert key == "s"
+        assert value.tolist() == ["x", "y"]
+        nested = lazy_stack(
+            [
+                TensorDict(n=TensorDict(s=NonTensorData("x"))),
+                TensorDict(n=TensorDict(s=NonTensorData("y"))),
+            ]
+        )
+        ((key, value),) = nested.non_tensor_items(include_nested=True)
+        assert key == ("n", "s")
+        assert value.tolist() == ["x", "y"]
+        assert nested.non_tensor_items() == ()
 
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "prod"]
@@ -3675,7 +3797,9 @@ class TestLazyStackedTensorDict:
             assert result.names == [None, None]
             assert (result["a"] == getattr(lazy["a"], op)(dim % lazy.ndim)).all()
         member = TensorDict(a=torch.ones(3, 4, 2), batch_size=[3, 4], names=["x", "y"])
-        lazy = lazy_stack([member, member.clone()], stack_dim_name="y")
+        # non-unique names warn until 0.17 (#2690)
+        with pytest.warns(FutureWarning, match="stack dim name 'y'"):
+            lazy = lazy_stack([member, member.clone()], stack_dim_name="y")
         assert lazy.names == ["y", "x", "y"]
         assert getattr(lazy, op)(1).names == [None, None]
         assert getattr(lazy, op)(0).names == ["x", "y"]

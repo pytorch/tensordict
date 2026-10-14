@@ -1093,6 +1093,12 @@ def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
     return batch_size
 
 
+def _check_member_as_lists(td: TensorDictBase, is_leaf) -> None:
+    """Raises if an in-place method walks the copies that the member ``td`` reads (#2592)."""
+    if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
+        _raise_if_inplace_call()
+
+
 def _raise_on_exclusive_keys(method: str) -> None:
     """Raises because ``method`` would drop the keys that some members of a lazy stack lack."""
     raise RuntimeError(
@@ -1143,6 +1149,23 @@ def _warn_names_length(names: list, batch_dims: int) -> None:
         "entries, and its names are dropped. Starting with TensorDict 0.17, "
         "the default will change to raising a ValueError, as for any other "
         "list of the wrong length. Pass one name per batch dim.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
+def _warn_stack_dim_name_taken(name: str) -> None:
+    """Warns that the stack dim ``name`` of a lazy stack is also a dim name of its members, which raises from 0.17 (#2690)."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"The stack dim name {name!r} is also the name of a dim of the "
+        "stacked tensordicts, so the lazy stack has non-unique dimension "
+        "names. This is accepted today. Starting with TensorDict 0.17, the "
+        "default will change to raising a ValueError, as on a TensorDict. "
+        "Give the stack dim a name the stacked tensordicts do not use.",
         FutureWarning,
         stacklevel=stacklevel,
     )
@@ -1706,6 +1729,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # method (notably under ``torch.compile`` where that decorator
     # short-circuits and never writes the attribute).
     _last_op = None
+    # Set by flatten(inplace=True): (start_dim, merged sizes), which a
+    # with-block around the call reads on exit.
+    _inplace_flatten_sizes = None
+    # Set by flatten_keys(inplace=True): whether unflatten_keys undoes it,
+    # that is, no key held the separator before. A with-block reads it on exit.
+    _inplace_flatten_keys_exact = None
     # Class-level default; instances populate this on lock_() so locked-
     # fast-paths can avoid iterating ``_tensordict`` (which would emit
     # DICT_KEYS_MATCH guards under Dynamo). Cleared on unlock_().
@@ -1870,6 +1899,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     "key must be a NestedKey (a str or a possibly tuple of str)."
                 )
             return key in self.keys(True, is_leaf=_is_leaf_nontensor)
+        return self._contains_tensordict(key)
+
+    def _contains_tensordict(self, item: Any) -> bool:
+        """Answers ``item in self`` for an ``item`` that is not a str or a tuple.
+
+        Called by ``__contains__`` after the str and tuple checks. The default
+        raises the NestedKey ``RuntimeError``; a lazy stack reports whether a
+        tensordict ``item`` is one of its members (identity).
+        """
         raise RuntimeError(
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
@@ -4028,12 +4066,41 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             restore the old behavior. They are deprecated and will be removed
             in 0.17.
 
-        .. note:: Keyword arguments can be passed to :meth:`~.get` when dealing with ragged tensors.
-            See :meth:`~tensordict.LazyStackedTensorDict.get` for a complete overview.
-            A dense tensordict ignores them today and warns for ``as_list=True``
-            and ``as_nested_tensor=True``. Starting with TensorDict 0.17, the
-            default will change to returning a list or a nested tensor, as a
-            lazy stack does.
+        Keyword Args:
+            as_list (bool, optional): if ``True``, a lazy stack returns the
+                entries as a list, one item per stacked tensordict.
+                Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
+                Defaults to ``False``.
+            as_padded_tensor (bool, optional): if ``True``, a lazy stack pads
+                the entries to the largest shape and returns them as one
+                tensor: each dim is padded to its largest size, also across
+                the levels of a lazy stack of lazy stacks. ``padding_value``
+                sets the padding value and ``padding_side`` sets the side of
+                every padded dim.
+                Exclusive with ``as_list`` and ``as_nested_tensor``.
+                Defaults to ``False``.
+            as_nested_tensor (bool, optional): if ``True``, a lazy stack returns
+                the entries as a nested tensor (:mod:`torch.nested`). ``layout``
+                sets its layout. A lazy stack of lazy stacks raises a
+                ``ValueError``, as a nested tensor has a single nested level.
+                Exclusive with ``as_list`` and ``as_padded_tensor``.
+                Defaults to ``False``.
+            layout (torch.layout, optional): the layout of the nested tensor
+                when ``as_nested_tensor=True``: ``torch.jagged`` or
+                ``torch.strided``. Defaults to ``torch.jagged``.
+            padding_side (str): The side of padding. Must be `"left"` or `"right"`. Defaults to `"right"`.
+            padding_value (scalar or bool, optional): The padding value. Defaults to 0.0.
+
+        A lazy stack reads the entry of every stacked tensordict and stacks
+        the results into a new tensor. If the entry shapes differ, the plain
+        call raises a ``RuntimeError``: pass ``as_list``, ``as_padded_tensor``
+        or ``as_nested_tensor`` to get a list, a padded tensor or a nested
+        tensor instead.
+
+        .. note:: A dense tensordict ignores the keyword arguments today and
+            warns for ``as_list=True`` and ``as_nested_tensor=True``. Starting
+            with TensorDict 0.17, the default will change to returning a list
+            or a nested tensor, as a lazy stack does.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -4046,6 +4113,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             None
             >>> td.get("z", 0)
             0
+
+            >>> import torch
+            >>> from tensordict import lazy_stack
+            >>> td = lazy_stack([
+            ...     TensorDict({"x": torch.ones(1,)}),
+            ...     TensorDict({"x": torch.ones(2,) * 2}),
+            ... ])
+            >>> nested = td.get("x", as_nested_tensor=True)
+            >>> nested.is_nested, nested.offsets()
+            (True, tensor([0, 1, 3]))
+            >>> td.get("x", as_padded_tensor=True)
+            tensor([[1., 0.],
+                    [2., 2.]])
         """
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
@@ -4093,6 +4173,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         raise NotImplementedError
 
     def _get_tuple(self, key, default, **kwargs):
+        """Reads the entry at ``key``: the storage part of :meth:`get`.
+
+        :meth:`get` has unravelled ``key`` to a non-empty tuple of str and
+        resolved ``default`` (``NO_DEFAULT`` when a missing key must raise
+        ``KeyError``). A missing key returns ``default``; a path through an
+        entry that is not a tensordict raises ``ValueError``. The h5 and zarr
+        files and :class:`~tensordict.store.TensorDictStore` treat that path
+        as a missing key, and return ``default``.
+        """
         first = self._get_str(key[0], default, **kwargs)
         if len(key) == 1 or first is default:
             return first
@@ -5285,6 +5374,25 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ('nested', 'b') torch.Size([2, 3])
 
         """
+        if (
+            is_leaf is _NESTED_TENSORS_AS_LISTS
+            or is_leaf is _NESTED_TENSORS_AS_LISTS_NONTENSOR
+        ):
+            members = self._members_as_lists()
+            if members is not None:
+                for i, td in enumerate(members):
+                    _check_member_as_lists(td, is_leaf)
+                    for key, val in td.items(
+                        include_nested=include_nested,
+                        leaves_only=leaves_only,
+                        is_leaf=is_leaf,
+                        sort=sort,
+                    ):
+                        if isinstance(key, str):
+                            yield (str(i), key), val
+                        else:
+                            yield (str(i), *key), val
+                return
         if sort:
 
             def keyfunc(item):
@@ -5345,6 +5453,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 for k in self.keys():
                     yield k, self._get_str(k, NO_DEFAULT)
 
+    def _members_as_lists(self) -> list[TensorDictBase] | None:
+        """The tensordicts that the ``_NESTED_TENSORS_AS_LISTS`` traversals walk one by one.
+
+        :meth:`items` and :meth:`values` call it when ``is_leaf`` is
+        ``_NESTED_TENSORS_AS_LISTS`` or ``_NESTED_TENSORS_AS_LISTS_NONTENSOR``.
+        ``None`` (the default) takes the generic traversal, with ``is_leaf`` as
+        the leaf predicate. A lazy stack returns its members: :meth:`values`
+        then lists the values of each member in turn, and :meth:`items`
+        prefixes each key with the index of its member:
+        ``("0", "a"), ("1", "a")``.
+        """
+        return None
+
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
         return tuple(
@@ -5404,6 +5525,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             [torch.Size([2]), torch.Size([2, 3])]
 
         """
+        if (
+            is_leaf is _NESTED_TENSORS_AS_LISTS
+            or is_leaf is _NESTED_TENSORS_AS_LISTS_NONTENSOR
+        ):
+            members = self._members_as_lists()
+            if members is not None:
+                for td in members:
+                    _check_member_as_lists(td, is_leaf)
+                    yield from td.values(
+                        include_nested=include_nested,
+                        leaves_only=leaves_only,
+                        is_leaf=is_leaf,
+                        sort=sort,
+                    )
+                return
         if sort:
             for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
@@ -5862,7 +5998,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             old_key (NestedKey): key to be renamed. A missing key raises
                 ``KeyError``.
-            new_key (NestedKey): new name of the entry. A key inside
+            new_key (NestedKey): new name of the entry. An empty key raises
+                ``KeyError``. A key inside
                 ``old_key``, such as ``("a", "b")`` for ``"a"``, moves the
                 entry there, as ``td.set(new_key, td.pop(old_key))`` does.
             safe (bool, optional): if ``True``, a ``KeyError`` is raised when
@@ -5911,6 +6048,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         old_key = unravel_key(old_key)
         new_key = unravel_key(new_key)
+        if new_key == ():
+            raise KeyError(_GENERIC_NESTED_ERR.format(new_key))
         if (
             safe
             and old_key != new_key
@@ -5957,18 +6096,48 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
             self.del_(old_key)
 
-    @abc.abstractmethod
+    @_lock_blocked
     def del_(self, key: NestedKey) -> Self:
         """Deletes a key of the tensordict.
 
+        A locked tensordict raises ``RuntimeError`` (see :meth:`~.lock_`).
+
         Args:
-            key (NestedKey): key to be deleted
+            key (NestedKey): key to be deleted. A missing key raises
+                ``KeyError``, and a key whose path runs through an entry that
+                is not a tensordict raises ``ValueError``. Until 0.17, the
+                stores and the zarr backend of
+                :class:`~tensordict.PersistentTensorDict` warn and do nothing
+                for a missing key.
 
         Returns:
             self
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3)))
+            >>> list(td.del_(("b", "c")).keys(True))
+            ['a', 'b']
+
         """
-        raise NotImplementedError
+        self._del(_unravel_key_to_tuple(key))
+        return self
+
+    def _del(self, key: tuple[str, ...]) -> None:
+        """Deletes the entry at ``key``: the storage part of :meth:`del_`.
+
+        :meth:`del_` has checked the lock and unravelled ``key`` to a tuple of
+        str, and returns ``self``. It does not check for an empty key. An empty
+        or missing key raises ``KeyError``; a key whose path runs through an
+        entry that is not a tensordict raises ``ValueError``. Until 0.17, the
+        backends keep their former errors: for ``()``,
+        :class:`~tensordict.PersistentTensorDict` raises ``ValueError``,
+        :class:`~tensordict.store.TensorDictStore` raises ``IndexError`` and
+        :class:`~tensordict.store.LazyStackedTensorDictStore` warns; for a
+        missing key, the stores and the zarr backend warn and return.
+        """
+        raise NotImplementedError(f"del_ is not implemented for {type(self).__name__}.")
 
     # Apply and map functionality
     def apply_(self, fn: Callable, *others, **kwargs) -> Self:
@@ -8595,6 +8764,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is_shared=False)
             >>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
+        if self._has_exclusive_keys:
+            _raise_on_exclusive_keys("flatten_keys")
         if inplace:
             return self._flatten_keys_inplace(separator=separator, is_leaf=is_leaf)
         return self._flatten_keys_outplace(separator=separator, is_leaf=is_leaf)
@@ -8672,6 +8843,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             raise KeyError(
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
+        self._inplace_flatten_keys_exact = not any(
+            separator in part for key in all_leaves for part in key
+        )
         # we will need to remove the empty tensordicts later on, but not the
         # leaves that sit at the root
         root_keys = set(self.keys())
@@ -8781,6 +8955,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
 
         """
+        if self._has_exclusive_keys:
+            _raise_on_exclusive_keys("unflatten_keys")
         if not inplace:
             result = self._clone(recurse=False)
             if not result._unflatten_keys_fast(separator):

@@ -99,6 +99,30 @@ _OPS = {
         "get('missing', None)": lambda td: td.get("missing", None),
         "entry_class(key) is type(get(key))": _entry_class_mismatches,
     },
+    "key_edits": {
+        "popitem()": lambda td: [*td.popitem(), td],
+        "del_('a')": _inplace(lambda td: td.del_("a")),
+        "del_('missing')": _inplace(lambda td: td.del_("missing")),
+        "del_(())": _inplace(lambda td: td.del_(())),
+        "del_(('a', 'x'))": _inplace(lambda td: td.del_(("a", "x"))),
+        "rename_key_('a', 'z')": _inplace(lambda td: td.rename_key_("a", "z")),
+        "rename_key_('a', ())": _inplace(lambda td: td.rename_key_("a", ())),
+        "flatten_keys()": lambda td: td.flatten_keys(),
+        "flatten_keys(inplace=True)": _inplace(
+            lambda td: td.flatten_keys(inplace=True)
+        ),
+        "unflatten_keys()": lambda td: td.unflatten_keys(),
+        "get_at('a', 0)": lambda td: td.get_at("a", 0),
+        "get_at('missing', 0, None)": lambda td: td.get_at("missing", 0, None),
+        "get_at(('a', 'x'), 0)": lambda td: td.get_at(("a", "x"), 0),
+        "get(('a', 'x'), None)": lambda td: td.get(("a", "x"), None),
+        "is_empty()": lambda td: td.is_empty(),
+        "non_tensor_items(True)": lambda td: [
+            key for key, _ in td.non_tensor_items(True)
+        ],
+        "'a' in td": lambda td: "a" in td,
+        "('a', 'x') in td": lambda td: ("a", "x") in td,
+    },
     "select": {
         "select('a')": lambda td: td.select("a"),
         "select('a', 'b')": lambda td: td.select("a", "b"),

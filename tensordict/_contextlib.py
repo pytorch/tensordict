@@ -12,10 +12,11 @@ import contextlib
 import functools
 import inspect
 import sys
+import warnings
 from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
-from tensordict.utils import _parse_to
+from tensordict.utils import _parse_to, _user_stacklevel, is_tensorclass
 from torch.compiler import is_compiling
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,
@@ -161,6 +162,27 @@ class _DecoratorContextManager:
 LAST_OP_MAPS = {}
 
 
+def _changed_in_place(self, out):
+    # With inplace=True, the op changes the tensordict it was called on and
+    # returns it: the reversal must undo the op on ``out`` itself.
+    return (self._tensordict if is_tensorclass(self) else self) is out
+
+
+def _warn_kept_in_place(op, result):
+    """Warns that a with-block around ``op(..., inplace=True)`` keeps ``result``, until 0.17 (gh-2700)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        f"A with-block around {op}(..., inplace=True) leaves the tensordict "
+        f"with {result} after the block. Starting with TensorDict 0.17, the "
+        "default will change to restoring it on exit, as without "
+        f"inplace=True. To keep {result}, call {op}(..., inplace=True) "
+        "outside a with-block.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _reverse_lock(self, args, kwargs, out):
     return self.unlock_()
 
@@ -190,6 +212,20 @@ LAST_OP_MAPS["swapdims"] = _reverse_transpose
 
 def _reverse_flatten_keys(self, args, kwargs, out):
     sep = args[0] if args else "."
+    if _changed_in_place(self, out):
+        separator = kwargs.get("separator", sep)
+        # flatten_keys(inplace=True) records whether unflatten_keys undoes it
+        exact, out._inplace_flatten_keys_exact = out._inplace_flatten_keys_exact, None
+        if separator != sep:
+            # the reversal below reads a positional separator only, and
+            # leaves these keys flat
+            if any(separator in key for key in out.keys()):
+                _warn_kept_in_place("flatten_keys", "its keys flat")
+            return out
+        if exact:
+            return out.unflatten_keys(sep, inplace=True)
+        # A key held the separator before the block, so unflatten_keys
+        # cannot tell it from a flattened nested key: keep main's result.
     if not out.is_locked:
         return out.update(self.unflatten_keys(sep), inplace=False)
     else:
@@ -230,6 +266,21 @@ def _reverse_flatten(self, args, kwargs, out):
         dim0 = 0
     if dim1 is None:
         dim1 = -1
+    if kwargs.get("inplace") and _changed_in_place(self, out):
+        # flatten(inplace=True) records the sizes that it merged
+        record, out._inplace_flatten_sizes = out._inplace_flatten_sizes, None
+        if record is not None:
+            start_dim, sizes = record
+            ndim = out.ndim
+            d0 = dim0 + ndim if dim0 < 0 else dim0
+            d1 = dim1 + ndim if dim1 < 0 else dim1
+            if -ndim <= d0 < ndim and len(out.shape[d0 : d1 + 1]) == 1:
+                # The reversal below unflattens d0 into the one size that it
+                # has, and keeps the flat shape.
+                if len(sizes) > 1:
+                    _warn_kept_in_place("flatten", "its flattened shape")
+                return out
+            return out.unflatten(start_dim, sizes, inplace=True)
     if dim1 < 0:
         dim1 = out.ndim + dim1
     if dim0 < 0:
@@ -256,6 +307,11 @@ def _reverse_unflatten(self, args, kwargs, out):
     else:
         dim0 = kwargs.get("dim")
         unflattened_size = kwargs.get("unflattened_size")
+    if _changed_in_place(self, out):
+        if dim0 < 0:
+            dim0 = out.ndim - len(unflattened_size) + 1 + dim0
+        dim1 = dim0 + len(unflattened_size) - 1
+        return out.flatten(dim0, dim1, inplace=True)
     if dim0 < 0:
         dim0 = out.ndim + dim0
     dim1 = dim0 + len(unflattened_size) - 1

@@ -68,7 +68,23 @@ class _NoSetNonTensor:
         )
 
 
-class _StoreUnsupported(_NoShapeOps, _NoVmap, _NoSetNonTensor):
+class _NoSelectExclude:
+    """``select`` and ``exclude`` for a backend whose reads copy the stored data."""
+
+    def _select(self, *keys, inplace=False, strict=True, set_shared=True):
+        raise NotImplementedError(
+            f"Cannot call select on a {type(self).__name__}. "
+            "Call to_tensordict() first."
+        )
+
+    def _exclude(self, *keys, inplace=False, set_shared=True):
+        raise NotImplementedError(
+            f"Cannot call exclude on a {type(self).__name__}. "
+            "Call to_tensordict() first."
+        )
+
+
+class _StoreUnsupported(_NoShapeOps, _NoVmap, _NoSetNonTensor, _NoSelectExclude):
     """The unsupported operations of the stores in :mod:`tensordict.store`."""
 
     def _memmap_(self, *, inplace, **kwargs):

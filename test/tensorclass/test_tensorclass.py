@@ -574,6 +574,117 @@ for item in obs:
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensordict_stub_source_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check the source annotations of TensorDict.__init__ and from_dict alone:
+    # their signatures are copied from _td.py into a stub, next to the names
+    # they use. Mypy also searches the working directory, which must not hold
+    # the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    with open(_TENSORDICT_DIR / "_td.py", "r") as f:
+        tree = ast.parse(f.read())
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TensorDict"
+    )
+    methods = [
+        node
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name in ("__init__", "from_dict")
+    ]
+    assert len(methods) == 2
+    for method in methods:
+        method.body = [ast.Expr(ast.Constant(...))]
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class Size: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("_nestedkey.pyi").write_text(
+        (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
+    )
+    methods_source = textwrap.indent("\n".join(map(ast.unparse, methods)), "    ")
+    package.joinpath("__init__.pyi").write_text(
+        f"""from collections.abc import Mapping, Sequence
+from typing import Any, Self, TypeVar
+
+import torch
+from tensordict._nestedkey import NestedKey
+
+class TensorCollection: ...
+class TensorDictBase(TensorCollection): ...
+
+T = TypeVar("T", bound=TensorCollection)
+CompatibleType = torch.Tensor | TensorCollection
+DeviceType = Any
+
+class TensorDict(TensorDictBase):
+{methods_source}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def user_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        return [line for line in stdout.splitlines() if line.startswith("user.py:")]
+
+    # A nested dict and a dict[str, Tensor] variable work at runtime.
+    valid = """import torch
+from tensordict import TensorDict
+from tensordict._nestedkey import NestedKey
+
+t = torch.Tensor()
+data: dict[str, torch.Tensor] = {"a": t}
+nested_key_data: dict[NestedKey, torch.Tensor] = {("a", "b"): t}
+TensorDict({"a": t, "b": {"c": t}}, batch_size=[3])
+TensorDict(data, batch_size=[3])
+TensorDict(nested_key_data)
+TensorDict({("a", "b"): t})
+TensorDict({"a": t, ("b", "c"): t})
+TensorDict(TensorDict(data))
+TensorDict.from_dict({"a": t, "b": {"c": t}}, batch_size=[3])
+TensorDict.from_dict(data)
+"""
+    assert user_errors(valid) == []
+
+    invalid = """import torch
+from tensordict import TensorDict
+
+TensorDict(3)
+TensorDict.from_dict([torch.Tensor()])
+"""
+    errors = user_errors(invalid)
+    assert len(errors) == 2, errors
+    assert 'Argument 1 to "TensorDict" has incompatible type "int"' in errors[0]
+    assert 'Argument 1 to "from_dict" of "TensorDict"' in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.parametrize(
     "path,class_name",
     [
@@ -1010,6 +1121,40 @@ class TestTensorClass:
         assert obj.batch_size == (2, 3)
         assert obj.X.shape == (2, 3)
         assert (obj.X == 1).all()
+
+    @pytest.mark.parametrize(
+        "shape,op,args",
+        [((2, 3, 4), "flatten", (0, 1)), ((6, 4), "unflatten", (0, (2, 3)))],
+    )
+    def test_shape_op_context_manager_inplace(self, shape, op, args):
+        # with inplace=True, the shape is restored on exit too (gh-2700)
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            y: TensorDict
+
+        obj = MyClass(
+            X=torch.zeros(shape), y=TensorDict(z=torch.zeros(shape)), batch_size=shape
+        )
+        with getattr(obj, op)(*args, inplace=True) as obj_op:
+            assert obj_op is obj
+            obj_op.X = obj_op.X + 1
+        assert obj.batch_size == shape
+        assert obj.X.shape == shape
+        assert obj.y.batch_size == shape
+        assert (obj.X == 1).all()
+
+    def test_flatten_keys_context_manager_inplace(self):
+        # with inplace=True, the nested keys are restored on exit too (gh-2700)
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            y: TensorDict
+
+        obj = MyClass(X=torch.zeros(2), y=TensorDict(z=torch.zeros(2)), batch_size=[2])
+        with obj.flatten_keys(inplace=True):
+            pass
+        assert set(obj._tensordict.keys(True, True)) == {"X", ("y", "z")}
 
     def test_lock_context_manager_restores_on_error(self):
         # lock_() and unlock_() undo their change also when the body raises
