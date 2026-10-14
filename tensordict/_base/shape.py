@@ -1796,17 +1796,6 @@ class _ShapeOps:
                     "gather(inplace=True) is not supported on LazyStackedTensorDict; "
                     "call .to_tensordict() first or use inplace=False."
                 )
-            if self._gather_inplace_warns and tuple(index.shape) == tuple(
-                self.batch_size
-            ):
-                warnings.warn(
-                    f"gather(inplace=True) on a {type(self).__name__} over a "
-                    "lazy tensordict works when the index has the batch shape. "
-                    "Starting with TensorDict 0.17, the default will change to "
-                    "raising a NotImplementedError, as LazyStackedTensorDict does.",
-                    FutureWarning,
-                    stacklevel=_user_stacklevel(),
-                )
             self._raise_if_holds_lazy_stack("gather")
             if index.ndim != self.batch_dims:
                 raise NotImplementedError(
@@ -1842,6 +1831,17 @@ class _ShapeOps:
                     dim_corrected, expand_index(nested.batch_size), inplace=True
                 )
 
+            if self._gather_inplace_warns and tuple(index.shape) == tuple(
+                self.batch_size
+            ):
+                warnings.warn(
+                    f"gather(inplace=True) on a {type(self).__name__} over a "
+                    "lazy tensordict works when the index has the batch shape. "
+                    "Starting with TensorDict 0.17, the default will change to "
+                    "raising a NotImplementedError, as LazyStackedTensorDict does.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
+                )
             return self._inplace_rebind_leaves(leaf_fn, nested_fn, new_batch_size)
         return torch.gather(self, dim, index, out=out)
 
