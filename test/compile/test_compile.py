@@ -310,6 +310,57 @@ def test_where_non_tensor_data():
     assert result.get("s").tolist() == ["a", "b", "a", "b"]
 
 
+@pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+@pytest.mark.parametrize("value", [3, [1, 2]], ids=type)
+@pytest.mark.parametrize("setitem", [False, True], ids=["set_at_", "setitem"])
+def test_set_at_cast_non_tensor(setitem, value, lazy):
+    # The FutureWarning for a value cast to a tensor in a non-tensor entry
+    # (gh-2522) is skipped under compile, which traces no warnings.warn
+    def fn(td):
+        if setitem:
+            td[:2] = value
+        else:
+            td.set_at_("a", value, slice(0, 2))
+        return td["b"] + 1
+
+    td = TensorDict(
+        a=NonTensorData("s", batch_size=[3]), b=torch.zeros(3), batch_size=[3]
+    )
+    if lazy:
+        td = lazy_stack(td.unbind(0))
+    torch.compile(fn, fullgraph=True, backend="eager")(td)
+    assert torch.equal(td[1]["a"], torch.as_tensor(value))
+
+
+@pytest.mark.parametrize("lazy", [False, True], ids=["dense", "lazy"])
+@pytest.mark.parametrize("non_tensor", [False, True], ids=["tensors", "non-tensor"])
+@pytest.mark.parametrize("value", ["number", "tensordict"])
+def test_setitem_compiles(value, non_tensor, lazy):
+    # td[index] = value decides from Python types whether to warn of a cast
+    # in a non-tensor entry (gh-2522), which adds no graph break
+    def make(batch_size):
+        td = TensorDict(b=torch.zeros(batch_size), n={"e": torch.zeros(batch_size, 2)})
+        td.batch_size = [batch_size]
+        if non_tensor:
+            td["a"] = NonTensorData("s", batch_size=[batch_size])
+        return td
+
+    def fn(td, other):
+        td[:2] = 0.5 if value == "number" else other
+        return td["b"] + 1
+
+    td = make(3)
+    if lazy:
+        td = lazy_stack(td.unbind(0))
+    other = make(2)
+    other["b"] = torch.full((2,), 2.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        out = torch.compile(fn, fullgraph=True, backend="eager")(td, other)
+    expected = 1.5 if value == "number" else 3.0
+    assert out.tolist() == [expected, expected, 1.0]
+
+
 @pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )
@@ -1063,6 +1114,24 @@ class TestTD:
         assert result["nested"].batch_size == expected["nested"].batch_size
         assert result.names == expected.names
         assert result["nested", "b"].device == torch.device("meta")
+
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    def test_to_dtype_batch_size_locked_nested_lazy(self, mode, batch_size):
+        # #2374
+        def to_double(td):
+            return td.to(torch.float64, batch_size=batch_size)
+
+        td = TensorDict(
+            lazy=lazy_stack([TensorDict(x=torch.zeros(3)) for _ in range(2)]),
+            y=torch.zeros(2, 3),
+            batch_size=[2],
+        ).lock_()
+        to_double_c = torch.compile(to_double, fullgraph=True, mode=mode)
+        result = to_double_c(td)
+        assert result.batch_size == torch.Size(batch_size)
+        assert result.is_locked
+        assert result["lazy", "x"].dtype == torch.float64
+        assert result["y"].dtype == torch.float64
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="cuda required")
     def test_to_cpu_from_cuda(self, mode):
@@ -2812,7 +2881,9 @@ class TestCudaGraphs:
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
         yield
-        torch.set_default_device(device)
+        # With no default device set, get_default_device() returns cpu, and
+        # set_default_device(cpu) would leave a device mode on for later tests.
+        torch.set_default_device(None if device.type == "cpu" else device)
 
     def test_cudagraphs_keeps_pytree_registry(self, compiled):
         # pytorch/tensordict#2076: creating and calling a CudaGraphModule used to

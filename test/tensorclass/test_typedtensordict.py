@@ -107,10 +107,41 @@ class TestConstruction:
         assert other.batch_size == (4,)
         assert (other.X == 2).all()
         assert (state.X == 1).all()
-        # no schema validation: a missing field gives an instance without it
-        partial = PredictorState.from_dict({"eta": torch.zeros(4)}, batch_size=[4])
+        # a missing required field warns (it raises from 0.17) and gives an
+        # instance without it; check=False gives the same instance silently
+        with pytest.warns(FutureWarning, match="misses the required field.*X, beta"):
+            partial = PredictorState.from_dict({"eta": torch.zeros(4)}, batch_size=[4])
         assert type(partial) is PredictorState
         assert list(partial.keys()) == ["eta"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            partial = PredictorState.from_dict(
+                {"eta": torch.zeros(4)}, batch_size=[4], check=False
+            )
+            assert list(partial.keys()) == ["eta"]
+            # undeclared keys are kept without a warning
+            extra = PredictorState.from_dict({**data, "z": torch.zeros(4)})
+            assert sorted(extra.keys()) == ["X", "beta", "eta", "z"]
+            # a tensor collection that is not a TensorDict is wrapped as is
+            stacked = PredictorState.from_dict(lazy_stack([state[0], state[1]]))
+            assert type(stacked) is PredictorState
+            assert sorted(stacked.keys()) == sorted(data)
+            # from_dict_instance does not check the declared fields
+            other = state.from_dict_instance({"eta": torch.zeros(4)}, batch_size=[4])
+            assert list(other.keys()) == ["eta"]
+            # a nested partial write goes through from_dict_instance
+            outer = TensorDict(inner=state.clone(), batch_size=[4])
+            outer[1:3] = {"inner": {"X": torch.full((2, 3), 3.0)}}
+            assert type(outer["inner"]) is PredictorState
+            assert (outer["inner", "X"][1:3] == 3).all()
+            assert (outer["inner", "X"][::3] == 1).all()
+        # the positional constructor warns the same way
+        with pytest.warns(FutureWarning, match=r"PredictorState\(dict\).*X, beta"):
+            partial = PredictorState({"eta": torch.zeros(4)}, batch_size=[4])
+        assert list(partial.keys()) == ["eta"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert sorted(PredictorState(data, batch_size=[4]).keys()) == sorted(data)
 
     def test_missing_required_field(self):
         with pytest.raises(TypeError, match="missing required field.*beta"):
