@@ -48,6 +48,8 @@ from tensordict.utils import (
     _erase_cache_first,
     _lock_blocked,
     _LOCK_ERROR,
+    _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_update_ignore_lock,
     _zip_strict,
     IndexType,
     is_batchedtensor,
@@ -608,6 +610,41 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase: ...
+
+    # Override: the base runs with _param_td unlocked, so that a lock=True
+    # content takes nested entries, and the parameters are registered again
+    # afterwards, since the base writes nested entries into the nested
+    # tensordicts directly.
+    @_lock_blocked
+    def update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase | None = None,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        non_blocking: bool = False,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
+        update_batch_size: bool = False,
+        ignore_lock: bool = False,
+        **kwargs,
+    ) -> TensorDictBase:
+        if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
+            _warn_update_ignore_lock(stacklevel=3)
+        with self._param_td.unlock_():
+            TensorDictBase.update(
+                self,
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
+                is_leaf=is_leaf,
+                update_batch_size=update_batch_size,
+                **kwargs,
+            )
+            self._reset_params()
+        return self
 
     @_lock_blocked
     @_unlock_and_set

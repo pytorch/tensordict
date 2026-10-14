@@ -4571,7 +4571,9 @@ class TestTensorDictParams:
             assert type(r) is TensorDict
             assert r.is_locked is (lock and keeps_lock)
         if op in ("eq", "ne", "lt", "any0"):
-            assert not any(v.requires_grad for v in result.values(True, True))
+            # boolean results, which hold no gradient: their lock is checked
+            # above
+            assert all(v.dtype is torch.bool for v in result.values(True, True))
         else:
             grads = {
                 key: v.requires_grad for r in results for key, v in r.items(True, True)
@@ -4708,6 +4710,30 @@ class TestTensorDictParams:
             assert params.update({"q": torch.ones(4)}, ignore_lock=True) is params
         assert record[0].filename == __file__
         assert sorted(dict(params.named_parameters())) == ["a", "n.c", "q"]
+
+    @pytest.mark.parametrize("dict_source", [False, True], ids=["td", "dict"])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_update_nested_source(self, lock, dict_source):
+        # a nested entry of the source goes into the nested tensordict, also
+        # with lock=True content, and the module registers the new leaves
+        params = self._params(lock=lock)
+        source = TensorDict(
+            a=torch.ones(4, 3),
+            n=TensorDict(c=torch.ones(4, 3), q=torch.ones(4, 2), batch_size=[4]),
+            batch_size=[4],
+        )
+        if dict_source:
+            source = source.to_dict()
+        assert params.update(source) is params
+        assert params._param_td.is_locked is lock
+        registered = {**dict(params.named_parameters()), **dict(params.named_buffers())}
+        entries = {
+            ".".join(key) if isinstance(key, tuple) else key: value
+            for key, value in params._param_td.items(True, True)
+        }
+        assert registered.keys() == entries.keys()
+        assert all(registered[key] is entries[key] for key in entries)
+        assert (params["n", "c"] == 1).all()
 
     def test_update_root_locked(self):
         params = self._params().lock_()
