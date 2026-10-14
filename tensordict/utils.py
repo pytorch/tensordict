@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
+import contextvars
 import functools
 import itertools
 import logging
@@ -656,6 +657,13 @@ def is_tensorclass(obj: type | Any) -> bool:
 
 
 _TENSORCLASS_MEMO = {}
+
+# Set while the archive writer stages placeholder leaves (see
+# ``_write_archive_from_td``): tensorclass ``__post_init__`` must not run on
+# that data, which is uninitialized or zero until the real bytes are written.
+_SKIP_TENSORCLASS_POST_INIT = contextvars.ContextVar(
+    "_SKIP_TENSORCLASS_POST_INIT", default=False
+)
 
 
 def _is_tensorclass(cls: type) -> bool:

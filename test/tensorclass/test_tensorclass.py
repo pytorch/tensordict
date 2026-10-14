@@ -4338,6 +4338,19 @@ class TestTensorClass:
         assert (grads == 1).all()
 
 
+class _ValidatingRagged(TensorClass):
+    # Module level, so that loading an archive resolves this class whatever
+    # the test order. __post_init__ records the offsets it sees in `seen`.
+    offsets: torch.Tensor
+    indices: torch.Tensor
+    seen: ClassVar[list] = []
+
+    def __post_init__(self):
+        type(self).seen.append(self.offsets.tolist())
+        if int(self.offsets[-1]) != len(self.indices):
+            raise ValueError("last offset must be len(indices)")
+
+
 class TestMemmap:
     def test_empty_tensor_roundtrip(self, tmp_path):
         @tensorclass
@@ -4678,6 +4691,28 @@ class TestMemmap:
         assert isinstance(loaded, MySubclassed)
         assert (loaded.a == 0).all()
         assert loaded.meta == "hello"
+
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_save_archive_validating_post_init(self, tmp_path, nested):
+        # Saving to a .tdz archive must not run __post_init__ on the
+        # uninitialized or zero placeholders that it stages before writing
+        # the data; __post_init__ runs on the real data when it is loaded.
+        Ragged = _ValidatingRagged
+        seen = Ragged.seen
+        data = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.tensor([5, 6, 7]))
+        if nested:
+            data = TensorDict(adj=data, x=torch.zeros(4))
+        seen.clear()
+        saved = data.save(tmp_path / "data.tdz")
+        assert seen == [[0, 2, 3]]
+        seen.clear()
+        loaded = TensorDict.load(tmp_path / "data.tdz")
+        assert seen == [[0, 2, 3]]
+        for result in (saved, loaded):
+            assert type(result) is type(data)
+            assert_allclose_td(result, data)
+            adj = result["adj"] if nested else result
+            assert isinstance(adj, Ragged)
 
     def test_memmap_like(self):
         @tensorclass

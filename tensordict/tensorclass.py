@@ -78,6 +78,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _resolve_expand_shape,
+    _SKIP_TENSORCLASS_POST_INIT,
     _strong_ref,
     _td_fields,
     _TENSORCLASS_MEMO,
@@ -2427,7 +2428,9 @@ def _from_tensordict(
         object.__setattr__(tc, "_non_tensordict", non_tensordict)
     # since we aren't calling the dataclass __init__, we need to manually
     # check whether a __post_init__ method has been defined and invoke it
-    if hasattr(cls, "__post_init__"):
+    if hasattr(cls, "__post_init__") and (
+        is_compiling() or not _SKIP_TENSORCLASS_POST_INIT.get()
+    ):
         tc.__post_init__()
     return tc
 
