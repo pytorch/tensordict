@@ -369,6 +369,11 @@ Rules
   ``permute``, ``transpose``, ``flatten``, ``unflatten``, ``chunk``,
   ``expand``, ``cat``, ``stack``, and indexing return the same
   :class:`~tensordict.UnbatchedTensor`, with the same storage.
+- :meth:`~tensordict.TensorDictBase.apply` and
+  :meth:`~tensordict.TensorDictBase.named_apply` with a ``batch_size`` (also
+  with ``out=``) count as shape operations: the function is not called on an
+  :class:`~tensordict.UnbatchedTensor`, which keeps its data and takes the new
+  batch size. Without a ``batch_size``, the function is called on it.
 - Other operations work as for a tensor: device and dtype casts (``to``),
   pointwise arithmetic (``+``, ``-``, ``*``, ``/``), ``clone``, gradient
   computation, and access by key.

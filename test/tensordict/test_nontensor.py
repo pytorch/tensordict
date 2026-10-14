@@ -3153,6 +3153,37 @@ class TestUnbatchedTensor:
         assert out["u"].shape == (5,)
         assert out.get("u").batch_size == (6,)
 
+    def test_unbatched_apply_batch_size(self):
+        # https://github.com/pytorch/tensordict/issues/2499
+        # apply with a batch_size is a shape op: fn is not called on the
+        # UnbatchedTensor, which only takes the new batch size.
+        td = TensorDict(
+            a=torch.ones(3, 2), u=UnbatchedTensor(torch.ones(5)), batch_size=[3, 2]
+        )
+        out = td.apply(lambda x: x * 2, batch_size=[3])
+        assert (out["a"] == 2).all()
+        assert isinstance(out.get("u"), UnbatchedTensor)
+        assert (out["u"] == 1).all()
+        assert out.get("u").batch_size == (3,)
+        out = td.named_apply(lambda name, x: x * 2, batch_size=[3])
+        assert (out["u"] == 1).all()
+        out = TensorDict(
+            a=torch.zeros(3, 2), u=UnbatchedTensor(torch.zeros(5)), batch_size=[3]
+        )
+        assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
+        assert (out["a"] == 2).all()
+        assert (out["u"] == 1).all()
+        # A shape function works because it is not called on the entry
+        out = td.apply(lambda x: x.reshape(6, *x.shape[2:]), batch_size=[6])
+        assert out["u"].shape == (5,)
+        assert out.get("u").batch_size == (6,)
+
+        # Without a batch_size, fn is called on the entry
+        out = td.apply(lambda x: x * 2)
+        assert isinstance(out.get("u"), UnbatchedTensor)
+        assert (out["u"] == 2).all()
+        assert out.get("u").batch_size == (3, 2)
+
     @pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul])
     def test_unbatched_pointwise_other_unbatched(self, op):
         td = TensorDict(a=torch.ones(3, 2), u=torch.ones(3), batch_size=[3])
