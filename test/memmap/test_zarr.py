@@ -240,6 +240,28 @@ class TestZarrNonTensor:
         assert ztd.get("text").tolist() == ["x", "yy", "z"]
         ztd.close()
 
+    def test_foreign_column_as_stack(self, tmp_path):
+        # a string column that another tool wrote, one string per row, reads
+        # as a NonTensorStack of its rows with non_tensor_as_stack=True (#2545)
+        path = str(tmp_path / "s.zarr")
+        root = zarr.open_group(path, mode="w")
+        root.create_array("pos", shape=(4,), dtype="float32")[:] = 0
+        root.create_array("mission", shape=(4,), dtype=str)[:] = ["a", "b", "c", "d"]
+        ztd = PersistentTensorDict.from_zarr(path)
+        assert ztd.entry_class("mission") is NonTensorData
+        ztd.close()
+        ztd = PersistentTensorDict.from_zarr(path, mode="r+", non_tensor_as_stack=True)
+        assert ztd.batch_size == (4,)
+        assert ztd.entry_class("mission") is NonTensorStack
+        assert ztd[1:3].get("mission").tolist() == ["b", "c"]
+        assert ztd[2]["mission"] == "c"
+        # a value that tensordict wrote is a payload of bytes, not rows
+        ztd.set("n", NonTensorData(1234, batch_size=[4]))
+        assert ztd.file["n"].shape == (4,)
+        assert ztd.entry_class("n") is NonTensorData
+        assert ztd[1]["n"] == 1234
+        ztd.close()
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrIndexing:
@@ -397,6 +419,25 @@ class TestZarrWriteOps:
         with pytest.warns(FutureWarning, match="add_.*leaves the file unchanged"):
             stack.add_(1.0)
         assert (reopened["a"] == 1).all()
+
+    def test_inplace_methods_write_nested_lazy_stack(self, ztd, tmp_path):
+        # #2592: the in-place methods of a tensordict write to the zarr
+        # members of a lazy stack that it holds
+        expected = ztd.to_tensordict()
+        dense = expected.clone()
+        data = TensorDict({"n": {"s": lazy_stack([ztd, dense])}}, batch_size=[2])
+        assert data.add_(1.0) is data
+        assert data.mul_(torch.tensor(2.0)) is data
+        expected.add_(1.0).mul_(2.0)
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), expected)
+        torch.testing.assert_close(dense, expected)
+        # a read-only member is left unchanged, with a warning
+        stack = lazy_stack([ztd, PersistentTensorDict.from_zarr(tmp_path / "s.zarr")])
+        data = TensorDict({"s": stack}, batch_size=[2])
+        with pytest.warns(FutureWarning, match="add_.*leaves the file unchanged"):
+            data.add_(1.0)
+        torch.testing.assert_close(reopened["a"], expected["a"] + 1)
 
     def test_inplace_read_only_warns(self, ztd, tmp_path):
         # The in-place methods leave a read-only store unchanged, as before
