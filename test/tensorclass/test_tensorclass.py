@@ -4037,6 +4037,32 @@ class TestTensorClass:
             assert tc.a is source.a
             assert (tc.b == 1).all()
 
+    def test_update_at_idx_keyword(self):
+        # update_at_ names the index idx, as TensorDict.update_at_ does, and
+        # still takes index= until TensorDict 0.17
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        source = TC(a=torch.ones(2), batch_size=[2])
+        expected = TC(a=torch.zeros(4), batch_size=[4])
+        expected.update_at_(source, slice(1, 3))
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert tc.update_at_(source, idx=slice(1, 3)) is tc
+        assert (tc.a == expected.a).all()
+        assert tc.a.tolist() == [0.0, 1.0, 1.0, 0.0]
+
+        tc = TC(a=torch.zeros(4), batch_size=[4])
+        with pytest.warns(
+            DeprecationWarning,
+            match=r"update_at_\(index=.*0\.17.*update_at_\(idx=",
+        ) as record:
+            assert tc.update_at_(source, index=slice(1, 3)) is tc
+        assert record[0].filename == __file__
+        assert (tc.a == expected.a).all()
+
     @pytest.mark.parametrize("source_type", ["tensorclass", "dict"])
     def test_update_at_full_size_source(self, source_type):
         # update_at_ sends a source that update() accepts to update(), which

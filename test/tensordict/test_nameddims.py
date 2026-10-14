@@ -862,6 +862,97 @@ class TestNamedDims(TestTensorDictsBase):
         assert tds[0].names == ["e"]
         assert tds[0][""].names == tds[""][0].names == ["e", "d"]
 
+    def test_lazy_stack_set_names_failure_leaves_names_unchanged(self):
+        # A clash on the stack dim, or a names list of the wrong length, is
+        # rejected before the stack dim name or any member is written.
+        members = [
+            TensorDict({"x": torch.zeros(3)}, [3], names=["inner"]),
+            TensorDict({"x": torch.zeros(3)}, [3], names=["inner"]),
+        ]
+        stack = LazyStackedTensorDict(*members, stack_dim=0)
+        assert stack.names == [None, "inner"]
+        with pytest.raises(ValueError, match="already taken"):
+            stack.names = ["inner", "inner"]
+        assert stack.names == [None, "inner"]
+        assert [member.names for member in stack.tensordicts] == [
+            ["inner"],
+            ["inner"],
+        ]
+
+        # The clash is only on the second member. The first must not be renamed.
+        first = TensorDict({"x": torch.zeros(3, 4)}, [3], names=["inner"])
+        second = TensorDict(
+            {"nested": TensorDict({}, [3, 4], names=["inner", "taken"])},
+            [3],
+            names=["inner"],
+        )
+        stack = LazyStackedTensorDict(first, second, stack_dim=0)
+        assert stack.names == [None, "inner"]
+        with pytest.raises(ValueError, match="already taken"):
+            stack.names = ["taken", "other"]
+        assert first.names == ["inner"]
+        assert second.names == ["inner"]
+        assert second["nested"].names == ["inner", "taken"]
+        assert stack.names == [None, "inner"]
+
+        stack = LazyStackedTensorDict(
+            TensorDict({}, [3], names=["feat"]),
+            TensorDict({}, [3], names=["feat"]),
+            stack_dim=0,
+        )
+        assert stack.ndim == 2
+        assert stack.names == [None, "feat"]
+        for bad_names, error in ((["batch"], ValueError), ([], IndexError)):
+            with pytest.raises(error):
+                stack.names = bad_names
+            assert stack.names == [None, "feat"]
+            assert [member.names for member in stack.tensordicts] == [
+                ["feat"],
+                ["feat"],
+            ]
+
+    def test_lazy_stack_set_names_members_disagree(self):
+        # The members of a nested lazy stack may disagree on names, so that
+        # its names getter raises. Setting the names of the outer stack still
+        # works, and a failure restores each member's own names.
+        def disagree():
+            return LazyStackedTensorDict(
+                TensorDict({}, [3], names=["p"]), TensorDict({}, [3], names=["q"])
+            )
+
+        outer = LazyStackedTensorDict(disagree(), disagree())
+        outer.names = [None, None, None]
+        assert outer.names == [None, None, None]
+
+        clash = TensorDict(
+            {"nested": TensorDict({}, [3, 4], names=["inner", "taken"])},
+            [3],
+            names=["inner"],
+        )
+        outer = LazyStackedTensorDict(
+            disagree(), LazyStackedTensorDict(clash, clash.clone())
+        )
+        with pytest.raises(ValueError, match="non-unique"):
+            outer.names = [None, None, "taken"]
+        assert [member.names for member in outer.tensordicts[0].tensordicts] == [
+            ["p"],
+            ["q"],
+        ]
+        assert outer.tensordicts[1].names == [None, "inner"]
+        assert clash["nested"].names == ["inner", "taken"]
+
+        # The same member twice: its second snapshot is taken after its first
+        # rename, so the rollback must end on the first one.
+        td = TensorDict({}, [3], names=["q"])
+        bad = TensorDict(
+            {"n": TensorDict({}, [3, 4], names=["q", "taken"])}, [3], names=["q"]
+        )
+        stack = LazyStackedTensorDict(td, td, bad)
+        with pytest.raises(ValueError, match="non-unique"):
+            stack.names = ["s", "taken"]
+        assert td.names == ["q"]
+        assert stack.names == [None, "q"]
+
     def test_sub_td(self):
         td = self.sub_td("cpu")
         with pytest.raises(
