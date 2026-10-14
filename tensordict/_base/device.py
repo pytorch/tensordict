@@ -488,7 +488,22 @@ class _DeviceOps:
             threads.append(thread)
         try:
             while len(items) < lkeys:
-                keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                try:
+                    keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                except queue.Empty:
+                    # A large or file-backed leaf can take longer than the
+                    # timeout to pin: wait as long as a thread is working.
+                    if any(thread.is_alive() for thread in threads):
+                        continue
+                    # A thread may have put its last leaf after the wait
+                    try:
+                        keyval = q_out.get_nowait()
+                    except queue.Empty:
+                        raise RuntimeError(
+                            "The pin_memory threads of to(device, "
+                            "non_blocking_pin=True) exited without returning "
+                            f"{lkeys - len(items)} of the {lkeys} leaves."
+                        ) from None
                 if not isinstance(keyval, tuple):
                     raise keyval
                 key, val = keyval

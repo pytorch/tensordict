@@ -18,6 +18,7 @@ import re
 import shutil
 import sys
 import threading
+import time
 import warnings
 import weakref
 from collections import defaultdict, namedtuple, OrderedDict, UserDict
@@ -3630,6 +3631,49 @@ class TestGeneric:
         with pytest.warns(DeprecationWarning, match="pin_memory_"):
             td.pin_memory_(num_threads=2)
         assert calls[-1] == (2, True)
+
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ),
+        ],
+    )
+    def test_to_non_blocking_pin_slow_leaf(self, device, monkeypatch):
+        # A leaf that takes longer than the wait timeout to pin (the first read
+        # of a large memory-mapped file, say) must not stop the transfer
+        monkeypatch.setattr("tensordict._base.device._PIN_MEM_TIMEOUT", 0.1)
+        pin_memory = torch.Tensor.pin_memory
+
+        def slow_pin_memory(tensor, *args, **kwargs):
+            time.sleep(0.3)
+            if device == "cpu":
+                # pinning needs an accelerator
+                return tensor
+            return pin_memory(tensor, *args, **kwargs)
+
+        td = TensorDict(a=torch.arange(3), b={"c": torch.ones(3)}, batch_size=[3])
+        monkeypatch.setattr(torch.Tensor, "pin_memory", slow_pin_memory)
+        out = td.to(device, non_blocking_pin=True, num_threads=2)
+        assert out.device.type == device
+        assert (out.cpu() == td).all()
+
+    def test_to_non_blocking_pin_dead_thread(self, monkeypatch):
+        # A pin thread that exits without returning its leaf raises a clear error
+        monkeypatch.setattr("tensordict._base.device._PIN_MEM_TIMEOUT", 0.1)
+        monkeypatch.setattr(
+            "tensordict._base.device._pin_mem", lambda q_in, q_out: None
+        )
+        td = TensorDict(a=torch.arange(3), b={"c": torch.ones(3)}, batch_size=[3])
+        with pytest.raises(
+            RuntimeError, match=r"exited without returning 2 of the 2 leaves"
+        ):
+            td.to("cpu", non_blocking_pin=True, num_threads=2)
 
     def test_load_state_dict_incomplete(self):
         data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
