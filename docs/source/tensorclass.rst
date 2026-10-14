@@ -194,6 +194,8 @@ either:
   >>> type(x.detached()).__name__, x[0].probs.shape
   ('Logits', torch.Size([4]))
 
+.. _tensorclass-post-init:
+
 ``__post_init__``
 ~~~~~~~~~~~~~~~~~
 
@@ -211,11 +213,45 @@ Use it to compute a default value, or to make sure that the fields are valid:
   >>> b.mask
   tensor([True, True, True])
 
-``__post_init__`` also runs each time tensordict makes a new instance from an
-existing one: an index, ``clone``, ``torch.stack``, ``apply``, and
-``from_tensordict``. Do little work in it, and make sure that a second run
-gives the same result. In the example above, the second run finds a mask and
-keeps it.
+``__post_init__`` also runs each time tensordict rebuilds an instance, that
+is, makes a new instance from the data of an existing one: an index,
+``clone``, ``to``, ``torch.stack``, ``apply``, and the other operations that
+return a tensorclass. It runs as well on the data that
+``from_tensordict``, ``from_dict`` and a load (``load_memmap``, ``load``)
+bring in. Do little work in it, and make sure that a second run gives the
+same result. In the example above, the second run finds a mask and keeps it.
+
+On a lazy stack (:func:`~tensordict.lazy_stack`, and the operations that
+return one), ``__post_init__`` runs on each stacked instance, not on the
+stack, so it sees fields of the shape of that instance, even when the
+instances have different shapes. A lazy stack of N instances makes N calls.
+The fields that it sets go to the stacked instances. ``torch.stack`` makes
+one call, on the stacked result.
+
+``__post_init__`` does not run on the shells that tensordict builds without
+fields and fills afterwards: the result of ``empty()``, the tensorclass
+entries of ``empty(recurse=True)``, and the output of
+:func:`~tensordict.pad_sequence`. A shell has no field, not even those that
+``__post_init__`` would fill. Under ``torch.compile``, ``__post_init__``
+still runs on these shells.
+
+To validate the data once, when it comes in, set the
+``skip_post_init_on_rebuild`` flag. ``__post_init__`` then runs in the
+generated ``__init__``, ``from_tensordict``, ``from_dict``, and when the data
+is loaded, but not when tensordict rebuilds an instance. Each class follows
+its own flag: a tensorclass without the flag that holds one with it runs only
+its own ``__post_init__`` on ``clone()``. Subclasses inherit the flag:
+
+  >>> class Ragged(TensorClass["skip_post_init_on_rebuild"]):
+  ...     offsets: torch.Tensor
+  ...     indices: torch.Tensor
+  ...
+  ...     def __post_init__(self):
+  ...         if int(self.offsets[-1]) != len(self.indices):
+  ...             raise ValueError("the last offset must be len(indices)")
+  >>> r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3))
+  >>> r.clone().offsets  # no check, and no device synchronization on CUDA
+  tensor([0, 2, 3])
 
 A custom ``__init__``
 ~~~~~~~~~~~~~~~~~~~~~
@@ -436,6 +472,12 @@ The flags are:
   ``to_dict``. Without this flag, such a name raises ``AttributeError`` when
   the class is defined. A field named ``data`` or ``fields`` is allowed
   without the flag, and it replaces the member of that name.
+
+``skip_post_init_on_rebuild``
+  ``__post_init__`` runs only on the data that comes in (the generated
+  ``__init__``, ``from_tensordict``, ``from_dict`` and loads), not each time
+  tensordict makes a new instance from an existing one, as in ``clone``,
+  ``to``, indexing, or ``torch.stack``. See :ref:`tensorclass-post-init`.
 
 ``autocast``, ``nocast``, and ``tensor_only`` are mutually exclusive. A class
 with two of them raises ``TypeError``.

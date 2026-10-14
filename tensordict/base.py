@@ -89,6 +89,7 @@ from tensordict.utils import (
     _REPR_OPTIONS,
     _set_max_batch_size,
     _shape,
+    _SKIP_TENSORCLASS_POST_INIT,
     _split_tensordict,
     _strtobool,
     _td_fields,
@@ -7989,7 +7990,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # simply exclude the leaves. A comprehension walks the keys once:
             # unpacking the view would call its __len__, which walks them too.
             leaves = [key for key in self.keys(True, True)]  # noqa: C416
-            result = self._exclude(*leaves, set_shared=False)
+            # The tensorclass entries become shells that the caller fills:
+            # __post_init__ would see no fields. Dynamo cannot set a
+            # ContextVar, so compiled code still runs it.
+            token = None if is_compiling() else _SKIP_TENSORCLASS_POST_INIT.set(True)
+            try:
+                result = self._exclude(*leaves, set_shared=False)
+            finally:
+                if token is not None:
+                    _SKIP_TENSORCLASS_POST_INIT.reset(token)
             if batch_size is not None:
                 # The batch_size setter gives the new batch size to the shorter
                 # sub-tensordicts and skips the empty ones of other shapes:
