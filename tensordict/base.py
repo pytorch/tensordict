@@ -7991,11 +7991,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # unpacking the view would call its __len__, which walks them too.
             leaves = [key for key in self.keys(True, True)]  # noqa: C416
             # The tensorclass entries become shells that the caller fills:
-            # __post_init__ would see no fields. Dynamo cannot set a
-            # ContextVar, so compiled code still runs it.
+            # __post_init__ would see no fields, here or when to() rebuilds
+            # them. Dynamo cannot set a ContextVar, so compiled code still
+            # runs it.
             token = None if is_compiling() else _SKIP_TENSORCLASS_POST_INIT.set(True)
             try:
                 result = self._exclude(*leaves, set_shared=False)
+                if device is not NO_DEFAULT and device is not None:
+                    result = result.to(device)
+                    device = NO_DEFAULT
             finally:
                 if token is not None:
                     _SKIP_TENSORCLASS_POST_INIT.reset(token)

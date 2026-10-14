@@ -948,8 +948,9 @@ def tensorclass(
             Defaults to ``False``.
         skip_post_init_on_rebuild (bool, optional): if ``True``,
             ``__post_init__`` runs in the generated ``__init__``,
-            ``from_tensordict``, ``from_dict`` and when the data is loaded,
-            but not when tensordict makes a new instance from the data of an
+            ``from_tensordict``, ``from_dict``, the other constructors such
+            as ``from_any`` or ``fromkeys``, and when the data is loaded or
+            received from another process, but not when tensordict makes a new instance from the data of an
             existing one, as in indexing, ``clone``, ``to``, ``apply`` or
             ``torch.stack``. Defaults to ``False``: ``__post_init__`` also
             runs on these rebuilds, except on the shells that ``empty()``
@@ -2525,13 +2526,26 @@ def _from_tensordict(
             # Run it on each stacked instance, which sees its own fields: on
             # the stack, reading a field of uneven shape would raise. The
             # fields it sets go to the members, which the stack holds.
-            for member in tensordict.tensordicts:
-                cls._from_tensordict(
-                    member, dict(non_tensordict), safe=False, rebuild=rebuild
-                )
+            _post_init_members(cls, tensordict, non_tensordict)
         else:
             tc.__post_init__()
     return tc
+
+
+def _post_init_members(cls, tensordict: LazyStackedTensorDict, non_tensordict: dict):
+    """Run ``cls.__post_init__`` on an instance built from each member of ``tensordict``.
+
+    The keys were checked on the stack: a member may hold more keys than the
+    stack, which keeps those that all the members share.
+    """
+    for member in tensordict.tensordicts:
+        if isinstance(member, LazyStackedTensorDict):
+            _post_init_members(cls, member, non_tensordict)
+            continue
+        tc = cls.__new__(cls)
+        object.__setattr__(tc, "_tensordict", member)
+        object.__setattr__(tc, "_non_tensordict", dict(non_tensordict))
+        tc.__post_init__()
 
 
 def _tensorclass_keys(cls, tensordict: TensorDict) -> list[str]:
@@ -3850,14 +3864,21 @@ def _update_at_(
     return self
 
 
+# The TensorDict classmethods whose inputs are instances: the others, such as
+# from_any or fromkeys, build an instance from new data.
+_REBUILD_CLASSMETHODS = frozenset({"stack", "cat", "lazy_stack", "maybe_dense_stack"})
+
+
 def _wrap_classmethod(td_cls, cls, func):
+    rebuild = func.__name__ in _REBUILD_CLASSMETHODS
+
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         res = func.__get__(td_cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             # create a new tensorclass from res and copy the metadata from self
-            return cls._from_tensordict(res)
+            return cls._from_tensordict(res, rebuild=rebuild)
         return res
 
     return wrapped_func
@@ -5489,7 +5510,8 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
 
     - ``skip_post_init_on_rebuild``: ``__post_init__`` runs on the data that
       comes in (the generated ``__init__``, ``from_tensordict``,
-      ``from_dict`` and loads), but not when tensordict makes a new instance
+      ``from_dict``, the other constructors such as ``from_any`` or
+      ``fromkeys``, and loads), but not when tensordict makes a new instance
       from an existing one (indexing, ``clone``, ``to``, ``apply``, stacking
       and the other operations). Subclasses inherit the flag.
 

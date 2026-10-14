@@ -733,6 +733,9 @@ _REBUILD_OPS = {
     "stack": lambda tc: torch.stack([tc, tc]),
     "lazy_stack": lambda tc: lazy_stack([tc, tc]),
     "cat": lambda tc: torch.cat([tc, tc]),
+    "stack_classmethod": lambda tc: type(tc).stack([tc, tc]),
+    "lazy_stack_classmethod": lambda tc: type(tc).lazy_stack([tc, tc]),
+    "cat_classmethod": lambda tc: type(tc).cat([tc, tc]),
     "unbind": lambda tc: tc.unbind(0),
     "consolidate": lambda tc: tc.consolidate(),
     "memmap": lambda tc: tc.memmap(),
@@ -2615,6 +2618,20 @@ class TestTensorClass:
         )
         with pytest.raises(ValueError, match="points must be"):
             _ValidatingMesh.from_tensordict(raw)
+        # The stack's keys are those that all the members share: a member may
+        # hold one that is not a field
+        raw = lazy_stack(
+            [
+                TensorDict(points=torch.rand(4, 3), cells=torch.zeros(2, 3), foo=1),
+                TensorDict(points=torch.rand(6, 3), cells=torch.zeros(2, 3)),
+            ]
+        )
+        calls.clear()
+        batch = _ValidatingMesh.from_tensordict(raw)
+        assert calls == [(4, 3), (6, 3)]
+        calls.clear()
+        batch.clone()
+        assert calls == [(4, 3), (6, 3)]
 
     def test_post_init_empty_shell(self):
         # empty() and pad_sequence build shells that they fill afterwards:
@@ -2630,6 +2647,14 @@ class TestTensorClass:
         shell = TensorDict(mesh=small).empty(recurse=True)
         assert isinstance(shell["mesh"], _ValidatingMesh)
         assert shell["mesh"].points is None
+        assert calls == []
+        # With a device, to() rebuilds the shell. The copy that empty() makes
+        # first runs __post_init__ on the full mesh.
+        shell = TensorDict(mesh=small).empty(recurse=True, device="cpu")
+        assert isinstance(shell["mesh"], _ValidatingMesh)
+        assert shell["mesh"].points is None
+        assert calls == [(4, 3)]
+        calls.clear()
         assert calls == []
         padded = pad_sequence([small, large])
         assert isinstance(padded, _ValidatingMesh)
@@ -2674,6 +2699,16 @@ class TestTensorClass:
         assert calls == [_SkipCounted]
         calls.clear()
         _SkipCounted.from_dict(tc.to_dict())
+        assert calls == [_SkipCounted]
+        # The constructors that a tensorclass takes from TensorDict
+        calls.clear()
+        _SkipCounted.from_any(tc.to_dict())
+        assert calls == [_SkipCounted]
+        calls.clear()
+        _SkipCounted.fromkeys(["offsets", "indices"], 0)
+        assert calls == [_SkipCounted]
+        calls.clear()
+        _SkipCounted.from_list([{"offsets": 0, "indices": 1}] * 2)
         assert calls == [_SkipCounted]
         calls.clear()
         _CountedHolder.from_tensordict(holder.to_tensordict())

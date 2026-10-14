@@ -237,8 +237,10 @@ still runs on these shells.
 
 To validate the data once, when it comes in, set the
 ``skip_post_init_on_rebuild`` flag. ``__post_init__`` then runs in the
-generated ``__init__``, ``from_tensordict``, ``from_dict``, and when the data
-is loaded, but not when tensordict rebuilds an instance. Each class follows
+generated ``__init__``, ``from_tensordict``, ``from_dict``, the other
+constructors (``from_any``, ``from_list``, ``fromkeys``, ...), and when the
+data is loaded or received from another process, but not when tensordict
+rebuilds an instance. Each class follows
 its own flag: a tensorclass without the flag that holds one with it runs only
 its own ``__post_init__`` on ``clone()``. Subclasses inherit the flag:
 
@@ -475,7 +477,8 @@ The flags are:
 
 ``skip_post_init_on_rebuild``
   ``__post_init__`` runs only on the data that comes in (the generated
-  ``__init__``, ``from_tensordict``, ``from_dict`` and loads), not each time
+  ``__init__``, ``from_tensordict``, ``from_dict``, the other constructors
+  such as ``from_any`` or ``fromkeys``, and loads), not each time
   tensordict makes a new instance from an existing one, as in ``clone``,
   ``to``, indexing, or ``torch.stack``. See :ref:`tensorclass-post-init`.
 
