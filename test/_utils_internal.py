@@ -11,6 +11,7 @@ from functools import wraps
 
 import numpy as np
 import torch
+from filelock import FileLock
 from tensordict import (
     MetaData,
     NonTensorData,
@@ -42,6 +43,23 @@ def prod(sequence):
         return math.prod(sequence)
     else:
         return int(np.prod(sequence))
+
+
+def streaming_dataset(**kwargs):
+    """Builds a ``streaming.StreamingDataset``, one process at a time.
+
+    A ``StreamingDataset`` claims the first free shared-memory prefix
+    (``/000000_locals``, ...) by looking for it and then creating it. Two
+    pytest-xdist workers that build one at the same moment pick the same
+    prefix, and the second fails with ``FileExistsError``. A lock file in the
+    temporary directory makes the workers build theirs one after the other.
+    """
+    from streaming import StreamingDataset
+
+    with FileLock(
+        pathlib.Path(tempfile.gettempdir()) / "tensordict_test_streaming.lock"
+    ):
+        return StreamingDataset(**kwargs)
 
 
 def is_npu_available():

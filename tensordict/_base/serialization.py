@@ -36,6 +36,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+    _raise_on_exclusive_keys,
     _sync_cuda_transfer,
     _unflatten_state_dict,
     is_compiling,
@@ -51,6 +52,7 @@ from tensordict.utils import (
     _get_shared_executor,
     _is_non_tensor,
     _is_safe_legacy_key,
+    _is_tensorclass,
     _is_unbatched,
     _prefix_last_key,
     _rebuild_njt_from_njt,
@@ -63,6 +65,19 @@ from torch._utils import _get_available_device_type, _get_device_module
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
+
+
+def _is_saved_tensorclass(prefix: Path) -> bool:
+    """Returns True if the ``meta.json`` in ``prefix`` is that of a tensorclass."""
+    import tensordict
+
+    if not (prefix / "meta.json").exists():
+        return False
+    type_name = _load_metadata(prefix).get("_type")
+    return any(
+        str(cls) == type_name and _is_tensorclass(cls)
+        for cls in tensordict.base._ACCEPTED_CLASSES
+    )
 
 
 def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
@@ -127,6 +142,8 @@ class _Serialization:
             {'': {'batch_size': torch.Size([]), 'device': None}, '3': {'batch_size': torch.Size([]), 'device': None}}
 
         """
+        if self._has_exclusive_keys:
+            _raise_on_exclusive_keys("state_dict")
         if destination is None:
             destination = collections.OrderedDict()
             destination._metadata = collections.OrderedDict()
@@ -428,6 +445,11 @@ class _Serialization:
                         flat_size=flat_size,
                     )
 
+                # Visit a tensorclass through its tensordict: the tensorclass
+                # wrapper would rebuild the (empty) result as an instance and
+                # run __post_init__ on it.
+                if _is_tensorclass(type(value)):
+                    value = value._tensordict
                 value._fast_apply(
                     local_assign,
                     named=True,
@@ -1063,6 +1085,10 @@ class _Serialization:
             ``RuntimeError``. Use :meth:`~tensordict.TensorDictBase.memmap` to
             build a memory-mapped copy instead.
         """
+        if self._memmap_inplace_unsupported:
+            raise RuntimeError(
+                "Converting a sub-tensordict values to memmap cannot be done."
+            )
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)
@@ -1542,7 +1568,9 @@ class _Serialization:
                 or as a ``"/"``-separated string path (e.g. ``"module/0"``).
                 Only that subtree is loaded. Works both for directories
                 (equivalent to appending the path to ``prefix``) and for
-                archives.
+                archives. A nested key reaches the entries of a saved
+                tensorclass as ``obj.get(key)`` does, without its
+                ``_tensordict`` level.
             mode (str, optional): how the files are memory-mapped. With
                 ``"r"``, the mapping is copy-on-write: in-place writes to the
                 leaves stay in memory. They reach the files only if the
@@ -1639,10 +1667,20 @@ class _Serialization:
             raise ValueError(f"mode must be 'r', 'r+' or None, got {mode!r}.")
         if allow_pickle is not None and not isinstance(allow_pickle, bool):
             raise TypeError("allow_pickle must be a bool or None.")
+        metadata = None
         if not isinstance(prefix, _ArchivePath):
             # nested (recursive) calls pass _ArchivePath instances directly
             prefix = Path(prefix)
-            if prefix.is_file():
+            if subpath is None:
+                # The common case is a directory: read its metadata first and
+                # look for an archive file only if that fails. This saves a
+                # stat per (nested) tensordict, a metadata-server round trip
+                # on network file systems.
+                try:
+                    metadata = _load_metadata(prefix)
+                except OSError:
+                    pass
+            if metadata is None and prefix.is_file():
                 if not is_memmap_archive(prefix):
                     raise ValueError(
                         f"{prefix} is a file but not a memory-mapped tensordict "
@@ -1669,6 +1707,15 @@ class _Serialization:
                 safe_part = _encode_key_for_filesystem(
                     part, robust=effective_robust_key
                 )
+                if (
+                    part != "_tensordict"
+                    and not (prefix / safe_part).exists()
+                    and (prefix / "_tensordict" / "meta.json").exists()
+                    and _is_saved_tensorclass(prefix)
+                ):
+                    # A tensorclass saves its content under _tensordict:
+                    # resolve the nested key as tensorclass.get(key) does.
+                    prefix = prefix / "_tensordict"
                 candidate = prefix / safe_part
                 if (
                     effective_robust_key
@@ -1689,7 +1736,8 @@ class _Serialization:
             # meta-device and FakeTensor loads remain metadata-only.
             prefix.reader.schedule_compressed_prefetch(prefix.at, num_threads)
 
-        metadata = _load_metadata(prefix)
+        if metadata is None:
+            metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
         if device is not None:
             device = torch.device(device)

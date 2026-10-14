@@ -80,10 +80,13 @@ _has_mypy = importlib.util.find_spec("mypy") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
-    from pytorch.tensordict.test._utils_internal import get_available_devices
+    from pytorch.tensordict.test._utils_internal import (
+        get_available_devices,
+        streaming_dataset,
+    )
 else:
     IS_FB = False
-    from _utils_internal import get_available_devices
+    from _utils_internal import get_available_devices, streaming_dataset
 
 # Capture all warnings
 pytestmark = [
@@ -656,6 +659,20 @@ class MyData2:
     X: torch.Tensor
     y: torch.Tensor
     z: list
+
+
+_RAGGED_POST_INIT_CALLS = []
+
+
+@tensorclass
+class Ragged:
+    offsets: torch.Tensor
+    indices: torch.Tensor
+
+    def __post_init__(self):
+        _RAGGED_POST_INIT_CALLS.append(self.offsets)
+        if self.offsets is None or int(self.offsets[0]) != 0:
+            raise ValueError(f"offsets must start at 0, got {self.offsets}")
 
 
 @dataclasses.dataclass
@@ -1296,6 +1313,30 @@ class TestTensorClass:
         assert data_load.z == "a string!"
         assert data_load.batch_size == data.batch_size
         assert (data_load == data).all()
+
+    def test_consolidate_nested_post_init(self):
+        # consolidate must not run __post_init__ on an empty tensorclass while
+        # it collects the leaves of a nested one
+        calls = _RAGGED_POST_INIT_CALLS
+        adj = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.tensor([5, 6, 7]))
+        calls.clear()
+        adj.consolidate()
+        assert len(calls) == 1
+
+        td = TensorDict(adj=adj, x=torch.zeros(4))
+        calls.clear()
+        td_c = td.consolidate()
+        assert len(calls) == 1
+        assert isinstance(td_c["adj"], Ragged)
+        torch.testing.assert_close(td_c["adj"].offsets, adj.offsets)
+        torch.testing.assert_close(td_c["adj"].indices, adj.indices)
+        torch.testing.assert_close(td_c["x"], td["x"])
+
+        td_load = pickle.loads(pickle.dumps(td_c))
+        assert isinstance(td_load["adj"], Ragged)
+        torch.testing.assert_close(td_load["adj"].offsets, adj.offsets)
+        torch.testing.assert_close(td_load["adj"].indices, adj.indices)
+        torch.testing.assert_close(td_load["x"], td["x"])
 
     def test_dataclass(self):
         data = MyData(
@@ -2711,6 +2752,24 @@ class TestTensorClass:
         assert (data_select == 1).all()
         assert "a" in data_select._tensordict
 
+    def test_select_exclude_nested_through_leaf(self):
+        # A nested key through a leaf is missing (#2617)
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+            n: TensorDict
+
+        data = Data(x=torch.zeros(3), n=TensorDict(y=torch.zeros(3)), batch_size=[3])
+        with pytest.raises(KeyError, match="'x' is a Tensor, not a tensordict"):
+            data.select(("x", "q"))
+        out = data.select(("x", "q"), "n", strict=False)
+        assert isinstance(out, Data)
+        assert out.x is None
+        assert out.n is data.n
+        out = data.exclude(("x", "q"))
+        assert isinstance(out, Data)
+        assert out.x is data.x
+
     def test_is_non_tensor_key(self):
         @tensorclass
         class Transition:
@@ -3668,11 +3727,8 @@ class TestTensorClass:
         tmpdir = str(tmpdir)
         td.to_mds(out=tmpdir)
 
-        # Create a dataloader
-        from streaming import StreamingDataset
-
         # Load the dataset
-        dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=2)
         dl = torch.utils.data.DataLoader(  # noqa: TOR401
             dataset=dataset, batch_size=2, collate_fn=MC.from_list
         )
@@ -4310,6 +4366,19 @@ class TestTensorClass:
         assert (grads == 1).all()
 
 
+class _ValidatingRagged(TensorClass):
+    # Module level, so that loading an archive resolves this class whatever
+    # the test order. __post_init__ records the offsets it sees in `seen`.
+    offsets: torch.Tensor
+    indices: torch.Tensor
+    seen: ClassVar[list] = []
+
+    def __post_init__(self):
+        type(self).seen.append(self.offsets.tolist())
+        if int(self.offsets[-1]) != len(self.indices):
+            raise ValueError("last offset must be len(indices)")
+
+
 class TestMemmap:
     def test_empty_tensor_roundtrip(self, tmp_path):
         @tensorclass
@@ -4650,6 +4719,28 @@ class TestMemmap:
         assert isinstance(loaded, MySubclassed)
         assert (loaded.a == 0).all()
         assert loaded.meta == "hello"
+
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_save_archive_validating_post_init(self, tmp_path, nested):
+        # Saving to a .tdz archive must not run __post_init__ on the
+        # uninitialized or zero placeholders that it stages before writing
+        # the data; __post_init__ runs on the real data when it is loaded.
+        Ragged = _ValidatingRagged
+        seen = Ragged.seen
+        data = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.tensor([5, 6, 7]))
+        if nested:
+            data = TensorDict(adj=data, x=torch.zeros(4))
+        seen.clear()
+        saved = data.save(tmp_path / "data.tdz")
+        assert seen == [[0, 2, 3]]
+        seen.clear()
+        loaded = TensorDict.load(tmp_path / "data.tdz")
+        assert seen == [[0, 2, 3]]
+        for result in (saved, loaded):
+            assert type(result) is type(data)
+            assert_allclose_td(result, data)
+            adj = result["adj"] if nested else result
+            assert isinstance(adj, Ragged)
 
     def test_memmap_like(self):
         @tensorclass
@@ -6087,6 +6178,82 @@ class TestSubClassing:
         obj.s = "u"
         assert obj.s == "u"
 
+    _OPERATORS = (
+        "__repr__",
+        "__eq__",
+        "__ne__",
+        "__or__",
+        "__xor__",
+        "__bool__",
+        "__lt__",
+        "__le__",
+        "__gt__",
+        "__ge__",
+        "__ror__",
+    )
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    def test_subclassing_keeps_operators(self, api):
+        # gh-2602: a tensorclass keeps the operators that its body or a parent
+        # defines, as dataclasses keeps __repr__ and __eq__.
+        def make_operator(name):
+            def operator(self, *args):
+                return False if name == "__bool__" else f"custom {name}"
+
+            return operator
+
+        operators = {name: make_operator(name) for name in self._OPERATORS}
+        namespace = {"__annotations__": {"x": torch.Tensor}, **operators}
+        if api == "inheritance":
+            Parent = type("Parent", (TensorClass,), namespace)
+            Child = type("Child", (Parent,), {})
+        else:
+            Parent = type("Parent", (), namespace)
+            if api == "dataclass":
+                Parent = dataclasses.dataclass(Parent)
+            Parent = tensorclass(Parent)
+            Child = tensorclass(type("Child", (Parent,), {}))
+        for cls in (Parent, Child):
+            for name, operator in operators.items():
+                assert getattr(cls, name) is operator, name
+            obj = cls(x=torch.zeros(2), batch_size=[2])
+            assert repr(obj) == "custom __repr__"
+            assert (obj == obj) == "custom __eq__"
+            assert (obj < obj) == "custom __lt__"
+            assert (1 | obj) == "custom __ror__"
+            assert not obj
+
+    @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    def test_subclassing_default_operators(self, api):
+        if api == "inheritance":
+
+            class Parent(TensorClass):
+                x: torch.Tensor
+
+        else:
+
+            class Parent:
+                x: torch.Tensor
+
+            if api == "dataclass":
+                Parent = dataclasses.dataclass(Parent)
+            Parent = tensorclass(Parent)
+
+        class Child(Parent):
+            pass
+
+        if api != "inheritance":
+            Child = tensorclass(Child)
+        for cls in (Parent, Child):
+            obj = cls(x=torch.zeros(2, dtype=torch.bool), batch_size=[2])
+            assert repr(obj).startswith(f"{cls.__name__}(\n    x=Tensor(")
+            for result in (obj == obj, obj != obj, obj | obj, obj ^ obj, obj < obj):
+                assert type(result) is cls
+            assert (obj == obj).x.all()
+            assert not (obj < obj).x.any()
+            with pytest.raises(RuntimeError):
+                bool(obj)
+
     # Regression test for GitHub issue #1469: the metaclass __getitem__ used to
     # read every subscript as a list of flags, so a generic TensorClass could not
     # be subscripted with types.
@@ -6124,6 +6291,45 @@ class TestSubClassing:
             TensorClass["autocst"]
         with pytest.raises(TypeError, match="only accepts the flags"):
             TensorClass[int]
+
+    # Regression test for GitHub issue #2601: the metaclass __getitem__ hid a
+    # __class_getitem__ defined by a subclass.
+    def test_subclassing_class_getitem(self):
+        class Shape(TensorClass):
+            x: torch.Tensor
+
+            @classmethod
+            def __class_getitem__(cls, item):
+                return (cls, item)
+
+        class SubShape(Shape):
+            y: torch.Tensor
+
+        class Super(TensorClass):
+            x: torch.Tensor
+
+            def __class_getitem__(cls, item):
+                return super().__class_getitem__(item)
+
+        for cls in (Shape, SubShape):
+            assert cls[2, 3] == (cls, (2, 3))
+            assert cls[2] == (cls, 2)
+            assert cls[(2,)] == (cls, (2,))
+            assert cls[...] == (cls, ...)
+            # flags are handled first, as before
+            NoCast = cls["nocast"]
+            assert issubclass(NoCast, cls) and NoCast._nocast
+
+        assert Super["nocast"]._nocast
+        assert Super.__class_getitem__("nocast")._nocast
+        with pytest.raises(TypeError, match="only accepts the flags"):
+            Super[2]
+
+        class Plain(TensorClass):
+            x: torch.Tensor
+
+        with pytest.raises(TypeError, match="Plain is not a generic class"):
+            Plain[2, 3]
 
     @pytest.mark.skipif(
         sys.version_info < (3, 12), reason="PEP 695 syntax requires Python 3.12"
@@ -6715,6 +6921,41 @@ class TestTensorOnly:
 
         assert isinstance(tc.data["nested"], TensorDict)
         assert tc.data["nested", "tensor"] == 1
+
+    def test_tensor_only_setattr_mapping(self):
+        class TensorOnlyMapping(TensorClass["tensor_only"]):
+            data: TensorDict
+            meta: NonTensorData
+            x: torch.Tensor
+
+        x = torch.zeros(2)
+        tc = TensorOnlyMapping(data={}, meta="a", x=x, batch_size=[2])
+        tc.data = UserDict({"nested": UserDict({"tensor": x})})
+        assert isinstance(tc.data["nested"], TensorDict)
+        assert tc.data["nested", "tensor"] is x
+        assert tc.data.batch_size == (2,)
+        tc.data = {}
+        assert tc.data.is_empty() and tc.data.batch_size == (2,)
+        # A Mapping in a field that is not a TensorDict is not normalized
+        meta = UserDict({"metadata": "value"})
+        tc.meta = meta
+        assert tc.meta.data is meta
+        y = torch.ones(2)
+        tc.x = y
+        assert tc.x is y
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            tc.x = torch.ones(3)
+        assert tc.x is y
+
+    def test_non_tensor_data_set(self):
+        data = NonTensorData("a", batch_size=[2])
+        data.data = NonTensorData("b", batch_size=[2])
+        assert data.data == "b"
+        with pytest.raises(KeyError, match="only 'data' keys are supported"):
+            data._set_str("other", "c", inplace=False, validated=False)
+        with pytest.raises(KeyError, match="only 'data' keys are supported"):
+            data._set_at_str("other", "c", 0, validated=False)
+        assert data.data == "b"
 
     @pytest.mark.parametrize("set_method", ["constructor", "attribute", "set"])
     def test_tensor_only_preserves_tensordict(self, set_method):

@@ -141,6 +141,15 @@ class TestZarrRoundTrip:
         )
         assert td_recon.batch_size == torch.Size([3])
 
+    def test_auto_batch_size_persistent(self, tmp_path):
+        td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
+        td.to_zarr(tmp_path / "s.zarr")
+        td_recon = PersistentTensorDict.from_zarr(
+            tmp_path / "s.zarr", auto_batch_size=True, batch_dims=1
+        )
+        assert type(td_recon) is PersistentTensorDict
+        assert td_recon.batch_size == torch.Size([3])
+
     def test_free_function(self, tmp_path):
         from tensordict import from_zarr
 
@@ -238,6 +247,28 @@ class TestZarrNonTensor:
         assert ztd.to_tensordict()["text"] == ["a", "b", "c"]
         ztd["text"] = NonTensorStack("x", "yy", "z")
         assert ztd.get("text").tolist() == ["x", "yy", "z"]
+        ztd.close()
+
+    def test_foreign_column_as_stack(self, tmp_path):
+        # a string column that another tool wrote, one string per row, reads
+        # as a NonTensorStack of its rows with non_tensor_as_stack=True (#2545)
+        path = str(tmp_path / "s.zarr")
+        root = zarr.open_group(path, mode="w")
+        root.create_array("pos", shape=(4,), dtype="float32")[:] = 0
+        root.create_array("mission", shape=(4,), dtype=str)[:] = ["a", "b", "c", "d"]
+        ztd = PersistentTensorDict.from_zarr(path)
+        assert ztd.entry_class("mission") is NonTensorData
+        ztd.close()
+        ztd = PersistentTensorDict.from_zarr(path, mode="r+", non_tensor_as_stack=True)
+        assert ztd.batch_size == (4,)
+        assert ztd.entry_class("mission") is NonTensorStack
+        assert ztd[1:3].get("mission").tolist() == ["b", "c"]
+        assert ztd[2]["mission"] == "c"
+        # a value that tensordict wrote is a payload of bytes, not rows
+        ztd.set("n", NonTensorData(1234, batch_size=[4]))
+        assert ztd.file["n"].shape == (4,)
+        assert ztd.entry_class("n") is NonTensorData
+        assert ztd[1]["n"] == 1234
         ztd.close()
 
 
@@ -398,6 +429,25 @@ class TestZarrWriteOps:
             stack.add_(1.0)
         assert (reopened["a"] == 1).all()
 
+    def test_inplace_methods_write_nested_lazy_stack(self, ztd, tmp_path):
+        # #2592: the in-place methods of a tensordict write to the zarr
+        # members of a lazy stack that it holds
+        expected = ztd.to_tensordict()
+        dense = expected.clone()
+        data = TensorDict({"n": {"s": lazy_stack([ztd, dense])}}, batch_size=[2])
+        assert data.add_(1.0) is data
+        assert data.mul_(torch.tensor(2.0)) is data
+        expected.add_(1.0).mul_(2.0)
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        torch.testing.assert_close(reopened.to_tensordict(), expected)
+        torch.testing.assert_close(dense, expected)
+        # a read-only member is left unchanged, with a warning
+        stack = lazy_stack([ztd, PersistentTensorDict.from_zarr(tmp_path / "s.zarr")])
+        data = TensorDict({"s": stack}, batch_size=[2])
+        with pytest.warns(FutureWarning, match="add_.*leaves the file unchanged"):
+            data.add_(1.0)
+        torch.testing.assert_close(reopened["a"], expected["a"] + 1)
+
     def test_inplace_read_only_warns(self, ztd, tmp_path):
         # The in-place methods leave a read-only store unchanged, as before
         # they wrote to stores, and warn that this will raise
@@ -425,6 +475,26 @@ class TestZarrWriteOps:
         ztd.masked_fill_(torch.tensor([True, False, False]), 3.0)
         assert (ztd["a"][0] == 3).all()
         assert (ztd["a"][1:] == 0).all()
+
+    def test_missing_key_reads_no_data(self, ztd, monkeypatch):
+        # A membership test for a missing key, and the one in set, must not
+        # read the arrays of the store
+        reads = []
+        getitem = zarr.Array.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.name)
+            return getitem(self, *args, **kwargs)
+
+        monkeypatch.setattr(zarr.Array, "__getitem__", counting_getitem)
+        assert "missing" not in ztd.keys()
+        assert ("b", "missing") not in ztd.keys(True)
+        assert "a" in ztd.keys()
+        ztd.set(("new_group", "x"), torch.zeros(3, 4))
+        assert reads == []
+        with pytest.raises(KeyError, match="key missing not found"):
+            ztd._get_array("missing")
+        assert reads == []
 
     def test_fill_zero_masked_fill_no_read(self, ztd, tmp_path, monkeypatch):
         # fill_, zero_, masked_fill_ and detach_ write to the store without
@@ -570,6 +640,54 @@ class TestZarrWriteOps:
             assert root[key].compressors, key
         td_back = TensorDict.from_zarr(tmp_path / "s.zarr")
         assert (td_back == td).all()
+
+    def test_to_context_manager_writes_in_place(self, tmp_path, monkeypatch):
+        # the write-back of to() reads nothing and keeps the layout of the
+        # arrays, also for a store reopened without its creation arguments
+        td = TensorDict(
+            {"a": torch.arange(8.0), "b": {"c": torch.zeros(8)}}, batch_size=[8]
+        )
+        td.to_zarr(tmp_path / "s.zarr", chunks=(2,))
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        reads = []
+        getitem = zarr.Array.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.path)
+            return getitem(self, *args, **kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with ztd.to(torch.float64) as td64:
+                td64["a"] += 1
+                td64["b", "d"] = torch.ones(8)
+                monkeypatch.setattr(zarr.Array, "__getitem__", counting_getitem)
+        monkeypatch.undo()
+        assert reads == []
+        root = zarr.open_group(str(tmp_path / "s.zarr"), mode="r")
+        assert root["a"].chunks == (2,)
+        assert root["b/c"].chunks == (2,)
+        assert ztd["a"].dtype == torch.float32
+        assert (ztd["a"] == torch.arange(8.0) + 1).all()
+        assert (ztd["b", "d"] == 1).all()
+
+    def test_to_context_manager_changes_entry_type(self, tmp_path):
+        # as on a TensorDict, a group that the block replaces with a tensor is
+        # replaced, and a tensor replaced with a tensordict raises
+        td = TensorDict(
+            {"a": torch.arange(8.0), "b": {"c": torch.zeros(8)}}, batch_size=[8]
+        )
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict.from_zarr(tmp_path / "s.zarr", mode="r+")
+        with ztd.to(torch.float64) as td64:
+            td64["b"] = torch.ones(8)
+        assert set(ztd.keys(True, True)) == {"a", "b"}
+        assert (ztd["b"] == 1).all()
+        with pytest.raises(RuntimeError, match="cannot set a tensor collection"):
+            with ztd.to(torch.float64) as td64:
+                td64["a"] = TensorDict(c=torch.ones(8), batch_size=[8])
+        assert set(ztd.keys(True, True)) == {"a", "b"}
+        assert (ztd["a"] == torch.arange(8.0)).all()
 
     def test_chunks_heterogeneous_ranks(self, tmp_path):
         # a single chunks spec constrains the leading dims of every leaf,

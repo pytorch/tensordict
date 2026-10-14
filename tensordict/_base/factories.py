@@ -200,6 +200,7 @@ def from_h5(
     auto_batch_size: bool = False,
     batch_dims: int | None = None,
     batch_size: torch.Size | None = None,
+    non_tensor_as_stack: bool = False,
 ) -> "TensorDictBase":
     """Converts an HDF5 file to a TensorDict.
 
@@ -213,6 +214,7 @@ def from_h5(
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
         batch_size=batch_size,
+        non_tensor_as_stack=non_tensor_as_stack,
     )
 
 
@@ -223,6 +225,7 @@ def from_zarr(
     auto_batch_size: bool = False,
     batch_dims: int | None = None,
     batch_size: torch.Size | None = None,
+    non_tensor_as_stack: bool = False,
 ) -> "TensorDictBase":
     """Converts a zarr store to a TensorDict.
 
@@ -236,6 +239,7 @@ def from_zarr(
         auto_batch_size=auto_batch_size,
         batch_dims=batch_dims,
         batch_size=batch_size,
+        non_tensor_as_stack=non_tensor_as_stack,
     )
 
 

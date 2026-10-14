@@ -13,9 +13,19 @@ from typing import Any, ClassVar
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
-from tensordict._td import TensorDict
-from tensordict.base import _register_tensor_class, NO_DEFAULT, TensorDictBase
-from tensordict.utils import _as_context_manager, _cache_while_locked
+from tensordict._td import _StateFromSource, TensorDict
+from tensordict.base import (
+    _is_tensor_collection,
+    _register_tensor_class,
+    NO_DEFAULT,
+    TensorDictBase,
+)
+from tensordict.utils import (
+    _as_context_manager,
+    _cache_while_locked,
+    _is_non_tensor,
+    _is_tensorclass,
+)
 
 try:
     # Python 3.11+ (PEP 681)
@@ -304,6 +314,50 @@ def _make_delegate_inplace(method_name: str) -> Callable:
     return method
 
 
+def _reads_copies(td: TensorDictBase) -> bool:
+    """Whether ``td``, or a tensordict that it holds or stacks, reads copies of its tensors."""
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if td._reads_return_copies:
+        return True
+    if isinstance(td, LazyStackedTensorDict):
+        return any(_reads_copies(member) for member in td.tensordicts)
+    return any(
+        _reads_copies(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
+def _make_delegate_inplace_pointwise(method_name: str) -> Callable:
+    """Delegate an in-place pointwise method to a lazy-stack ``self._source``.
+
+    The stack writes into its members, which writing back the leaves read from
+    ``self`` cannot do when they are nested. Other sources, stacks that hold
+    copies, such as files, and stacks with exclusive keys, which the inherited
+    method leaves unchanged, run the inherited method.
+    """
+    inherited = getattr(TypedTensorDict, method_name)
+
+    def method(self, *args, **kwargs):
+        source = self._source
+        if (
+            not isinstance(source, LazyStackedTensorDict)
+            or source._has_exclusive_keys
+            or _reads_copies(source)
+        ):
+            return inherited(self, *args, **kwargs)
+        result = getattr(source, method_name)(*args, **kwargs)
+        if result is not source:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        return self
+
+    method.__name__ = method_name
+    method.__qualname__ = f"TypedTensorDict.{method_name}"
+    return method
+
+
 def _make_delegate_tuple_wrap(method_name: str) -> Callable:
     """Delegate to ``self._source`` and wrap each element of the returned tuple."""
 
@@ -424,7 +478,7 @@ class _TypedTensorDictMeta(type(TensorDictBase)):
         )
 
 
-class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
+class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDictMeta):
     """A TensorDictBase subclass with typed field declarations and backend composition.
 
     .. warning::
@@ -479,20 +533,12 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     _source: TensorDictBase
 
     # Override: the flag lives on the source.
-    @property
-    def _is_shared(self):
-        return self._source._is_shared
-
-    @_is_shared.setter
+    @_StateFromSource._is_shared.setter
     def _is_shared(self, value):
         self._source._is_shared = value
 
     # Override: the flag lives on the source.
-    @property
-    def _is_memmap(self):
-        return self._source._is_memmap
-
-    @_is_memmap.setter
+    @_StateFromSource._is_memmap.setter
     def _is_memmap(self, value):
         self._source._is_memmap = value
 
@@ -598,27 +644,12 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
         self._source.batch_size = new_size
 
     @property
-    def device(self) -> torch.device | None:
-        return self._source.device
-
-    @device.setter
-    def device(self, value) -> None:
-        self._source.device = value
-
-    @property
     def names(self):
         return self._source.names
 
     @names.setter
     def names(self, value):
         self._source.names = value
-
-    def _has_names(self) -> bool:
-        return self._source._has_names()
-
-    @property
-    def _has_non_tensor(self) -> bool:
-        return self._source._has_non_tensor
 
     def _set_names(self, names: Sequence[str] | None) -> None:
         self._source._set_names(names)
@@ -631,11 +662,6 @@ class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
-
-    # Override: the lock state lives on the source.
-    @TensorDictBase.is_locked.getter
-    def is_locked(self) -> bool:
-        return self._source.is_locked
 
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
@@ -1044,6 +1070,52 @@ _INPLACE_DELEGATES = [
     "masked_fill_",
 ]
 
+# In-place pointwise: delegate to a lazy-stack source, return self
+_INPLACE_POINTWISE_DELEGATES = [
+    "abs_",
+    "acos_",
+    "exp_",
+    "neg_",
+    "reciprocal_",
+    "sigmoid_",
+    "sign_",
+    "sin_",
+    "sinh_",
+    "tan_",
+    "tanh_",
+    "trunc_",
+    "lgamma_",
+    "frac_",
+    "expm1_",
+    "log_",
+    "log10_",
+    "log1p_",
+    "log2_",
+    "ceil_",
+    "floor_",
+    "round_",
+    "erf_",
+    "erfc_",
+    "asin_",
+    "atan_",
+    "cos_",
+    "cosh_",
+    "add_",
+    "lerp_",
+    "addcdiv_",
+    "addcmul_",
+    "sub_",
+    "mul_",
+    "maximum_",
+    "minimum_",
+    "clamp_max_",
+    "clamp_min_",
+    "pow_",
+    "div_",
+    "sqrt_",
+    "zero_",
+]
+
 # Tuple wrap: delegate to _source, wrap each element
 _TUPLE_WRAP_DELEGATES = [
     "_unbind",
@@ -1059,6 +1131,9 @@ for _name in _WRAP_DELEGATES:
 
 for _name in _INPLACE_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_inplace(_name))
+
+for _name in _INPLACE_POINTWISE_DELEGATES:
+    setattr(TypedTensorDict, _name, _make_delegate_inplace_pointwise(_name))
 
 for _name in _TUPLE_WRAP_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_tuple_wrap(_name))

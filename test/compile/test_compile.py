@@ -8,6 +8,7 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
+import sys
 import warnings
 import weakref
 from pathlib import Path
@@ -20,6 +21,7 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    is_leaf_nontensor,
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
@@ -28,6 +30,7 @@ from tensordict import (
     NonTensorStack,
     tensorclass,
     TensorDict,
+    TensorDictBase,
     TensorDictParams,
     TypedTensorDict,
 )
@@ -394,6 +397,70 @@ def test_comparison_tensor_fullgraph():
     assert (result == fn(td, other)).all()
 
 
+_NESTED_DEVICE_CASES = {
+    # #2647: a nested tensordict without a device, in a tensordict on CPU
+    "nested_td": lambda x: TensorDict(
+        {"s": TensorDict({"a": x, "b": x + 1}, [3]), "c": x * 2}, [3], device="cpu"
+    ),
+    "non_blocking_false": lambda x: TensorDict(
+        {"s": TensorDict({"a": x}, [3]), "c": x},
+        [3],
+        device="cpu",
+        non_blocking=False,
+    ),
+    "nested_dict": lambda x: TensorDict(
+        {"s": {"a": x, "b": {"c": x}}}, [3], device="cpu"
+    ),
+    "three_levels": lambda x: TensorDict(
+        {"s": TensorDict({"t": TensorDict({"a": x}, [3])}, [3])}, [3], device="cpu"
+    ),
+    "names": lambda x: TensorDict(
+        {"s": TensorDict({"a": x}, [3])}, [3], device="cpu", names=["n"]
+    ),
+    "expanded": lambda x: TensorDict(
+        {"g": TensorDict({"u": x[0]}).expand(3), "c": x}, [3], device="cpu"
+    ),
+    "to_cpu": lambda x: TensorDict({"s": TensorDict({"a": x}, [3])}, [3]).to("cpu"),
+}
+
+
+@pytest.mark.parametrize("name", list(_NESTED_DEVICE_CASES))
+def test_nested_device_construction_fullgraph(name):
+    # Moving a nested tensordict to the device of the outer one compiles into
+    # one graph, without the device-recorder sync (#2647).
+    fn = _NESTED_DEVICE_CASES[name]
+
+    def describe(td):
+        out = {"": (td.device, td.batch_size, td.names if td._has_names() else None)}
+        for key, value in td.items(include_nested=True):
+            if is_tensor_collection(value):
+                out[key] = (value.device, value.batch_size)
+            else:
+                out[key] = (value.device, value.shape, value.tolist())
+        return out
+
+    x = torch.arange(6.0).reshape(3, 2)
+    expected = describe(fn(x))
+    torch._dynamo.reset()
+    result = torch.compile(fn, fullgraph=True, backend="eager")(x)
+    assert describe(result) == expected
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_construction_empty_then_full_source(device):
+    # A graph traced with an empty source is not reused for a full one: the
+    # result kept no entries (#2648).
+    def fn(x, source):
+        return TensorDict(source, batch_size=[3], device=device)
+
+    compiled = torch.compile(fn, backend="eager")
+    x = torch.arange(3.0)
+    assert compiled(x, {}).is_empty()
+    result = compiled(x, {"a": x, "b": {"c": x}})
+    assert set(result.keys(True, True)) == {"a", ("b", "c")}
+    assert (result["b", "c"] == x).all()
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -478,13 +545,14 @@ class TestTD:
         assert result.shape == torch.Size([0])
         assert result["a", "b"].shape == torch.Size([0])
 
-    def test_td_index_bool_mask(self, mode):
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_td_index_bool_mask(self, mode, device):
         # the masked size depends on the data, so this graph-breaks
         def add_one(td, mask):
             return td[mask] + 1
 
         add_one_c = torch.compile(add_one, mode=mode)
-        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        data = TensorDict({"a": {"b": torch.arange(3)}}, [3], device=device)
         result = add_one_c(data, torch.tensor([True, False, True]))
         assert result.shape == torch.Size([2])
         assert (result["a", "b"] == torch.tensor([1, 3])).all()
@@ -684,6 +752,45 @@ class TestTD:
         assert keys == ("a", ("a", "b"), ("a", "b", "c"), ("a", "d"))
         for val, val_c in zip(vals, vals_c):
             assert (val == val_c).all()
+
+    def test_keys_nested(self, mode):
+        # Iterating, counting and sorting the nested keys compiles to one
+        # frame, without a recompile (#2618).
+        def keys(td):
+            out = 0
+            for key in td.keys(True, True):
+                out = out + td.get(key).sum()
+            return (
+                out,
+                len(td.keys(True, False)),
+                list(td.keys(True, True, sort=True)),
+            )
+
+        data = TensorDict(
+            {
+                "a": torch.arange(4.0),
+                "b": {"c": torch.ones(4), "d": {"e": torch.ones(4)}},
+            },
+            [4],
+        )
+        for td in (
+            data,
+            data.clone().lock_(),
+            MyClass(a=MyClass(a=None, b=torch.ones(())), b=torch.zeros(())),
+        ):
+            torch._dynamo.reset_code_caches()
+            cnt = CompileCounterWithBackend("eager")
+            if mode is None:
+                keys_c = torch.compile(keys, fullgraph=True, backend=cnt)
+            else:
+                keys_c = torch.compile(keys, fullgraph=True, mode=mode)
+            expected = keys(td)
+            for _ in range(2):
+                out, length, sorted_keys = keys_c(td)
+                torch.testing.assert_close(out, expected[0])
+                assert (length, sorted_keys) == expected[1:]
+            if mode is None:
+                assert cnt.frame_count == 1
 
     @pytest.mark.parametrize("recurse", [True, False])
     @pytest.mark.parametrize("lock", [True, False])
@@ -1085,8 +1192,10 @@ class TestTD:
 
     def test_inplace_methods(self, mode):
         # The in-place methods trace without a graph break: the check for
-        # containers that read copies of their data is a class attribute
+        # containers that read copies of their data is a class attribute, and
+        # the one for nested lazy stacks that read copies (#2592) is a try
         def inplace(td, other):
+            td.zero_()
             td.abs_()
             td.add_(other, alpha=2.0)
             td.mul_(2.0)
@@ -3528,6 +3637,11 @@ class TestTCCustomInitCompile:
         assert data.is_locked
 
 
+# Module level: under compile, appends to a list read from the closure of a
+# function set as a method are lost.
+_TRACED_CALLS = []
+
+
 def _count_compiles(fn, *args):
     """Compile fn, run it twice, return (frame_count_first, frame_count_second).
 
@@ -3580,6 +3694,28 @@ class TestGuardCount:
         first, second = _count_compiles(fn, td)
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_get_nested_no_recompile(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        def fn(td):
+            hit = td.get(("a", "b"), None)
+            miss = td.get(("a", "z"), None)
+            return hit + td.get(("a", "b")) + td["tc", "x"], miss
+
+        td = TensorDict(
+            {"a": {"b": torch.zeros(3)}, "tc": TC(x=torch.ones(3), batch_size=[3])},
+            batch_size=[3],
+        )
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for _ in range(2):
+            out, miss = compiled(td)
+            torch.testing.assert_close(out, torch.ones(3))
+            assert miss is None
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
     def test_tc_getattr_no_recompile(self):
         class BigTC(TensorClass["nocast"]):
@@ -3823,6 +3959,46 @@ class TestGuardCount:
         second = cnt.frame_count
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
+
+    def test_getitem_str_key_guards(self):
+        """``td["k"]`` guards little more than reading the entry from the dict."""
+
+        def read_td(td):
+            return td["a"] + td["sub"]["b"]
+
+        def read_dict(td):
+            return td._tensordict["a"] + td._tensordict["sub"]._tensordict["b"]
+
+        from torch._dynamo.eval_frame import _debug_get_cache_entry_list
+
+        def guards(fn, td):
+            torch._dynamo.reset()
+            cnt = CompileCounterWithBackend("eager")
+            torch.testing.assert_close(
+                torch.compile(fn, backend=cnt, fullgraph=True)(td), fn(td)
+            )
+            assert cnt.frame_count == 1
+            (entry,) = _debug_get_cache_entry_list(fn.__code__)
+            tree = str(entry.guard_manager)
+            leaves = [
+                line
+                for line in tree.splitlines()
+                if "+- " in line and "GuardManager" not in line.split("+- ")[1][:30]
+            ]
+            return len(leaves), tree
+
+        td = TensorDict(
+            a=torch.zeros(3),
+            sub=TensorDict(b=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        n_td, tree = guards(read_td, td)
+        n_dict, _ = guards(read_dict, td)
+        # The generic path guards each method it calls (_get_tuple_maybe_non_tensor,
+        # _get_tuple, _pass_through...). torch 2.14: 22 guards for the dict
+        # reads, 49 on the generic path, 33 here.
+        assert "_get_tuple_maybe_non_tensor" not in tree
+        assert n_td <= n_dict + 18, (n_td, n_dict)
 
     def test_locked_clone_recurse_false_schema_fast_path(self):
         """A locked TD's ``clone(recurse=False)`` must:
@@ -4079,6 +4255,163 @@ class TestGuardCount:
             compiled(td)
             assert "a" not in td.keys()
         assert cnt.frame_count == 1, f"Recompilation detected: {cnt.frame_count}"
+
+    @staticmethod
+    def _build_and_set():
+        @tensorclass(tensor_only=True)
+        class Data:
+            a: torch.Tensor
+            td: TensorDict
+
+        def fn(x, td, extra):
+            batch_size = x.shape[:1]
+            out = TensorDict(
+                {"a": x, "nested": TensorDict({"b": x + 1}, batch_size)}, batch_size
+            )
+            out["c"] = x * 2
+            out["nested", "d"] = x - 1
+            for key, value in extra.items():
+                out[key] = value
+            data = Data(a=x, td=out, batch_size=batch_size)
+            data.a = x + 3
+            data.td = extra
+            td["cache", "y"] = td["x"] * 2
+            return out, data, td
+
+        def make(n, full, batched=True):
+            x = torch.arange(float(n))
+            batch_size = [n] if batched else []
+            td = TensorDict(
+                {"x": x, "cache": TensorDict(batch_size=batch_size)}, batch_size
+            )
+            extra = {"e": x * 5, "f": {"g": x}} if full else {}
+            return x, td, extra
+
+        def flat(result):
+            out, data, td = result
+            return [
+                (type(obj).__name__, tuple(obj.batch_size), key, val.tolist())
+                for obj in (out, data.td, td)
+                for key, val in obj.items(True, True)
+            ] + [data.a.tolist(), type(data).__name__]
+
+        return fn, make, flat
+
+    def test_set_matching_tensor_skips_validation(self, monkeypatch):
+        # Exact tensors whose shape and device match are stored without
+        # tracing the validators, as in eager mode, and a tensorclass
+        # attribute write traces neither _convert_mapping_for_field nor
+        # is_non_tensor.
+        tc_module = sys.modules["tensordict.tensorclass"]
+        calls = _TRACED_CALLS
+        calls.clear()
+        validate = TensorDictBase._validate_value_generic
+        convert = tc_module._convert_mapping_for_field
+        non_tensor = tc_module.is_non_tensor
+
+        def record_validate(self, value, *args, **kwargs):
+            _TRACED_CALLS.append(("validate", type(value).__name__, kwargs.get("key")))
+            return validate(self, value, *args, **kwargs)
+
+        def record_convert(key, *args):
+            _TRACED_CALLS.append(("convert", key))
+            return convert(key, *args)
+
+        def record_non_tensor(obj):
+            _TRACED_CALLS.append(("is_non_tensor",))
+            return non_tensor(obj)
+
+        monkeypatch.setattr(TensorDictBase, "_validate_value_generic", record_validate)
+        monkeypatch.setattr(tc_module, "_convert_mapping_for_field", record_convert)
+        monkeypatch.setattr(tc_module, "is_non_tensor", record_non_tensor)
+        fn, make, flat = self._build_and_set()
+        expected = flat(fn(*make(3, True)))
+        torch._dynamo.reset_code_caches()
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        calls.clear()
+        assert flat(compiled(*make(3, True))) == expected
+        # Only the tensorclass constructor validates its tensors
+        assert [call for call in calls if call[:2] == ("validate", "Tensor")] == [
+            ("validate", "Tensor", "a")
+        ]
+        assert [call for call in calls if call[0] != "validate"] == [
+            ("convert", "a"),
+            ("convert", "td"),
+        ]
+        calls.clear()
+
+    def test_set_no_recompile_across_sizes(self):
+        fn, make, flat = self._build_and_set()
+        torch._dynamo.reset_code_caches()
+        cnt = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=cnt, fullgraph=True, dynamic=None)
+        frames = []
+        for n in (3, 4, 5):
+            assert flat(compiled(*make(n, True))) == flat(fn(*make(n, True)))
+            frames.append(cnt.frame_count)
+        # The second size makes the graph dynamic, the third reuses it
+        assert frames == [1, 2, 2]
+
+    def test_set_empty_and_full_sources(self):
+        # Results match eager when the sources and batch sizes alternate
+        # between empty and non-empty.
+        fn, make, flat = self._build_and_set()
+        torch._dynamo.reset_code_caches()
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        for n, full, batched in (
+            (3, False, True),
+            (4, True, True),
+            (5, False, False),
+            (6, True, False),
+            (3, True, True),
+            (4, False, True),
+            (5, True, False),
+            (6, False, False),
+        ):
+            args = make(n, full, batched)
+            assert flat(compiled(*args)) == flat(fn(*make(n, full, batched)))
+
+    @pytest.mark.parametrize(
+        "value",
+        ["tensor", "parameter", "short", "mismatch", "meta", "td", "str", "dict"],
+    )
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_set_validation_compiled_matches_eager(self, value, device):
+        # Values that need validation are still validated under compile
+        def fn(x, param):
+            td = TensorDict(batch_size=[2, 3], device=device, names=["a", None])
+            if value == "tensor":
+                td.set("v", x)
+            elif value == "parameter":
+                td.set("v", param)
+            elif value == "short":
+                td.set("v", x[0])
+            elif value == "mismatch":
+                td.set("v", x.transpose(0, 1))
+            elif value == "meta":
+                td.set("v", x.to("meta"))
+            elif value == "td":
+                td.set("v", TensorDict({"y": x.unsqueeze(-1)}, [2, 3, 1]))
+            elif value == "str":
+                td.set("v", "abc")
+            else:
+                td.set("v", {"y": x})
+            td["w"] = x + 1
+            return td
+
+        def describe(f, x, param):
+            try:
+                td = f(x, param)
+            except Exception as err:
+                return type(err)
+            return [
+                (key, type(val).__name__, tuple(val.shape), str(val.device))
+                for key, val in td.items(True, True, is_leaf=is_leaf_nontensor)
+            ] + [td.names, td["v"].names if value == "td" else None]
+
+        x, param = torch.zeros(2, 3), torch.nn.Parameter(torch.zeros(2, 3))
+        compiled = torch.compile(fn, backend="eager")
+        assert describe(compiled, x, param) == describe(fn, x, param)
 
 
 class TestNestedCompileRegion:

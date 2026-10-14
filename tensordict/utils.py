@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
+import contextvars
 import functools
 import itertools
 import logging
@@ -40,7 +41,11 @@ import numpy as np
 import torch
 from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
-from tensordict._deprecation import deprecated_attributes, warn_deprecated
+from tensordict._deprecation import (
+    deprecated_attributes,
+    deprecation_message,
+    warn_deprecated,
+)
 from tensordict._indexing import _getitem_batch_size  # noqa: F401
 from tensordict._nestedkey import NestedKey
 from torch import Tensor
@@ -653,6 +658,13 @@ def is_tensorclass(obj: type | Any) -> bool:
 
 _TENSORCLASS_MEMO = {}
 
+# Set while the archive writer stages placeholder leaves (see
+# ``_write_archive_from_td``): tensorclass ``__post_init__`` must not run on
+# that data, which is uninitialized or zero until the real bytes are written.
+_SKIP_TENSORCLASS_POST_INIT = contextvars.ContextVar(
+    "_SKIP_TENSORCLASS_POST_INIT", default=False
+)
+
 
 def _is_tensorclass(cls: type) -> bool:
     # Under Dynamo the memo is not read: a lookup that misses guards on all the
@@ -768,9 +780,24 @@ def _erase_cache_first(fun):
     return new_fun
 
 
-_NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
 _GENERIC_NESTED_ERR = "Only NestedKeys are supported: a key must be a string or a non-empty, possibly nested tuple of strings. Got key {!r}."
+
+
+def _warn_nested_key_in_flat_keys(key: tuple[str, ...], tensordict) -> None:
+    """Warns that ``key in tensordict.keys()`` finds the nested ``key`` today, and returns False in 0.17."""
+    warnings.warn(
+        deprecation_message(
+            f"Finding the nested key {key} in {type(tensordict).__name__}.keys() "
+            "without include_nested=True",
+            removal="0.17",
+        )
+        + " Starting with TensorDict 0.17, the check returns False, as it does "
+        "for TensorDict. Use keys(include_nested=True) to look up a nested key.",
+        FutureWarning,
+        # point to the code that runs `key in view`
+        stacklevel=3,
+    )
 
 
 class _StringKeys(KeysView):
@@ -804,7 +831,8 @@ class _StringKeys(KeysView):
             except Exception:
                 raise TypeError(_NON_STR_KEY_ERR)
             if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+                # A nested key is not a top-level key
+                return False
             else:
                 item = unravel_item[0]
         return self.keys.__contains__(item)
@@ -2561,14 +2589,13 @@ def _is_unbatched(data) -> bool:
     cls = type(data)
     if cls is Tensor:
         return False
-    is_dynamo = is_compiling()
-    if not is_dynamo:
-        out = _UNBATCHED_MEMO.get(cls)
-        if out is not None:
-            return out
+    if is_compiling():
+        return bool(getattr(cls, "_pass_through", False))
+    out = _UNBATCHED_MEMO.get(cls)
+    if out is not None:
+        return out
     out = bool(getattr(cls, "_pass_through", False))
-    if not is_dynamo:
-        _UNBATCHED_MEMO[cls] = out
+    _UNBATCHED_MEMO[cls] = out
     return out
 
 
@@ -2596,6 +2623,52 @@ def _any_unbatched(tensors) -> bool:
     return False
 
 
+# Python picks the overload of torch._foreach_add and torch._foreach_sub that
+# takes a number for a 0-dim tensor, and reading the number of a CUDA tensor
+# synchronizes the device. The overload of _foreach_add that takes a 0-dim
+# tensor does not, and computes ``tensor + alpha * other`` in one kernel.
+# Passing alpha makes Python pick it, since the number overload has no alpha.
+_FOREACH_ADD_TENSOR = frozenset({"add", "add_", "sub", "sub_"})
+_FLOAT32_64 = (torch.float32, torch.float64)
+# A subclass with __torch_function__ would see get_device and, for a sub,
+# _foreach_add
+_PLAIN_TENSOR_TYPES = (Tensor, torch.nn.Parameter)
+# The check costs about 0.2 us per tensor, about a tenth of what add_ costs per
+# leaf; the cap keeps it to about 25 us, the order of the sync it saves.
+_FOREACH_ADD_TENSOR_MAX = 128
+
+
+def _is_cuda_scalar_of(other, tensors) -> bool:
+    # The overload that takes a 0-dim tensor casts it to the dtype of each
+    # tensor first, the one that takes a number does not: integer tensors with
+    # a float64 0-dim tensor give float64 instead of float32, and float16 or
+    # bfloat16 tensors with a wider or integer 0-dim tensor round differently.
+    # Both give the same dtypes and values for float32 and float64 tensors, and
+    # for tensors of the dtype of a floating-point 0-dim tensor. A subclass
+    # of Tensor would turn the results into that subclass. Under a torch
+    # function mode, every attribute read below would go through the mode.
+    if torch._C._is_torch_function_mode_enabled():
+        return False
+    if not (
+        type(other) is Tensor
+        and other.is_cuda
+        and not other.ndim
+        and other.is_floating_point()
+        and not other.requires_grad
+    ):
+        return False
+    # get_device() is cheaper than building a torch.device for every tensor
+    device, dtype = other.get_device(), other.dtype
+    for tensor in tensors:
+        if (
+            type(tensor) not in _PLAIN_TENSOR_TYPES
+            or tensor.get_device() != device
+            or (tensor.dtype not in _FLOAT32_64 and tensor.dtype is not dtype)
+        ):
+            return False
+    return True
+
+
 def _foreach(name: str, tensors, *args, **kwargs):
     """Calls ``torch._foreach_<name>(tensors, *args, **kwargs)``, one tensor at a time under torch.func or with an unbatched tensor.
 
@@ -2617,6 +2690,23 @@ def _foreach(name: str, tensors, *args, **kwargs):
         _any_unbatched(tensors)
         or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
     ):
+        if (
+            name in _FOREACH_ADD_TENSOR
+            and len(tensors) <= _FOREACH_ADD_TENSOR_MAX
+            # sign * True would turn a bool alpha, which torch rejects for
+            # floating-point results, into an int
+            and type(kwargs.get("alpha")) is not bool
+            and _is_cuda_scalar_of(args[0], tensors)
+        ):
+            # Pass a copy, read once as the number would be: the in-place kernel
+            # can read other after writing a tensor that holds it, and autograd
+            # saves other for backward, which fails if other was made in
+            # inference mode or is changed in place before backward. Without
+            # alpha, the number also dropped the forward-mode tangent of other.
+            other = args[0].clone() if "alpha" in kwargs else args[0].detach().clone()
+            op = torch._foreach_add_ if name.endswith("_") else torch._foreach_add
+            sign = -1 if name.startswith("sub") else 1
+            return op(tensors, other, alpha=sign * kwargs.get("alpha", 1))
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [
@@ -3290,19 +3380,35 @@ _LIBRARY_DIRS = (
 )
 
 
-def _warn_dim_past_batch_dims(op: str) -> None:
-    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
-    # point to the first frame outside tensordict and torch: the user's call
-    frame, stacklevel = sys._getframe(1), 2
+def _user_stacklevel() -> int:
+    """The ``stacklevel`` of the first frame outside tensordict and torch, for a warning emitted by the caller."""
+    frame, stacklevel = sys._getframe(2), 2
     while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
         frame, stacklevel = frame.f_back, stacklevel + 1
+    return stacklevel
+
+
+def _warn_dim_past_batch_dims(op: str) -> None:
+    """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
     warnings.warn(
         f"{op} got a dim outside the batch dims, and uses it on the dims of "
         "the leaves instead. Starting with TensorDict 0.17, the default will "
         "change to raising an IndexError, as torch does for a tensor of the "
         "batch size.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _warn_lazy_shape_args(op: str, args: str) -> None:
+    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17."""
+    warnings.warn(
+        f"LazyStackedTensorDict.{op} got {args}, which TensorDict.{op} "
+        "rejects, and returns the result of its members. Starting with "
+        "TensorDict 0.17, the default will change to raising a ValueError, "
+        f"as TensorDict.{op} does.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
     )
 
 

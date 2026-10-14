@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import collections
 import concurrent
+import contextlib
 import ctypes
 import dataclasses
 import functools
@@ -24,7 +25,7 @@ import shutil
 import sys
 import warnings
 import weakref
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,6 +79,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _LOCK_ERROR,
     _REPR_OPTIONS,
     _resolve_expand_shape,
+    _SKIP_TENSORCLASS_POST_INIT,
     _strong_ref,
     _td_fields,
     _TENSORCLASS_MEMO,
@@ -1042,6 +1044,31 @@ def _own_annotation_names(cls: type) -> list[str]:
     return list(annotations)
 
 
+def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
+    """Whether ``cls`` defines the method ``name``, in its body or in a parent.
+
+    The tensorclass ``default``, the methods that the TensorClass base forwards
+    to its TensorDict, those that :func:`dataclasses.dataclass` generates and
+    those of ``object`` do not count.
+    """
+    for base in cls.__mro__:
+        if name in base.__dict__:
+            method = base.__dict__[name]
+            break
+    else:
+        return False
+    if base is object or method is default:
+        return False
+    if getattr(method, "__qualname__", "").startswith("_wrap_td_method."):
+        return False
+    if "__dataclass_fields__" not in base.__dict__:
+        return True
+    # dataclasses compiles the methods it generates from a string, as for
+    # __init__ in _tensorclass
+    code = getattr(inspect.unwrap(method), "__code__", None)
+    return getattr(code, "co_filename", None) != "<string>"
+
+
 # The names of the members of a tensorclass and of the attributes that hold its
 # state. A tensorclass has or forwards to its TensorDict every TensorDict
 # attribute, and library code calls private TensorDict methods on nested tensor
@@ -1251,9 +1278,29 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         if own_doc == generated_doc:
             own_doc = None
 
+    # Keep the operators that the class defines, in its body or in a parent.
+    # Look for them before dataclass() adds a __repr__ and an __eq__.
+    operators = {
+        "__repr__": _repr,
+        "__eq__": _eq,
+        "__ne__": _ne,
+        "__or__": _or,
+        "__xor__": _xor,
+        "__bool__": _bool,
+    }
+    own_operators = {
+        name
+        for name in (*operators, *_FALLBACK_METHOD_FROM_TD_FORCE)
+        if _defines_method(cls, name, operators.get(name))
+    }
+
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
     cls = dataclass(cls, frozen=frozen)
+    for name in own_operators:
+        if name in cls.__dict__ and name not in attrs_before:
+            # dataclass() replaced an inherited __repr__ or __eq__
+            delattr(cls, name)
     _TENSORCLASS_MEMO[cls] = True
 
     # Use dataclasses.fields() to get the correct field list (excludes ClassVar fields)
@@ -1379,16 +1426,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         cls.__getitems__ = _getitem
     if "__setitem__" not in cls.__dict__:
         cls.__setitem__ = _setitem
-    if not _is_non_tensor:
-        cls.__repr__ = _repr
     if "__len__" not in cls.__dict__:
         cls.__len__ = _len
-
-    cls.__eq__ = _eq
-    cls.__ne__ = _ne
-    cls.__or__ = _or
-    cls.__xor__ = _xor
-    cls.__bool__ = _bool
+    for name, method in operators.items():
+        if name not in own_operators and not (_is_non_tensor and name == "__repr__"):
+            setattr(cls, name, method)
 
     if not hasattr(cls, "_new_unsafe"):
         cls._new_unsafe = classmethod(_new_unsafe)
@@ -1442,7 +1484,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             else:
                 setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_FORCE:
-        setattr(cls, method_name, _wrap_td_method(method_name))
+        if method_name not in own_operators:
+            setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         if not hasattr(cls, method_name) and method_name not in expected_keys:
             is_property = isinstance(
@@ -1501,7 +1544,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         TensorDictBase.__dict__, *(mixin.__dict__ for mixin in _TENSORDICTBASE_MIXINS)
     )
     for attr in td_attrs:
-        if attr in ("__torch_function__",):
+        # __init_subclass__ is TensorDict's hook for its own subclasses
+        if attr in ("__torch_function__", "__init_subclass__"):
             continue
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and attr not in cls.__dict__:
@@ -2427,7 +2471,9 @@ def _from_tensordict(
         object.__setattr__(tc, "_non_tensordict", non_tensordict)
     # since we aren't calling the dataclass __init__, we need to manually
     # check whether a __post_init__ method has been defined and invoke it
-    if hasattr(cls, "__post_init__"):
+    if hasattr(cls, "__post_init__") and (
+        is_compiling() or not _SKIP_TENSORCLASS_POST_INIT.get()
+    ):
         tc.__post_init__()
     return tc
 
@@ -2541,31 +2587,32 @@ def _memmap_(
             os.makedirs(prefix, exist_ok=True)
 
         def save_metadata(cls=cls, _non_tensordict=_non_tensordict, prefix=prefix):
-            with open(prefix / "meta.json", "wb") as f:
-                metadata = {"_type": str(cls)}
-                to_pickle = {}
-                for key, value in _non_tensordict.items():
-                    value = _from_shared_nontensor(value)
-                    if _is_json_serializable(value):
-                        metadata[key] = value
-                    else:
-                        to_pickle[key] = value
-                from tensordict._utils_key_json import json_dumps
+            metadata = {"_type": str(cls)}
+            to_pickle = {}
+            for key, value in _non_tensordict.items():
+                value = _from_shared_nontensor(value)
+                if _is_json_serializable(value):
+                    metadata[key] = value
+                else:
+                    to_pickle[key] = value
+            from tensordict._utils_key_json import json_dumps
 
-                json_str = json_dumps(metadata)
-                # Ensure we write bytes to the binary file
-                if isinstance(json_str, str):
-                    f.write(json_str.encode("utf-8"))
-                else:
-                    f.write(json_str)
-                if to_pickle:
-                    pickled = pickle.dumps(to_pickle)
-                    with open(prefix / "other.pickle", "wb") as pickle_file:
-                        pickle_file.write(pickled)
-                    _save_json_types(prefix, to_pickle, pickled)
-                else:
-                    (prefix / "other.pickle").unlink(missing_ok=True)
-                    (prefix / _JSON_TYPES_FILE).unlink(missing_ok=True)
+            json_str = json_dumps(metadata)
+            # Ensure we write bytes to the binary file
+            if isinstance(json_str, str):
+                json_str = json_str.encode("utf-8")
+            # Serialize before opening any file, so that a value that cannot be
+            # pickled leaves the files on disk as they were.
+            pickled = pickle.dumps(to_pickle) if to_pickle else None
+            with open(prefix / "meta.json", "wb") as f:
+                f.write(json_str)
+            if pickled is not None:
+                with open(prefix / "other.pickle", "wb") as pickle_file:
+                    pickle_file.write(pickled)
+                _save_json_types(prefix, to_pickle, pickled)
+            else:
+                (prefix / "other.pickle").unlink(missing_ok=True)
+                (prefix / _JSON_TYPES_FILE).unlink(missing_ok=True)
 
         if executor is None:
             save_metadata()
@@ -3131,7 +3178,9 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             if non_tensordict and key in non_tensordict:
                 del non_tensordict[key]
         return
-    value, _ = _convert_mapping_for_field(key, value, type(self)._tensordict_fields)
+    # _convert_mapping_for_field, inlined
+    if key in type(self)._tensordict_fields and isinstance(value, Mapping):
+        value = _normalize_nested_mapping(value)
     out = self._set_str(key, value, inplace=False, validated=False, ignore_lock=False)
     if out is not self:
         raise RuntimeError(
@@ -4366,7 +4415,8 @@ def _set_str(
     ignore_lock: bool = False,
     non_blocking: bool = False,
 ):
-    if is_non_tensor(self):
+    # is_non_tensor(self), inlined: every tensorclass sets _is_non_tensor
+    if type(self)._is_non_tensor is True:
         if key != "data":
             raise KeyError(f"only 'data' keys are supported for {type(self).__name__}.")
         while isinstance(value, (NonTensorData, NonTensorStack)):
@@ -4396,7 +4446,8 @@ def _set_at_str(
     validated: bool,
     non_blocking: bool = False,
 ):
-    if is_non_tensor(self):
+    # is_non_tensor(self), inlined: every tensorclass sets _is_non_tensor
+    if type(self)._is_non_tensor is True:
         if key != "data":
             raise KeyError(f"only 'data' keys are supported for {type(self).__name__}.")
         while isinstance(value, (NonTensorData, NonTensorStack)):
@@ -5107,6 +5158,12 @@ def _patch_tc(cls):
     # _set_methods(TensorClass)
 
 
+def _is_tensorclass_flags(item: IndexType) -> bool:
+    if not isinstance(item, tuple):
+        item = (item,)
+    return all(isinstance(_item, str) and _item in _TENSORCLASS_FLAGS for _item in item)
+
+
 class _TensorClassMeta(abc.ABCMeta):
     def __new__(
         mcs,
@@ -5159,11 +5216,22 @@ class _TensorClassMeta(abc.ABCMeta):
         return cls
 
     def __getitem__(cls, item: IndexType) -> Self:
+        # Python calls a metaclass __getitem__ before __class_getitem__, so pass
+        # anything other than flags or type arguments of a generic class to a
+        # __class_getitem__ that a subclass defines, with the item unchanged.
+        if not issubclass(cls, Generic) and not _is_tensorclass_flags(item):
+            for base in cls.__mro__:
+                if base is TensorClass:
+                    break
+                if "__class_getitem__" in base.__dict__:
+                    return cls.__class_getitem__(item)
+        return _TensorClassMeta._getitem_flags(cls, item)
+
+    def _getitem_flags(cls, item: IndexType) -> Self:
+        # TensorClass[flags] and the type arguments of a generic TensorClass.
         if not isinstance(item, tuple):
             item = (item,)
-        if not all(
-            isinstance(_item, str) and _item in _TENSORCLASS_FLAGS for _item in item
-        ):
+        if not _is_tensorclass_flags(item):
             # Type arguments of a generic class, as in
             # ``class Foo(TensorClass, Generic[T])`` or ``class Foo[T](TensorClass)``.
             # This metaclass __getitem__ hides Generic.__class_getitem__, so we
@@ -5390,7 +5458,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     # __class_getitem__ on the class rather than a metaclass __getitem__.
     # Delegate to the metaclass implementation that builds the configured subclass.
     def __class_getitem__(cls, item: IndexType) -> Self:  # type: ignore[override]
-        return _TensorClassMeta.__getitem__(cls, item)
+        return _TensorClassMeta._getitem_flags(cls, item)
 
 
 # _TensorClassMeta does not pass the base class itself to tensorclass(), which
@@ -6827,9 +6895,11 @@ class NonTensorStack(LazyStackedTensorDict):
         if not all(is_non_tensor(item) for item in self.tensordicts):
             raise RuntimeError("All tensordicts must be non-tensors.")
 
+    # Override: lists the stored values, not dicts of the members.
     def tolist(
         self,
         *,
+        convert_nodes: bool = True,
         convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
         as_linked_list: bool = False,
@@ -6837,6 +6907,9 @@ class NonTensorStack(LazyStackedTensorDict):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
 
         Keyword Args:
+            convert_nodes (bool): accepted for compatibility with
+                :meth:`~tensordict.TensorDictBase.tolist`. It has no effect:
+                the elements are the stored values, not tensordicts. Default: ``True``.
             convert_tensors (bool): if ``True``, tensors will be converted to lists.
                 Otherwise, they will remain as tensors. Default: ``False``.
             tolist_first (bool, optional): if ``True``, the tensordict will be converted to a list first when
@@ -6874,6 +6947,7 @@ class NonTensorStack(LazyStackedTensorDict):
             stack_dim=self.stack_dim,
         )
 
+    # Override: builds the stack from raw values, not from dicts.
     @classmethod
     def from_list(cls, non_tensors: List[Any]):
         # Use local function because refers to cls
@@ -6917,40 +6991,18 @@ class NonTensorStack(LazyStackedTensorDict):
             prev = cls(*[prev.clone(False) for _ in range(dim)], stack_dim=0)
         return prev
 
-    def __repr__(self):
+    # Override: shows the data, cut after 50 characters.
+    def _repr_parts(self) -> list[str]:
         selfrepr = str(self.tolist())
         if len(selfrepr) > 50:
             selfrepr = f"{selfrepr[:50]}..."
-        selfrepr = indent(selfrepr, prefix=4 * " ")
-        batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
-        device = indent(f"device={self.device}", prefix=4 * " ")
-        return f"NonTensorStack(\n{selfrepr},\n{batch_size},\n{device})"
+        return [
+            indent(selfrepr, prefix=4 * " "),
+            indent(f"batch_size={self.batch_size}", prefix=4 * " "),
+            indent(f"device={self.device}", prefix=4 * " "),
+        ]
 
-    @classmethod
-    def lazy_stack(
-        cls,
-        items: Sequence[TensorCollection],
-        dim: int = 0,
-        *,
-        device: DeviceType | None = None,
-        out: T | None = None,
-        stack_dim_name: str | None = None,
-        **kwargs,
-    ) -> T:
-        result = super().lazy_stack(
-            items=items,
-            dim=dim,
-            out=out,
-            stack_dim_name=stack_dim_name,
-            device=device,
-            **kwargs,
-        )
-        if not isinstance(result, cls):
-            raise RuntimeError(
-                f"Unexpected result type: {type(result)} - expected one of {cls}."
-            )
-        return result
-
+    # Override: returns the stacked values as a list, as NonTensorData.to_dict returns its data.
     def to_dict(
         self,
         *,
@@ -6965,9 +7017,11 @@ class NonTensorStack(LazyStackedTensorDict):
             as_linked_list=as_linked_list,
         )
 
-    def to_tensordict(self, *, retain_none: bool | None = None):
+    # Override: a NonTensorStack is already the dense form of its data.
+    def _to_tensordict(self, *, retain_none: bool | None) -> NonTensorStack:
         return self
 
+    # Override: a NonTensorStack is its own materialized form.
     def contiguous(
         self, *, canonical: bool = False, inplace: bool = False
     ) -> NonTensorStack:
@@ -6977,14 +7031,11 @@ class NonTensorStack(LazyStackedTensorDict):
         # TensorDict, silently dropping the data.
         return self
 
-    # flip, roll, rot90, tile, narrow and broadcast_to are inherited from
-    # TensorDictBase, which builds the result from the tensor leaves, and
-    # reshape falls back to the same code when the new shape is not a flatten
-    # or unflatten of the stack. A stack of non-tensor entries has no tensor
-    # leaves, so the result used to be an empty TensorDict. The overrides below
-    # move the entries instead: they run the operation on a tensor holding the
-    # flat position of each entry, then pick the entries at the resulting
-    # positions.
+    # The shape operations of TensorDictBase build their result from the
+    # tensor leaves, and a stack of non-tensor entries has none: the result
+    # would be an empty TensorDict. The hooks below move the entries instead:
+    # they run the operation on a tensor holding the flat position of each
+    # entry, then pick the entries at the resulting positions.
     def _positions(self) -> torch.Tensor:
         return torch.arange(self.batch_size.numel()).reshape(self.batch_size)
 
@@ -6996,58 +7047,57 @@ class NonTensorStack(LazyStackedTensorDict):
         # advanced indexing copies the selected entries
         return self[tuple(reversed(index))]
 
-    def flip(self, dims: int | tuple[int, ...]) -> NonTensorStack:
-        return self._select_positions(self._positions().flip(dims))
-
-    def roll(
+    # Override: move the entries, as there are no tensor leaves.
+    def _batch_op(
         self,
-        shifts: int | tuple[int, ...],
-        dims: int | tuple[int, ...] | None = None,
+        fn: Callable[[torch.Tensor], torch.Tensor],
+        batch_size: torch.Size,
+        names: list | None,
         *,
-        inplace: bool = False,
+        index: tuple | None = None,
     ) -> NonTensorStack:
-        result = self._select_positions(self._positions().roll(shifts, dims))
-        if inplace:
-            return self.update_(result)
-        return result
+        if index is not None:
+            # Let torch check the arguments, then select a slice, which shares
+            # the entries the same way narrowing a tensor returns a view.
+            fn(self._positions())
+            return self[index]
+        return self._select_positions(fn(self._positions()))
 
-    def rot90(self, k: int = 1, dims: tuple[int, int] = (0, 1)) -> NonTensorStack:
-        return self._select_positions(self._positions().rot90(k, dims))
-
-    def tile(self, dims: tuple[int, ...]) -> NonTensorStack:
-        return self._select_positions(self._positions().tile(dims))
-
-    def narrow(self, dim: int, start: int, length: int) -> NonTensorStack:
-        # Let torch check the arguments, then select a slice, which shares the
-        # entries the same way narrowing a tensor returns a view.
-        self._positions().narrow(dim, start, length)
-        dim = dim % self.ndim
-        if start < 0:
-            start += self.batch_size[dim]
-        return self[(slice(None),) * dim + (slice(start, start + length),)]
-
-    def broadcast_to(self, shape: tuple[int, ...]) -> NonTensorStack:
-        return self.expand(shape)
-
-    def reshape(self, *args, **kwargs) -> NonTensorStack:
-        if kwargs.get("inplace", False):
-            return super().reshape(*args, **kwargs)
-        kwargs.pop("inplace", None)
-        positions = self._positions().reshape(_get_shape_from_args(*args, **kwargs))
-        if positions.shape == self.batch_size:
-            return self
-        if not positions.numel():
+    # Override: regroup the stack when the new shape allows it, which shares
+    # the entries like a view, and move the entries otherwise.
+    def _reshape(
+        self,
+        shape: torch.Size,
+        names: list | None,
+        leaf_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    ) -> NonTensorStack:
+        if not self.batch_size.numel():
+            if shape == self.batch_size:
+                # an identity unflatten
+                return self
             # With no entries, regrouping the stack does not give every shape
             # (it keeps [3, 0] for [1, 0]).
-            result = self._reshape_empty(positions.shape)
+            result = self._reshape_empty(shape)
             if self.is_locked:
                 result.lock_()
             return result
-        try:
-            # regrouping the stack shares the entries, like a view
-            return self._view(positions.shape)
-        except RuntimeError:
-            return self._select_positions(positions)
+        result = self._regroup(shape)
+        if result is not None:
+            return result
+        if shape == self.batch_size:
+            # an identity unflatten of a multi-dim stack: return self, as
+            # reshape and view do
+            return self
+        return self._batch_op(lambda positions: positions.reshape(shape), shape, names)
+
+    # Override: expanding the members shares the entries and is twice as fast
+    # as moving them.
+    def _broadcast_to(self, shape: torch.Size) -> NonTensorStack:
+        return self.expand(shape)
+
+    # Override: a NonTensorStack is the dense form of stacked non-tensor data.
+    def _densify(self, layout: torch.layout) -> NonTensorStack:
+        return self
 
     def _reshape_empty(self, shape: torch.Size) -> NonTensorStack:
         # Stack the dims before the first zero-size one, so that tolist()
@@ -7093,19 +7143,23 @@ class NonTensorStack(LazyStackedTensorDict):
                 json_serializable = _is_json_serializable(data)
                 if json_serializable:
                     jsondict["data"] = data
+                    pickled = None
                 else:
                     jsondict["data"] = "pickle.pkl"
-                    with open(prefix / "pickle.pkl", "wb") as f:
-                        pickle.dump(data, f)
-                with open(prefix / "meta.json", "wb") as f:
-                    from tensordict._utils_key_json import json_dumps
+                    # Serialize before opening any file, so that data that cannot be
+                    # pickled leaves the files on disk as they were.
+                    pickled = pickle.dumps(data)
+                from tensordict._utils_key_json import json_dumps
 
-                    json_str = json_dumps(jsondict, separators=(",", ":"))
-                    # Ensure we write bytes to the binary file
-                    if isinstance(json_str, str):
-                        f.write(json_str.encode("utf-8"))
-                    else:
-                        f.write(json_str)
+                json_str = json_dumps(jsondict, separators=(",", ":"))
+                # Ensure we write bytes to the binary file
+                if isinstance(json_str, str):
+                    json_str = json_str.encode("utf-8")
+                if pickled is not None:
+                    with open(prefix / "pickle.pkl", "wb") as f:
+                        f.write(pickled)
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json_str)
                 if json_serializable:
                     (prefix / "pickle.pkl").unlink(missing_ok=True)
 
@@ -7197,10 +7251,7 @@ class NonTensorStack(LazyStackedTensorDict):
             stack_dim=0,
         )
 
-    def densify(self, layout: torch.layout = torch.strided):
-        # No need to do anything with a non tensor stack
-        return self
-
+    # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -7233,6 +7284,7 @@ class NonTensorStack(LazyStackedTensorDict):
             ignore_lock=ignore_lock,
         )
 
+    # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -7376,29 +7428,40 @@ class NonTensorStack(LazyStackedTensorDict):
                 raise RuntimeError(_LOCK_ERROR)
         td[member_index] = piece
 
-    def update_at_(
-        self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
-        index: IndexType,
-        clone: bool = False,
-        *,
-        non_blocking: bool = False,
-    ) -> T:
-        memmap = False
-        if self._is_memmap and hasattr(self, "_path_to_memmap"):
-            global _BREAK_ON_MEMMAP
+    @contextlib.contextmanager
+    def _rewrite_memmap(self):
+        """Lets the members of a memory-mapped stack be written, and writes the stack to its path again at the end."""
+        global _BREAK_ON_MEMMAP
+        memmap = self._is_memmap and hasattr(self, "_path_to_memmap")
+        if memmap:
             _BREAK_ON_MEMMAP = False
-            memmap = True
         try:
-            super().update_at_(
-                input_dict_or_td, index, clone=clone, non_blocking=non_blocking
-            )
+            yield
             if memmap:
                 self._memmap_(
                     prefix=self._path_to_memmap, inplace=True, robust_key=True
                 )
         finally:
             _BREAK_ON_MEMMAP = True
+
+    # Override: a memory-mapped stack is written again after its members.
+    def _update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorCollection,
+        idx: IndexType,
+        *,
+        clone: bool,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> T:
+        with self._rewrite_memmap():
+            super()._update_at_(
+                input_dict_or_td,
+                idx,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+            )
         return self
 
     @property
@@ -7528,3 +7591,100 @@ def _update_shared_nontensor(nontensor, val):
         raise NotImplementedError(
             f"Updating {type(nontensor).__name__} within a shared/memmaped structure is not supported."
         )
+
+
+def _shared_nontensor_value(nontensor, val):
+    """The value that :func:`_update_shared_nontensor` writes into ``nontensor`` for ``val``, or ``NO_DEFAULT`` if the write would raise.
+
+    The manager of a shared list or dict pickles the value it is given, so a
+    generator cannot be written. These take a list or dict built from a value
+    that pickles: the write stores that one, so an iterator is read once.
+    """
+    try:
+        if isinstance(nontensor, multiprocessing.managers.ListProxy):
+            pickle.dumps(val)
+            # extend takes any iterable
+            val = list(val)
+        elif isinstance(nontensor, multiprocessing.managers.DictProxy):
+            pickle.dumps(val)
+            # update takes a mapping or an iterable of pairs
+            val = dict(val)
+        elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+            # ctypes converts with __index__ in an int or bool slot, and also
+            # with __float__ in a float slot
+            if isinstance(nontensor.get_obj(), ctypes.c_double) and hasattr(
+                type(val), "__float__"
+            ):
+                float(val)
+            else:
+                operator.index(val)
+        elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+            if not isinstance(val, str):
+                return NO_DEFAULT
+        else:
+            return NO_DEFAULT
+    except Exception:
+        return NO_DEFAULT
+    return val
+
+
+def _stored_non_tensor(dest, source, break_on_memmap: bool | None = None):
+    """The source that ``dest.copy_`` writes into ``dest``, a shared or memory-mapped non-tensor leaf, for ``source``.
+
+    That is ``source``, or a copy holding the list or dict that a shared
+    ``dest`` stores, or ``None`` if ``dest`` cannot store the values of
+    ``source``. A memory-mapped value that does not share its data takes any
+    value that it can write to its files: JSON or pickle. A member of a
+    memory-mapped stack takes none, unless the write goes through the stack
+    (``break_on_memmap=False``, as in :meth:`NonTensorDataBase._update`). The
+    pairs that ``copy_`` rejects whatever the storage are left to ``copy_``.
+    """
+    if not is_non_tensor(source):
+        return source
+    if isinstance(dest, NonTensorStack):
+        broadcast = not isinstance(source, NonTensorStack)
+        if broadcast:
+            sources = [source] * len(dest.tensordicts)
+        else:
+            sources = source.unbind(dest.stack_dim)
+            if len(sources) != len(dest.tensordicts):
+                return source
+        if dest._is_memmap and hasattr(dest, "_path_to_memmap"):
+            # the stack lets its members be written, then saves itself again
+            break_on_memmap = False
+        stored = []
+        for member, value in zip(dest.tensordicts, sources):
+            if broadcast and stored and isinstance(source.data, Iterator):
+                # an iterator is read once: the other members take what the
+                # first one read
+                value = stored[0]
+            value = _stored_non_tensor(member, value, break_on_memmap)
+            if value is None:
+                return None
+            stored.append(value)
+        if all(new is old for new, old in zip(stored, sources)):
+            return source
+        return NonTensorStack(*stored, stack_dim=dest.stack_dim)
+    if isinstance(source, NonTensorStack):
+        return source
+    if break_on_memmap is None:
+        break_on_memmap = _BREAK_ON_MEMMAP
+    if dest._is_memmap and dest._is_memmaped_from_above() and break_on_memmap:
+        # the write raises: only the stack writes its members
+        return None
+    if dest._tensordict._is_shared or (
+        dest._is_memmap and dest._metadata.get("_share_non_tensor")
+    ):
+        data = _shared_nontensor_value(dest._non_tensordict["data"], source.data)
+        if data is NO_DEFAULT:
+            return None
+        if data is source.data:
+            return source
+        return NonTensorData(data, batch_size=dest.batch_size, device=dest.device)
+    if dest._is_memmap and not _is_json_serializable(source.data):
+        # the write pickles the value: try it before any entry is written
+        try:
+            pickle.dumps(source.data)
+        except Exception:
+            return None
+    return source

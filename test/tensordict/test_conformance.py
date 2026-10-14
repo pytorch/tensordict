@@ -93,6 +93,8 @@ _OPS = {
         "values(True, True)": lambda td: list(td.values(True, True)),
         "len()": len,
         "batch_size, names, device": lambda td: [td.batch_size, td.names, td.device],
+        "is_contiguous()": lambda td: td.is_contiguous(),
+        "clear_device_()": _inplace(lambda td: td.clear_device_()),
         "get('a')": lambda td: td.get("a"),
         "get('missing', None)": lambda td: td.get("missing", None),
         "entry_class(key) is type(get(key))": _entry_class_mismatches,
@@ -115,6 +117,7 @@ _OPS = {
         "clone()": lambda td: td.clone(),
         "clone(recurse=False)": lambda td: td.clone(recurse=False),
         "contiguous()": lambda td: td.contiguous(),
+        "contiguous(canonical=True)": lambda td: td.contiguous(canonical=True),
     },
     "pointwise": {
         "abs()": lambda td: td.abs(),
@@ -176,6 +179,16 @@ _OPS = {
         "unbind(1)": lambda td: td.unbind(1),
         "torch.stack([td, td], 1)": lambda td: torch.stack([td, td], 1),
         "torch.cat([td, td], 1)": lambda td: torch.cat([td, td], 1),
+        "flip(0)": lambda td: td.flip(0),
+        "roll(1, 0)": lambda td: td.roll(1, 0),
+        "rot90(1, (0, 1))": lambda td: td.rot90(1, (0, 1)),
+        "tile((2, 1, 1, 1))": lambda td: td.tile((2, 1, 1, 1)),
+        "narrow(1, 0, 2)": lambda td: td.narrow(1, 0, 2),
+        "broadcast_to((2, 4, 3, 2, 1))": lambda td: td.broadcast_to((2, 4, 3, 2, 1)),
+        "repeat_interleave(2, 0)": lambda td: td.repeat_interleave(2, 0),
+        "repeat_interleave(2, 2)": lambda td: td.repeat_interleave(2, 2),
+        "densify()": lambda td: td.densify(),
+        "get_item_shape('a')": lambda td: td.get_item_shape("a"),
     },
     "masking": {
         "where(mask, 0)": lambda td: td.where(_MASK, 0),
@@ -202,6 +215,55 @@ _OPS = {
         "zero_()": _inplace(lambda td: td.zero_()),
         "detach_()": _inplace(lambda td: td.detach_()),
     },
+    "update": {
+        "update({'a': zeros})": _inplace(
+            lambda td: td.update({"a": torch.zeros(4, 3, 2, 1, 5)})
+        ),
+        "update({'new': zeros})": _inplace(
+            lambda td: td.update({"new": torch.zeros(4, 3, 2, 1)})
+        ),
+        "update(new=zeros)": _inplace(
+            lambda td: td.update(new=torch.zeros(4, 3, 2, 1))
+        ),
+        "update(dense + 1)": _inplace(lambda td: td.update(td.to_tensordict() + 1)),
+        "update(dense + 1, inplace=True)": _inplace(
+            lambda td: td.update(td.to_tensordict() + 1, inplace=True)
+        ),
+        "update(dense + 1, keys_to_update=['a'])": _inplace(
+            lambda td: td.update(td.to_tensordict() + 1, keys_to_update=["a"])
+        ),
+        "update({('n', 'x'): zeros})": _inplace(
+            lambda td: td.update({("n", "x"): torch.zeros(4, 3, 2, 1)})
+        ),
+        "update(dense[0], update_batch_size=True)": _inplace(
+            lambda td: td.update(td.to_tensordict()[0], update_batch_size=True)
+        ),
+        "update_({'a': zeros})": _inplace(
+            lambda td: td.update_({"a": torch.zeros(4, 3, 2, 1, 5)})
+        ),
+        "update_(dense * 0)": _inplace(lambda td: td.update_(td.to_tensordict() * 0)),
+        "update_({'a': tensor(0.)})": _inplace(
+            lambda td: td.update_({"a": torch.tensor(0.0)})
+        ),
+        "update_(dense * 0, keys_to_update=['a'])": _inplace(
+            lambda td: td.update_(td.to_tensordict() * 0, keys_to_update=["a"])
+        ),
+        "update_({'missing': zeros})": _inplace(
+            lambda td: td.update_({"missing": torch.zeros(4, 3, 2, 1)})
+        ),
+        "update_at_({'a': zeros}, 0)": _inplace(
+            lambda td: td.update_at_({"a": torch.zeros(3, 2, 1, 5)}, 0)
+        ),
+        "update_at_(dense[1:3] * 0, slice(1, 3))": _inplace(
+            lambda td: td.update_at_(td.to_tensordict()[1:3] * 0, slice(1, 3))
+        ),
+        "update_at_({'a': tensor(0.)}, (..., 0))": _inplace(
+            lambda td: td.update_at_({"a": torch.tensor(0.0)}, (Ellipsis, 0))
+        ),
+        "update_at_(dense[0] * 0, 0, keys_to_update=['a'])": _inplace(
+            lambda td: td.update_at_(td.to_tensordict()[0] * 0, 0, keys_to_update=["a"])
+        ),
+    },
     "apply": {
         "apply(x + 1)": lambda td: td.apply(lambda x: x + 1),
         "apply(x + y, td)": lambda td: td.apply(lambda x, y: x + y, td),
@@ -217,6 +279,9 @@ _OPS = {
             td.to_dict(), batch_size=td.batch_size
         ),
         "pickle": _pickle_round_trip,
+        "state_dict()": lambda td: td.state_dict(),
+        "to_tensordict()": lambda td: td.to_tensordict(),
+        "to(float64)": lambda td: td.to(torch.float64),
     },
 }
 
@@ -231,6 +296,7 @@ def _normalize(value):
             "batch size": list(td.batch_size),
             "names": list(td.names),
             "device": td.device,
+            "locked": value.is_locked,
             "leaves": {
                 key: _normalize(leaf)
                 for key, leaf in td.items(True, True, is_leaf=_is_leaf_nontensor)
@@ -306,6 +372,8 @@ def _compare(make, op):
     torch.manual_seed(0)
     td = make("cpu")
     dense = td.to_tensordict()
+    if td.is_locked:
+        dense.lock_()
     expected, dense_error = _run(op, dense)
     result, error = _run(op, td)
     if dense_error is not None:

@@ -89,6 +89,29 @@ class TestConstruction:
         assert isinstance(state, TensorDictBase)
         assert state.batch_size == torch.Size([5])
 
+    def test_from_dict_and_instance(self):
+        data = {
+            "eta": torch.zeros(4, 3),
+            "X": torch.ones(4, 3),
+            "beta": torch.zeros(4, 3),
+        }
+        state = PredictorState.from_dict(data, batch_size=[4, 3], names=["n", "t"])
+        assert type(state) is PredictorState
+        assert state.batch_size == (4, 3)
+        assert state.names == ["n", "t"]
+        assert (state.X == 1).all()
+        other = state.from_dict_instance(
+            {**data, "X": torch.full((4, 3), 2.0)}, batch_size=[4]
+        )
+        assert type(other) is PredictorState
+        assert other.batch_size == (4,)
+        assert (other.X == 2).all()
+        assert (state.X == 1).all()
+        # no schema validation: a missing field gives an instance without it
+        partial = PredictorState.from_dict({"eta": torch.zeros(4)}, batch_size=[4])
+        assert type(partial) is PredictorState
+        assert list(partial.keys()) == ["eta"]
+
     def test_missing_required_field(self):
         with pytest.raises(TypeError, match="missing required field.*beta"):
             PredictorState(
@@ -893,12 +916,6 @@ class TestFromTensordict:
         torch.testing.assert_close(state.to_tensordict(), expected)
         torch.testing.assert_close(lazy_stack(tds).to_tensordict(), expected)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=ValueError,
-        reason="the in-place methods that write back read the nested members "
-        "of the lazy source as lists of their own leaves",
-    )
     def test_from_tensordict_lazy_stack_nested_zero_(self):
         state, tds = self._make_nested_lazy_state()
         assert state.zero_() is state
@@ -919,6 +936,44 @@ class TestFromTensordict:
         with pytest.warns(FutureWarning, match="leaves the file unchanged"):
             state.update_(before + 1)
         torch.testing.assert_close(state.to_tensordict(), before)
+
+    @pytest.mark.parametrize("hetero", [False, True], ids=["same", "hetero"])
+    def test_from_tensordict_lazy_stack_nested_inplace(self, hetero):
+        # #2519: the in-place methods write into the members of a stack with a
+        # nested entry, also when the nested members differ in shape
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.ones(3), n={"x": torch.ones(3, 2 + hetero * i)}, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        state = Nested.from_tensordict(lazy_stack(tds))
+        other = lazy_stack(tds).apply(lambda x: torch.full_like(x, 2.0))
+        assert state.zero_() is state
+        assert state.add_(1.0) is state
+        assert state.add_(other, alpha=2.0) is state
+        assert state.lerp_(other, 0.5) is state
+        for td in tds:
+            assert (td["a"] == 3.5).all()
+            assert (td["n", "x"] == 3.5).all()
+
+    def test_from_tensordict_lazy_stack_exclusive_keys_inplace(self):
+        # the in-place methods leave the keys that only some members hold
+        class Flat(TypedTensorDict):
+            a: Tensor
+
+        tds = [
+            TensorDict(a=torch.ones(3), batch_size=[3]),
+            TensorDict(a=torch.ones(3), c=torch.ones(3), batch_size=[3]),
+        ]
+        state = Flat.from_tensordict(lazy_stack(tds))
+        assert state.add_(1.0) is state
+        assert (tds[1]["a"] == 2).all()
+        assert (tds[1]["c"] == 1).all()
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:

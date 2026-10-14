@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import queue
 import warnings
+import weakref
+from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 from typing import Callable, overload
 
@@ -34,6 +36,7 @@ from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _is_shared,
+    _is_unbatched,
     _make_dtype_promotion,
     _parse_to,
     _pin_mem,
@@ -83,6 +86,57 @@ def _to_batch_size_will_change(td, batch_size, root=True) -> bool:
         for value in td.values()
         if _is_tensor_collection(type(value))
     )
+
+
+def _pin_memory(x):
+    return x.pin_memory()
+
+
+def _pin_memory_nodes(td) -> list | None:
+    # The nodes whose leaves pin_memory(inplace=True) replaces by their pinned
+    # copies, or None if any node is locked or is not exactly a TensorDict or
+    # a lazy stack (a tensorclass counts as the tensordict it wraps), or if
+    # any leaf is memory-mapped, shared, not strided or an UnbatchedTensor.
+    # Such a tree keeps the _fast_apply path, which writes the pinned copies
+    # back into its leaves.
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+
+    def plain_node(node):
+        if is_tensorclass(node):
+            node = node._tensordict
+        if node.is_locked or type(node) not in (TensorDict, LazyStackedTensorDict):
+            return None
+        return node
+
+    node = plain_node(td)
+    if node is None:
+        return None
+    nodes, todo = [], [node]
+    while todo:
+        node = todo.pop()
+        if node._lazy:
+            for child in node.tensordicts:
+                child = plain_node(child)
+                if child is None:
+                    return None
+                todo.append(child)
+            continue
+        nodes.append(node)
+        for value in node._tensordict.values():
+            if type(value) is not Tensor:
+                if _is_tensor_collection(type(value)):
+                    if not is_non_tensor(value):
+                        value = plain_node(value)
+                        if value is None:
+                            return None
+                        todo.append(value)
+                    continue
+                if _is_unbatched(value) or isinstance(value, MemoryMappedTensor):
+                    return None
+            if value.layout is not torch.strided or value.untyped_storage().is_shared():
+                return None
+    return nodes
 
 
 class _DeviceOps:
@@ -189,11 +243,7 @@ class _DeviceOps:
             device(type='cpu')
 
         """
-        self._device = None
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                value.clear_device_()
-        return self
+        return self._set_device(None)
 
     def _set_device(self, device: torch.device) -> Self:
         self._device = device
@@ -293,21 +343,69 @@ class _DeviceOps:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 
         Args:
-            num_threads (int or str): if provided, the number of threads to use
-                to call ``pin_memory`` on the leaves. Defaults to ``None``, which sets a high
-                number of threads in :class:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`.
-                To execute all the calls to :meth:`~torch.Tensor.pin_memory` on the main thread, pass
-                ``num_threads=0``.
-            inplace (bool, optional): if ``True``, the tensordict is modified in-place.
+            num_threads (int, optional): if provided, the number of threads to
+                use to call ``pin_memory`` on the leaves, in a
+                :class:`~concurrent.futures.ThreadPoolExecutor`. Defaults to
+                ``None``, which, like ``0``, calls
+                :meth:`~torch.Tensor.pin_memory` on the calling thread.
+            inplace (bool, optional): if ``True``, the tensordict is modified
+                in-place. When every node is an unlocked
+                :class:`~tensordict.TensorDict` or
+                :class:`~tensordict.LazyStackedTensorDict` (or a tensorclass
+                over one) and no leaf is a :class:`~tensordict.MemoryMappedTensor`, in
+                shared memory, sparse, jagged or an
+                :class:`~tensordict.UnbatchedTensor`, each leaf is replaced by
+                its pinned copy, and the tensordict and every nested node stay
+                the same objects; keys that hold the same tensor share its
+                pinned copy, and a leaf that is a view of another leaf gets its
+                own. Any other tree, such as a locked one or one that holds a
+                memory-mapped tensordict, has the pinned copies written back
+                into its leaves, as before, so they stay in pageable memory.
                 Defaults to ``False``.
 
         """
-
-        def pin_memory(x):
-            return x.pin_memory()
-
+        if self._pin_memory_unsupported:
+            raise RuntimeError(
+                f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() "
+                "before making this call."
+            )
+        nodes = _pin_memory_nodes(self) if inplace else None
+        if nodes is not None:
+            # Replace each leaf by its pinned copy. Keys that hold one tensor
+            # share its copy: memo maps the id of a leaf to a weak reference
+            # to it and its copy (or the future of its copy).
+            executor = ThreadPoolExecutor(num_threads) if num_threads else None
+            memo, pending = {}, []
+            try:
+                for node in nodes:
+                    for key in list(node._tensordict):
+                        value = node._tensordict[key]
+                        if _is_tensor_collection(type(value)):
+                            continue
+                        entry = memo.get(id(value))
+                        if entry is None or entry[0]() is not value:
+                            if executor is None:
+                                pinned = _pin_memory(value)
+                            else:
+                                pinned = executor.submit(_pin_memory, value)
+                            entry = memo[id(value)] = (weakref.ref(value), pinned)
+                        # release the old leaf as its replacement is written
+                        del value
+                        if executor is None:
+                            node._set_str(key, entry[1], validated=True, inplace=False)
+                        else:
+                            pending.append((node, key, entry[1]))
+                # with threads, nothing is written until every leaf is pinned
+                values = [future.result() for _, _, future in pending]
+            finally:
+                # as in _multithread_apply_nest, do not wait for the threads
+                if executor is not None:
+                    executor.shutdown(wait=False)
+            for (node, key, _), value in zip(pending, values):
+                node._set_str(key, value, validated=True, inplace=False)
+            return self
         return self._fast_apply(
-            pin_memory,
+            _pin_memory,
             num_threads=num_threads,
             inplace=inplace,
             propagate_lock=True,
@@ -318,7 +416,7 @@ class _DeviceOps:
         removal="0.17",
         replacement="pin_memory(inplace=True)",
     )
-    def pin_memory_(self, num_threads: int | str = 0) -> Self:
+    def pin_memory_(self, num_threads: int = 0) -> Self:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors and returns the TensorDict modifies in-place.
 
         .. deprecated:: 0.15
@@ -329,9 +427,8 @@ class _DeviceOps:
             :meth:`pin_memory` to keep that behavior.
 
         Args:
-            num_threads (int or str): if provided, the number of threads to use
-                to call ``pin_memory`` on the leaves. If ``"auto"`` is passed, the
-                number of threads is automatically determined.
+            num_threads (int, optional): if provided, the number of threads to
+                use to call ``pin_memory`` on the leaves. Defaults to ``0``.
 
         """
         return self.pin_memory(num_threads=num_threads, inplace=True)
@@ -488,7 +585,23 @@ class _DeviceOps:
             threads.append(thread)
         try:
             while len(items) < lkeys:
-                keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                try:
+                    keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
+                except queue.Empty:
+                    # A large or file-backed leaf can take longer than the
+                    # timeout to pin: wait as long as a thread is working.
+                    if any(thread.is_alive() for thread in threads):
+                        continue
+                    # A thread may have put its last leaf after the wait
+                    # timed out.
+                    try:
+                        keyval = q_out.get_nowait()
+                    except queue.Empty:
+                        raise RuntimeError(
+                            "The pin_memory threads of to(device, "
+                            "non_blocking_pin=True) exited without returning "
+                            f"{lkeys - len(items)} of the {lkeys} leaves."
+                        ) from None
                 if not isinstance(keyval, tuple):
                     raise keyval
                 key, val = keyval
@@ -531,7 +644,8 @@ class _DeviceOps:
                 If ``None`` (default), the leaves are copied with ``non_blocking=True``
                 and, when the target device is not a CUDA device (e.g. device-to-host
                 copies), the tensordict synchronizes once after all the copies have been
-                issued (under :func:`torch.compile`, these copies are blocking instead).
+                issued; for a CPU target, only if a leaf comes from another device.
+                Under :func:`torch.compile`, these copies are blocking instead.
                 If ``True``, the copies are non-blocking and no synchronization
                 is performed: the caller is responsible for synchronizing before reading
                 the results. If ``False``, the copies are blocking.
@@ -668,6 +782,47 @@ class _DeviceOps:
             num_threads,
             inplace,
         ) = _parse_to(*args, **kwargs)
+        return self._to(
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            non_blocking_pin,
+            num_threads,
+            inplace,
+            args,
+            kwargs,
+        )
+
+    def _to(
+        self,
+        device: torch.device | None,
+        dtype: torch.dtype | None,
+        non_blocking: bool | None,
+        convert_to_format: torch.memory_format | None,
+        batch_size: torch.Size | None,
+        non_blocking_pin: bool,
+        num_threads: int | None,
+        inplace: bool,
+        args: tuple,
+        kwargs: dict,
+    ) -> Self:
+        """Casts the tensordict as :meth:`to` describes, with the parsed arguments.
+
+        :meth:`to` has handled an attrs tensordict, taken ``non_blocking`` out
+        of ``kwargs`` and parsed the other arguments; ``args`` and ``kwargs``
+        are the ones it received, without ``non_blocking``. It wraps the result
+        for use as a context manager.
+
+        Returns ``self`` when the device is already the right one and no dtype
+        or memory format is given (the batch size is then set in place, as
+        for a batch size alone), and a new tensordict otherwise. With
+        ``_masking_on_dense_copy``, a change of device, dtype or memory format
+        converts a :meth:`to_tensordict` copy. A class overrides it to reject
+        arguments that its storage cannot honor, or to change the device
+        without reading the data.
+        """
         result = self
 
         if (
@@ -679,6 +834,15 @@ class _DeviceOps:
             if batch_size is not None and tuple(batch_size) != result.batch_size:
                 result.batch_size = torch.Size(batch_size)
             return result
+
+        if (
+            self._masking_on_dense_copy
+            and not inplace
+            and (
+                device is not None or dtype is not None or convert_to_format is not None
+            )
+        ):
+            return self.to_tensordict().to(*args, non_blocking=non_blocking, **kwargs)
 
         if (
             self.is_consolidated()
@@ -729,6 +893,24 @@ class _DeviceOps:
                 return tensor.to(
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
+
+        # A copy to the CPU needs the sync at the end only if a leaf comes from
+        # another device: a CPU leaf is copied synchronously, and the sync would
+        # wait for all the work queued on the GPU.
+        needs_d2h_sync = True
+        if (
+            device is not None
+            and device.type == "cpu"
+            and sub_non_blocking
+            and not non_blocking
+        ):
+            needs_d2h_sync = False
+
+            def to(tensor, _to=to):
+                nonlocal needs_d2h_sync
+                if not tensor.is_cpu:
+                    needs_d2h_sync = True
+                return _to(tensor)
 
         apply_kwargs = {}
         if device is not None or dtype is not None or convert_to_format is not None:
@@ -813,8 +995,8 @@ class _DeviceOps:
                             "stacks and names. Call to(...) and then set the "
                             "batch_size to get the new behaviour now.",
                             FutureWarning,
-                            # skip the _as_context_manager wrapper
-                            stacklevel=3,
+                            # skip to() and the _as_context_manager wrapper
+                            stacklevel=4,
                         )
 
         if batch_size is not None:
@@ -824,6 +1006,7 @@ class _DeviceOps:
             and sub_non_blocking
             and not non_blocking
             and device.type != "cuda"
+            and needs_d2h_sync
         ):
             self._sync_all()
         return result
