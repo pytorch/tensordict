@@ -2018,7 +2018,9 @@ class PersistentTensorDict(
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
 
-    # Override: works on an in-memory copy; inplace would rename in the file.
+    # Override: one to_tensordict() read, outside the cache that the base
+    # keeps while locked: a locked file would keep a copy of its data, and
+    # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def flatten_keys(
         self,
@@ -2045,7 +2047,9 @@ class PersistentTensorDict(
             )
         return self.to_tensordict().flatten_keys(separator=separator, is_leaf=is_leaf)
 
-    # Override: works on an in-memory copy; inplace would rename in the file.
+    # Override: one to_tensordict() read, outside the cache that the base
+    # keeps while locked: a locked file would keep a copy of its data, and
+    # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
         if inplace:

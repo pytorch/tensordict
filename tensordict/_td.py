@@ -1674,17 +1674,24 @@ class TensorDict(TensorDictBase):
         elif not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
         else:
-            parent = self
-            for i, subkey in enumerate(key[:-1]):
-                parent = parent.get(subkey)
-                if parent is None:
-                    raise KeyError(f"No sub-tensordict with key {subkey}.")
-                if not _is_tensor_collection(type(parent)):
-                    rest = key[i + 1] if len(key) == i + 2 else key[i + 1 :]
-                    raise ValueError(
-                        f"{subkey!r} is a {type(parent).__name__}, not a "
-                        f"tensordict, so it has no entry {rest!r}."
-                    )
+            try:
+                parent = self._get_tuple(key[:-1], None)
+            except ValueError:
+                # a tensor before key[-2]: raise the error of the whole key,
+                # which names the rest of the path
+                self._get_tuple(key, None)
+                raise
+            if parent is None:
+                # name the first missing sub-tensordict
+                i = 1
+                while self._get_tuple(key[:i], None) is not None:
+                    i += 1
+                raise KeyError(f"No sub-tensordict with key {key[i - 1]}.")
+            if not _is_tensor_collection(type(parent)):
+                raise ValueError(
+                    f"{key[-2]!r} is a {type(parent).__name__}, not a tensordict, "
+                    f"so it has no entry {key[-1]!r}."
+                )
             parent.del_(key[-1])
 
     # Override: stacks into the existing leaf storages (torch.stack(out=)).

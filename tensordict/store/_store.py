@@ -2417,7 +2417,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             f"    td_id={self._td_id!r}",
         ]
 
-    # Override: works on an in-memory copy; inplace would rename in the store.
+    # Override: one to_tensordict() read, outside the cache that the base
+    # keeps while locked: a locked store would keep a copy of its data, and
+    # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def flatten_keys(self, separator=".", inplace=False, is_leaf=None):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
@@ -2439,7 +2441,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             )
         return self.to_tensordict().flatten_keys(separator=separator, is_leaf=is_leaf)
 
-    # Override: works on an in-memory copy; inplace would rename in the store.
+    # Override: one to_tensordict() read, outside the cache that the base
+    # keeps while locked: a locked store would keep a copy of its data, and
+    # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def unflatten_keys(self, separator=".", inplace=False):
         if inplace:

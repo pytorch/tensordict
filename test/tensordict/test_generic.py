@@ -3742,6 +3742,10 @@ class TestGeneric:
             td.del_(())
         with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
             td.del_(("a", "x"))
+        with pytest.raises(ValueError, match="'a' is a Tensor, not a tensordict"):
+            td.del_(("a", "x", "y"))
+        with pytest.raises(KeyError):
+            td.del_(("zz", "y", "z"))
         with pytest.raises(KeyError):
             td.del_("zz")
         with pytest.raises(KeyError):

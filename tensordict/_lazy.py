@@ -3629,18 +3629,16 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: deletes the entry of each member that has it.
     def _del(self, key: tuple[str, ...]) -> None:
-        # Use check-before-delete pattern for torch.compile compatibility
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        key_tuple = key
-        is_nested = len(key_tuple) > 1
+        is_nested = len(key) > 1
         is_deleted = False
         for td in self.tensordicts:
             # Not all sub-tensordicts need to have the entry, but one must
             # have it (or an error is thrown). A tensordict that appears twice
             # in the stack no longer has the entry the second time (no id()
             # check: under torch.compile it guards on the id of every member).
-            if key_tuple[0] in td.keys():
+            if key[0] in td.keys():
                 if is_nested:
                     # For nested keys, check the full path exists
                     if key in td.keys(True):
@@ -3650,16 +3648,20 @@ class LazyStackedTensorDict(TensorDictBase):
                     td.del_(key)
                     is_deleted = True
         if not is_deleted:
-            parent = key[:-1]
-            if (
-                is_nested
-                and parent in self.keys(True)
-                and not _is_tensor_collection(self.entry_class(parent))
-            ):
-                raise ValueError(
-                    f"{key[-2]!r} is a {self.entry_class(parent).__name__}, not "
-                    f"a tensordict, so it has no entry {key[-1]!r}."
-                )
+            # a path through an entry that is not a tensordict raises
+            # ValueError, as in TensorDict
+            keys = self.keys(True)
+            for i in range(1, len(key)):
+                prefix = key[:i]
+                if prefix not in keys:
+                    break
+                entry_class = self.entry_class(prefix)
+                if not _is_tensor_collection(entry_class):
+                    rest = key[i] if len(key) == i + 1 else key[i:]
+                    raise ValueError(
+                        f"{key[i - 1]!r} is a {entry_class.__name__}, not a "
+                        f"tensordict, so it has no entry {rest!r}."
+                    )
             raise KeyError(
                 f"Key {key[0] if len(key) == 1 else key} not found in any of the "
                 "stacked tensordicts."

@@ -5806,10 +5806,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Deletes the entry at ``key``: the storage part of :meth:`del_`.
 
         :meth:`del_` has checked the lock and unravelled ``key`` to a tuple of
-        str, which may be empty, and returns ``self``. An empty or missing key
-        raises ``KeyError``; a key whose path runs through an entry that is not
-        a tensordict raises ``ValueError``. The stores and the zarr backend
-        warn and return instead for a missing key until 0.17.
+        str, and returns ``self``. It does not check for an empty key. An empty
+        or missing key raises ``KeyError``; a key whose path runs through an
+        entry that is not a tensordict raises ``ValueError``. Until 0.17, the
+        backends keep their former errors: for ``()``,
+        :class:`~tensordict.PersistentTensorDict` raises ``ValueError``,
+        :class:`~tensordict.store.TensorDictStore` raises ``IndexError`` and
+        :class:`~tensordict.store.LazyStackedTensorDictStore` warns; for a
+        missing key, the stores and the zarr backend warn and return.
         """
         raise NotImplementedError(f"del_ is not implemented for {type(self).__name__}.")
 
