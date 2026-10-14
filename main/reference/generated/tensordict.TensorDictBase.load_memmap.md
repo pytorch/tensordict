@@ -43,9 +43,7 @@ nested tensordict to load, as a nested key (e.g.
 or as a `"/"`-separated string path (e.g. `"module/0"`).
 Only that subtree is loaded. Works both for directories
 (equivalent to appending the path to `prefix`) and for
-archives. A nested key reaches the entries of a saved
-tensorclass as `obj.get(key)` does, without its
-`_tensordict` level.
+archives.
 - **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - how the files are memory-mapped. With
 `"r"`, the mapping is copy-on-write: in-place writes to the
 leaves stay in memory. They reach the files only if the
