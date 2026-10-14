@@ -425,6 +425,11 @@ class TestGeneric:
         assert layout_reverse == reverse
         assert (flat_reverse[:, 0] == 1).all()
         assert (reverse.unpack(flat_reverse) == td).all()
+        # shapes given as lists or tuples are converted to torch.Size
+        by_hand = PackLayout(keys=("b", "a"), shapes=([], (2,)))
+        assert by_hand == reverse
+        assert hash(by_hand) == hash(reverse)
+        assert (td.pack(layout=by_hand)[0] == flat_reverse).all()
 
         with pytest.raises(KeyError, match="differ from the keys of the layout"):
             td.exclude("a").pack(layout=layout)

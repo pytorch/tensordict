@@ -99,6 +99,7 @@ class PackLayout:
         keys (tuple of NestedKey): the leaf keys in column order.
         shapes (tuple of torch.Size): the feature shape of each leaf, that is
             its shape after the batch dimensions of the packed tensordict.
+            Lists and tuples of ints are converted to ``torch.Size``.
         dim (int): the position of the packed dimension in the packed tensor.
         nested (tuple): one ``(key, batch_shape, cls)`` entry per nested tensor
             collection, where ``batch_shape`` is its batch shape after the
@@ -132,6 +133,9 @@ class PackLayout:
     numel: int = dataclasses.field(init=False)
 
     def __post_init__(self):
+        object.__setattr__(
+            self, "shapes", tuple(torch.Size(shape) for shape in self.shapes)
+        )
         offsets = []
         numel = 0
         for shape in self.shapes:
