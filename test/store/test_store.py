@@ -2547,6 +2547,182 @@ class TestLazyStackedTensorDictStore:
             store_td.clear_redis()
             store_td.close()
 
+    @staticmethod
+    def _layout_store(store_kwargs, lazy_td, written, legacy):
+        """A store of ``lazy_td`` written by ``from_lazy_stack`` or by ``set``.
+
+        With ``legacy``, the ``layout`` field is removed, as in the metadata
+        that versions before #2030 wrote; their data bytes are the same.
+        """
+        if written == "upload":
+            store_td = LazyStackedTensorDictStore.from_lazy_stack(
+                lazy_td.clone(), **store_kwargs
+            )
+        else:
+            store_td = LazyStackedTensorDictStore(
+                count=len(lazy_td.tensordicts),
+                stack_dim=lazy_td.stack_dim,
+                inner_batch_size=lazy_td.tensordicts[0].batch_size,
+                **store_kwargs,
+            )
+            for key in lazy_td.keys(True, True):
+                store_td.set(key, lazy_td.get(key).clone())
+        if legacy:
+            for kp in store_td._run_sync(store_td._aget_all_keys()):
+                store_td._run_sync(
+                    store_td._client.hdel(store_td._meta_key(kp), "layout")
+                )
+        store_td.close()
+        return LazyStackedTensorDictStore.from_store(
+            td_id=store_td._td_id, **store_kwargs
+        )
+
+    @staticmethod
+    def _layout_lazy_td(stack_dim, count, inner):
+        n = torch.Size(inner).numel()
+        return lazy_stack(
+            [
+                TensorDict(
+                    a=torch.arange(float(n)).view(inner) + 100 * i,
+                    n=TensorDict(
+                        b=torch.arange(2 * n).view(*inner, 2) + 100 * i,
+                        batch_size=inner,
+                    ),
+                    batch_size=inner,
+                )
+                for i in range(count)
+            ],
+            stack_dim,
+        )
+
+    @pytest.mark.parametrize("legacy", [False, True])
+    @pytest.mark.parametrize("written", ["upload", "set"])
+    @pytest.mark.parametrize("stack_dim", [1, 2])
+    def test_stack_dim_nonzero(self, store_kwargs, stack_dim, written, legacy):
+        """A store stacked along a dim other than 0 reads and writes as the lazy stack (#2030).
+
+        from_lazy_stack stores an entry stack dim first and set in the batch
+        layout. Before, the indexed reads and writes took every entry to be
+        in the batch layout, and the element views every entry to be stack
+        dim first. Each entry is now read in its own layout, with or without
+        the layout field.
+        """
+        lazy_td = self._layout_lazy_td(stack_dim, 2, [3, 4][:stack_dim])
+        store_td = self._layout_store(store_kwargs, lazy_td, written, legacy)
+        try:
+            assert store_td.batch_size == lazy_td.batch_size
+            for read in (
+                lambda td: td["a"],
+                lambda td: td["n", "b"],
+                lambda td: td.to_tensordict()["a"],
+                lambda td: td[0]["a"],
+                lambda td: td[:, 1]["n", "b"],
+                lambda td: td[1:, ::2]["a"],
+                lambda td: td.get_at("a", (0, 1)),
+            ):
+                torch.testing.assert_close(read(store_td), read(lazy_td))
+            view = _StoreStackElementView(store_td, 1)
+            assert (view.to_tensordict() == lazy_td.tensordicts[1]).all()
+            mask = torch.zeros(lazy_td.batch_size, dtype=torch.bool)
+            mask[0, 1] = True
+            for td, element in (
+                (store_td, view),
+                (lazy_td, lazy_td.tensordicts[1]),
+            ):
+                td.set_at_("a", -1.0, (1, 1))
+                td[2, 0] = 5.0
+                td.masked_fill_(mask, -2.0)
+                element.fill_(("n", "b"), -3)
+            reader = LazyStackedTensorDictStore.from_store(
+                td_id=store_td._td_id, **store_kwargs
+            )
+            try:
+                assert (reader.to_tensordict() == lazy_td).all()
+            finally:
+                reader.close()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    @pytest.mark.parametrize("stack_dim", [1, 2])
+    def test_stack_dim_nonzero_round_trips(self, store_kwargs, stack_dim, monkeypatch):
+        """A write that gives the same bytes in both layouts takes as many round trips on either (#2030).
+
+        A scalar written over the dims up to the stack dim, or a write at one
+        index repeated on each of those dims, costs no more on an entry
+        stored stack dim first than on one stored in the batch layout.
+        """
+        import redis.asyncio as aioredis
+
+        calls = []
+        execute = aioredis.client.Pipeline.execute
+        execute_command = aioredis.Redis.execute_command
+
+        async def counting_execute(pipe, *args, **kwargs):
+            if pipe.command_stack:
+                calls.append(None)
+            return await execute(pipe, *args, **kwargs)
+
+        async def counting_execute_command(client, *args, **kwargs):
+            if not isinstance(client, aioredis.client.Pipeline):
+                calls.append(None)
+            return await execute_command(client, *args, **kwargs)
+
+        monkeypatch.setattr(aioredis.client.Pipeline, "execute", counting_execute)
+        monkeypatch.setattr(aioredis.Redis, "execute_command", counting_execute_command)
+        lazy_td = self._layout_lazy_td(stack_dim, 2, [3, 4][:stack_dim])
+        element = torch.tensor([6, 5])
+        writes = (
+            lambda td: td.__setitem__(slice(None), 7.0),
+            lambda td: td.set_at_("a", 8.0, slice(None)),
+            lambda td: td.set_at_("a", 9.0, (1, 1)),
+            lambda td: td.set_at_(("n", "b"), element, (1,) * (stack_dim + 1)),
+        )
+        counts = {}
+        for written in ("upload", "set"):
+            store_td = self._layout_store(store_kwargs, lazy_td, written, False)
+            try:
+                store_td["a"]
+                counts[written] = []
+                for write in writes:
+                    calls.clear()
+                    write(store_td)
+                    counts[written].append(len(calls))
+                expected = lazy_td.clone()
+                for write in writes:
+                    write(expected)
+                assert (store_td.to_tensordict() == expected).all()
+            finally:
+                store_td.clear_redis()
+                store_td.close()
+        assert counts["upload"] == counts["set"]
+
+    @pytest.mark.parametrize("legacy", [False, True])
+    @pytest.mark.parametrize("written", ["upload", "set"])
+    def test_stack_dim_nonzero_square(self, store_kwargs, written, legacy):
+        """The layout of an entry whose shape fits both layouts comes from the layout field (#2030).
+
+        Without the field, as written before #2030, the indexed reads take
+        the entry to be in the batch layout and the element views stack dim
+        first, as they did then.
+        """
+        lazy_td = self._layout_lazy_td(1, 3, [3])
+        store_td = self._layout_store(store_kwargs, lazy_td, written, legacy)
+        try:
+            # the data as written: stack dim first, or in the batch layout
+            stored = lazy_td["a"].movedim(1, 0) if written == "upload" else lazy_td["a"]
+            indexed = stored if legacy else lazy_td["a"]
+            torch.testing.assert_close(store_td["a"], indexed)
+            torch.testing.assert_close(store_td[:, 1]["a"], indexed[:, 1])
+            torch.testing.assert_close(store_td.get_at("a", (0, 1)), indexed[0, 1])
+            element = stored[1] if legacy else lazy_td.tensordicts[1]["a"]
+            torch.testing.assert_close(
+                _StoreStackElementView(store_td, 1)["a"], element
+            )
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
     @pytest.mark.parametrize(
         "index", [slice(0, 2), slice(None, None, -1), (slice(None), 1)]
     )
