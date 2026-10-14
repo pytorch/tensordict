@@ -20,6 +20,19 @@ The value depends on the interaction type. The module uses
 `default_interaction_type`. See [`InteractionType`](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType)
 for what each type reads from the distribution.
 
+With `return_log_prob=True` and the `RANDOM` interaction type, the
+module draws and scores the value in one call if the distribution class
+defines the method: `dist.rsample_and_log_prob(sample_shape)` if
+`dist.has_rsample`, `dist.sample_and_log_prob(sample_shape)`
+otherwise. The method returns a `(sample, log_prob)` tuple, with
+`log_prob` in the layout of `dist.log_prob`. Define it when
+`dist.log_prob(sample)` cannot recover the draw exactly, for example
+for a tanh-squashed normal that saturates. Otherwise the module calls
+`dist.log_prob` on the sample. The [`torch.distributions`](https://docs.pytorch.org/docs/stable/distributions.html#module-torch.distributions) classes
+do not define these methods;
+[`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) defines both,
+and calls them on its components when they define them.
+
 The default `distribution_class` is
 [`Delta`](tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta), which always returns its
 parameter. With it, the module copies its input to `out_keys`.

@@ -394,7 +394,72 @@ Generates a sample_shape shaped reparameterized sample or sample_shape
 shaped batch of reparameterized samples if the distribution parameters
 are batched.
 
+rsample_and_log_prob(*shape=None*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]
+
+Draws a reparameterized sample and returns it with the log-probability of the same draw.
+
+Each component is sampled and scored with its own
+`rsample_and_log_prob` method if it has one, and with `rsample` then
+`log_prob` otherwise. See `sample_and_log_prob()`.
+
+Parameters:
+
+**shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the leading sample dimensions.
+Defaults to `torch.Size([])`.
+
+Returns:
+
+the sample as returned by
+`rsample()`, and its log-probability in the layout of
+`log_prob()`.
+
+Return type:
+
+A `(sample, log_prob)` tuple
+
 sample(*shape=None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Generates a sample_shape shaped sample or sample_shape shaped batch of
 samples if the distribution parameters are batched.
+
+sample_and_log_prob(*shape=None*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]
+
+Draws a sample and returns it with the log-probability of the same draw.
+
+Each component is sampled and scored with its own `sample_and_log_prob`
+method if it has one, and with `sample` then `log_prob` otherwise.
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) calls this method
+when it samples with `return_log_prob=True`.
+
+Parameters:
+
+**shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the leading sample dimensions.
+Defaults to `torch.Size([])`.
+
+Returns:
+
+the sample as returned by
+`sample()`, and its log-probability in the layout of
+`log_prob()`.
+
+Return type:
+
+A `(sample, log_prob)` tuple
+
+Examples
+
+```
+>>> import torch
+>>> from torch import distributions as d
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import CompositeDistribution
+>>> params = TensorDict({
+... "cont": {"loc": torch.zeros(3, 4), "scale": torch.ones(3, 4)},
+... ("nested", "disc"): {"logits": torch.zeros(3, 10)}
+... }, [3])
+>>> dist = CompositeDistribution(params,
+... distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical})
+>>> sample, lp = dist.sample_and_log_prob()
+>>> sorted(lp.keys(True, True), key=str)
+[('nested', 'disc_log_prob'), 'cont_log_prob']
+```
