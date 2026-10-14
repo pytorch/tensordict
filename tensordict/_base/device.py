@@ -531,7 +531,8 @@ class _DeviceOps:
                 If ``None`` (default), the leaves are copied with ``non_blocking=True``
                 and, when the target device is not a CUDA device (e.g. device-to-host
                 copies), the tensordict synchronizes once after all the copies have been
-                issued (under :func:`torch.compile`, these copies are blocking instead).
+                issued; for a CPU target, only if a leaf comes from another device.
+                Under :func:`torch.compile`, these copies are blocking instead.
                 If ``True``, the copies are non-blocking and no synchronization
                 is performed: the caller is responsible for synchronizing before reading
                 the results. If ``False``, the copies are blocking.

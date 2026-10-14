@@ -106,8 +106,9 @@ class TestCpuTransferSync:
         benchmark(run)
 
     def test_cpu_to_cpu_default(self, benchmark, td_cuda_many_tensors):
-        """Default .to('cpu') of a tensordict already on the CPU (no sync)."""
-        td = td_cuda_many_tensors.to("cpu")
+        """Default .to('cpu') of a device-less tensordict with CPU leaves (no sync)."""
+        # clear_device_() keeps to("cpu") from returning the tensordict itself.
+        td = td_cuda_many_tensors.to("cpu").clear_device_()
 
         def run():
             return td.to("cpu")
