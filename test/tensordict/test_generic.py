@@ -169,6 +169,10 @@ def device_fixture():
     torch.set_default_device(None if device.type == "cpu" else device)
 
 
+# a namedtuple of numbers nested in a tuple (test_set_tuple_of_numbers_dtype)
+_Pair = namedtuple("_Pair", ["x", "y"])
+
+
 class TestGeneric:
     # Generic, type-insensitive teests
 
@@ -7539,6 +7543,77 @@ class TestGeneric:
         td["key"] = []
         assert isinstance(td["key"], torch.Tensor)
         assert td["key"].shape == torch.Size([0])
+
+    @pytest.mark.parametrize("default_dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            (1.0, 2.0),
+            (1, 2.0),
+            ((1.0, 2.0), (3.0, 4.0)),
+            (1j, 2.0),
+            (),
+            (1, 2),
+            (True, False),
+            (_Pair(1.0, 2.0), _Pair(3.0, 4.0)),
+        ],
+    )
+    def test_set_tuple_of_numbers_dtype(self, value, default_dtype):
+        # A tuple of numbers keeps NumPy's dtype until 0.16, with a
+        # FutureWarning where torch.tensor gives another dtype (#2679)
+        old = torch.as_tensor(np.asarray(value)).dtype
+        default = torch.get_default_dtype()
+        torch.set_default_dtype(default_dtype)
+        try:
+            new = torch.tensor(value).dtype
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                td = TensorDict(a=value)
+                td["b"] = value
+        finally:
+            torch.set_default_dtype(default)
+        assert td["a"].dtype == td["b"].dtype == old
+        assert (td["a"] == torch.tensor(value)).all()
+        record = [w for w in record if issubclass(w.category, FutureWarning)]
+        if default_dtype == torch.float64 or old in (torch.int64, torch.bool):
+            assert old == new
+            assert not record
+        else:
+            assert old != new
+            assert len(record) == 2
+            for w in record:
+                assert w.filename == __file__
+                assert (
+                    f"stored as a {old} tensor today. Starting with TensorDict "
+                    f"0.16, the default will change to the tensor that "
+                    f"torch.tensor(value) gives ({new})"
+                ) in str(w.message)
+
+    def test_set_tuple_no_warning(self):
+        # Tuples that do not hold only Python numbers, and lists, do not warn (#2679)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td = TensorDict(
+                a=("a", "b"),
+                b=(torch.ones(2), torch.ones(2)),
+                c=(np.float32(1.0), np.float32(2.0)),
+                d=[1.0, 2.0],
+                e=np.array([1.0, 2.0]),
+                f=(np.float64(1.0), 2.0),
+                g=(np.float32(1.0), 2.0),
+                h=(np.int64(1), np.uint64(1)),
+            )
+        assert td["b"].dtype == td["c"].dtype == td["d"].dtype == torch.float32
+        for key in "efgh":
+            assert td[key].dtype == torch.float64
+        # torch has no complex dtype for a bfloat16 default: store as on main
+        default = torch.get_default_dtype()
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            td["i"] = (1j, 2.0)
+        finally:
+            torch.set_default_dtype(default)
+        assert td["i"].dtype == torch.complex128
 
     @pytest.fixture
     def _set_list_none(self):

@@ -1144,6 +1144,67 @@ def _warn_scalar_over_non_tensor(
     )
 
 
+# the numbers that _warn_tuple_dtype warns about, in tuples and nested tuples;
+# exact types, since NumPy scalars such as np.float64 subclass float
+_NUMBER_TYPES = frozenset((bool, int, float, complex))
+
+
+def _is_tuple_of_numbers(value: tuple) -> bool:
+    # a flat tuple is checked at C speed; nested tuples item by item
+    types = set(map(type, value))
+    if types <= _NUMBER_TYPES:
+        return True
+    if not any(issubclass(cls, tuple) for cls in types):
+        return False
+    return all(
+        type(item) in _NUMBER_TYPES
+        or (isinstance(item, tuple) and _is_nested_tuple_of_numbers(item))
+        for item in value
+    )
+
+
+def _is_nested_tuple_of_numbers(value: tuple) -> bool:
+    return all(
+        type(item) in _NUMBER_TYPES
+        or (isinstance(item, tuple) and _is_nested_tuple_of_numbers(item))
+        for item in value
+    )
+
+
+def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
+    """Warns that the tuple of numbers ``value``, stored as ``array``, will get the dtype of ``torch.tensor(value)``.
+
+    NumPy stores a float or complex tuple of Python numbers as float64 or
+    complex128, and ``torch.tensor`` as the default dtype or its complex
+    counterpart: they differ exactly when the default dtype is not float64.
+    """
+    if is_compiling():
+        # Dynamo can trace neither the frame walk nor warnings.warn
+        return
+    new = torch.get_default_dtype()
+    if new == torch.float64 or not _is_tuple_of_numbers(value):
+        return
+    old = torch.as_tensor(array).dtype
+    if old.is_complex:
+        # torch has no complex dtype for a bfloat16 default
+        new = {torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)
+        if new is None:
+            return
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"A tuple of numbers is stored as a {old} tensor today. Starting with "
+        "TensorDict 0.16, the default will change to the tensor that "
+        f"torch.tensor(value) gives ({new}), as for a list of numbers. Pass "
+        f"torch.tensor(value) to get {new} now, or "
+        f"torch.tensor(value, dtype={old}) or a NumPy array to keep {old}.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
+
+
 # the values that set_at_ casts to a tensor in a non-tensor entry, and warns about
 _SET_AT_CAST_TYPES = (list, *_SCALAR_TYPES)
 
@@ -7517,8 +7578,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 return TensorDictBase.from_struct_array(array, device=self.device)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         elif isinstance(array, (list, tuple)):
+            value = array
             array = np.asarray(array)
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
+            if array.dtype.kind in ("c", "f") and isinstance(value, tuple):
+                _warn_tuple_dtype(value, array)
         elif hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()
