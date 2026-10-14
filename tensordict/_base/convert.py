@@ -682,6 +682,7 @@ class _Conversion:
         auto_batch_size: bool = False,
         batch_dims: int | None = None,
         batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
     ):
         """Creates a PersistentTensorDict from a h5 file.
 
@@ -697,6 +698,13 @@ class _Conversion:
             batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output
                 tensordict should have. Defaults to ``None`` (full batch-size at each level).
             batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
+            non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
+                dataset that tensordict did not write, such as a string column
+                with one string per row, reads as a
+                :class:`~tensordict.NonTensorStack` of its rows when its
+                leading dims equal the batch size. Otherwise it reads as one
+                :class:`~tensordict.NonTensorData` that holds the whole
+                dataset. Defaults to ``False``.
 
         Returns:
             A PersistentTensorDict representation of the input h5 file.
@@ -724,7 +732,12 @@ class _Conversion:
 
         if not issubclass(cls, PersistentTensorDict):
             cls = PersistentTensorDict
-        result = cls._open_h5(filename, mode=mode, batch_size=batch_size)
+        result = cls._open_h5(
+            filename,
+            mode=mode,
+            batch_size=batch_size,
+            non_tensor_as_stack=non_tensor_as_stack,
+        )
         if auto_batch_size:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_h5"))
@@ -740,6 +753,7 @@ class _Conversion:
         auto_batch_size: bool = False,
         batch_dims: int | None = None,
         batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
     ):
         """Creates a PersistentTensorDict from a zarr store.
 
@@ -759,6 +773,13 @@ class _Conversion:
             batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``
                 (read from the metadata written by :meth:`~.to_zarr`, or automatically determined
                 for stores written by other tools).
+            non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
+                array that tensordict did not write, such as a string column
+                with one string per row, reads as a
+                :class:`~tensordict.NonTensorStack` of its rows when its
+                leading dims equal the batch size. Otherwise it reads as one
+                :class:`~tensordict.NonTensorData` that holds the whole
+                array. Defaults to ``False``.
 
         Returns:
             A PersistentTensorDict representation of the input zarr store.
@@ -786,7 +807,12 @@ class _Conversion:
 
         if not issubclass(cls, PersistentTensorDict):
             cls = PersistentTensorDict
-        result = cls._open_zarr(filename, mode=mode, batch_size=batch_size)
+        result = cls._open_zarr(
+            filename,
+            mode=mode,
+            batch_size=batch_size,
+            non_tensor_as_stack=non_tensor_as_stack,
+        )
         if auto_batch_size:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_zarr"))

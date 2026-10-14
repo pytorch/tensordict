@@ -226,6 +226,10 @@ class _PersistentBackend:
         shape = node.attrs.get(_STACK_ATTR)
         return None if shape is None else torch.Size(shape)
 
+    def holds_rows(self, node, batch_size) -> bool:
+        """Whether the unmarked non-tensor ``node`` has one element per row of ``batch_size``."""
+        return bool(batch_size) and node.shape[: len(batch_size)] == tuple(batch_size)
+
     # -- structure
     def keys(self, file):
         raise NotImplementedError
@@ -485,6 +489,14 @@ class _H5Backend(_PersistentBackend):
             return node.asstr()[()].tolist()
         return node[()].tolist()
 
+    def holds_rows(self, node, batch_size) -> bool:
+        import h5py
+
+        # an opaque node holds a single value that tensordict wrote
+        return not h5py.check_opaque_dtype(node.dtype) and super().holds_rows(
+            node, batch_size
+        )
+
     def keys(self, file):
         return file.keys()
 
@@ -647,6 +659,12 @@ class _ZarrBackend(_PersistentBackend):
         import zarr
 
         return isinstance(node, zarr.Array)
+
+    def holds_rows(self, node, batch_size) -> bool:
+        # a marked node holds the bytes of a single value
+        return self._non_tensor_marker(node) is None and super().holds_rows(
+            node, batch_size
+        )
 
     def _non_tensor_marker(self, node):
         try:
@@ -1003,6 +1021,14 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         validate_batch_size (bool, optional): if ``True``, the batch size is
             checked against the stored array shapes at construction time (this
             requires iterating over the store metadata). Defaults to ``True``.
+        non_tensor_as_stack (bool, optional): if ``True``, a non-tensor array
+            that tensordict did not write, such as a string column written by
+            another tool, reads as a
+            :class:`~tensordict.NonTensorStack` of its rows when its leading
+            dims equal the batch size, so that indexing the tensordict selects
+            its rows. Otherwise it reads as one
+            :class:`~tensordict.NonTensorData` that holds the whole array.
+            Defaults to ``False``.
         **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset` (h5
             backend) or :meth:`zarr.Group.create_array` (zarr backend). With the
             zarr backend, arrays are stored as a single chunk without compression
@@ -1048,6 +1074,8 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
     _inplace_batch_size_change = False
     # an open file cannot be sent to the workers of map
     _map_on_dense_copies = True
+    # for the pickles made before non_tensor_as_stack
+    _non_tensor_as_stack = False
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1069,6 +1097,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         backend="h5",
         device=None,
         validate_batch_size: bool = True,
+        non_tensor_as_stack: bool = False,
         **kwargs,
     ):
         if batch_size is None:
@@ -1103,26 +1132,46 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         # we use this to allow nested tensordicts to have a different batch-size
         self._nested_tensordicts = {}
         self._pin_mem = False
+        self._non_tensor_as_stack = non_tensor_as_stack
 
         # this must be kept last
         if validate_batch_size:
             self._check_batch_size(self._batch_size)
 
     @classmethod
-    def _open_h5(cls, filename, *, mode="r", batch_size: torch.Size | None = None):
+    def _open_h5(
+        cls,
+        filename,
+        *,
+        mode="r",
+        batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
+    ):
         """Opens an h5 file; the public :meth:`~.from_h5` calls it.
 
         Without ``batch_size``, each nested tensordict gets the largest batch
         size that its entries share.
         """
-        out = cls(filename=filename, mode=mode, batch_size=batch_size)
+        out = cls(
+            filename=filename,
+            mode=mode,
+            batch_size=batch_size,
+            non_tensor_as_stack=non_tensor_as_stack,
+        )
         if batch_size is None:
             # determine batch size
             _set_max_batch_size(out)
         return out
 
     @classmethod
-    def _open_zarr(cls, filename, *, mode="r", batch_size: torch.Size | None = None):
+    def _open_zarr(
+        cls,
+        filename,
+        *,
+        mode="r",
+        batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
+    ):
         """Opens a zarr store; the public :meth:`~.from_zarr` calls it.
 
         Without ``batch_size``, the batch size (and the dimension names) are
@@ -1130,7 +1179,13 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         and :meth:`~tensordict.TensorDictBase.to_zarr` write, or else each
         nested tensordict gets the largest batch size that its entries share.
         """
-        out = cls(filename=filename, mode=mode, batch_size=batch_size, backend="zarr")
+        out = cls(
+            filename=filename,
+            mode=mode,
+            batch_size=batch_size,
+            backend="zarr",
+            non_tensor_as_stack=non_tensor_as_stack,
+        )
         if batch_size is None:
             metadata = out._backend.read_attrs_metadata(out.file)
             if metadata is not None and metadata.get("batch_size") is not None:
@@ -1293,6 +1348,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             backend=self.backend,
             # a persisted batch size was already validated at write time
             validate_batch_size=nested_batch_size is None,
+            non_tensor_as_stack=self._non_tensor_as_stack,
             **self._dataset_kwargs,
         )
         # share the backend instance so per-store state (e.g. the consolidated
@@ -1359,6 +1415,13 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                         device=device,
                         ndim=len(stack_shape),
                     )
+                elif (rows := self._non_tensor_rows(key, array)) is not None:
+                    # one element per row, decoded as a NonTensorData would be
+                    out = NonTensorStack._from_list(
+                        self._backend.read_non_tensor(array).tolist(),
+                        device=device,
+                        ndim=len(rows),
+                    )
                 else:
                     array = self._backend.read_non_tensor(array)
                     out = NonTensorData(
@@ -1370,6 +1433,18 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
             if out is None:
                 out = self._make_nested(key, array)
             return out
+
+    def _non_tensor_rows(self, key, array):
+        """The batch size of the rows that the unmarked non-tensor ``array`` reads as, or ``None``."""
+        if not self._non_tensor_as_stack:
+            return None
+        # the rows are those of the tensordict that holds the entry
+        owner = self
+        for subkey in _unravel_key_to_tuple(key)[:-1]:
+            owner = owner._get_str(subkey, NO_DEFAULT)
+        if self._backend.holds_rows(array, owner.batch_size):
+            return owner.batch_size
+        return None
 
     @_cache_while_locked  # noqa: B019
     def _get_str(self, key: NestedKey, default, **kwargs):
@@ -1732,7 +1807,10 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
         if self._backend.is_non_tensor(array):
             from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-            if self._backend.non_tensor_stack_shape(array) is not None:
+            if (
+                self._backend.non_tensor_stack_shape(array) is not None
+                or self._non_tensor_rows(key, array) is not None
+            ):
                 return NonTensorStack
             return NonTensorData
         return torch.Tensor
@@ -2287,6 +2365,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 batch_size=td.batch_size,
                 device=td.device,
                 backend=self.backend,
+                non_tensor_as_stack=self._non_tensor_as_stack,
                 **self._dataset_kwargs,
             )
             self._nested_tensordicts[key]._backend = self._backend
@@ -2345,6 +2424,7 @@ class PersistentTensorDict(_NoShapeOps, _NoVmap, _NoSetNonTensor, TensorDictBase
                 backend=self.backend,
                 device=self.device,
                 batch_size=self.batch_size,
+                non_tensor_as_stack=self._non_tensor_as_stack,
                 **self._dataset_kwargs,
             )
             clone._nested_tensordicts = nested_tds

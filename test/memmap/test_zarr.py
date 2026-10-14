@@ -249,6 +249,28 @@ class TestZarrNonTensor:
         assert ztd.get("text").tolist() == ["x", "yy", "z"]
         ztd.close()
 
+    def test_foreign_column_as_stack(self, tmp_path):
+        # a string column that another tool wrote, one string per row, reads
+        # as a NonTensorStack of its rows with non_tensor_as_stack=True (#2545)
+        path = str(tmp_path / "s.zarr")
+        root = zarr.open_group(path, mode="w")
+        root.create_array("pos", shape=(4,), dtype="float32")[:] = 0
+        root.create_array("mission", shape=(4,), dtype=str)[:] = ["a", "b", "c", "d"]
+        ztd = PersistentTensorDict.from_zarr(path)
+        assert ztd.entry_class("mission") is NonTensorData
+        ztd.close()
+        ztd = PersistentTensorDict.from_zarr(path, mode="r+", non_tensor_as_stack=True)
+        assert ztd.batch_size == (4,)
+        assert ztd.entry_class("mission") is NonTensorStack
+        assert ztd[1:3].get("mission").tolist() == ["b", "c"]
+        assert ztd[2]["mission"] == "c"
+        # a value that tensordict wrote is a payload of bytes, not rows
+        ztd.set("n", NonTensorData(1234, batch_size=[4]))
+        assert ztd.file["n"].shape == (4,)
+        assert ztd.entry_class("n") is NonTensorData
+        assert ztd[1]["n"] == 1234
+        ztd.close()
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrIndexing:
