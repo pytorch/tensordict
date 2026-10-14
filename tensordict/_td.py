@@ -1622,17 +1622,17 @@ class TensorDict(TensorDictBase):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # The _get_tuple below skips _get_str and _default_get: a subclass that
-        # overrides either one gets the generic walk, which calls them.
-        if cls._get_tuple is TensorDict._get_tuple and (
-            cls._get_str is not TensorDict._get_str
-            or cls._default_get is not TensorDict._default_get
-        ):
+        # Subclasses keep the generic walk, which calls their _get_str and
+        # _default_get, without going through the _get_tuple below.
+        if cls._get_tuple is TensorDict._get_tuple:
             cls._get_tuple = TensorDictBase._get_tuple
 
     # Override: reads the levels that are exact TensorDicts from their dicts,
     # without a _get_str and a _get_tuple call per level.
     def _get_tuple(self, key, default, **kwargs):
+        if type(self) is not TensorDict:
+            # a subclass's own _get_tuple calling super()._get_tuple
+            return TensorDictBase._get_tuple(self, key, default, **kwargs)
         try:
             value = self._tensordict[key[0]]
         except KeyError:

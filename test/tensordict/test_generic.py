@@ -3327,42 +3327,67 @@ class TestGeneric:
         assert td["tc", "x"] is leaf
         assert not calls
 
-        sub_calls = []
-
-        class SubStr(TensorDict):
-            def _get_str(self, key, default, **kwargs):
-                sub_calls.append(key)
-                return get_str(self, key, default, **kwargs)
-
-        # a subclass that overrides _get_str is read through it, as on main
-        sub_str = SubStr({"a": {"b": leaf}}, [3])
-        assert sub_str.get(("a", "b")) is leaf
-        assert sub_str.get(("z", "b"), None) is None
-        assert sub_calls == ["a", "z"]
         calls.clear()
+
+        # Subclasses keep the generic walk: they make the same _get_str and
+        # _default_get calls, with the same results, as with the generic walk
+        # for every class (main's behaviour).
+        def logged_get_str(self, key, default, **kwargs):
+            calls.append(("_get_str", type(self).__name__, key))
+            return get_str(self, key, default, **kwargs)
+
+        def logged_default_get(self, key, default=NO_DEFAULT):
+            calls.append(("_default_get", type(self).__name__, key))
+            if key == "auto":
+                return type(self)()
+            return TensorDictBase._default_get(self, key, default)
 
         class Plain(TensorDict):
             pass
 
-        # a subclass that overrides neither takes the dict reads
-        plain = Plain({"a": {"b": leaf}}, [3])
-        assert plain.get(("a", "b")) is leaf
-        assert plain["a", "b"] is leaf
-        assert plain.get(("z", "b"), None) is None
-        assert not calls
+        class OwnGetStr(TensorDict):
+            _get_str = logged_get_str
 
-        class AutoTD(TensorDict):
-            def _default_get(self, key, default=NO_DEFAULT):
-                return TensorDict()
+        class OwnDefaultGet(TensorDict):
+            _default_get = logged_default_get
 
-        # a subclass that overrides _default_get: a miss goes on with the rest
-        # of the key, in the returned value
-        auto = AutoTD({"a": leaf}, [3])
-        with pytest.raises(KeyError, match='key "y" not found in TensorDict'):
-            auto["zz", "y"]
-        assert auto.get(("zz", "y"), None) is None
-        assert TensorDict({"x": auto}, [3]).get(("x", "zz", "y"), None) is None
-        assert auto.get("zz").is_empty()
+        class OwnGetTuple(TensorDict):
+            _get_str = logged_get_str
+
+            def _get_tuple(self, key, default, **kwargs):
+                calls.append(("_get_tuple", type(self).__name__, key))
+                return super()._get_tuple(key, default, **kwargs)
+
+        class Late(TensorDict):
+            pass
+
+        Late._get_str = logged_get_str
+        Late._default_get = logged_default_get
+
+        def read(cls):
+            calls.clear()
+            sub = cls({"a": cls({"b": leaf}, [3])}, [3])
+            results = [
+                sub.get(("a", "b")),
+                sub["a", "b"],
+                sub.get(("a", "z"), None),
+                sub.get(("auto", "y"), None),
+            ]
+            with pytest.raises(KeyError) as err:
+                sub["auto", "y"]
+            return results, str(err.value), list(calls)
+
+        for cls in (Plain, OwnGetStr, OwnDefaultGet, OwnGetTuple, Late):
+            results, error, cls_calls = read(cls)
+            with monkeypatch.context() as m:
+                m.setattr(TensorDict, "_get_tuple", TensorDictBase._get_tuple)
+                expected, expected_error, expected_calls = read(cls)
+            assert cls_calls == expected_calls, cls
+            assert error == expected_error, cls
+            assert len(results) == len(expected)
+            for result, value in zip(results, expected):
+                assert result is value or (result == value).all(), cls
+        calls.clear()
         # a default that is the value on the path is returned, as before
         sub = td["a", "b"]
         assert td.get(("a", "b", "c"), sub) is sub
