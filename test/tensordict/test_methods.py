@@ -5435,6 +5435,8 @@ def test_pointwise_unary_vmap(op):
         lambda x, t: x.clone().add_(t),
         lambda x, t: x.clone().sub_(t),
         lambda x, t: x.clone().sub_(t, alpha=2),
+        lambda x, t: x.add(t, alpha=np.float32(2)),
+        lambda x, t: x.clone().add_(t, alpha=torch.tensor(2.0)),
     ],
     ids=[
         "add",
@@ -5446,6 +5448,8 @@ def test_pointwise_unary_vmap(op):
         "add_",
         "sub_",
         "sub_-alpha",
+        "add-alpha-numpy",
+        "add_-alpha-tensor",
     ],
 )
 def test_add_sub_cuda_scalar_tensor_no_sync(op):
@@ -5491,6 +5495,19 @@ def test_add_cuda_scalar_tensor_other_leaves():
     # A subclass of Tensor does not turn the leaves into that subclass
     out = td.exclude("a") + t.float().as_subclass(SubTensor)
     assert type(out["b"]) is torch.Tensor
+
+    class LoggedTensor(torch.Tensor):
+        funcs = []
+
+        @classmethod
+        def __torch_function__(cls, func, types, args=(), kwargs=None):
+            cls.funcs.append(func)
+            return super().__torch_function__(func, types, args, kwargs or {})
+
+    # Leaves of such a subclass still see the _foreach op of the method
+    leaves = TensorDict(b=torch.ones(3, device="cuda").as_subclass(LoggedTensor))
+    leaves.sub(t.float())
+    assert LoggedTensor.funcs == [torch._foreach_sub]
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
@@ -5539,6 +5556,31 @@ def test_add_sub_cuda_scalar_tensor_inplace_alias(op, view):
     getattr(td, op)(t)
     for key, val in expected.items():
         torch.testing.assert_close(td[key], val, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
+@pytest.mark.parametrize("inference", [False, True], ids=["changed", "inference"])
+@pytest.mark.parametrize(
+    "op",
+    [lambda x, t: x + t, lambda x, t: x - t, lambda x, t: t - x],
+    ids=["add", "sub", "rsub"],
+)
+def test_add_sub_cuda_scalar_tensor_backward(op, inference):
+    # As with the number, the 0-dim tensor is not saved for backward: it can be
+    # changed in place before backward, or come from inference mode
+    if inference:
+        with torch.inference_mode():
+            t = torch.tensor(0.25, device="cuda")
+    else:
+        t = torch.tensor(0.25, device="cuda")
+    x = torch.ones(3, device="cuda", requires_grad=True)
+    out = op(TensorDict(a=x * 2), t)
+    if not inference:
+        t.add_(1)
+    out["a"].sum().backward()
+    y = torch.ones(3, device="cuda", requires_grad=True)
+    op(y * 2, 0.25).sum().backward()
+    torch.testing.assert_close(x.grad, y.grad, rtol=0, atol=0)
 
 
 class TestEmptyTensorMemmapRoundtrip:

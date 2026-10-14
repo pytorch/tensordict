@@ -2620,12 +2620,20 @@ def _any_unbatched(tensors) -> bool:
 # takes a number for a 0-dim tensor, and reading the number of a CUDA tensor
 # synchronizes the device. The overload of _foreach_add that takes a 0-dim
 # tensor does not, and computes ``tensor + alpha * other`` in one kernel.
+# Passing alpha makes Python pick it, since the number overload has no alpha.
 _FOREACH_ADD_TENSOR = {
-    "add": (torch.ops.aten._foreach_add.Tensor, 1),
-    "add_": (torch.ops.aten._foreach_add_.Tensor, 1),
-    "sub": (torch.ops.aten._foreach_add.Tensor, -1),
-    "sub_": (torch.ops.aten._foreach_add_.Tensor, -1),
+    "add": ("_foreach_add", 1),
+    "add_": ("_foreach_add_", 1),
+    "sub": ("_foreach_add", -1),
+    "sub_": ("_foreach_add_", -1),
 }
+_FLOAT32_64 = (torch.float32, torch.float64)
+# A subclass with __torch_function__ would see get_device and, for a sub,
+# _foreach_add
+_PLAIN_TENSOR_TYPES = (Tensor, torch.nn.Parameter)
+# Checking the tensors costs about 0.1-0.2 us each, and with an idle GPU the
+# sync it saves costs tens of us: above this many tensors, take the number.
+_FOREACH_ADD_TENSOR_MAX = 128
 
 
 def _is_cuda_scalar_of(other, tensors) -> bool:
@@ -2644,10 +2652,13 @@ def _is_cuda_scalar_of(other, tensors) -> bool:
         and not other.requires_grad
     ):
         return False
-    device, dtype = other.device, other.dtype
+    # get_device() is cheaper than building a torch.device for every tensor
+    device, dtype = other.get_device(), other.dtype
     for tensor in tensors:
-        if tensor.device != device or (
-            tensor.dtype not in (torch.float32, torch.float64) and tensor.dtype != dtype
+        if (
+            type(tensor) not in _PLAIN_TENSOR_TYPES
+            or tensor.get_device() != device
+            or (tensor.dtype not in _FLOAT32_64 and tensor.dtype is not dtype)
         ):
             return False
     return True
@@ -2675,14 +2686,19 @@ def _foreach(name: str, tensors, *args, **kwargs):
         or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
     ):
         add_tensor = _FOREACH_ADD_TENSOR.get(name)
-        if add_tensor is not None and _is_cuda_scalar_of(args[0], tensors):
+        if (
+            add_tensor is not None
+            and len(tensors) <= _FOREACH_ADD_TENSOR_MAX
+            and _is_cuda_scalar_of(args[0], tensors)
+        ):
             op, sign = add_tensor
-            other = args[0]
-            if name.endswith("_"):
-                # The kernel reads other while it writes tensors that may hold
-                # it; the number overload reads it once, before any write.
-                other = other.clone()
-            return op(tensors, other, alpha=sign * kwargs.get("alpha", 1))
+            # Pass a copy, read once as the number would be: the in-place kernel
+            # can read other after writing a tensor that holds it, and autograd
+            # saves other for backward, which fails if other was made in
+            # inference mode or is changed in place before backward.
+            return getattr(torch, op)(
+                tensors, args[0].clone(), alpha=sign * kwargs.get("alpha", 1)
+            )
         return getattr(torch, "_foreach_" + name)(tensors, *args, **kwargs)
     op = _FOREACH_PER_TENSOR_OPS.get(name) or getattr(torch.Tensor, name)
     per_tensor_args = [
