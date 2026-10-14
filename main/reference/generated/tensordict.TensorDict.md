@@ -5,7 +5,7 @@ listed by task in [Methods by task](../td.html#api-tensordict-methods). This pag
 methods that `TensorDict` adds, and the overrides that have their own
 documentation.
 
-*class*tensordict.TensorDict(*source: T | [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *names: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*)
+*class*tensordict.TensorDict(*source: T | [Mapping](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *names: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*)
 
 Bases: [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
@@ -63,8 +63,10 @@ not set, the entries can be on different devices.
 
 Parameters:
 
-- **source** (*TensorDict**or**Dict**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**Union**[**Tensor**,*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*]**]*) - a
-data source. If empty, the tensordict can be populated subsequently.
+- **source** (*TensorDict**or**Mapping**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**Union**[**Tensor**,*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*]**]*) - a
+data source, such as a `dict` or any other
+[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping), read like a `dict`. If empty,
+the tensordict can be populated subsequently.
 A `TensorDict` can also be built via a sequence of keyword arguments,
 as it is the case for `dict(...)`.
 - **batch_size** (*iterable**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - a batch size for the
