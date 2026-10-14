@@ -126,6 +126,18 @@ def test_serialize_model_archive(benchmark, tmpdir, pause_when_exit):
     del t
 
 
+def test_load_memmap(benchmark, tmpdir, pause_when_exit):
+    """Tests efficiency of loading memmap tensors saved in a directory."""
+    t = nn.Transformer()
+    TensorDict.from_module(t).memmap(tmpdir, num_threads=32)
+
+    def func(path=tmpdir):
+        TensorDict.load_memmap(path)
+
+    benchmark(func)
+    del t
+
+
 def test_load_archive(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of loading a single-file memmap archive."""
     t = nn.Transformer()

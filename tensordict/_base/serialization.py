@@ -1639,10 +1639,20 @@ class _Serialization:
             raise ValueError(f"mode must be 'r', 'r+' or None, got {mode!r}.")
         if allow_pickle is not None and not isinstance(allow_pickle, bool):
             raise TypeError("allow_pickle must be a bool or None.")
+        metadata = None
         if not isinstance(prefix, _ArchivePath):
             # nested (recursive) calls pass _ArchivePath instances directly
             prefix = Path(prefix)
-            if prefix.is_file():
+            if subpath is None:
+                # The common case is a directory: read its metadata first and
+                # look for an archive file only if that fails. This saves a
+                # stat per (nested) tensordict, a metadata-server round trip
+                # on network file systems.
+                try:
+                    metadata = _load_metadata(prefix)
+                except OSError:
+                    pass
+            if metadata is None and prefix.is_file():
                 if not is_memmap_archive(prefix):
                     raise ValueError(
                         f"{prefix} is a file but not a memory-mapped tensordict "
@@ -1689,7 +1699,8 @@ class _Serialization:
             # meta-device and FakeTensor loads remain metadata-only.
             prefix.reader.schedule_compressed_prefetch(prefix.at, num_threads)
 
-        metadata = _load_metadata(prefix)
+        if metadata is None:
+            metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
         if device is not None:
             device = torch.device(device)
