@@ -573,6 +573,117 @@ for item in obs:
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensordict_stub_source_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check the source annotations of TensorDict.__init__ and from_dict alone:
+    # their signatures are copied from _td.py into a stub, next to the names
+    # they use. Mypy also searches the working directory, which must not hold
+    # the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    with open(_TENSORDICT_DIR / "_td.py", "r") as f:
+        tree = ast.parse(f.read())
+    (class_node,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "TensorDict"
+    )
+    methods = [
+        node
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name in ("__init__", "from_dict")
+    ]
+    assert len(methods) == 2
+    for method in methods:
+        method.body = [ast.Expr(ast.Constant(...))]
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class Size: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("_nestedkey.pyi").write_text(
+        (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
+    )
+    methods_source = textwrap.indent("\n".join(map(ast.unparse, methods)), "    ")
+    package.joinpath("__init__.pyi").write_text(
+        f"""from collections.abc import Mapping, Sequence
+from typing import Any, Self, TypeVar
+
+import torch
+from tensordict._nestedkey import NestedKey
+
+class TensorCollection: ...
+class TensorDictBase(TensorCollection): ...
+
+T = TypeVar("T", bound=TensorCollection)
+CompatibleType = torch.Tensor | TensorCollection
+DeviceType = Any
+
+class TensorDict(TensorDictBase):
+{methods_source}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def user_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        return [line for line in stdout.splitlines() if line.startswith("user.py:")]
+
+    # A nested dict and a dict[str, Tensor] variable work at runtime.
+    valid = """import torch
+from tensordict import TensorDict
+from tensordict._nestedkey import NestedKey
+
+t = torch.Tensor()
+data: dict[str, torch.Tensor] = {"a": t}
+nested_key_data: dict[NestedKey, torch.Tensor] = {("a", "b"): t}
+TensorDict({"a": t, "b": {"c": t}}, batch_size=[3])
+TensorDict(data, batch_size=[3])
+TensorDict(nested_key_data)
+TensorDict({("a", "b"): t})
+TensorDict({"a": t, ("b", "c"): t})
+TensorDict(TensorDict(data))
+TensorDict.from_dict({"a": t, "b": {"c": t}}, batch_size=[3])
+TensorDict.from_dict(data)
+"""
+    assert user_errors(valid) == []
+
+    invalid = """import torch
+from tensordict import TensorDict
+
+TensorDict(3)
+TensorDict.from_dict([torch.Tensor()])
+"""
+    errors = user_errors(invalid)
+    assert len(errors) == 2, errors
+    assert 'Argument 1 to "TensorDict" has incompatible type "int"' in errors[0]
+    assert 'Argument 1 to "from_dict" of "TensorDict"' in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.parametrize(
     "path,class_name",
     [
