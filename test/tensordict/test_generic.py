@@ -3705,6 +3705,68 @@ class TestGeneric:
         ).is_empty()
         assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
 
+    def test_is_empty_non_tensor_only(self):
+        # a non-tensor counts as a leaf on a dense tensordict; the lazy stack
+        # and the sub-tensordict, which use TensorDictBase.is_empty, do not
+        # count it
+        td = TensorDict(x=NonTensorData("a", batch_size=[2]), batch_size=[2])
+        assert not td.is_empty()
+        assert lazy_stack([td[0], td[1]]).is_empty()
+        assert td._get_sub_tensordict(0).is_empty()
+
+    def test_items_values_sort_flat(self):
+        td = TensorDict(b=torch.ones(()), a=torch.zeros(()))
+        assert [key for key, _ in td.items(sort=True)] == ["a", "b"]
+        assert [value.item() for value in td.values(sort=True)] == [0.0, 1.0]
+        assert list(TensorDict().items(sort=True)) == []
+        with pytest.raises(IndexError):
+            TensorDict().values(sort=True)
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda td: td,
+            lambda td: lazy_stack(list(td.unbind(0))),
+            lambda td: td._get_sub_tensordict(0),
+        ],
+        ids=["dense", "lazy", "sub"],
+    )
+    def test_del_empty_key_and_through_tensor(self, make):
+        td = make(
+            TensorDict(
+                a=torch.zeros(2, 3),
+                n=TensorDict(x=torch.ones(2, 3), batch_size=[2, 3]),
+                batch_size=[2, 3],
+            )
+        )
+        with pytest.raises(IndexError):
+            td.del_(())
+        with pytest.raises((AttributeError, KeyError)):
+            td.del_(("a", "x"))
+        with pytest.raises(KeyError):
+            td.del_("zz")
+        with pytest.raises(KeyError):
+            td.del_(("n", "zz"))
+        assert td.del_(("n", "x")) is td
+        assert list(td.keys(True)) == ["a", "n"]
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda td: td,
+            lambda td: lazy_stack(list(td.unbind(0))),
+            lambda td: td._get_sub_tensordict(0),
+        ],
+        ids=["dense", "lazy", "sub"],
+    )
+    def test_rename_key_empty_new_key(self, make):
+        td = make(TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]))
+        with pytest.raises(IndexError):
+            td.rename_key_("a", ())
+        assert list(td.keys()) == ["a"]
+        with pytest.raises(KeyError, match="Only NestedKeys are supported"):
+            td.rename_key_((), "b")
+
     @pytest.mark.parametrize("device", [None, "cpu", "meta"])
     def test_is_meta(self, device):
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])

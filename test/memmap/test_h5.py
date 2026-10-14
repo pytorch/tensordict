@@ -1313,6 +1313,75 @@ class TestH5Indexing:
         with pytest.raises(KeyError):
             h5td.get_at("missing", 0)
 
+    def test_get_at_index_kwarg(self, data):
+        td, h5td = data
+        with pytest.raises(TypeError, match="unexpected keyword argument 'index'"):
+            h5td.get_at("a", index=1)
+        with pytest.raises(KeyError):
+            h5td.get_at(("a", "x"), 0)
+
+    def test_get_nested_through_tensor_default(self, data):
+        # unlike TensorDict, which raises a ValueError, a path through a
+        # tensor is a missing key
+        td, h5td = data
+        assert h5td.get(("a", "x"), None) is None
+        with pytest.raises(ValueError, match="not a tensordict"):
+            td.get(("a", "x"), None)
+
+    @pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
+    def test_flatten_inplace_raises_before_read(self, data, op, monkeypatch):
+        td, h5td = data
+        keys = list(h5td.keys(True, True))
+        reads = []
+        monkeypatch.setattr(
+            type(h5td), "to_tensordict", lambda self, **kw: reads.append(1)
+        )
+        with pytest.raises(ValueError, match=f"Cannot call {op} in_place"):
+            getattr(h5td, op)(inplace=True)
+        assert not reads
+        assert list(h5td.keys(True, True)) == keys
+        assert (h5td["a"] == td["a"]).all()
+        monkeypatch.undo()
+        flat = h5td.flatten_keys()
+        assert type(flat) is TensorDict
+        assert set(flat.keys()) == {"a", "b", "nested.c", "s"}
+        with pytest.raises(TypeError, match="unexpected keyword argument 'is_leaf'"):
+            h5td.flatten_keys(is_leaf=lambda cls: False)
+
+    def test_subtd_rename_on_locked_h5(self, data):
+        # a sub-tensordict renames in its locked h5 source, with the source's
+        # warning
+        td, h5td = data
+        h5td.lock_()
+        sub = h5td._get_sub_tensordict(0)
+        assert sub.is_locked
+        with pytest.warns(FutureWarning, match="renames keys of a locked"):
+            assert sub.rename_key_("a", "z") is sub
+        assert "z" in h5td.keys()
+        assert "a" not in h5td.keys()
+        h5td.unlock_()
+        with pytest.raises(KeyError, match="already present"):
+            sub.rename_key_("z", "b", safe=True)
+
+    def test_select_exclude_unsupported(self, data):
+        td, h5td = data
+        with pytest.raises(
+            NotImplementedError,
+            match="Cannot call select on a PersistentTensorDict. Create a regular",
+        ):
+            h5td.select("a")
+        with pytest.raises(
+            NotImplementedError,
+            match="Cannot call exclude on a PersistentTensorDict. Create a regular",
+        ):
+            h5td.exclude("a")
+
+    def test_popitem(self, data):
+        td, h5td = data
+        with pytest.raises(NotImplementedError, match="popitem not implemented"):
+            h5td.popitem()
+        assert list(h5td.keys()) == list(td.keys())
+
     def test_tensorclass_iter(self, tmp_path):
         class H5Data(TensorClass):
             a: torch.Tensor

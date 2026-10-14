@@ -10,6 +10,7 @@ import io
 import pickle
 import uuid
 import warnings
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -4180,6 +4181,129 @@ class TestLazyStackedTensorDictStore:
         finally:
             store_td.clear_redis()
             store_td.close()
+
+    @staticmethod
+    def _key_edit_stores(store_kwargs):
+        """A TensorDictStore, a LazyStackedTensorDictStore and an element view of it."""
+        td = TensorDict(
+            a=torch.arange(6.0).view(2, 3),
+            n=TensorDict(x=torch.ones(2, 3), batch_size=[2, 3]),
+            batch_size=[2, 3],
+        )
+        tds = TensorDictStore.from_tensordict(td, **store_kwargs)
+        lstds = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(list(td.unbind(0))), **store_kwargs
+        )
+        return td, {"tds": tds, "lstds": lstds, "view": lstds[0]}, (tds, lstds)
+
+    @pytest.mark.parametrize("kind", ["tds", "lstds", "view"])
+    def test_get_at_missing_node_and_through_tensor(self, store_kwargs, kind):
+        td, stores, owned = self._key_edit_stores(store_kwargs)
+        try:
+            store = stores[kind]
+            assert store.get_at("zz", 0, None) is None
+            assert store.get_at("zz", 0) is None
+            node = store.get_at("n", 0)
+            assert type(node) is TensorDict
+            assert (node["x"] == 1).all()
+            if kind == "lstds":
+                with pytest.raises(ValueError, match="not a tensordict"):
+                    store.get_at(("a", "x"), 0)
+            else:
+                with pytest.raises(AttributeError, match="_get_at_tuple"):
+                    store.get_at(("a", "x"), 0)
+        finally:
+            for store in owned:
+                store.clear_redis()
+                store.close()
+
+    @pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
+    @pytest.mark.parametrize("kind", ["tds", "lstds", "view"])
+    def test_flatten_inplace_raises_before_read(self, store_kwargs, kind, op):
+        td, stores, owned = self._key_edit_stores(store_kwargs)
+        try:
+            store = stores[kind]
+            keys = list(store.keys(True, True))
+            if kind == "view":
+                # the view ignores inplace and returns a copy
+                out = getattr(store, op)(inplace=True)
+                assert type(out) is TensorDict
+            else:
+                with mock.patch.object(
+                    type(store), "to_tensordict", side_effect=AssertionError
+                ):
+                    with pytest.raises(
+                        ValueError, match=f"Cannot call {op} in_place with a"
+                    ):
+                        getattr(store, op)(inplace=True)
+            assert list(store.keys(True, True)) == keys
+            assert_allclose_td(store.to_tensordict(), td[0] if kind == "view" else td)
+            flat = store.flatten_keys()
+            assert type(flat) is TensorDict
+            assert set(flat.keys()) == {"a", "n.x"}
+            with pytest.raises(TypeError, match="unexpected keyword argument"):
+                store.flatten_keys(is_leaf=lambda cls: False)
+        finally:
+            for store in owned:
+                store.clear_redis()
+                store.close()
+
+    @pytest.mark.parametrize("kind", ["tds", "lstds", "view"])
+    def test_select_exclude_unsupported_messages(self, store_kwargs, kind):
+        td, stores, owned = self._key_edit_stores(store_kwargs)
+        try:
+            store = stores[kind]
+            name = type(store).__name__
+            for op in ("select", "exclude"):
+                with pytest.raises(
+                    NotImplementedError, match=f"Cannot call {op} on a {name}."
+                ):
+                    getattr(store, op)("a")
+        finally:
+            for store in owned:
+                store.clear_redis()
+                store.close()
+
+    @pytest.mark.parametrize("kind", ["tds", "lstds", "view"])
+    def test_key_edits_empty_key(self, store_kwargs, kind):
+        td, stores, owned = self._key_edit_stores(store_kwargs)
+        try:
+            store = stores[kind]
+            if kind == "view":
+                with pytest.raises(RuntimeError, match="Cannot delete keys"):
+                    store.del_("a")
+                with pytest.raises(RuntimeError, match="Cannot rename keys"):
+                    store.rename_key_("a", "a")
+                with pytest.raises(RuntimeError, match="Cannot popitem"):
+                    store.popitem()
+            elif kind == "tds":
+                with pytest.raises(IndexError):
+                    store.del_(())
+            else:
+                with pytest.warns(FutureWarning, match="missing key"):
+                    store.del_(())
+            assert list(store.keys(True, True)) == ["a", ("n", "x")]
+        finally:
+            for store in owned:
+                store.clear_redis()
+                store.close()
+
+    def test_non_tensor_items_store_round_trips(self, store_kwargs):
+        td = TensorDict(
+            a=torch.zeros(2),
+            s=NonTensorData("x", batch_size=[2]),
+            n=TensorDict(t=NonTensorData("y", batch_size=[2]), batch_size=[2]),
+            batch_size=[2],
+        )
+        store = TensorDictStore.from_tensordict(td, **store_kwargs)
+        try:
+            assert [key for key, _ in td.non_tensor_items(True)] == ["s", ("n", "t")]
+            # the store returns no non-tensor leaf
+            assert list(store.non_tensor_items(True)) == []
+            assert store.non_tensor_items() == ()
+        finally:
+            store.clear_redis()
+            store.close()
 
     def test_entry_class(self, store_kwargs):
         lazy_td = self._nested_lazy_td()
