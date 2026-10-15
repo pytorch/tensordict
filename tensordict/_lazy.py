@@ -53,6 +53,7 @@ from tensordict._indexing import (
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
+    _copy_leaves,
     _default_is_leaf,
     _empty_misfit,
     _has_lazy_stack,
@@ -61,6 +62,8 @@ from tensordict.base import (
     _KeyThroughLeafError,
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+    _NestedReadsCopies,
+    _on_copies,
     _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
@@ -396,6 +399,33 @@ def _shared_keys(tensordicts: list[TensorDict]) -> list[str]:
             )
             return [key for key in first if key in shared]
     return list(first)
+
+
+def _raise_if_copy_fails(
+    dests: list[Tensor], sources: list[Tensor], non_blocking: bool, start: int
+) -> None:
+    """Raises the error of the first copy of ``sources`` into ``dests`` that cannot be done, before any copy (#2776).
+
+    ``torch._foreach_copy_`` checks the leaves that require grad before it
+    copies, but the shapes only at each copy, after the copies before it.
+    The pairs before ``start`` are only checked where a later pair differs
+    in shape: ``torch._foreach_copy_`` raises at them before it writes the
+    later ones.
+    """
+    if [dest.shape for dest in dests[start:]] == [
+        source.shape for source in sources[start:]
+    ]:
+        return
+    for dest, source in zip(dests, sources):
+        if dest.shape == source.shape:
+            continue
+        try:
+            fails = torch.broadcast_shapes(dest.shape, source.shape) != dest.shape
+        except RuntimeError:
+            fails = True
+        if fails:
+            # copy_ raises before it writes, with the error of update_
+            dest.copy_(source, non_blocking=non_blocking)
 
 
 def _stack_chain(
@@ -4195,6 +4225,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     node = entry
 
     # Override: splits the source along the stack dim and updates each member.
+    # The leaves that the members copy on the fast route of update_ are paired
+    # and checked first, so that a part of the source that a member rejects
+    # raises before any member is written (#2776).
     def _update_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
@@ -4207,24 +4240,107 @@ class LazyStackedTensorDict(TensorDictBase):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        stack_dim = self.stack_dim
-        if input_dict_or_td.batch_dims > stack_dim and input_dict_or_td.batch_size[
-            stack_dim
-        ] == len(self.tensordicts):
-            pieces = input_dict_or_td.unbind(stack_dim)
+        pieces = self._update_pieces(input_dict_or_td)
+        if keys_to_update is None:
+            plans = self._member_plans(pieces, non_blocking)
         else:
-            pieces = [
-                self._broadcast_piece(input_dict_or_td, i)
-                for i in range(len(self.tensordicts))
-            ]
-        for td_dest, td_source in _zip_strict(self.tensordicts, pieces):
-            td_dest.update_(
-                td_source,
-                clone=clone,
-                non_blocking=non_blocking,
-                keys_to_update=keys_to_update,
-            )
+            plans = [None] * len(pieces)
+        dests, sources = [], []
+        for plan in plans:
+            if plan is not None:
+                dests += plan[0]
+                sources += plan[1]
+        # a copy into the first member, unless it is a lazy stack, raises
+        # before the other members are written: only those are checked
+        start = 0
+        if (
+            None not in plans
+            and plans
+            and not isinstance(self.tensordicts[0], LazyStackedTensorDict)
+        ):
+            start = len(plans[0][0])
+        _raise_if_copy_fails(dests, sources, non_blocking, start)
+        # the members on other routes are written first: one that raises
+        # leaves the planned members unchanged
+        for td_dest, td_source, plan in _zip_strict(self.tensordicts, pieces, plans):
+            if plan is None:
+                td_dest.update_(
+                    td_source,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+        if dests:
+            _copy_leaves(dests, sources, non_blocking)
+        for plan in plans:
+            if plan is not None and plan[2] is not None:
+                plan[2]()
         return self
+
+    # Override: joins the plans of the members.
+    def _update_plan(
+        self, input_dict_or_td: TensorDictBase, *, non_blocking: bool
+    ) -> tuple[list[Tensor], list[Tensor], Callable[[], None] | None] | None:
+        """The plans of the members, joined; ``None`` where a member takes another route of ``update_``.
+
+        Called by the ``_update_`` of a lazy stack that stacks ``self``,
+        which then calls ``update_`` on ``self`` for a ``None``.
+        """
+        plans = self._member_plans(self._update_pieces(input_dict_or_td), non_blocking)
+        if any(plan is None for plan in plans):
+            return None
+        finishes = [plan[2] for plan in plans if plan[2] is not None]
+
+        def finish():
+            for member_finish in finishes:
+                member_finish()
+
+        return (
+            [dest for plan in plans for dest in plan[0]],
+            [source for plan in plans for source in plan[1]],
+            finish if finishes else None,
+        )
+
+    def _member_plans(
+        self, pieces: Sequence[TensorDictBase], non_blocking: bool
+    ) -> list:
+        """The plan of the update of each member by its part of the source, as ``TensorDictBase._update_plan`` returns it.
+
+        ``None`` for a member that ``update_`` writes on another route: one
+        whose class has its own ``update_`` or ``_update_``, such as a
+        ``TensorDictParams``, or that holds a tensordict that reads copies,
+        such as an h5 file, or whose leaves match none of its part.
+        """
+        plans = []
+        for td, piece in _zip_strict(self.tensordicts, pieces):
+            plan = None
+            if type(td).update_ is TensorDictBase.update_ and type(td)._update_ in (
+                TensorDictBase._update_,
+                LazyStackedTensorDict._update_,
+            ):
+                try:
+                    plan = td._update_plan(piece, non_blocking=non_blocking)
+                except _NestedReadsCopies:
+                    if (
+                        type(td)._inplace_on_nested_copies
+                        is TensorDictBase._inplace_on_nested_copies
+                    ):
+                        # a file, which update_ writes on its fast route
+                        # too, once it has raised so
+                        plan = _on_copies(
+                            td._update_plan, piece, non_blocking=non_blocking
+                        )
+            plans.append(plan)
+        return plans
+
+    def _update_pieces(self, source: TensorDictBase) -> Sequence[TensorDictBase]:
+        """The part of ``source`` that ``update_`` writes into each member."""
+        stack_dim = self.stack_dim
+        if source.batch_dims > stack_dim and source.batch_size[stack_dim] == len(
+            self.tensordicts
+        ):
+            return source.unbind(stack_dim)
+        return [self._broadcast_piece(source, i) for i in range(len(self.tensordicts))]
 
     def _broadcast_piece(self, source: T, i: int) -> TensorDictBase:
         """The part of ``source`` that :meth:`update_` writes into member ``i``, for a source that cannot be split along the stack dim.
