@@ -657,6 +657,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # ------------------------------------------------------------------
     # Properties (delegated to _source)
     # ------------------------------------------------------------------
+    # Override: the batch size of the source.
     @property
     def batch_size(self) -> torch.Size:
         return self._source.batch_size
@@ -665,6 +666,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     def batch_size(self, new_size: torch.Size) -> None:
         self._source.batch_size = new_size
 
+    # Override: the names of the source.
     @property
     def names(self):
         return self._source.names
@@ -685,11 +687,13 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
 
+    # Override: locks the source; the base method builds the wrong lock graph.
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
         self._source.lock_(*args, **kwargs)
         return self
 
+    # Override: unlocks the source; the base method builds the wrong lock graph.
     @_as_context_manager("is_locked")
     def unlock_(self, *args, **kwargs):
         self._source.unlock_(*args, **kwargs)
@@ -951,6 +955,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             _warn_missing_required(cls, td, "{}.from_dict()", "pass check=False")
         return cls._wrap_td(td)
 
+    # Override: builds from the source and wraps the result.
     def from_dict_instance(
         self,
         input_dict,
