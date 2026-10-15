@@ -1194,6 +1194,12 @@ class TestFromTensordict:
             return lazy_stack(
                 [td.expand(2, 3).clone()._get_sub_tensordict(0) for td in members]
             )
+        if kind == "nested_h5":
+            for i, td in enumerate(members):
+                td["n"] = PersistentTensorDict.from_dict(
+                    td["n"], filename=tmp_path / f"n{i}.h5"
+                )
+            return lazy_stack(members)
         if kind == "h5":
             return lazy_stack(
                 [
@@ -1215,6 +1221,9 @@ class TestFromTensordict:
             "sub_td",
             pytest.param(
                 "h5", marks=pytest.mark.skipif(not _has_h5py, reason="no h5py")
+            ),
+            pytest.param(
+                "nested_h5", marks=pytest.mark.skipif(not _has_h5py, reason="no h5py")
             ),
         ],
     )
@@ -1238,6 +1247,11 @@ class TestFromTensordict:
         assert getattr(dest, method)(src) is dest
         # read back from the members, from the files for h5
         torch.testing.assert_close(source.to_tensordict(), values)
+        if "h5" in kind:
+            # .data cannot set what the files hold: it raises before it sets
+            with pytest.raises(RuntimeError, match="Cannot assign .data"):
+                dest.data = values + 1
+            torch.testing.assert_close(source.to_tensordict(), values)
         assert dest.add_(1) is dest
         assert dest.zero_() is dest
         assert (source.to_tensordict() == 0).all()
@@ -1292,25 +1306,32 @@ class TestFromTensordict:
             assert (td["n", "x"] == 3).all()
         assert (tds[0]["e"] == 1).all()
 
-    def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace_raises(self):
-        # #2759: the shared leaves differ in shape, so they cannot be changed
-        # without the exclusive keys: the method raises before it writes
+    @pytest.mark.parametrize("op", ["add_", "zero_", "mul_", "copy_"])
+    def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace(self, op):
+        # #2759: the shared leaves differ in shape, so they cannot be read as
+        # one tensor: the method runs on the shared leaves of each member and
+        # leaves the exclusive keys unchanged (#2739)
         class Nested(TypedTensorDict):
             a: Tensor
             n: TensorDict
 
         tds = [
             TensorDict(
-                a=torch.ones(3, k + 1), n={"x": torch.ones(3, 2)}, batch_size=[3]
+                a=torch.full((3, k + 1), 2.0),
+                n={"x": torch.full((3, 2), 2.0)},
+                batch_size=[3],
             )
             for k in range(2)
         ]
-        tds[0]["e"] = torch.ones(3)
+        tds[0]["e"] = torch.full((3,), 2.0)
         state = Nested.from_tensordict(lazy_stack(tds))
-        with pytest.raises(RuntimeError, match="Failed to stack"):
-            state.add_(1.0)
+        args = {"add_": (1.0,), "zero_": (), "mul_": (state,), "copy_": (state + 1,)}
+        assert getattr(state, op)(*args[op]) is state
+        expected = {"add_": 3.0, "zero_": 0.0, "mul_": 4.0, "copy_": 3.0}[op]
         for td in tds:
-            assert (td == 1).all()
+            assert (td["a"] == expected).all()
+            assert (td["n", "x"] == expected).all()
+        assert (tds[0]["e"] == 2).all()
 
     @pytest.mark.parametrize("receiver", ["dense", "lazy", "typed"])
     @pytest.mark.parametrize("wrap", ["typed", "tensorclass"])
