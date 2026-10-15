@@ -107,19 +107,20 @@ def to_mds(
 
     if not self.numel():
         raise ValueError("Cannot write an empty TensorDict to a streaming dataset.")
+    if writer is None:
+        if columns is None:
+            # A batch-free tensordict is one row, so it has no element 0.
+            columns = _columns(self[0] if self.ndim else self)
+        writer = MDSWriter(
+            out=out,
+            columns=columns,
+            keep_local=keep_local,
+            compression=compression,
+            hashes=hashes,
+            size_limit=size_limit,
+            **kwargs,
+        )
     if self.ndim:
-        if writer is None:
-            if columns is None:
-                columns = _columns(self[0])
-            writer = MDSWriter(
-                out=out,
-                columns=columns,
-                keep_local=keep_local,
-                compression=compression,
-                hashes=hashes,
-                size_limit=size_limit,
-                **kwargs,
-            )
         td_dict = self.tolist(convert_tensors="numpy")
         if not isinstance(td_dict, list):
             raise ValueError(f"Expected a list of dictionarie, got {type(td_dict)}.")
@@ -131,18 +132,11 @@ def to_mds(
                 w.write(td_i)
             return
 
-    if writer is None:
-        if columns is None:
-            columns = _columns(self)
-        writer = MDSWriter(
-            out=out,
-            columns=columns,
-            keep_local=keep_local,
-            compression=compression,
-            hashes=hashes,
-            size_limit=size_limit,
-        )
-    writer.write(self)
+    row = self.tolist(convert_tensors="numpy")
+    for k, v in row.items():
+        if isinstance(v, np.ndarray) and v.shape == ():
+            row[k] = v.item()
+    writer.write(row)
 
 
 def _columns(self: TensorCollection) -> dict[str, str]:
