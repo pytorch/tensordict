@@ -46,6 +46,7 @@ from tensordict import (
     TensorClass,
     tensorclass,
     TensorDict,
+    TypedTensorDict,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
@@ -2012,6 +2013,98 @@ class TestGeneric:
         assert td_empty.unsqueeze(0).names == [None, *names]
         td = TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2], names=[None, "y"])
         assert not td.empty(batch_size=[3])._has_names()
+
+    def test_empty_names_misfit_warns(self, monkeypatch):
+        # empty() keeps names that the names setter would reject or drop, with
+        # a FutureWarning: from 0.17 it applies them as the setter does (#2711)
+        # Those names do not fit the batch size, which TD_CHECK_INVARIANTS rejects.
+        monkeypatch.setattr(tensordict._td, "_CHECK_INVARIANTS", False)
+
+        @tensorclass
+        class Data:
+            a: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        lazy = lazy_stack([td, td])
+        for obj, kwargs, batch_size, names, future in (
+            (td, {"batch_size": [], "names": ["a"]}, [], ["a"], "drops"),
+            (td, {"batch_size": [5, 3], "names": ["a"]}, [5, 3], ["a"], "raises"),
+            (td, {"names": ["a", "b"]}, [3], ["a", "b"], "raises"),
+            (
+                TensorDict(batch_size=[2, 3]),
+                {"names": ["x", "x"]},
+                [2, 3],
+                ["x", "x"],
+                "raises",
+            ),
+            (
+                Data(a=torch.zeros(3), batch_size=[3]),
+                {"names": ["a", "b"]},
+                [3],
+                ["a", "b"],
+                "raises",
+            ),
+            # a stack of two 0-d members, whose members get the names ["b"]
+            (
+                lazy_stack([TensorDict(), TensorDict()]),
+                {"names": ["a", "b"]},
+                [2],
+                ["a", "b"],
+                "raises",
+            ),
+            # the empty stack of the members, kept for names of another length
+            (lazy, {"batch_size": [], "names": ["a"]}, [2], ["a"], "drops"),
+            (
+                lazy,
+                {"recurse": True, "batch_size": [4], "names": ["x", "y"]},
+                [2],
+                ["x"],
+                "raises",
+            ),
+        ):
+            # the members of a stack may also warn of their names, as before
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                empty = obj.empty(**kwargs)
+            ours = [w for w in record if str(w.message).startswith("empty(")]
+            assert len(ours) == 1
+            assert ours[0].category is FutureWarning
+            assert re.search(
+                r"empty\(batch_size=.*\) returns a tensordict with the names .*"
+                r"Starting with TensorDict 0\.17, the default will change to "
+                rf"applying the names as the names setter does, which {future}",
+                str(ours[0].message),
+            )
+            assert ours[0].filename == __file__
+            assert empty.batch_size == torch.Size(batch_size)
+            assert empty.names == names
+        # names that fit do not warn
+        params = TensorDictParams(TensorDict(a=torch.zeros(3), batch_size=[3]))
+        typed = Typed(a=torch.zeros(3), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            for obj in (td, params, typed, lazy):
+                for recurse in (False, True):
+                    names = [f"d{i}" for i in range(obj.ndim)]
+                    assert obj.empty(recurse, names=names).names == names
+                    empty = obj.empty(recurse, batch_size=[5, 4], names=["p", None])
+                    assert empty.names == ["p", None]
+                    assert obj.empty(recurse, batch_size=[], names=[]).names == []
+            # where empty() applies the names setter already, it raises as
+            # before, without the warning
+            for obj, recurse in ((td, True), (params, False), (typed, False)):
+                with pytest.raises(ValueError, match="length of the dimension"):
+                    obj.empty(recurse, names=["a", "b"])
+        # and on a 0-d batch, it drops the names as before, with the warning of
+        # the names setter only
+        for obj, recurse in ((td, True), (params, False), (typed, False)):
+            with pytest.warns(FutureWarning, match="Got the dimension names") as record:
+                empty = obj.empty(recurse, batch_size=[], names=["a"])
+            assert empty.names == []
+            assert not any(str(w.message).startswith("empty(") for w in record)
 
     @pytest.mark.parametrize("shared", [None, "memory", "memmap"])
     def test_empty_recurse_kwargs(self, shared, tmpdir):
