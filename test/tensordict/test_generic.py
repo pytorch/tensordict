@@ -61,6 +61,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _unravel_key_to_tuple,
     assert_allclose_td,
+    expand_as_right,
     is_non_tensor,
     is_tensorclass,
     set_lazy_legacy,
@@ -10721,6 +10722,24 @@ class TestGeneric:
         mask = torch.tensor([True, False, True])
         out = td.clone().lock_()
         assert td.where(mask, 0, out=out) is out
+
+    def test_torch_where_td_other_tensor_input(self):
+        # torch.where(mask, tensor, td): the tensor broadcasts against each leaf
+        # and the mask over the batch dims, as in torch.where(~mask, td, tensor)
+        td = TensorDict(
+            a=torch.randn(3, 4, 2),
+            nested=TensorDict(b=torch.randn(3, 4, 5, 2), batch_size=[3, 4]),
+            batch_size=[3, 4],
+        )
+        value = torch.randn(2)
+        for mask in (torch.tensor([True, False, True]), torch.rand(3, 4) > 0.5):
+            result = torch.where(mask, value, td)
+            assert result.batch_size == td.batch_size
+            for key in ("a", ("nested", "b")):
+                leaf = td.get(key)
+                expected = torch.where(expand_as_right(mask, leaf), value, leaf)
+                assert torch.equal(result.get(key), expected)
+            assert_allclose_td(result, torch.where(~mask, td, value))
 
     def test_apply_out_batch_size_list(self):
         # a batch_size list equal to out.batch_size is accepted

@@ -1008,6 +1008,10 @@ def where(condition, input, other, *, out=None):
         raise RuntimeError(
             "Cannot use a persistent tensordict as output of torch.where."
         )
+    if not _is_tensor_collection(type(input)) and _is_tensor_collection(type(other)):
+        # torch.where(condition, value, td): pick from td where condition is False.
+        # logical_not, not ~, so that a uint8 condition is negated correctly.
+        return other.where(condition.logical_not(), input, out=out)
     return input.where(condition, other, out=out)
 
 
