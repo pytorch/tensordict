@@ -99,6 +99,7 @@ from tensordict.utils import (
     _REPR_OPTIONS,
     _shape,
     _td_fields,
+    _tensor_list_from_non_tensor_stack,
     _unravel_key_to_tuple,
     _user_stacklevel,
     _warn_dim_past_batch_dims,
@@ -1464,14 +1465,21 @@ class LazyStackedTensorDict(TensorDictBase):
                 "permitted if all members of the stack have this key in "
                 "their register."
             ) from e
+        assign_list = isinstance(value, list) and list_to_stack()
         if not validated:
             value = self._validate_value(
                 value,
                 non_blocking=non_blocking,
-                check_shape=not (isinstance(value, list) and list_to_stack()),
+                check_shape=not assign_list,
                 key=key,
             )
             validated = True
+        if assign_list:
+            # Ragged tensors come back as a NonTensorStack. Write the tensors
+            # themselves into the members, as the list did.
+            recovered = _tensor_list_from_non_tensor_stack(value)
+            if isinstance(recovered, list):
+                value = recovered
         if self._is_vmapped:
             value = self._hook_in(value)
         if isinstance(value, list):

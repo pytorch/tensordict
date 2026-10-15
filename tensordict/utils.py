@@ -2159,6 +2159,11 @@ def _convert_list_to_stack(
             # FIXME: this may lead to some weird behaviours if we have nested lists and by chance one of them has
             #  things that can be stacked, and others don't.
             return torch.stack(a_list), False
+        if all_tensors:
+            # No common shape to stack. A list has no .shape for the caller to read.
+            from tensordict import NonTensorStack
+
+            return NonTensorStack(*a_list), True
         # TODO: check that LazyStack understands that a list is a bunch of elements to write in separate tds
         return list(a_list), False
     from tensordict.base import _is_tensor_collection
@@ -2168,6 +2173,33 @@ def _convert_list_to_stack(
     from tensordict import NonTensorStack
 
     return NonTensorStack(*a_list), True
+
+
+def _tensor_list_from_non_tensor_stack(value: Any) -> list[Any] | Tensor | None:
+    """Tensors held by a non-tensor stack, or ``None`` if a leaf is not a tensor.
+
+    ``_convert_list_to_stack`` wraps a ragged tensor list in a
+    :class:`~tensordict.NonTensorStack`. A lazy stack still writes each tensor
+    into its own member. This rebuilds that list from the same tensor objects.
+    """
+    if not is_non_tensor(value):
+        return None
+    members = getattr(value, "tensordicts", None)
+    if members is None:
+        data = value.data
+        if isinstance(data, Tensor) and not value.batch_size:
+            return data
+        return None
+    # The list order is dim 0. Another stack dim is not the list we wrapped.
+    if value.stack_dim != 0:
+        return None
+    leaves = []
+    for member in members:
+        leaf = _tensor_list_from_non_tensor_stack(member)
+        if leaf is None:
+            return None
+        leaves.append(leaf)
+    return leaves
 
 
 def _recursive_unbind_list(a_list, dim):
