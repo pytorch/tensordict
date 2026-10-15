@@ -457,6 +457,56 @@ class TestLazyStackedTensorDict:
             "    stack_dim=1)"
         )
 
+    def test_repr_does_not_stack(self):
+        # Printing reads the entries' shapes and dtypes from the members.
+        td = lazy_stack(
+            [
+                lazy_stack(
+                    [
+                        TensorDict(
+                            a=torch.zeros(3, 2),
+                            b=torch.zeros(3, i + 1),
+                            n=TensorDict(c=torch.zeros(3), batch_size=[3]),
+                            batch_size=[3],
+                        )
+                        for i in range(2)
+                    ],
+                    1,
+                )
+                for _ in range(2)
+            ]
+        )
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(tensors, *args, **kwargs):
+            calls.append(len(tensors))
+            return stack(tensors, *args, **kwargs)
+
+        with mock.patch.object(torch, "stack", counting_stack):
+            text = repr(td)
+        assert calls == []
+        assert (
+            "a: Tensor(shape=torch.Size([2, 3, 2, 2]), device=cpu, "
+            "dtype=torch.float32, is_shared=False)" in text
+        )
+        assert "b: Tensor(shape=torch.Size([2, 3, 2, -1])" in text
+        assert "c: Tensor(shape=torch.Size([2, 3, 2])," in text
+
+    def test_repr_promoted_dtype(self):
+        # The dtype is the one that td[key] has: torch.stack promotes it.
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3)),
+                TensorDict(a=torch.zeros(3, dtype=torch.float64)),
+            ]
+        )
+        assert td["a"].dtype == torch.float64
+        assert (
+            "a: Tensor(shape=torch.Size([2, 3]), device=cpu, "
+            "dtype=torch.float64, is_shared=False)" in repr(td)
+        )
+
     def test_to_keeps_nested_tensorclass(self):
         class MC(TensorClass):
             x: torch.Tensor

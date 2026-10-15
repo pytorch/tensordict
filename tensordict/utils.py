@@ -1869,12 +1869,54 @@ def _make_repr(key: NestedKey, item, tensordict: T, sep) -> str:
     return sep.join([key, _get_repr(item)])
 
 
+def _stacked_repr(shape, tensors) -> str | None:
+    """The repr of ``torch.stack(tensors)``, built without stacking them.
+
+    Returns ``None`` if the stack would fail, or if the print options show a
+    field that needs the stacked data.
+    """
+    opts = _REPR_OPTIONS
+    if -1 in shape or any(
+        opts[name]
+        for name in (
+            "show_grad",
+            "show_is_contiguous",
+            "show_is_view",
+            "show_storage_size",
+            "plain",
+        )
+    ):
+        return None
+    device = tensors[0].device
+    if any(tensor.device != device for tensor in tensors):
+        return None
+    try:
+        dtype = functools.reduce(torch.promote_types, [t.dtype for t in tensors])
+    except RuntimeError:
+        return None
+    # torch.stack returns a new tensor, which is_shared() reports as shared
+    # only on CUDA.
+    return _get_repr_custom(Tensor, shape, device, dtype, device.type == "cuda")
+
+
 def _td_fields(td: T, keys=None, sep=": ") -> str:
+    from tensordict._lazy import LazyStackedTensorDict
+
+    is_lazy = isinstance(td, LazyStackedTensorDict)
     strs = []
     if keys is None:
         keys = td.keys()
     for key in keys:
-        shape = td.get_item_shape(key)
+        # A lazy stack's tensor entries are printed from the members.
+        leaf = td._plain_leaf(key) if is_lazy else None
+        if leaf is not None:
+            shape = leaf[0]
+            substr = _stacked_repr(*leaf)
+            if substr is not None:
+                strs.append(sep.join([key, substr]))
+                continue
+        else:
+            shape = td.get_item_shape(key)
         if -1 not in shape:
             item = td.get(key)
             strs.append(_make_repr(key, item, td, sep=sep))
