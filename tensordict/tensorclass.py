@@ -1223,8 +1223,11 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
         # get the output type from the arguments / keyword arguments
         if func is torch.where:
-            # torch.where(condition, input, other): the result has the type of input
+            # torch.where(condition, input, other): the result has the type of
+            # input, or of other when input is a scalar or a tensor
             tensorclass_instance = args[1] if len(args) > 1 else kwargs.get("input")
+            if not _is_tensor_collection(type(tensorclass_instance)):
+                tensorclass_instance = args[2] if len(args) > 2 else kwargs.get("other")
         elif len(args) > 0:
             tensorclass_instance = args[0]
         else:

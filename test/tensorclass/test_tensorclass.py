@@ -3722,6 +3722,9 @@ class TestTensorClass:
             torch.where(mask, data1, data0),
             torch.where(mask, input=data1, other=data0),
             torch.where(mask, data1, 0.0),
+            # a scalar or tensor input takes the type of other (#2743)
+            torch.where(mask, 1.0, data0),
+            torch.where(mask, torch.ones(5), data0),
         ):
             assert type(result) is type(data0)
             assert result.batch_size == data0.batch_size

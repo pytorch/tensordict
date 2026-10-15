@@ -56,6 +56,7 @@ from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
+    expand_as_right,
     is_non_tensor,
     set_lazy_legacy,
 )
@@ -5484,6 +5485,33 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.where(mask, td, torch.ones_like(td), out=td_where)
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 1).all()
+
+    def test_where_td_other(self, td_name, device):
+        # torch.where(mask, value, td), with the tensordict as other (#2743)
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if td_name == "td_with_unbatched":
+            pytest.skip(
+                "UnbatchedTensor where() has expand_as_right dimension mismatch"
+            )
+        # the mask covers the leading batch dim and broadcasts over the others
+        mask = torch.zeros(td.shape[:1], dtype=torch.bool, device=device).bernoulli_()
+        for value in (0, torch.tensor(2, device=device)):
+            td_where = torch.where(mask, value, td)
+            assert td_where.batch_size == td.batch_size
+            for k in td.keys(True, True):
+                leaf = td.get(k)
+                expected = torch.where(expand_as_right(mask, leaf), value, leaf)
+                assert (td_where.get(k) == expected).all()
+        if td_name == "td_h5":
+            return
+        td_where = td.clone()
+        value = torch.tensor(2, device=device)
+        assert torch.where(mask, value, td, out=td_where) is td_where
+        for k in td.keys(True, True):
+            leaf = td.get(k)
+            expected = torch.where(expand_as_right(mask, leaf), value, leaf)
+            assert (td_where.get(k) == expected).all()
 
     def test_where_pad(self, td_name, device):
         torch.manual_seed(1)
