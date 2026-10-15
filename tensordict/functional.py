@@ -442,8 +442,8 @@ def _pad_inplace_preflight(tensordict: TensorDictBase, prefix: tuple = ()) -> No
     A file, a sub-tensordict, a legacy lazy view and a ``TypedTensorDict``
     over a lazy stack keep their batch size: padding them in place, or a
     tensordict that holds them, would raise or break them after the earlier
-    leaves were padded. A ``LazyStackedTensorDict`` pads in place on its own
-    and is not walked.
+    leaves were padded. A lazy tensordict is not walked: a
+    ``LazyStackedTensorDict`` pads in place on its own.
     """
     if not prefix and not tensordict._inplace_batch_size_change:
         raise NotImplementedError(
@@ -451,7 +451,9 @@ def _pad_inplace_preflight(tensordict: TensorDictBase, prefix: tuple = ()) -> No
             f"{type(tensordict).__name__} cannot do in place. Use inplace=False "
             "instead."
         )
-    if isinstance(tensordict, LazyStackedTensorDict):
+    if tensordict._lazy:
+        # a lazy stack pads in place on its own, and a sub-tensordict refuses
+        # its first write
         return
     for key, value in tensordict.items():
         if not _is_tensor_collection(type(value)) or is_non_tensor(value):

@@ -1552,6 +1552,28 @@ class TestBackends:
             return
         torch.testing.assert_close(state.to_tensordict(), dense.to_tensordict())
 
+    @pytest.mark.parametrize("parent", [False, True], ids=["direct", "parent"])
+    def test_pad_inplace(self, source, parent):
+        # a dense source pads in place; the others cannot change their batch
+        # size and raise before anything is padded, also through a parent
+        kind, td = source
+        state = _BackendState.from_tensordict(td, check=False)
+        obj = state
+        if parent:
+            obj = TensorDict(
+                x=torch.arange(12.0).reshape(4, 3), t=state, batch_size=[4, 3]
+            )
+        before = obj.to_tensordict()
+        if kind == "dense":
+            assert obj.pad([0, 0, 0, 1], inplace=True) is obj
+            torch.testing.assert_close(obj.to_tensordict(), before.pad([0, 0, 0, 1]))
+            return
+        error = RuntimeError if kind == "subtd" and not parent else None
+        with pytest.raises(error or NotImplementedError):
+            obj.pad([0, 0, 0, 1], inplace=True)
+        assert obj.batch_size == (4, 3)
+        torch.testing.assert_close(obj.to_tensordict(), before)
+
     def test_setitem_self(self):
         # the base __setitem__ refuses to nest a tensordict in itself; the
         # delegate wrote the typed tensordict into its own source
