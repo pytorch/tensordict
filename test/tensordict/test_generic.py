@@ -25,7 +25,7 @@ from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, ModuleType
 from typing import Any, get_type_hints
 from unittest import mock
 
@@ -173,6 +173,59 @@ def device_fixture():
 
 # a namedtuple of numbers nested in a tuple (test_set_tuple_of_numbers_dtype)
 _Pair = namedtuple("_Pair", ["x", "y"])
+
+
+@contextlib.contextmanager
+def _install_fake_streaming():
+    # to_mds imports streaming.MDSWriter at call time. The package is not installed.
+    created = []
+    written = []
+
+    class MDSWriter:
+        def __init__(self, *args, **kwargs):
+            created.append({"args": args, "kwargs": dict(kwargs)})
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def write(self, sample):
+            written.append(sample)
+
+    module = ModuleType("streaming")
+    module.MDSWriter = MDSWriter
+    with mock.patch.dict(sys.modules, {"streaming": module}):
+        yield created, written
+
+
+def _assert_to_mds_row(row, *, scalar, vector, text):
+    assert type(row) is dict
+    assert list(row) == ["a", "b", "c"]
+    assert type(row["a"]) is float
+    assert row["a"] == scalar
+    assert isinstance(row["b"], np.ndarray)
+    assert row["b"].dtype == np.float32
+    assert row["b"].shape == (len(vector),)
+    assert row["b"].tolist() == vector
+    assert type(row["c"]) is str
+    assert row["c"] == text
+
+
+def _expected_mds_writer_call():
+    return {
+        "args": (),
+        "kwargs": {
+            "out": "out",
+            "columns": {"a": "float", "b": "ndarray", "c": "str"},
+            "keep_local": False,
+            "compression": None,
+            "hashes": None,
+            "size_limit": 1 << 26,
+            "extra_kw": 123,
+        },
+    }
 
 
 class TestGeneric:
@@ -9334,6 +9387,94 @@ class TestGeneric:
         batches = [_batch for batch in batches for _batch in batch.unbind(0)]
         test_td = torch.stack(batches)
         assert_allclose_td(td, test_td)
+
+    def test_to_mds_zero_dim_writes_row_dict(self):
+        # A batch-free tensordict is one row. 0-dim ndarrays become Python
+        # scalars, as they do for one element of a batched tensordict.
+        td = TensorDict(
+            a=torch.tensor(1.5, dtype=torch.float32),
+            b=torch.tensor([4.0, 5.0], dtype=torch.float32),
+            c="a string",
+            batch_size=[],
+        )
+        with _install_fake_streaming() as (created, written):
+            td.to_mds(out="out")
+        assert "streaming" not in sys.modules
+        assert len(created) == 1
+        assert len(written) == 1
+        _assert_to_mds_row(written[0], scalar=1.5, vector=[4.0, 5.0], text="a string")
+
+        class Writer:
+            def __init__(self):
+                self.rows = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def write(self, sample):
+                self.rows.append(sample)
+
+        passed = Writer()
+        with _install_fake_streaming() as (created, written):
+            td.to_mds(out="out", writer=passed)
+        assert "streaming" not in sys.modules
+        assert created == []
+        assert written == []
+        assert len(passed.rows) == 1
+        _assert_to_mds_row(
+            passed.rows[0], scalar=1.5, vector=[4.0, 5.0], text="a string"
+        )
+
+    def test_to_mds_zero_dim_forwards_writer_kwargs(self):
+        td = TensorDict(
+            a=torch.tensor(1.5, dtype=torch.float32),
+            b=torch.tensor([4.0, 5.0], dtype=torch.float32),
+            c="a string",
+            batch_size=[],
+        )
+        with _install_fake_streaming() as (created, written):
+            td.to_mds(out="out", extra_kw=123)
+        assert "streaming" not in sys.modules
+        assert len(written) == 1
+        assert created == [_expected_mds_writer_call()]
+
+    def test_to_mds_forwards_writer_kwargs(self):
+        # Batched to_mds already forwards kwargs and writes one dict per row.
+        td = TensorDict(
+            a=torch.tensor([1.5, 2.5], dtype=torch.float32),
+            b=torch.tensor([[4.0, 5.0], [6.0, 7.0]], dtype=torch.float32),
+            c=["a string", "another string"],
+            batch_size=[2],
+        )
+        with _install_fake_streaming() as (created, written):
+            td.to_mds(out="out", extra_kw=123)
+        assert "streaming" not in sys.modules
+        assert created == [_expected_mds_writer_call()]
+        assert len(written) == 2
+        _assert_to_mds_row(written[0], scalar=1.5, vector=[4.0, 5.0], text="a string")
+        _assert_to_mds_row(
+            written[1], scalar=2.5, vector=[6.0, 7.0], text="another string"
+        )
+
+    def test_to_mds_empty_raises(self):
+        # numel() is at least 1 for every batch size, including [0].
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        with _install_fake_streaming() as (created, written):
+            with mock.patch.object(td, "numel", return_value=0):
+                assert td.numel() == 0
+                with pytest.raises(
+                    ValueError,
+                    match=re.escape(
+                        "Cannot write an empty TensorDict to a streaming dataset."
+                    ),
+                ):
+                    td.to_mds(out="out")
+        assert "streaming" not in sys.modules
+        assert created == []
+        assert written == []
 
     def test_to_module_state_dict(self):
         net0 = nn.Transformer(
