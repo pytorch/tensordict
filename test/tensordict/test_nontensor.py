@@ -1368,6 +1368,32 @@ class TestNonTensorData:
         assert type(td.get(key)) is cls
         assert td.get(key).data == "s1"
 
+    @pytest.mark.parametrize(
+        "index",
+        [np.array([1, 0]), np.array(1), [1, 0], torch.tensor([1, 0])],
+        ids=["ndarray", "ndarray_0d", "list", "tensor"],
+    )
+    def test_update_at_partial_index(self, index):
+        # Only () and slice(None) replace the whole value. Any other index,
+        # including an ndarray, is a partial update and raises RuntimeError.
+        data = NonTensorData("h", batch_size=[4])
+        with pytest.raises(
+            RuntimeError, match=r"Cannot update a part of a NonTensorDataBase\."
+        ):
+            data.update_at_(NonTensorData("x"), index)
+        assert data.data == "h"
+
+    @pytest.mark.parametrize(
+        "index", [(), slice(None)], ids=["empty_tuple", "slice_none"]
+    )
+    def test_update_at_whole_index(self, index):
+        # () and slice(None) select every element, so update_at_ replaces the
+        # whole value through update_.
+        data = NonTensorData("h", batch_size=[4])
+        assert data.data == "h"
+        assert data.update_at_(NonTensorData("x"), index) is data
+        assert data.data == "x"
+
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_subtd_set_at_array_data(self, array):
         # Arrays and tensors compare elementwise, so comparing the old and new
