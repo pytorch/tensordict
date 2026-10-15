@@ -1732,6 +1732,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
         return _build(source, new_batch_size)
 
+    # Override: an integer on the stack dim gives a view that writes through.
     def __getitem__(self, index):
         index_unravel = _unravel_key_to_tuple(index)
         if index_unravel:

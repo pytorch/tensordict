@@ -20,11 +20,17 @@ The cases that fail today are listed in ``conformance_known_failures.json``.
 Each test compares its failing cases with that list: a failure that is not
 listed is a regression, and a listed case that passes must be removed from the
 list. Run with ``TENSORDICT_UPDATE_KNOWN_FAILURES=1`` to rewrite the list.
+
+:class:`TestOneImplementation` checks that the subclasses of
+``TensorDictBase`` override its public methods only where
+:data:`_ALLOWED_OVERRIDES` gives a reason, and that the private methods they
+override have a docstring.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import pathlib
@@ -34,7 +40,7 @@ import pytest
 import torch
 from _utils_internal import TestTensorDictsBase
 from tensordict import is_tensor_collection, TensorDict, UnbatchedTensor
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.utils import is_non_tensor
 
 _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
@@ -53,7 +59,7 @@ _CONTAINERS = list(
         for name, device in TestTensorDictsBase.TYPES_DEVICES
         if torch.device(device).type == "cpu"
     )
-)
+) + ["typed_lazy"]
 
 # Every tensordict of the pool has batch size [4, 3, 2, 1] and the keys "a"
 # (float), "b" (float) and "c" (int).
@@ -98,6 +104,7 @@ _OPS = {
         "get('a')": lambda td: td.get("a"),
         "get('missing', None)": lambda td: td.get("missing", None),
         "entry_class(key) is type(get(key))": _entry_class_mismatches,
+        "list(td)": list,
     },
     "key_edits": {
         "popitem()": lambda td: [*td.popitem(), td],
@@ -142,6 +149,7 @@ _OPS = {
         "clone(recurse=False)": lambda td: td.clone(recurse=False),
         "contiguous()": lambda td: td.contiguous(),
         "contiguous(canonical=True)": lambda td: td.contiguous(canonical=True),
+        "contiguous(inplace=True)": _inplace(lambda td: td.contiguous(inplace=True)),
     },
     "pointwise": {
         "abs()": lambda td: td.abs(),
@@ -220,6 +228,12 @@ _OPS = {
             _MASK, td.apply(torch.zeros_like)
         ),
         "torch.where(mask, td, 0)": lambda td: torch.where(_MASK, td, 0),
+        "where(mask, 0, out=dense)": lambda td: (
+            lambda out: [td.where(_MASK, 0, out=out) is out, out]
+        )(td.to_tensordict().zero_()),
+        "where(mask, dense.exclude('b'), pad=0)": lambda td: td.where(
+            _MASK, td.to_tensordict().exclude("b"), pad=0
+        ),
         "masked_fill(mask, -1)": lambda td: td.masked_fill(_MASK, -1),
         "masked_select(mask)": lambda td: td.masked_select(_MASK),
         "masked_fill_(mask, -1)": _inplace(lambda td: td.masked_fill_(_MASK, -1)),
@@ -238,6 +252,7 @@ _OPS = {
         "fill_('missing', 2.0)": _inplace(lambda td: td.fill_("missing", 2.0)),
         "zero_()": _inplace(lambda td: td.zero_()),
         "detach_()": _inplace(lambda td: td.detach_()),
+        "share_memory_()": _inplace(lambda td: td.share_memory_()),
     },
     "update": {
         "update({'a': zeros})": _inplace(
@@ -262,6 +277,7 @@ _OPS = {
         "update(dense[0], update_batch_size=True)": _inplace(
             lambda td: td.update(td.to_tensordict()[0], update_batch_size=True)
         ),
+        "copy_(dense * 0)": _inplace(lambda td: td.copy_(td.to_tensordict() * 0)),
         "update_({'a': zeros})": _inplace(
             lambda td: td.update_({"a": torch.zeros(4, 3, 2, 1, 5)})
         ),
@@ -490,6 +506,441 @@ class TestContainersMatchDense:
             if difference is not None:
                 failures[case] = difference
         _check_known_failures(f"{td_name} {group}", failures)
+
+
+# The modules that define subclasses of TensorDictBase, besides tensordict.
+_SUBCLASS_MODULES = ("tensordict.nn", "tensordict.persistent", "tensordict.store")
+
+_DESCRIPTORS = (property, classmethod, staticmethod)
+
+# Class attributes that are not operations.
+_NOT_OPERATIONS = {
+    "__init__",
+    "__init_subclass__",
+    "__class_getitem__",
+    "__annotate__",
+    "__annotate_func__",
+}
+
+# The public methods of TensorDictBase that each class still overrides, with
+# the reason (see TestOneImplementation). Remove an entry with its override.
+_DENSE_FAST_PATH = "dense fast path over the dict of entries"
+_DENSE_MEMMAP = "only dense storage can hold the new memory-mapped tensor"
+_FLATTEN_COPY = "one to_tensordict() read, without the cache of a locked tensordict"
+_TD_PARAMS = "an nn.Module that forwards to the tensordict it wraps"
+_LEGACY_VIEW = "legacy lazy view, removed in 0.17"
+_ALLOWED_OVERRIDES = {
+    "TensorDict": {
+        "del_": "dense fast path: a top-level key is deleted without the call to _del",
+        "empty": "fast path for the dense root, which many operations call",
+        "from_module": "the implementation, which TensorDictBase.from_module calls",
+        "is_empty": _DENSE_FAST_PATH,
+        "items": _DENSE_FAST_PATH,
+        "make_memmap": _DENSE_MEMMAP,
+        "make_memmap_from_storage": _DENSE_MEMMAP,
+        "make_memmap_from_tensor": _DENSE_MEMMAP,
+        "popitem": "O(1) on the dict of entries",
+        "values": _DENSE_FAST_PATH,
+    },
+    "_SubTensorDict": {
+        "expand": "accepts, and ignores, the inplace keyword it had",
+        "names": "the names of the source at the index of the view",
+        "rename_key_": "the source checks its lock and the keys, and renames",
+        "unlock_": "raises: only the source can be unlocked",
+    },
+    "LazyStackedTensorDict": {
+        "__getitem__": "indexes the members, so the result shares their storage",
+        "__getitems__": "indexes the members, so the result shares their storage",
+        "__setstate__": "reads the pickles of TensorDict 0.14 and earlier",
+        "__torch_function__": "dispatches the torch functions that lazy stacks implement",
+        "device": "the members' common device",
+        "from_list": "stacks one tensordict per element (#1955)",
+        "get_item_shape": "-1 for the dims where the shapes of the members differ",
+        "is_locked": "locked when all the members are",
+        "is_memmap": "computed from the members",
+        "is_shared": "computed from the members",
+        "lazy_stack": "the constructor that the method of TensorDictBase calls",
+        "maybe_dense_stack": "the constructor that the method of TensorDictBase calls",
+        "names": "the names of the members and of the stack dim",
+        "non_tensor_items": "stacks the non-tensor leaves that every member holds",
+        "pop": "with a default, a deep key that keys(True) lacks is not read",
+        "rename_key_": "renames in each member, which checks its lock and the keys",
+        "zero_": "each member zeros itself: a file member writes zeros without reading",
+    },
+    "NonTensorStack": {
+        "__getitem__": "an advanced index copies the entries, as it does for tensors",
+        "__setitem__": "wraps a plain value as non-tensor data; saves a memmap stack again",
+        "contiguous": "a NonTensorStack is its own materialized form",
+        "data": "the value that every element holds",
+        "from_list": "builds the stack from plain values, not from dicts",
+        "is_empty": "a NonTensorStack holds a value",
+        "to_dict": "returns the values as a list, as NonTensorData.to_dict does",
+        "tolist": "lists the stored values, not dicts of the members",
+        "update": "the source is a NonTensorData or a NonTensorStack, not a mapping",
+        "update_": "the source is a NonTensorData or a NonTensorStack, not a mapping",
+    },
+    "PersistentTensorDict": {
+        "__getitem__": "an index gives a writable view of the file",
+        "__getitems__": "an index gives a writable view of the file",
+        "__getstate__": "replaces the open file with what its backend can pickle",
+        "__setstate__": "reopens the file, and reads the pickles of TensorDict 0.14",
+        "batch_size": "checks the new batch size against the file",
+        "flatten_keys": _FLATTEN_COPY,
+        "unflatten_keys": _FLATTEN_COPY,
+    },
+    "TensorDictStore": {
+        "device": "the device can be set, and is persisted on the server",
+        "flatten_keys": _FLATTEN_COPY,
+        "from_schema": "takes the connection arguments of the store",
+        "unflatten_keys": _FLATTEN_COPY,
+    },
+    "LazyStackedTensorDictStore": {
+        "__getitem__": "an integer on the stack dim gives a view that writes through",
+        "device": "the device can be set; reads move the entries to it",
+        "flatten_keys": _FLATTEN_COPY,
+        "unflatten_keys": _FLATTEN_COPY,
+    },
+    "_StoreStackElementView": {
+        "device": "settable, but leaf reads ignore it (FutureWarning until 0.17)",
+        "flatten_keys": "works on an in-memory copy",
+        "unflatten_keys": "works on an in-memory copy",
+    },
+    "_StateFromSource": {
+        "device": "a view reports the device of its source",
+        "is_locked": "a view reports the lock of its source",
+    },
+    "_StoreConnection": {
+        "__getstate__": "the event loop, its thread and the client cannot be pickled",
+        "__setstate__": "opens a new connection to the same server",
+    },
+    "TypedTensorDict": {
+        "__setitem__": "forwards to the source; through _setitem_index a key write is 16-28% slower",
+        "all": "forwards to the source; the base method is 11-14% slower with a dim",
+        "any": "forwards to the source; the base method is 11-14% slower with a dim",
+        "batch_size": "the batch size of the source",
+        "contiguous": "forwards to the source and wraps the result",
+        "del_": "forwards to the source; through _del it is 60-80% slower",
+        "from_dict_instance": "builds from the source and wraps the result",
+        "is_contiguous": "forwards to the source",
+        "lock_": "locks the source; the base method builds the wrong lock graph",
+        "make_memmap": "the memory-mapped tensor goes into the source",
+        "make_memmap_from_storage": "the memory-mapped tensor goes into the source",
+        "make_memmap_from_tensor": "the memory-mapped tensor goes into the source",
+        "masked_fill": "forwards to the source; the base copies an h5 source to a new file",
+        "masked_select": "forwards to the source and wraps the result",
+        "names": "the names of the source",
+        "popitem": "pops from the source",
+        "rename_key_": "the source renames: a lazy stack renames in each member",
+        "repeat_interleave": "forwards to the source; in place, the base method is about 50% slower",
+        "reshape": "forwards to the source; in place, the base method is about 50% slower",
+        "unlock_": "unlocks the source; the base method builds the wrong lock graph",
+    },
+    "TensorDictParams": dict.fromkeys(
+        (
+            "__getitem__",
+            "__getitems__",
+            "__hash__",
+            "__repr__",
+            "__setitem__",
+            "__torch_function__",
+            "all",
+            "any",
+            "apply",
+            "apply_",
+            "auto_device_",
+            "batch_size",
+            "contiguous",
+            "cpu",
+            "create_nested",
+            "cuda",
+            "data",
+            "del_",
+            "device",
+            "fill_",
+            "flatten_keys",
+            "from_dict_instance",
+            "get",
+            "grad",
+            "is_contiguous",
+            "is_locked",
+            "is_memmap",
+            "is_shared",
+            "items",
+            "load_state_dict",
+            "map",
+            "masked_fill",
+            "masked_select",
+            "memmap_",
+            "memmap_like",
+            "named_apply",
+            "names",
+            "pin_memory",
+            "pop",
+            "rename_key_",
+            "repeat_interleave",
+            "reshape",
+            "set",
+            "set_",
+            "set_at_",
+            "shape",
+            "state_dict",
+            "to",
+            "to_h5",
+            "to_tensordict",
+            "to_zarr",
+            "unflatten_keys",
+            "update",
+            "update_",
+            "update_at_",
+            "values",
+            "zero_",
+        ),
+        _TD_PARAMS,
+    ),
+    "_CustomOpTensorDict": dict.fromkeys(
+        (
+            "__repr__",
+            "batch_size",
+            "contiguous",
+            "del_",
+            "detach_",
+            "device",
+            "is_empty",
+            "is_locked",
+            "is_memmap",
+            "is_shared",
+            "lock_",
+            "make_memmap",
+            "make_memmap_from_storage",
+            "make_memmap_from_tensor",
+            "masked_fill_",
+            "pin_memory",
+            "popitem",
+            "rename_key_",
+            "share_memory_",
+            "sorted_keys",
+            "to",
+            "unlock_",
+        ),
+        _LEGACY_VIEW,
+    ),
+    "_PermutedTensorDict": {"names": _LEGACY_VIEW},
+    "_SqueezedTensorDict": {"names": _LEGACY_VIEW},
+    "_TransposedTensorDict": {"names": _LEGACY_VIEW},
+    "_UnsqueezedTensorDict": {"names": _LEGACY_VIEW},
+    "_ViewedTensorDict": {"names": _LEGACY_VIEW},
+}
+
+
+# The private methods of TensorDictBase that a subclass overrides, but that have
+# no docstring stating their contract. Remove a name once it has one.
+_UNDOCUMENTED_HOOKS = {
+    **dict.fromkeys(
+        (
+            "_apply_nest",
+            "_batch_size_setter",
+            "_cast_reduction",
+            "_change_batch_size",
+            "_check_batch_size",
+            "_check_device",
+            "_check_is_shared",
+            "_check_new_batch_size",
+            "_convert_inplace",
+            "_convert_to_tensordict",
+            "_create_nested_str",
+            "_erase_cache",
+            "_exclude",
+            "_get_names_idx",
+            "_get_non_tensor",
+            "_has_names",
+            "_index_tensordict",
+            "_irecv",
+            "_isend",
+            "_load_memmap",
+            "_lock_parents_weakrefs",
+            "_multithread_apply_flat",
+            "_multithread_rebuild",
+            "_new_impl",
+            "_propagate_unlock",
+            "_recv",
+            "_reduce_get_metadata",
+            "_repeat",
+            "_select",
+            "_send",
+            "_set_device",
+            "_set_names",
+            "_set_non_tensor",
+            "_to_module",
+            "_unbind",
+            "_update_at_fast",
+        ),
+        "older than the one-implementation series; document it when it changes",
+    ),
+    **dict.fromkeys(
+        (
+            "_legacy_permute",
+            "_legacy_squeeze",
+            "_legacy_transpose",
+            "_legacy_unsqueeze",
+            "_legacy_view",
+        ),
+        "used by the legacy lazy views, removed in 0.17",
+    ),
+}
+
+
+def _in_library(cls):
+    return cls.__module__.split(".")[0] == "tensordict"
+
+
+def _library_classes():
+    """The subclasses of TensorDictBase that tensordict defines, and their mixins.
+
+    Returns them by name, and whether every module of :data:`_SUBCLASS_MODULES`
+    imported.
+    """
+    complete = True
+    for module in _SUBCLASS_MODULES:
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            # An optional backend: its classes are skipped.
+            complete = False
+    classes = {}
+    pending = [TensorDictBase]
+    while pending:
+        for subclass in pending.pop().__subclasses__():
+            pending.append(subclass)
+            for cls in subclass.__mro__:
+                if _in_library(cls) and cls not in TensorDictBase.__mro__:
+                    classes[cls.__qualname__] = cls
+    return classes, complete
+
+
+def _operations():
+    """The public names of TensorDictBase and its dunders, without the abstract ones."""
+    names = {name for name in dir(TensorDictBase) if not name.startswith("_")}
+    for cls in TensorDictBase.__mro__:
+        if not _in_library(cls):
+            continue
+        for name, value in vars(cls).items():
+            if (
+                name.startswith("__")
+                and name.endswith("__")
+                and (
+                    # TensorDictBase sets __hash__ to None.
+                    value is None or callable(value) or isinstance(value, _DESCRIPTORS)
+                )
+            ):
+                names.add(name)
+    return names - _NOT_OPERATIONS - TensorDictBase.__abstractmethods__
+
+
+def _overridden_hooks(classes):
+    """The private methods of TensorDictBase that one of ``classes`` overrides.
+
+    Returns them by name, with their definition on TensorDictBase or the first
+    of its mixins, without the abstract storage methods.
+    """
+    overridden = set().union(*(vars(cls) for cls in classes.values()))
+    hooks = {}
+    for cls in TensorDictBase.__mro__:
+        if not _in_library(cls):
+            continue
+        for name, value in vars(cls).items():
+            if (
+                name.startswith("_")
+                and not name.startswith("__")
+                and name in overridden
+                and name not in TensorDictBase.__abstractmethods__
+                and (callable(value) or isinstance(value, _DESCRIPTORS))
+            ):
+                hooks.setdefault(name, value)
+    return hooks
+
+
+def _docstring(value):
+    if isinstance(value, property):
+        value = value.fget
+    elif isinstance(value, (classmethod, staticmethod)):
+        value = value.__func__
+    return (value.__doc__ or "").strip()
+
+
+class TestOneImplementation:
+    """Each public method of TensorDictBase has one implementation.
+
+    A subclass defines the storage protocol and private hooks, and overrides a
+    public method of TensorDictBase only for a reason given in
+    :data:`_ALLOWED_OVERRIDES`. Each private method of TensorDictBase that a
+    subclass overrides states its contract in a docstring. See "The
+    TensorDictBase contract" in ARCHITECTURE.md.
+    """
+
+    def test_public_overrides(self):
+        classes, complete = _library_classes()
+        operations = _operations()
+        new, gone = [], []
+        for name, cls in sorted(classes.items()):
+            overrides = operations.intersection(vars(cls))
+            allowed = _ALLOWED_OVERRIDES.get(name, {})
+            new += [f"{name}.{op}" for op in sorted(overrides - allowed.keys())]
+            gone += [f"{name}.{op}" for op in sorted(allowed.keys() - overrides)]
+        if complete:
+            gone += [
+                f"{name} (no such class)"
+                for name in sorted(_ALLOWED_OVERRIDES.keys() - classes.keys())
+            ]
+        message = []
+        if new:
+            message.append(
+                f"{len(new)} overrides of public TensorDictBase methods are not in "
+                "_ALLOWED_OVERRIDES:\n"
+                + "\n".join(f"  {override}" for override in new)
+                + "\nWrite the part that depends on the storage as a private hook "
+                'that the public method calls (see "The TensorDictBase contract" '
+                "in ARCHITECTURE.md), or add the override to _ALLOWED_OVERRIDES "
+                "with the reason a hook does not do."
+            )
+        if gone:
+            message.append(
+                f"{len(gone)} allowed overrides are gone; remove them from "
+                "_ALLOWED_OVERRIDES:\n"
+                + "\n".join(f"  {override}" for override in gone)
+            )
+        assert not message, "\n".join(message)
+
+    def test_overridden_hooks_are_documented(self):
+        classes, complete = _library_classes()
+        hooks = _overridden_hooks(classes)
+        undocumented = sorted(
+            name
+            for name, value in hooks.items()
+            if not _docstring(value) and name not in _UNDOCUMENTED_HOOKS
+        )
+        stale = sorted(
+            name
+            for name in _UNDOCUMENTED_HOOKS
+            if (name in hooks and _docstring(hooks[name]))
+            or (complete and name not in hooks)
+        )
+        message = []
+        if undocumented:
+            message.append(
+                f"{len(undocumented)} private methods of TensorDictBase that "
+                "subclasses override have no docstring:\n"
+                + "\n".join(f"  {name}" for name in undocumented)
+                + "\nState the contract of each one in its docstring: what the "
+                "public method has done before the call, what the hook must do, "
+                "and what it returns."
+            )
+        if stale:
+            message.append(
+                f"{len(stale)} names of _UNDOCUMENTED_HOOKS have a docstring now, "
+                "or no override; remove them:\n"
+                + "\n".join(f"  {name}" for name in stale)
+            )
+        assert not message, "\n".join(message)
 
 
 if __name__ == "__main__":

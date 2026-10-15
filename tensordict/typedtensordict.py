@@ -366,35 +366,6 @@ def _reads_copies(td: TensorDictBase) -> bool:
     )
 
 
-def _make_delegate_inplace_pointwise(method_name: str) -> Callable:
-    """Delegate an in-place pointwise method to a lazy-stack ``self._source``.
-
-    The stack writes into its members, which writing back the leaves read from
-    ``self`` cannot do when they are nested. Other sources, stacks that hold
-    copies, such as files, and stacks with exclusive keys, which the inherited
-    method leaves unchanged, run the inherited method.
-    """
-    inherited = getattr(TypedTensorDict, method_name)
-
-    def method(self, *args, **kwargs):
-        source = self._source
-        if (
-            not isinstance(source, LazyStackedTensorDict)
-            or source._has_exclusive_keys
-            or _reads_copies(source)
-        ):
-            return inherited(self, *args, **kwargs)
-        result = getattr(source, method_name)(*args, **kwargs)
-        if result is not source:
-            # broadcasting self returns a new tensordict and writes nothing
-            return result
-        return self
-
-    method.__name__ = method_name
-    method.__qualname__ = f"TypedTensorDict.{method_name}"
-    return method
-
-
 def _make_delegate_tuple_wrap(method_name: str) -> Callable:
     """Delegate to ``self._source`` and wrap each element of the returned tuple."""
 
@@ -586,6 +557,20 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             self._source, LazyStackedTensorDict
         )
 
+    # Override: the members of a lazy source keep their batch size, so an
+    # in-place shape op that changes the batch size raises before it writes,
+    # also through a tensordict that holds self.
+    @property
+    def _inplace_batch_size_change(self):
+        source = self._source
+        return source._inplace_batch_size_change and not source._lazy
+
+    # Override: a lazy source writes a gather with an index of the batch shape
+    # into its members; the lazy stacks refuse it.
+    @property
+    def _gather_inplace_warns(self):
+        return isinstance(self._source, LazyStackedTensorDict)
+
     # ------------------------------------------------------------------
     # Internal helper: wrap a TensorDictBase without key validation
     # ------------------------------------------------------------------
@@ -672,6 +657,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # ------------------------------------------------------------------
     # Properties (delegated to _source)
     # ------------------------------------------------------------------
+    # Override: the batch size of the source.
     @property
     def batch_size(self) -> torch.Size:
         return self._source.batch_size
@@ -680,6 +666,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     def batch_size(self, new_size: torch.Size) -> None:
         self._source.batch_size = new_size
 
+    # Override: the names of the source.
     @property
     def names(self):
         return self._source.names
@@ -700,11 +687,13 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._source._change_batch_size(new_size)
 
+    # Override: locks the source; the base method builds the wrong lock graph.
     @_as_context_manager("is_locked")
     def lock_(self, *args, **kwargs):
         self._source.lock_(*args, **kwargs)
         return self
 
+    # Override: unlocks the source; the base method builds the wrong lock graph.
     @_as_context_manager("is_locked")
     def unlock_(self, *args, **kwargs):
         self._source.unlock_(*args, **kwargs)
@@ -751,15 +740,53 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             return None
         return type(self)._wrap_td(result)
 
-    # Override: unwraps a typed ``out`` for the source and wraps the result.
-    def where(self, condition, other, *, out=None, **kwargs):
+    # Override: the source's where, with a typed ``out`` unwrapped and the
+    # result wrapped.
+    def _where(self, condition, other, *, out, pad, update_batch_size):
         unwrapped_out = out._source if isinstance(out, TypedTensorDict) else out
-        result = self._source.where(condition, other, out=unwrapped_out, **kwargs)
-        if result is None:
-            return None
+        result = self._source.where(
+            condition,
+            other,
+            out=unwrapped_out,
+            pad=pad,
+            update_batch_size=update_batch_size,
+        )
         if out is not None:
             return out
         return type(self)._wrap_td(result)
+
+    # Override: the source's in-place methods write into the members of a lazy
+    # stack, which writing back the leaves read from self cannot do when they
+    # are nested. Other sources, stacks that hold copies, such as files, and
+    # stacks with exclusive keys, which the method leaves unchanged, take the
+    # inherited path.
+    def _inplace_on_copies(self, method, *args, **kwargs):
+        source = self._source
+        if (
+            not isinstance(source, LazyStackedTensorDict)
+            or source._has_exclusive_keys
+            or _reads_copies(source)
+        ):
+            return super()._inplace_on_copies(method, *args, **kwargs)
+        # the public name of a hook such as _zero_
+        result = getattr(source, method.__name__.lstrip("_"))(*args, **kwargs)
+        if result is not source:
+            # broadcasting self returns a new tensordict and writes nothing
+            return result
+        return self
+
+    # Override: the source detaches, with its checks.
+    def _detach_(self):
+        self._source.detach_()
+
+    # Override: the source fills, with its checks.
+    def _masked_fill_(self, mask, value):
+        self._source.masked_fill_(mask, value)
+        return self
+
+    # Override: the source moves to shared memory, with its checks.
+    def _share_memory_(self):
+        self._source.share_memory_()
 
     # ------------------------------------------------------------------
     # _apply_nest: unwrap *others, delegate, wrap result
@@ -928,6 +955,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             _warn_missing_required(cls, td, "{}.from_dict()", "pass check=False")
         return cls._wrap_td(td)
 
+    # Override: builds from the source and wraps the result.
     def from_dict_instance(
         self,
         input_dict,
@@ -1033,11 +1061,14 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # ------------------------------------------------------------------
     # del_ and rename_key_: in-place, return self
     # ------------------------------------------------------------------
+    # Override: perf, one call to the source (the base front and a _del hook
+    # take 60-80% longer); the source checks its lock and the key.
     def del_(self, key):
         self._source.del_(key)
         return self
 
-    # Override: the source checks its lock and the keys, and renames.
+    # Override: the source checks its lock and the keys, and renames: a lazy
+    # stack renames in each member, where the base would write a stacked copy.
     def rename_key_(self, old_key, new_key, safe=False):
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
@@ -1055,6 +1086,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         non_blocking=None,
         lock=False,
         nested=True,
+        **kwargs,
     ):
         td = TensorDict._new_unsafe(
             source=source,
@@ -1064,6 +1096,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             non_blocking=non_blocking,
             lock=lock,
             nested=nested,
+            **kwargs,
         )
         return cls._wrap_td(td)
 
@@ -1090,6 +1123,16 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 # ======================================================================
 
 # Direct delegation: return value from _source as-is
+# The public methods in these lists override the base: ``is_contiguous`` (the
+# base walks the leaves, several times slower), ``all`` and ``any`` (the base
+# is 10-15% slower with a dim), ``reshape`` and ``repeat_interleave`` (with
+# inplace=True, the base rewrites the leaves through self, 50% slower),
+# ``popitem`` (one call to the source),
+# ``__setitem__`` (a key write through the base is 15-25% slower: the base
+# front calls _set_tuple, then the source's), ``make_memmap*`` (a memory-mapped
+# source), ``contiguous`` (one call to the source), ``masked_fill`` (the
+# source's copy: the base would clone a file), ``masked_select`` (the typed
+# result).
 _DIRECT_DELEGATES = [
     "_get_str",
     "_get_tuple",
@@ -1098,19 +1141,11 @@ _DIRECT_DELEGATES = [
     "entry_class",
     "_check_is_shared",
     "_check_device",
-    "_storage_is_read_only",
     "is_contiguous",
     "popitem",
     "_cast_reduction",
     "__setitem__",
-    "__ne__",
-    "__xor__",
-    "__or__",
-    "__eq__",
-    "__ge__",
-    "__gt__",
-    "__le__",
-    "__lt__",
+    "_compare",
     "all",
     "any",
     "make_memmap",
@@ -1121,7 +1156,8 @@ _DIRECT_DELEGATES = [
 # Wrap result: delegate to _source, wrap TensorDictBase result
 _WRAP_DELEGATES = [
     "_clone",
-    "expand",
+    "_expand",
+    "_reshape",
     "reshape",
     "_unsqueeze",
     "_squeeze",
@@ -1142,62 +1178,13 @@ _INPLACE_DELEGATES = [
     "_set_tuple",
     "_set_at_str",
     "_set_at_tuple",
-    "share_memory_",
-    "detach_",
-    "masked_fill_",
-]
-
-# In-place pointwise: delegate to a lazy-stack source, return self
-_INPLACE_POINTWISE_DELEGATES = [
-    "abs_",
-    "acos_",
-    "exp_",
-    "neg_",
-    "reciprocal_",
-    "sigmoid_",
-    "sign_",
-    "sin_",
-    "sinh_",
-    "tan_",
-    "tanh_",
-    "trunc_",
-    "lgamma_",
-    "frac_",
-    "expm1_",
-    "log_",
-    "log10_",
-    "log1p_",
-    "log2_",
-    "ceil_",
-    "floor_",
-    "round_",
-    "erf_",
-    "erfc_",
-    "asin_",
-    "atan_",
-    "cos_",
-    "cosh_",
-    "add_",
-    "lerp_",
-    "addcdiv_",
-    "addcmul_",
-    "sub_",
-    "mul_",
-    "maximum_",
-    "minimum_",
-    "clamp_max_",
-    "clamp_min_",
-    "pow_",
-    "div_",
-    "sqrt_",
-    "zero_",
 ]
 
 # Tuple wrap: delegate to _source, wrap each element
 _TUPLE_WRAP_DELEGATES = [
     "_unbind",
-    "chunk",
-    "split",
+    "_chunk",
+    "_split",
 ]
 
 for _name in _DIRECT_DELEGATES:
@@ -1208,9 +1195,6 @@ for _name in _WRAP_DELEGATES:
 
 for _name in _INPLACE_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_inplace(_name))
-
-for _name in _INPLACE_POINTWISE_DELEGATES:
-    setattr(TypedTensorDict, _name, _make_delegate_inplace_pointwise(_name))
 
 for _name in _TUPLE_WRAP_DELEGATES:
     setattr(TypedTensorDict, _name, _make_delegate_tuple_wrap(_name))

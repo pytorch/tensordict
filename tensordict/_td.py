@@ -540,6 +540,7 @@ class TensorDict(TensorDictBase):
             return None
         return result
 
+    # Override: the implementation, which TensorDictBase.from_module calls.
     @classmethod
     def from_module(
         cls,
@@ -750,6 +751,7 @@ class TensorDict(TensorDictBase):
                     return True
         return False
 
+    # Override: dense fast path over the dict of entries.
     def is_empty(self):
 
         for item in self._tensordict.values():
@@ -2832,6 +2834,7 @@ class TensorDict(TensorDictBase):
         )
 
     # some custom methods for efficiency
+    # Override: dense fast path over the dict of entries.
     def items(
         self,
         include_nested: bool = False,
@@ -2903,6 +2906,7 @@ class TensorDict(TensorDictBase):
                 sort=sort,
             )
 
+    # Override: dense fast path over the dict of entries.
     def values(
         self,
         include_nested: bool = False,
