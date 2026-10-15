@@ -1821,9 +1821,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> TensorDictBase:
         # None means this sequence's own flag. A nested sequence receives the
-        # caller's value as a real parameter, not through **kwargs.
+        # caller's value as a real parameter, not through **kwargs, and still
+        # keeps a sample its own prefix wrote.
         if _requires_sample is None:
             _requires_sample = self._requires_sample
+        else:
+            _requires_sample = _requires_sample and self._requires_sample
         if (
             tensordict_out is not None
             or self._select_before_return
@@ -1850,9 +1853,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                         module_requires_sample = (
                             _requires_sample if i == last_index else True
                         )
+                        # A nested sequence also passes **kwargs to its modules.
+                        module_kwargs = (
+                            kwargs
+                            if isinstance(m, ProbabilisticTensorDictSequential)
+                            else {}
+                        )
                         tensordict_exec = m(
                             tensordict_exec,
                             _requires_sample=module_requires_sample,
+                            **module_kwargs,
                         )
                     else:
                         tensordict_exec = m(tensordict_exec, **kwargs)
@@ -1864,10 +1874,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
             last_module = self._last_module
-            if isinstance(
-                last_module,
-                (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
-            ):
+            if isinstance(last_module, ProbabilisticTensorDictSequential):
+                tensordict_exec = last_module(
+                    tensordict_exec, _requires_sample=_requires_sample, **kwargs
+                )
+            elif isinstance(last_module, ProbabilisticTensorDictModule):
                 tensordict_exec = last_module(
                     tensordict_exec, _requires_sample=_requires_sample
                 )
