@@ -5698,6 +5698,16 @@ class TestCastFilter:
             assert mesh64.cells.dtype == torch.long
         assert mesh.points.dtype == torch.float32
 
+    def test_cast_filter_attrs(self):
+        # The class default does not stop to(attrs), whose attrs give each
+        # leaf its dtype
+        mesh = self._mesh(self.Mesh).exclude("name")
+        attrs = mesh.double(cast_filter=None).attrs(fields=("device", "dtype"))
+        out = mesh.to(attrs)
+        assert type(out) is self.Mesh
+        assert out.points.dtype == out.cells.dtype == torch.float64
+        assert out.point_data["zone"].dtype == torch.float64
+
     def test_cast_filter_inheritance(self):
         class Sub(self.Mesh):
             pass

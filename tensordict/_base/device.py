@@ -681,7 +681,10 @@ class _DeviceOps:
                 example ``("obs",)`` or ``("next", "done")``. Leaves for which
                 it returns ``False`` keep their dtype; a device or memory-format
                 change still applies to them. It is not called on non-tensor
-                data, nor when no dtype is given. Helpers such as
+                data, nor when no dtype is given or when ``to`` gets an attrs
+                tensordict, whose leaves give each leaf its dtype. An
+                :class:`~tensordict.UnbatchedTensor` leaf is passed as is, not
+                as a :class:`torch.Tensor`. Helpers such as
                 :func:`~tensordict.is_inexact` can be passed directly. Defaults
                 to the ``cast_filter`` of a tensorclass that declares one, and to
                 casting every leaf otherwise; pass ``None`` to cast every leaf.
@@ -793,6 +796,8 @@ class _DeviceOps:
                 raise TypeError(
                     "to(attrs_td) does not accept additional positional arguments."
                 )
+            # The attrs give each leaf its dtype: cast_filter does not apply
+            kwargs.pop("cast_filter", None)
             return self._to_per_leaf(attrs_td, **kwargs)
 
         non_blocking = kwargs.pop("non_blocking", None)

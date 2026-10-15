@@ -9387,6 +9387,15 @@ class TestGeneric:
         assert out["mask"].dtype == torch.bool
         assert out["point_data", "zone"].dtype == torch.int32
 
+    @pytest.mark.parametrize("cast_filter", [None, tensordict.is_inexact])
+    def test_to_cast_filter_attrs(self, cast_filter):
+        # The attrs give each leaf its dtype: cast_filter does not apply
+        td = self._cast_filter_td().exclude("info")
+        attrs = td.double().attrs(fields=("device", "dtype"))
+        out = td.to(attrs, cast_filter=cast_filter)
+        assert (out == td.to(attrs)).all()
+        assert out["cells"].dtype == out["mask"].dtype == torch.float64
+
     def test_to_cast_filter_device_and_memory_format(self):
         # The device and memory format apply to every leaf, the dtype to the
         # selected ones

@@ -1005,7 +1005,9 @@ def tensorclass(
             a dtype cast applies to, ``key`` being the nested key as a tuple of
             str. A ``cast_filter`` passed to the call overrides it, and
             ``cast_filter=None`` there casts every leaf. Subclasses inherit it.
-            Defaults to ``None``: every leaf is cast.
+            It applies to calls on the tensorclass itself, not when the
+            tensorclass is a value of another tensordict or tensorclass that
+            is cast. Defaults to ``None``: every leaf is cast.
 
     Returns:
         the tensorclass, or a decorator if the flags are given without a
@@ -5652,7 +5654,9 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     shorthands (``float()``, ``bfloat16()``, ...): a predicate
     ``fn(key, value) -> bool`` that selects the tensor leaves a dtype cast
     applies to. A ``cast_filter`` passed to the call overrides it, and
-    ``cast_filter=None`` there casts every leaf. Subclasses inherit it.
+    ``cast_filter=None`` there casts every leaf. Subclasses inherit it. It
+    applies to calls on the tensorclass itself, not when the tensorclass is a
+    value of another tensordict or tensorclass that is cast.
 
         >>> from tensordict import is_inexact
         >>> class Mesh(TensorClass, cast_filter=is_inexact):
