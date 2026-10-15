@@ -321,6 +321,8 @@ def _pad_preflight(
             nested_key = prefix + (key,)
             if (
                 resizes
+                # a sub-tensordict holds sub-tensordicts: it raises on its own
+                and not tensordict._lazy
                 and tensor._lazy
                 and not isinstance(tensor, LazyStackedTensorDict)
             ):
