@@ -4901,6 +4901,32 @@ class TestTensorDictParams:
         torch.testing.assert_close(params["a"].data, dense["a"])
         assert isinstance(params["a"], nn.Parameter)
 
+    _NON_TENSOR_AT_OPS = {
+        "set_at_": lambda td, src: td.set_at_("s", "new", 1),
+        "set_at_slice": lambda td, src: td.set_at_("s", "new", slice(0, 2)),
+        "set_at_stack": lambda td, src: td.set_at_("ns", "new", 1),
+        "update_at_": lambda td, src: td.update_at_(src[1], 1),
+    }
+
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("op", list(_NON_TENSOR_AT_OPS))
+    def test_inplace_at_writes_non_tensor(self, op, lock):
+        # #2740: set_at_ and update_at_ write the non-tensor leaves at the
+        # index, as on the wrapped tensordict
+        fn = self._NON_TENSOR_AT_OPS[op]
+        params = self._params_non_tensor(lock)
+        with torch.no_grad():
+            assert fn(params, self._non_tensor_source()) is params
+        dense = self._params_non_tensor(lock)._param_td.clone()
+        fn(dense, self._non_tensor_source())
+        old = self._params_non_tensor(lock)
+        written = [dense.get(key).tolist() for key in ("s", "ns")]
+        assert written != [old.get(key).tolist() for key in ("s", "ns")]
+        assert [params.get(key).tolist() for key in ("s", "ns")] == written
+        torch.testing.assert_close(params["a"].data, dense["a"])
+        assert isinstance(params["a"], nn.Parameter)
+        assert params._param_td.is_locked is old._param_td.is_locked
+
     def test_data_update_non_tensor(self):
         # .data builds new non-tensor leaves, so plain td.data.update_() does
         # not write them
