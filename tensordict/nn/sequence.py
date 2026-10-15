@@ -63,7 +63,10 @@ class TensorDictSequential(TensorDictModule):
             are present.
             Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is :obj:`True` AND if the
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
-            looking for those that have the required keys, if any. Defaults to False.
+            looking for those that have the required keys, if any. The result is a new lazy stack along the
+            same dim, where each executed member is what the module returned and the others are left as they
+            are. If every executed module returns the tensordict it received, the original stack is returned.
+            Defaults to False.
         selected_out_keys (iterable of NestedKeys, optional): the list of out-keys to select. If not provided, all
             ``out_keys`` will be written.
         inplace (bool or str, optional): where the sequence writes its ``out_keys``
@@ -595,11 +598,26 @@ class TensorDictSequential(TensorDictModule):
         ):
             tensordict = module(tensordict, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
+            new_tds = []
+            replaced = False
             for sub_td in tensordict.tensordicts:
                 if all(
                     key in sub_td.keys(include_nested=True) for key in module.in_keys
                 ):
-                    module(sub_td, **kwargs)
+                    out = module(sub_td, **kwargs)
+                    if out is not sub_td:
+                        replaced = True
+                    new_tds.append(out)
+                else:
+                    new_tds.append(sub_td)
+            # Same-object returns are in-place writes into this stack.
+            # Allocate a new stack only when a member was replaced.
+            if replaced:
+                tensordict = type(tensordict)(
+                    *new_tds,
+                    stack_dim=tensordict.stack_dim,
+                    stack_dim_name=tensordict._td_dim_name,
+                )
         return tensordict
 
     def _module_iter(self):

@@ -1233,7 +1233,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the stack
             does not have the required keys, then TensorDictSequential will scan through
             the sub-tensordicts looking for those that have the required keys, if any.
-            Defaults to ``False``.
+            The result is a new lazy stack along the same dim, where each executed member
+            is what the module returned and the others are left as they are. If every
+            executed module returns the tensordict it received, the original stack is
+            returned. Defaults to ``False``.
         return_composite (bool, optional): If `True` and multiple
             :class:`~tensordict.nn.ProbabilisticTensorDictModule` or
             :class:`~tensordict.nn.ProbabilisticTensorDictSequential` instances are found,
