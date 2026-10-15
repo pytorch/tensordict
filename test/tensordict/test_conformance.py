@@ -516,7 +516,6 @@ _NOT_OPERATIONS = {
 # the reason (see TestOneImplementation). Remove an entry with its override.
 _DENSE_FAST_PATH = "dense fast path over the dict of entries"
 _DENSE_MEMMAP = "only dense storage can hold the new memory-mapped tensor"
-_SKELETON = "a TensorDict skeleton, built without reading the data"
 _FLATTEN_COPY = "one to_tensordict() read, without the cache of a locked tensordict"
 _TO_LAZY_SOURCE = "forwards to the source, so a lazy stack writes into its members"
 _TD_PARAMS = "an nn.Module that forwards to the tensordict it wraps"
@@ -543,11 +542,9 @@ _ALLOWED_OVERRIDES = {
     "LazyStackedTensorDict": {
         "__getitem__": "indexes the members, so the result shares their storage",
         "__getitems__": "indexes the members, so the result shares their storage",
-        "__setitem__": "writes the indexed values into the members",
         "__setstate__": "reads the pickles of TensorDict 0.14 and earlier",
         "__torch_function__": "dispatches the torch functions that lazy stacks implement",
         "device": "the members' common device",
-        "empty": "a lazy stack of the members' empty tensordicts",
         "from_list": "stacks one tensordict per element (#1955)",
         "get_item_shape": "-1 for the dims where the shapes of the members differ",
         "is_locked": "locked when all the members are",
@@ -577,33 +574,25 @@ _ALLOWED_OVERRIDES = {
         "__getitem__": "an index gives a writable view of the file",
         "__getitems__": "an index gives a writable view of the file",
         "__getstate__": "replaces the open file with what its backend can pickle",
-        "__setitem__": "writes the indexed values into the file",
         "__setstate__": "reopens the file, and reads the pickles of TensorDict 0.14",
         "batch_size": "checks the new batch size against the file",
-        "empty": _SKELETON,
         "flatten_keys": _FLATTEN_COPY,
         "unflatten_keys": _FLATTEN_COPY,
     },
     "TensorDictStore": {
-        "__setitem__": "writes the indexed values in batched server calls",
         "device": "the device can be set, and is persisted on the server",
-        "empty": _SKELETON,
         "flatten_keys": _FLATTEN_COPY,
         "from_schema": "takes the connection arguments of the store",
         "unflatten_keys": _FLATTEN_COPY,
     },
     "LazyStackedTensorDictStore": {
         "__getitem__": "an integer on the stack dim gives a view that writes through",
-        "__setitem__": "writes the indexed values in batched server calls",
         "device": "the device can be set; reads move the entries to it",
-        "empty": _SKELETON,
         "flatten_keys": _FLATTEN_COPY,
         "unflatten_keys": _FLATTEN_COPY,
     },
     "_StoreStackElementView": {
-        "__setitem__": "writes the indexed values into the parent store",
         "device": "settable, but leaf reads ignore it (FutureWarning until 0.17)",
-        "empty": _SKELETON,
         "flatten_keys": "works on an in-memory copy",
         "unflatten_keys": "works on an in-memory copy",
     },
