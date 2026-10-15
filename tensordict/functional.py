@@ -139,11 +139,7 @@ def pad(
         raise RuntimeError("pad_size must have an even number of dimensions")
 
     if safe:
-        _pad_preflight(tensordict, pad_size)
-        if inplace and any(
-            pad_size[i] + pad_size[i + 1] for i in range(0, len(pad_size), 2)
-        ):
-            _pad_inplace_preflight(tensordict)
+        _pad_preflight(tensordict, pad_size, inplace=inplace)
 
     if is_non_tensor(tensordict):
         # NonTensorStack is a LazyStackedTensorDict subclass: dispatch before
@@ -242,7 +238,12 @@ def pad(
     return out
 
 
-def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
+def _pad_preflight(
+    tensordict: TensorDictBase,
+    pad_size: Sequence[int],
+    inplace: bool = False,
+    prefix: tuple = (),
+) -> None:
     """Validate that ``pad(tensordict, pad_size, ...)`` would succeed for every leaf without mutating anything.
 
     Walks the tensordict recursively (including ``LazyStackedTensorDict``
@@ -251,7 +252,28 @@ def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
     requested ``pad_size`` and that the resulting size on every padded dim is
     non-negative. Catches the realistic user-error class of failures before
     ``inplace=True`` has rebound any leaf.
+
+    With ``inplace=True``, a tensordict whose batch size would change but
+    cannot change in place (a file, a sub-tensordict, a ``TypedTensorDict``
+    over a lazy stack) raises too, at the top or nested: padding it, or a
+    tensordict that holds it, would raise or break it after the earlier
+    leaves were padded. A sub-tensordict at the top raises its own error on
+    the first write, and a lazy stack pads in place on its own.
     """
+    resizes = inplace and any(
+        pad_size[i] + pad_size[i + 1] for i in range(0, len(pad_size), 2)
+    )
+    if resizes and not tensordict._inplace_batch_size_change:
+        raise NotImplementedError(
+            "pad(inplace=True) changes the batch size, which a "
+            f"{type(tensordict).__name__}"
+            + (
+                f" at key {prefix[0] if len(prefix) == 1 else prefix!r}"
+                if prefix
+                else ""
+            )
+            + " cannot do in place. Use inplace=False instead."
+        )
     if is_non_tensor(tensordict):
         shape = tensordict.batch_size
         if not shape:
@@ -282,7 +304,7 @@ def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
         constituent_pad_size: list[int] = [p for pair in non_stack_pairs for p in pair]
         if constituent_pad_size and any(p != 0 for p in constituent_pad_size):
             for td_i in tensordict.tensordicts:
-                _pad_preflight(td_i, constituent_pad_size)
+                _pad_preflight(td_i, constituent_pad_size, inplace=inplace)
         return
 
     reverse_pad = list(pad_size[::-1])
@@ -294,7 +316,21 @@ def _pad_preflight(tensordict: TensorDictBase, pad_size: Sequence[int]) -> None:
         if tensor is None or _is_unbatched(tensor):
             continue
         if _is_tensor_collection(type(tensor)):
-            _pad_preflight(tensor, pad_size)
+            if is_tensorclass(tensor) and not is_non_tensor(tensor):
+                tensor = tensor._tensordict
+            nested_key = prefix + (key,)
+            if (
+                resizes
+                and tensor._lazy
+                and not isinstance(tensor, LazyStackedTensorDict)
+            ):
+                raise NotImplementedError(
+                    f"pad(inplace=True) changes the batch size, which a "
+                    f"{type(tensor).__name__} at key "
+                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r} "
+                    "cannot do in place. Use inplace=False instead."
+                )
+            _pad_preflight(tensor, pad_size, inplace=inplace, prefix=nested_key)
             continue
         shape = _shape(tensor)
         if len(pad_size) > 2 * len(shape):
@@ -434,43 +470,6 @@ def _with_batch_size(
         batch_size=batch_size,
         call_on_nested=True,
     )
-
-
-def _pad_inplace_preflight(tensordict: TensorDictBase, prefix: tuple = ()) -> None:
-    """Raise if ``pad(tensordict, ..., inplace=True)`` would change the batch size of a tensordict that cannot change it.
-
-    A file, a sub-tensordict, a legacy lazy view and a ``TypedTensorDict``
-    over a lazy stack keep their batch size: padding them in place, or a
-    tensordict that holds them, would raise or break them after the earlier
-    leaves were padded. A lazy tensordict is not walked: a
-    ``LazyStackedTensorDict`` pads in place on its own.
-    """
-    if not prefix and not tensordict._inplace_batch_size_change:
-        raise NotImplementedError(
-            f"pad(inplace=True) changes the batch size, which a "
-            f"{type(tensordict).__name__} cannot do in place. Use inplace=False "
-            "instead."
-        )
-    if tensordict._lazy:
-        # a lazy stack pads in place on its own, and a sub-tensordict refuses
-        # its first write
-        return
-    for key, value in tensordict.items():
-        if not _is_tensor_collection(type(value)) or is_non_tensor(value):
-            continue
-        if is_tensorclass(value):
-            value = value._tensordict
-        nested_key = prefix + (key,)
-        if not value._inplace_batch_size_change or (
-            value._lazy and not isinstance(value, LazyStackedTensorDict)
-        ):
-            raise NotImplementedError(
-                f"pad(inplace=True) changes the batch size, which a "
-                f"{type(value).__name__} at key "
-                f"{nested_key[0] if len(nested_key) == 1 else nested_key!r} "
-                "cannot do in place. Use inplace=False instead."
-            )
-        _pad_inplace_preflight(value, nested_key)
 
 
 def _pad_lazy_stack_inplace(
