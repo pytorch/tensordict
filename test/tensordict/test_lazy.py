@@ -5606,6 +5606,122 @@ class TestLazyStackedTensorDict:
                 td.set_at_("a", "s1", index)
             assert td.get("a").tolist() == expected.tolist()
 
+    def test_lazy_nested_set_inplace_missing_leaf_writes_nothing(self):
+        # Member 1 has "n" but not "b". set_ must KeyError before copy_
+        # into member 0, with the same message as that member.
+        leaf = torch.ones(3)
+        before = leaf.clone()
+        ptr = leaf.data_ptr()
+        member0 = TensorDict({"n": {"b": leaf}}, [])
+        member1 = TensorDict({"n": {}}, [])
+        stack = lazy_stack([member0, member1], 0)
+        value = torch.zeros(2, 3)
+        direct = TensorDict({"n": {}}, [])
+        with pytest.raises(KeyError) as direct_exc:
+            direct.set_(("n", "b"), value.unbind(0)[1])
+        with pytest.raises(KeyError) as exc:
+            stack.set_(("n", "b"), value)
+        assert str(exc.value) == str(direct_exc.value)
+        assert leaf.data_ptr() == ptr
+        assert torch.equal(leaf, before)
+        assert "b" not in member1["n"].keys()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_lazy_nested_set_inplace_shape_mismatch_writes_nothing(self, stack_dim):
+        # Feature dims differ, so the slice along stack_dim does not copy_
+        # into member 1. Member 0 must keep its storage and its values.
+        leaf0 = torch.ones(4, 3)
+        leaf1 = torch.ones(4, 5)
+        before0 = leaf0.clone()
+        before1 = leaf1.clone()
+        ptr0, ptr1 = leaf0.data_ptr(), leaf1.data_ptr()
+        member0 = TensorDict({"n": {"b": leaf0}}, [4])
+        member1 = TensorDict({"n": {"b": leaf1}}, [4])
+        stack = lazy_stack([member0, member1], stack_dim)
+        value = torch.zeros(2, 4, 3) if stack_dim == 0 else torch.zeros(4, 2, 3)
+        direct = TensorDict({"n": {"b": torch.ones(4, 5)}}, [4])
+        with pytest.raises(ValueError) as direct_exc:
+            direct.set_(("n", "b"), value.unbind(stack_dim)[1])
+        with pytest.raises(ValueError) as exc:
+            stack.set_(("n", "b"), value)
+        assert str(exc.value) == str(direct_exc.value)
+        assert str(exc.value.__cause__) == str(direct_exc.value.__cause__)
+        assert leaf0.data_ptr() == ptr0
+        assert leaf1.data_ptr() == ptr1
+        assert torch.equal(leaf0, before0)
+        assert torch.equal(leaf1, before1)
+
+    def test_lazy_set_inplace_missing_key_writes_nothing(self):
+        # A missing top-level key is rejected before any member is written.
+        leaf0 = torch.ones(3)
+        leaf1 = torch.ones(3) * 2
+        before0, before1 = leaf0.clone(), leaf1.clone()
+        ptr0, ptr1 = leaf0.data_ptr(), leaf1.data_ptr()
+        member0 = TensorDict({"a": leaf0}, [])
+        member1 = TensorDict({"a": leaf1}, [])
+        stack = lazy_stack([member0, member1], 0)
+        with pytest.raises(KeyError):
+            stack.set_("missing", torch.zeros(2, 3))
+        assert leaf0.data_ptr() == ptr0
+        assert leaf1.data_ptr() == ptr1
+        assert torch.equal(leaf0, before0)
+        assert torch.equal(leaf1, before1)
+        assert "missing" not in member0.keys()
+        assert "missing" not in member1.keys()
+
+    def test_lazy_nested_set_inplace_creates_missing_intermediate(self):
+        # Member 1 has no "n". set_ creates that nested tensordict.
+        leaf = torch.ones(3)
+        ptr = leaf.data_ptr()
+        member0 = TensorDict({"n": {"b": leaf}}, [])
+        member1 = TensorDict({"x": torch.zeros(2)}, [])
+        stack = lazy_stack([member0, member1], 0)
+        value = torch.full((2, 3), 2.0)
+        assert stack.set_(("n", "b"), value) is stack
+        assert leaf.data_ptr() == ptr
+        assert torch.equal(leaf, value[0])
+        assert "n" in member1.keys()
+        assert torch.equal(member1.get(("n", "b")), value[1])
+        assert torch.equal(member1.get("x"), torch.zeros(2))
+
+    def test_lazy_nested_set_replaces_leaf_when_shapes_differ(self):
+        # set(), unlike set_, replaces a leaf whose shape does not match.
+        leaf0 = torch.ones(4, 3)
+        leaf1 = torch.ones(4, 5)
+        before0, before1 = leaf0.clone(), leaf1.clone()
+        ptr0, ptr1 = leaf0.data_ptr(), leaf1.data_ptr()
+        member0 = TensorDict({"n": {"b": leaf0}}, [4])
+        member1 = TensorDict({"n": {"b": leaf1}}, [4])
+        stack = lazy_stack([member0, member1], 0)
+        value = torch.arange(24, dtype=torch.float32).reshape(2, 4, 3)
+        stack.set(("n", "b"), value)
+        assert member0.get(("n", "b")).data_ptr() != ptr0
+        assert member1.get(("n", "b")).data_ptr() != ptr1
+        assert torch.equal(member0.get(("n", "b")), value[0])
+        assert torch.equal(member1.get(("n", "b")), value[1])
+        assert torch.equal(leaf0, before0)
+        assert torch.equal(leaf1, before1)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_lazy_nested_set_inplace_matching_shapes_keeps_storage(self, stack_dim):
+        leaf0 = torch.ones(4, 3)
+        leaf1 = torch.full((4, 3), 3.0)
+        ptr0, ptr1 = leaf0.data_ptr(), leaf1.data_ptr()
+        member0 = TensorDict({"n": {"b": leaf0}}, [4])
+        member1 = TensorDict({"n": {"b": leaf1}}, [4])
+        stack = lazy_stack([member0, member1], stack_dim)
+        if stack_dim == 0:
+            value = torch.arange(24, dtype=torch.float32).reshape(2, 4, 3)
+            expected0, expected1 = value[0], value[1]
+        else:
+            value = torch.arange(24, dtype=torch.float32).reshape(4, 2, 3)
+            expected0, expected1 = value[:, 0], value[:, 1]
+        assert stack.set_(("n", "b"), value) is stack
+        assert leaf0.data_ptr() == ptr0
+        assert leaf1.data_ptr() == ptr1
+        assert torch.equal(leaf0, expected0)
+        assert torch.equal(leaf1, expected1)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
