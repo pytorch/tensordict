@@ -2311,6 +2311,44 @@ class TestTensorClass:
         assert a.shape == (2, 3)
         assert a[1, -1] == 0
 
+    def test_get_dense_as_list_warns(self):
+        # over a dense tensordict, as_list and as_nested_tensor are ignored,
+        # and warn as TensorDict.get does (#2551)
+        X = torch.arange(6.0).view(2, 3)
+        obj = MyData2(X=X, y=torch.zeros(2), z=None, batch_size=[2])
+        for name in ("as_list", "as_nested_tensor"):
+            with pytest.warns(
+                FutureWarning,
+                match=rf"^MyData2\.get\(key, {name}=True\) returns the stored "
+                "tensor today. Starting with TensorDict 0.17",
+            ) as record:
+                out = obj.get("X", **{name: True})
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert out is X
+        # a nested key warns once, from the tensordict that ignores it
+        outer = TensorDict(data=obj, batch_size=[2])
+        holder = MyData2(X=X, y=obj, z=outer, batch_size=[2])
+        for key, cls in (
+            (("y", "X"), "MyData2"),
+            (("z", "data", "X"), "TensorDict"),
+        ):
+            with pytest.warns(FutureWarning, match=rf"^{cls}\.get") as record:
+                assert holder.get(key, as_list=True) is X
+            assert len(record) == 1
+        lazy = MyData2.from_tensordict(
+            LazyStackedTensorDict(
+                TensorDict(X=torch.ones(3)), TensorDict(X=torch.ones(3))
+            )
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert obj.get("X") is X
+            assert obj.get("X", as_padded_tensor=True) is X
+            assert obj.get("missing", 0, as_list=True) == 0
+            assert isinstance(lazy.get("X", as_list=True), list)
+            assert lazy.get("X", as_nested_tensor=True).is_nested
+
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_getattr(self, any_to_td):
         @tensorclass

@@ -67,6 +67,7 @@ from tensordict.base import (
     _TENSORDICTBASE_MIXINS,
     _UNSET,
     _update_at_aliases,
+    _warn_get_kwargs,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -4671,7 +4672,18 @@ def _get(self, key: NestedKey, *args, **kwargs):
                 return entry.get(key[1:], **kwargs)
             return entry.get(key[1:], default=default, **kwargs)
         if kwargs:
-            return _getattr(self, key[0], **kwargs)
+            result = _getattr(self, key[0], **kwargs)
+            if (
+                (
+                    ("as_list" in kwargs and kwargs["as_list"])
+                    or ("as_nested_tensor" in kwargs and kwargs["as_nested_tensor"])
+                )
+                and self._tensordict._get_ignores_kwargs
+                and not is_compiling()
+            ):
+                # warn as a dense tensordict's get does (#2551)
+                _warn_get_kwargs(self, kwargs, result, default)
+            return result
         return getattr(self, key[0])
     except (AttributeError, KeyError):
         if default is NO_DEFAULT:
