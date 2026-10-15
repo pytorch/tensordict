@@ -4420,6 +4420,24 @@ class LazyStackedTensorDict(TensorDictBase):
             td.masked_fill_(_mask, value)
         return self
 
+    # Override: each member returns its own filled copy, so that a member
+    # whose clone cannot be filled in place (TensorDictParams) works.
+    def _masked_fill(self, mask: Tensor, value: float | bool) -> Self:
+        if not self.tensordicts:
+            return super()._masked_fill(mask, value)
+        if mask.ndim < self.batch_dims:
+            mask = expand_right(mask, self.batch_size)
+        return self._new_lazy_unsafe(
+            *[
+                td.masked_fill(_mask, value)
+                for _mask, td in _zip_strict(
+                    mask.unbind(dim=self.stack_dim), self.tensordicts
+                )
+            ],
+            stack_dim=self.stack_dim,
+            stack_dim_name=self._td_dim_name,
+        )
+
     @_lock_blocked
     def insert(self, index: int, tensordict: T) -> None:
         """Insert a TensorDict into the stack at the specified index.

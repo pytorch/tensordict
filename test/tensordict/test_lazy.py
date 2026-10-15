@@ -40,6 +40,7 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     TensorDictBase,
 )
+from tensordict.nn import TensorDictParams
 from tensordict.utils import (
     assert_allclose_td,
     logger as tdlogger,
@@ -798,6 +799,33 @@ class TestLazyStackedTensorDict:
         ]
         assert stack.masked_fill_(mask, 1.0) is stack
         torch.testing.assert_close(stack.to_tensordict(), td.masked_fill_(mask, 1.0))
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("index", [(), slice(1, None)])
+    def test_masked_fill_params(self, stack_dim, index):
+        # Out-of-place masked_fill leaves the parameters untouched, as on a
+        # single TensorDictParams (#2779)
+        params = [
+            TensorDictParams(
+                TensorDict(a=torch.ones(3, 2), n={"b": torch.ones(3)}, batch_size=[3])
+            )
+            for _ in range(3)
+        ]
+        stack = lazy_stack(params, stack_dim)[index]
+        mask = torch.arange(stack.numel()).view(stack.shape) % 2 == 0
+        result = stack.masked_fill(mask, 0.0)
+        assert isinstance(result, LazyStackedTensorDict)
+        for p in params:
+            assert all((value == 1).all() for value in p.values(True, True))
+        expected = lazy_stack(
+            [
+                td.masked_fill(m, 0.0)
+                for td, m in zip(stack.tensordicts, mask.unbind(stack_dim))
+            ],
+            stack_dim,
+        )
+        assert_allclose_td(result, expected)
+        assert result["a"].requires_grad
 
     @pytest.mark.parametrize("ragged", [False, True])
     def test_arithmetic_ops(self, ragged):

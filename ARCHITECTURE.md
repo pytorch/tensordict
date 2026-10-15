@@ -220,6 +220,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_reduction_parts()` | `all()`, `any()` without a dim | return the parts to reduce: the values, or the members of a lazy stack | lazy |
 | `_reduced_names(dim)` | `all(dim)`, `any(dim)` | return the names of the result | lazy |
 | `_masked_fill_(mask, value)` | `masked_fill_` | fill in place where `mask` is True | sub, lazy, file, lazy store, params, typed |
+| `_masked_fill(mask, value)` | `masked_fill`, without `_masking_on_dense_copy` | return a filled copy; the default fills a clone in place | lazy |
 | `_fill_(key, value)` | `fill_`, and `zero_` with `_fills_without_reading` | fill the entry at the tuple `key`; raise `KeyError` if it is missing | file |
 | `_detach_()` | `detach_`, without `_storage_holds_no_gradients` | detach the leaves in place | sub (raises), lazy, params, typed |
 | `_apply_(fn, *others, **kwargs)` | `apply_` | write the results into the leaves; the default calls `apply(..., inplace=True)` | lazy |
