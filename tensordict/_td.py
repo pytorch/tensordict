@@ -1327,7 +1327,11 @@ class TensorDict(TensorDictBase):
                         or (device is not None and value.device != device)
                     ):
                         kind = 1
-                elif type(value) is TensorDict or type(value) is dict:
+                elif (
+                    type(value) is TensorDict or type(value) is dict
+                ) and value is not self:
+                    # self goes to the general path, which raises before it
+                    # writes anything
                     child = entries.get(key)
                     if type(child) is TensorDict:
                         kind = 2

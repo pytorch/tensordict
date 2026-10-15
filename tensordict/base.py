@@ -1765,6 +1765,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # from the stored data, as in the lazy stores. update() then writes the
     # leaves it merges into the sub-tensordict back (see _update_write_back).
     _nested_reads_return_copies = False
+    # Whether update({key: self}) writes a copy of the data, as the stores do:
+    # they write what the source holds on the server, not the Python object,
+    # so no cycle forms and update() does not raise (#2741).
+    _update_stores_copy_of_self = False
     # Whether the in-place shape methods (reshape, flatten, repeat, ... with
     # inplace=True) can change the batch size after they rewrite the leaves.
     # If not, _inplace_rebind_leaves raises before it writes anything.
@@ -4578,7 +4582,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
-            elif value is self and (keys_to_update is None or target is None):
+            elif (
+                value is self
+                and not self._update_stores_copy_of_self
+                and (keys_to_update is None or target is None)
+            ):
                 # with keys_to_update, a merge of self into a sub-tensordict
                 # can leave out the entry that holds the sub-tensordict
                 raise ValueError(_SELF_NESTING_ERROR.format(input_key))

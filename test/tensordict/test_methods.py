@@ -1009,8 +1009,12 @@ class TestTensorDicts(TestTensorDictsBase):
         # repr or clone raised a RecursionError
         td = getattr(self, td_name)(device)
         td.unlock_()
+        td["nested"] = TensorDict(
+            z=torch.zeros(td.batch_size, device=device), batch_size=td.batch_size
+        )
         keys = set(td.keys(True))
-        for source in ({"me": td}, {("nested", "me"): td}):
+        # an existing sub-tensordict is left unchanged too
+        for source in ({"me": td}, {("nested", "me"): td}, {"nested": td}):
             with pytest.raises(
                 ValueError, match=re.escape("Cannot set a tensordict inside itself")
             ):

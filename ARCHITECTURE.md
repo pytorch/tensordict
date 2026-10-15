@@ -257,6 +257,7 @@ to compare it with the shapes in their metadata.
 | `_lazy` | the base treats the class as a lazy view: for example, a new batch size and `masked_select(inplace=True)` raise | lazy, sub, the legacy lazy views |
 | `_reads_return_copies` | the in-place methods run on copies of the leaves and write them back (see below) | file, store, lazy store, element; a property on sub, lazy and typed |
 | `_nested_reads_return_copies` | `update` and `_fill_` write the leaves of a nested tensordict back under their full keys | lazy store, element |
+| `_update_stores_copy_of_self` | `update({key: self})` writes a copy of the data instead of raising that a tensordict cannot contain itself | store, lazy store, element |
 | `_masking_on_dense_copy` | `where`, `masked_fill`, and `to` with a new device, dtype or memory format, work on a `to_tensordict()` copy | sub, file, store, lazy store, element, the legacy lazy views |
 | `_masked_select_on_dense_copy` | `masked_select` masks a `to_tensordict()` copy | store, lazy store, element |
 | `_masked_select_inplace_unsupported` | `masked_select(inplace=True)` raises, as on a lazy stack | lazy store, element |
