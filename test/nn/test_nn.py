@@ -1831,6 +1831,124 @@ class TestTDSequence:
         out2 = seq2(td2)
         assert out2["result"] == 6
 
+    def _partial_tolerant_add_b(self, calls, *, inplace):
+        class AddB(TensorDictModuleBase):
+            in_keys = ["a"]
+            out_keys = ["b"]
+
+            def forward(self, tensordict):
+                if inplace:
+                    out = tensordict
+                    out.set("b", tensordict.get("a") + 1)
+                else:
+                    out = tensordict.copy()
+                    out.set("b", tensordict.get("a") + 1)
+                calls.append((tensordict, out))
+                return out
+
+        return AddB()
+
+    def _partial_tolerant_stack(self, keys, stack_dim):
+        if stack_dim == 0:
+            batch_size = [4]
+            base = torch.arange(4, dtype=torch.float32)
+        else:
+            batch_size = [3]
+            base = torch.arange(6, dtype=torch.float32).reshape(3, 2)
+        members = [
+            TensorDict({key: base + i}, batch_size=batch_size)
+            for i, key in enumerate(keys)
+        ]
+        return members, TensorDict.lazy_stack(members, stack_dim, stack_dim_name="time")
+
+    def test_partial_tolerant_plain_keeps_output(self):
+        # A plain tensordict that has every in_key keeps the module return.
+        calls = []
+        seq = TensorDictSequential(
+            self._partial_tolerant_add_b(calls, inplace=False),
+            partial_tolerant=True,
+        )
+        td = TensorDict({"a": torch.zeros(4)}, [4])
+        result = seq(td)
+        assert len(calls) == 1
+        seen_in, seen_out = calls[0]
+        assert seen_in is td
+        assert result is seen_out
+        assert "b" in result.keys()
+        assert "b" not in td.keys()
+        torch.testing.assert_close(result["b"], td["a"] + 1)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_partial_tolerant_lazy_shared_keys_keeps_output(self, stack_dim):
+        # Every member has the in_key, so the stack is one module call.
+        calls = []
+        seq = TensorDictSequential(
+            self._partial_tolerant_add_b(calls, inplace=False),
+            partial_tolerant=True,
+        )
+        (td0, td1), stacked = self._partial_tolerant_stack(("a", "a"), stack_dim)
+        result = seq(stacked)
+        assert len(calls) == 1
+        seen_in, seen_out = calls[0]
+        assert seen_in is stacked
+        assert result is seen_out
+        assert result is not stacked
+        assert "b" in result.keys()
+        assert result.stack_dim == stacked.stack_dim
+        assert result.names[result.stack_dim] == "time"
+        assert "b" not in td0.keys()
+        assert "b" not in td1.keys()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_partial_tolerant_lazy_missing_key_keeps_output(self, stack_dim):
+        # Only the member that has "a" is executed. Its return is stacked
+        # back; the other member stays the same object. The input stack does
+        # not gain "b".
+        calls = []
+        seq = TensorDictSequential(
+            self._partial_tolerant_add_b(calls, inplace=False),
+            partial_tolerant=True,
+        )
+        (td_a, td_c), stacked = self._partial_tolerant_stack(("a", "c"), stack_dim)
+        result = seq(stacked)
+        assert len(calls) == 1
+        seen_in, seen_out = calls[0]
+        assert seen_in is td_a
+        assert result is not stacked
+        assert type(result) is type(stacked)
+        assert result.stack_dim == stack_dim
+        assert result.names == stacked.names
+        assert result.tensordicts[0] is seen_out
+        assert "b" in result.tensordicts[0].keys()
+        torch.testing.assert_close(result.tensordicts[0]["b"], td_a["a"] + 1)
+        assert result.tensordicts[1] is td_c
+        assert stacked.tensordicts[0] is td_a
+        assert stacked.tensordicts[1] is td_c
+        assert "b" not in td_a.keys()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_partial_tolerant_lazy_missing_key_inplace(self, stack_dim):
+        # An in-place module writes into the member and returns it. The
+        # sequential result is the original stack.
+        calls = []
+        seq = TensorDictSequential(
+            self._partial_tolerant_add_b(calls, inplace=True),
+            partial_tolerant=True,
+        )
+        (td_a, td_c), stacked = self._partial_tolerant_stack(("a", "c"), stack_dim)
+        result = seq(stacked)
+        assert len(calls) == 1
+        seen_in, seen_out = calls[0]
+        assert seen_in is td_a
+        assert seen_out is td_a
+        assert result is stacked
+        assert "b" in td_a.keys()
+        torch.testing.assert_close(td_a["b"], td_a["a"] + 1)
+        assert result.tensordicts[1] is td_c
+        assert "b" not in td_c.keys()
+        assert result.stack_dim == stack_dim
+        assert result.names[result.stack_dim] == "time"
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)
