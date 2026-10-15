@@ -4176,10 +4176,11 @@ class TestGeneric:
         [
             lambda s: s,
             lambda s: TensorDict(x=s, batch_size=[2]),
+            lambda s: TensorDict(x=s, y=s.clone(), batch_size=[2]),
             lambda s: lazy_stack([s, s.clone()]),
             lambda s: lazy_stack([TensorDict(sub=s[0]), TensorDict(sub=s[1])]),
         ],
-        ids=["stack", "nested", "stack_of_stacks", "nested_in_members"],
+        ids=["stack", "nested", "siblings", "stack_of_stacks", "nested_in_members"],
     )
     def test_is_empty_lazy_members_hold_leaves(self, make):
         # gh-2807: a lazy stack lists only the leaves that its members share.
@@ -4218,8 +4219,26 @@ class TestGeneric:
             (lambda: TensorDict(x=TensorDict()), True),
             (lambda: TensorDict(a=torch.ones(())), False),
             (lambda: NonTensorStack("a", "b"), False),
+            # the nested stack comes first, but the result is False today and
+            # from 0.17
+            (
+                lambda: TensorDict(
+                    x=lazy_stack([TensorDict(a=torch.ones(())), TensorDict()]),
+                    y=torch.ones(2),
+                    batch_size=[2],
+                ),
+                False,
+            ),
         ],
-        ids=["empty", "empty_members", "shared", "dense_empty", "dense", "nts"],
+        ids=[
+            "empty",
+            "empty_members",
+            "shared",
+            "dense_empty",
+            "dense",
+            "nts",
+            "nested_then_leaf",
+        ],
     )
     def test_is_empty_no_lazy_warning(self, make, expected):
         td = make()

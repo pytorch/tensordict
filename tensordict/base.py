@@ -79,6 +79,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _KEY_ERROR,
+    _LIBRARY_DIRS,
     _lock_blocked,
     _LOCK_ERROR,
     _lock_warn,
@@ -1441,6 +1442,19 @@ def _members_hold_leaf(members: list[TensorDictBase]) -> bool:
     for member in members:
         for _ in member.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR):
             return True
+    return False
+
+
+def _in_dense_is_empty() -> bool:
+    """Whether the calling ``is_empty()`` runs for a ``TensorDict.is_empty`` call, which warns once, if its own result is ``True`` (#2807)."""
+    frame = sys._getframe(2)
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        if (
+            frame.f_code.co_name == "is_empty"
+            and frame.f_globals.get("__name__") == "tensordict._td"
+        ):
+            return True
+        frame = frame.f_back
     return False
 
 
@@ -5501,7 +5515,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         for _ in self.keys(True, True):
             return False
         members = self._members_as_lists()
-        if members is not None and _members_hold_leaf(members):
+        if (
+            members is not None
+            and _members_hold_leaf(members)
+            and not _in_dense_is_empty()
+        ):
             _warn_lazy_is_empty()
         return True
 
