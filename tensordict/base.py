@@ -9268,7 +9268,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is missing. Defaults to ``True``.
             reproduce_struct (bool, optional): if ``True``, all tensordict returned have
                 the same tree structure as ``self``, even if some sub-tensordicts
-                contain no leaves.
+                contain no leaves. Non-tensor entries are not copied: each
+                one goes to the output whose key set names it, or to the last
+                one, as with ``reproduce_struct=False``.
 
         .. note::
             ``None`` non-tensor values will be ignored and not returned.
@@ -9306,7 +9308,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if inplace:
             keys_to_del = set()
         for key_set in key_sets:
-            outs.append(self.empty(recurse=reproduce_struct))
+            out = self.empty(recurse=reproduce_struct)
+            if reproduce_struct:
+                # empty(recurse=True) keeps the non-tensor leaves: they belong
+                # to the output whose key set names them, or to the last one.
+                out = out.exclude(*out.keys(True, True, is_leaf=_is_leaf_nontensor))
+            outs.append(out)
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
             for key in key_set:

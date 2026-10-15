@@ -8252,6 +8252,49 @@ class TestGeneric:
         assert td is td3
         assert "d" not in td
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("reproduce_struct", [False, True])
+    def test_split_keys_non_tensor(self, reproduce_struct, lazy):
+        # A non-tensor entry goes only to the output whose key set names it,
+        # or to the last output, with or without reproduce_struct.
+        td = TensorDict(
+            a=torch.zeros(3),
+            b=torch.ones(3),
+            info=NonTensorData("run 7", batch_size=[3]),
+            n=TensorDict(
+                c=torch.zeros(3),
+                s=NonTensorData("label", batch_size=[3]),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+
+        def leaves(part):
+            return set(part.keys(True, True, is_leaf=is_leaf_nontensor))
+
+        td_a, td_b, rest = td.split_keys(
+            ["a"], ["b"], reproduce_struct=reproduce_struct
+        )
+        assert leaves(td_a) == {"a"}
+        assert leaves(td_b) == {"b"}
+        assert leaves(rest) == {"info", ("n", "c"), ("n", "s")}
+        assert rest[0]["info"] == "run 7"
+        td_a, td_info, rest = td.split_keys(
+            ["a"], ["info", ("n", "s")], reproduce_struct=reproduce_struct
+        )
+        assert leaves(td_a) == {"a"}
+        assert leaves(td_info) == {"info", ("n", "s")}
+        assert td_info[0]["n", "s"] == "label"
+        assert leaves(rest) == {"b", ("n", "c")}
+        if reproduce_struct:
+            # the sub-tensordicts are kept, even without leaves
+            assert "n" in td_a.keys()
+            assert td_a["n"].is_empty()
+        else:
+            assert "n" not in td_a.keys()
+
     @pytest.mark.parametrize("sign", ["plus", "minus"])
     def test_split_uneven(self, sign):
         a = torch.arange(6).unsqueeze(-1).expand(6, 3)
