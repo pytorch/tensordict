@@ -10466,6 +10466,24 @@ class TestGeneric:
             sub.update({"a": torch.ones(3)})
         assert sub.update({"a": torch.ones(3)}, inplace=True) is sub
 
+    def test_sub_td_update_nested_inplace_locked(self):
+        # update(inplace=True) writes the nested entries of a locked source,
+        # as a sub-tensordict and as a nested key (#2745)
+        source = TensorDict(
+            a=torch.zeros(2, 3), n=TensorDict(x=torch.zeros(2, 3)), batch_size=[2, 3]
+        ).lock_()
+        sub = source._get_sub_tensordict(0)
+        sub.update({"a": torch.ones(3), "n": {"x": torch.ones(3)}}, inplace=True)
+        assert (source["a"][0] == 1).all() and (source["n", "x"][0] == 1).all()
+        sub.update({("n", "x"): torch.full((3,), 2.0)}, inplace=True)
+        assert (source["n", "x"][0] == 2).all() and (source["n", "x"][1] == 0).all()
+        # a lazy stack of views of locked tensordicts writes through them
+        parents = [source, source.clone().lock_()]
+        stack = lazy_stack([p._get_sub_tensordict(1) for p in parents])
+        stack[0] = TensorDict(a=torch.ones(3), n={"x": torch.ones(3)}, batch_size=[3])
+        assert (source["a"][1] == 1).all() and (source["n", "x"][1] == 1).all()
+        assert (parents[1]["n", "x"][1] == 0).all()
+
     def test_sub_td_update_at_arguments(self):
         # _SubTensorDict.update_at_ and update_ take the arguments of
         # TensorDictBase, and still discard_idx_attr and input_dict

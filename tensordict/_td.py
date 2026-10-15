@@ -3352,7 +3352,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                         )
                         target.update(
                             {subkey: value},
-                            inplace=False,
+                            inplace=inplace,
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
                             is_leaf=is_leaf,
@@ -3366,6 +3366,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                         )
                         target.update(
                             value,
+                            inplace=inplace,
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
                             update_batch_size=update_batch_size,
