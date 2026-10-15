@@ -4022,6 +4022,14 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
         self._tensordict[item] = value._tensordict
     else:
+        if isinstance(value, TensorDictBase):
+            # As in update(): the keys of the dict of a TensorDict are faster
+            # to read than its keys(), and valid calls only pay for issuperset.
+            keys = value._tensordict if type(value) is TensorDict else value.keys()
+            if not type(self).__expected_keys__.issuperset(keys):
+                unknown = _non_field_keys(self, keys)
+                if unknown:
+                    _warn_non_field_keys(self, unknown, "__setitem__")
         # int, float etc.
         self._tensordict[item] = value
 
