@@ -1044,6 +1044,75 @@ class TestFromTensordict:
         for td in tds:
             assert (td["a"] == 4).all()
 
+    @pytest.mark.parametrize("method", ["copy_", "update_"])
+    @pytest.mark.parametrize("dest_type", ["dense", "typed"])
+    @pytest.mark.parametrize("src_type", ["typed", "nested"])
+    def test_from_tensordict_lazy_stack_nested_as_source(
+        self, method, dest_type, src_type
+    ):
+        # #2768: copy_ and update_ write the nested entries of a stack with a
+        # nested entry, read through a TypedTensorDict or held by a tensordict
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.full((3,), i), n={"x": torch.full((3, 2), i)}, batch_size=[3]
+            )
+            for i in (1.0, 2.0, 3.0, 4.0)
+        ]
+        if src_type == "typed":
+            src = Nested.from_tensordict(lazy_stack(tds))
+        else:
+            src = TensorDict(
+                a=lazy_stack(tds)["a"], n=lazy_stack(tds)["n"], batch_size=[4, 3]
+            )
+        dest = TensorDict(
+            a=torch.zeros(4, 3),
+            n={"x": torch.zeros(4, 3, 2)},
+            b=torch.zeros(4, 3),
+            batch_size=[4, 3],
+        )
+        if dest_type == "typed":
+            dest = Nested.from_tensordict(dest)
+        assert getattr(dest, method)(src) is dest
+        expected = lazy_stack(tds).to_tensordict()
+        torch.testing.assert_close(dest.exclude("b").to_tensordict(), expected)
+        assert (dest["b"] == 0).all()
+
+    @pytest.mark.parametrize("method", ["copy_", "update_"])
+    def test_from_tensordict_lazy_stack_nested_as_source_other_keys(self, method):
+        # #2768: a ragged leaf that the destination lacks is not read, and a
+        # lazy stack in the destination is still written
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.full((3,), i),
+                n={"x": torch.full((3,), i), "info": torch.ones(3, int(i))},
+                batch_size=[3],
+            )
+            for i in (1.0, 2.0)
+        ]
+        dest = TensorDict(
+            a=torch.zeros(2, 3), n={"x": torch.zeros(2, 3)}, batch_size=[2, 3]
+        )
+        getattr(dest, method)(Nested.from_tensordict(lazy_stack(tds)))
+        torch.testing.assert_close(dest["n", "x"], lazy_stack(tds)["n", "x"])
+
+        def stack(value):
+            return lazy_stack(
+                [TensorDict(x=torch.full((3,), value), batch_size=[3]) for _ in "ab"]
+            )
+
+        dest = TensorDict(n=stack(0.0), m={"x": torch.zeros(2, 3)}, batch_size=[2, 3])
+        getattr(dest, method)(TensorDict(n=stack(1.0), m=stack(2.0), batch_size=[2, 3]))
+        assert (dest["n", "x"] == 1).all()
+        assert (dest["m", "x"] == 2).all()
+
     def test_from_tensordict_lazy_stack_of_stacks_exclusive_keys_inplace(self):
         # #2759: a key that only some members of an inner stack hold is left
         # unchanged, as in a single stack
