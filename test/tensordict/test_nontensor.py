@@ -924,6 +924,52 @@ class TestNonTensorData:
         td = TensorDict(q=rows).auto_batch_size_(batch_dims=batch_dims)
         assert td.batch_size == batch_size
 
+    def test_tensordict_stacks_a_list_of_equal_shaped_tensors(self):
+        # One shared shape is a stacked tensor, not a NonTensorStack.
+        td = TensorDict({"a": [torch.ones(2), torch.ones(2)]}, batch_size=[2])
+        value = td.get("a")
+        assert isinstance(value, torch.Tensor)
+        assert not isinstance(value, NonTensorStack)
+        assert value.shape == (2, 2)
+        assert (value == 1).all()
+
+    def test_tensordict_ragged_tensor_list_is_non_tensor_stack(self):
+        # Differently shaped tensors cannot be stacked. Each tensor stays the value
+        # of one batch element, as NonTensorStack(t0, t1) does, without a copy.
+        tensors = [torch.ones(2), torch.ones(3)]
+        td = TensorDict({"a": tensors}, batch_size=[2])
+        value = td.get("a")
+        assert isinstance(value, NonTensorStack)
+        assert value.batch_size == torch.Size([2])
+        assert value.tolist()[0] is tensors[0]
+        assert value.tolist()[1] is tensors[1]
+        assert (td[0]["a"] == tensors[0]).all()
+        assert (td[1]["a"] == tensors[1]).all()
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_lazy_stack_ragged_tensor_list_sets_tensors(self, device):
+        # A lazy stack writes each tensor of the list into its own member.
+        td = lazy_stack(
+            [
+                TensorDict(x0=torch.zeros(1), device=device),
+                TensorDict(x1=torch.zeros(2), device=device),
+            ]
+        )
+        tensors = [torch.ones(2), torch.ones(3)]
+        td.set("a", tensors)
+        assert td.tensordicts[0]._get_str("a", None) is tensors[0]
+        assert td.tensordicts[1]._get_str("a", None) is tensors[1]
+
+    def test_lazy_stack_non_tensor_list_keeps_non_tensor_data(self):
+        # A list of NonTensorData is not unwrapped into plain tensors.
+        td = lazy_stack([TensorDict(x0=torch.zeros(1)), TensorDict(x1=torch.zeros(2))])
+        tensors = [torch.ones(2), torch.ones(3)]
+        td.set("a", [NonTensorData(tensors[0]), NonTensorData(tensors[1])])
+        for member, tensor in zip(td.tensordicts, tensors):
+            value = member._get_str("a", None)
+            assert isinstance(value, NonTensorData)
+            assert value.data is tensor
+
     def test_new_empty_nontensorstack(self):
         td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))
         assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)
@@ -1442,6 +1488,32 @@ class TestNonTensorData:
         with pytest.raises(ValueError, match="not fields"):
             dest[index] = TensorDict(x=torch.ones(()))
         assert set(dest.to_dict()) == {"s"}
+
+    @pytest.mark.parametrize(
+        "index",
+        [np.array([1, 0]), np.array(1), [1, 0], torch.tensor([1, 0])],
+        ids=["ndarray", "ndarray_0d", "list", "tensor"],
+    )
+    def test_update_at_partial_index(self, index):
+        # Only () and slice(None) replace the whole value. Any other index,
+        # including an ndarray, is a partial update and raises RuntimeError.
+        data = NonTensorData("h", batch_size=[4])
+        with pytest.raises(
+            RuntimeError, match=r"Cannot update a part of a NonTensorDataBase\."
+        ):
+            data.update_at_(NonTensorData("x"), index)
+        assert data.data == "h"
+
+    @pytest.mark.parametrize(
+        "index", [(), slice(None)], ids=["empty_tuple", "slice_none"]
+    )
+    def test_update_at_whole_index(self, index):
+        # () and slice(None) select every element, so update_at_ replaces the
+        # whole value through update_.
+        data = NonTensorData("h", batch_size=[4])
+        assert data.data == "h"
+        assert data.update_at_(NonTensorData("x"), index) is data
+        assert data.data == "x"
 
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_subtd_set_at_array_data(self, array):

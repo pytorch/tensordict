@@ -2140,13 +2140,17 @@ from tensordict._utils_options import (  # noqa: F401
 
 def _convert_list_to_stack(
     a_list: list[Any],
-) -> tuple[torch.Tensor | TensorDictBase | NonTensorStack, bool]:  # noqa
+    *,
+    wrap_ragged: bool = True,
+) -> tuple[torch.Tensor | TensorDictBase | NonTensorStack | list[Any], bool]:  # noqa
     if not a_list:
         return torch.tensor(a_list), False
     # First, check elements and determine if there are lists within
     nontensor = True
     if all(isinstance(elt, list) for elt in a_list):
-        a_list, nontensor = zip(*[_convert_list_to_stack(elt) for elt in a_list])
+        a_list, nontensor = zip(
+            *[_convert_list_to_stack(elt, wrap_ragged=wrap_ragged) for elt in a_list]
+        )
         nontensor = any(nontensor)
     # FIXME: we should check that the type is unique
     all_castable = all(isinstance(elt, (bool, int, float)) for elt in a_list)
@@ -2159,6 +2163,11 @@ def _convert_list_to_stack(
             # FIXME: this may lead to some weird behaviours if we have nested lists and by chance one of them has
             #  things that can be stacked, and others don't.
             return torch.stack(a_list), False
+        if all_tensors and wrap_ragged:
+            # No common shape to stack. A list has no .shape for the caller to read.
+            from tensordict import NonTensorStack
+
+            return NonTensorStack(*a_list), True
         # TODO: check that LazyStack understands that a list is a bunch of elements to write in separate tds
         return list(a_list), False
     from tensordict.base import _is_tensor_collection

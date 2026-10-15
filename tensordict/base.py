@@ -1076,6 +1076,9 @@ _IS_LEAF_WITHOUT_NODES = (
 # Set while an in-place method runs on a tensordict whose file is opened
 # read-only, so that the nested calls it makes do not warn again.
 _READ_ONLY_CALL = local()
+# Set while empty() builds a result for the names it was given, so that the
+# empty() calls it makes do not warn of the names again.
+_EMPTY_NAMES_CALL = local()
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
@@ -1353,6 +1356,65 @@ def _empty_misfit(
         if value.batch_size[:ndim] != batch_size[:ndim]:
             return key, value
     return None
+
+
+def _warn_empty_names(
+    names: Sequence[str | None],
+    batch_size: Sequence[int],
+    result_names: list,
+    result_batch_size: Sequence[int] | None = None,
+) -> None:
+    """Warns that ``empty(batch_size=batch_size, names=names)``, which returns ``result_names`` and ``result_batch_size``, changes in 0.17 (#2711).
+
+    From 0.17, ``empty()`` applies ``names`` as the names setter does, on a
+    result of batch size ``batch_size``. This warns when the setter raises for
+    them, or gives other names than ``result_names``, or when the result has
+    kept another batch size for them. ``result_batch_size=None`` means
+    ``batch_size``.
+    """
+    if is_compiling() or getattr(_EMPTY_NAMES_CALL, "running", False):
+        return
+    # the checks of the names setter, in its order
+    value = list(names)
+    batch_dims = len(batch_size)
+    # a lazy stack keeps the batch size of its members for names of another
+    # length; for names of the right length, its own warning tells why
+    resized = (
+        result_batch_size is not None
+        and list(result_batch_size) != list(batch_size)
+        and len(value) != batch_dims
+    )
+    num_none = 0
+    for v in value:
+        num_none += v is None
+    if num_none == batch_dims:
+        if list(result_names) == [None] * batch_dims and not resized:
+            return
+        future = "drops these names"
+    elif len(value) == batch_dims and len(set(value)) == len(value) - max(
+        num_none - 1, 0
+    ):
+        return
+    else:
+        future = "raises a ValueError for these names"
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    result = f"the names {list(result_names)}"
+    future_size = ""
+    if resized:
+        result = f"the batch size {list(result_batch_size)} and {result}"
+        future_size = f"returning the batch size {list(batch_size)} and "
+    warnings.warn(
+        f"empty(batch_size={list(batch_size)}, names={value}) returns a "
+        f"tensordict with {result}. Starting with TensorDict 0.17, the default "
+        f"will change to {future_size}applying the names as the names setter "
+        f"does, which {future}. Pass one name per batch dim, "
+        "with no name used twice.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
@@ -2910,7 +2972,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def new_tensor(
         self,
-        data: torch.Tensor | TensorCollection,
+        data: torch.Tensor | TensorCollection | np.ndarray | Sequence | float,
         *,
         dtype: torch.dtype = None,
         device: DeviceType = NO_DEFAULT,
@@ -2919,39 +2981,69 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:  # noqa: D417
         """Returns a new TensorDict with data as the tensor ``data``.
 
-        By default, the returned TensorDict values have the same ``torch.dtype`` and ``torch.device`` as this tensor.
+        By default, each entry of the returned TensorDict has the ``torch.dtype`` of the
+        matching entry of this tensordict, and the returned TensorDict is on the device
+        of ``data``.
 
         The ``data`` can also be a tensor collection (``TensorDict`` or ``tensorclass``), in which case
         the ``new_tensor`` method iterates over the tensor pairs of ``self`` and ``data``.
 
         Args:
-            data (torch.Tensor or TensorDictBase): the data to be copied.
+            data (torch.Tensor, TensorDictBase or array_like): the data to be copied. As
+                for :meth:`torch.Tensor.new_tensor`, it can be a list, a tuple, a NumPy
+                array or a scalar; such data has no device, so the result is on the
+                device that :func:`torch.as_tensor` gives it, the default device.
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired type of returned tensordict.
-                Default: if ``None``, the `torch.dtype` will be unchanged.
+                Default: if ``None``, each entry keeps the ``torch.dtype`` of the
+                matching entry of this tensordict.
             device (torch.device, optional): the desired device of returned tensordict.
-                Default: if ``None``, the ``torch.device`` will be unchanged.
+                Default: the device of ``data``.
             requires_grad (bool, optional): If autograd should record operations on the
                 returned tensors. Default: ``False``.
             pin_memory (bool, optional): If set, returned tensor would be allocated in the
                 pinned memory. Works only for CPU tensors. Default: ``False``.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     a=torch.zeros(3), b=torch.zeros(3, dtype=torch.int64), batch_size=[3]
+            ... )
+            >>> out = td.new_tensor([1, 2])
+            >>> out.batch_size
+            torch.Size([2])
+            >>> out["a"], out["b"]
+            (tensor([1., 2.]), tensor([1, 2]))
+
         """
+        if isinstance(data, torch.Tensor) or _is_tensor_collection(type(data)):
+            shape = data.shape
+            data_device = data.device
+        else:
+            # An array_like, as torch.Tensor.new_tensor takes. The entries read
+            # ``data`` as it is, so torch does not warn about copying a tensor.
+            as_tensor = torch.as_tensor(data)
+            shape = as_tensor.shape
+            data_device = as_tensor.device
         kwargs = {}
         if device is not NO_DEFAULT:
             kwargs["device"] = device
         else:
-            device = kwargs["device"] = data.device
+            device = kwargs["device"] = data_device
         if pin_memory is not None:
             kwargs["pin_memory"] = pin_memory
+        if dtype is not None:
+            # Under torch.compile, Tensor.new_tensor(data, dtype=None) takes the
+            # dtype of data, not of the tensor, so pass dtype only when it is set.
+            kwargs["dtype"] = dtype
 
         def func(x, tensor_b=None):
             if tensor_b is None:
                 tensor_b = data
             return x.new_tensor(
                 tensor_b,
-                dtype=dtype,
                 requires_grad=requires_grad,
                 **kwargs,
             )
@@ -2962,13 +3054,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 data,
                 call_on_nested=True,
                 device=device,
-                batch_size=data.shape,
+                batch_size=shape,
             )
         return self._fast_apply(
             func,
             call_on_nested=True,
             device=device,
-            batch_size=data.shape,
+            batch_size=shape,
         )
 
     def _unbind(self, dim: int):
@@ -8515,7 +8607,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raising a ``RuntimeError`` or a ``ValueError``, as
                 ``TensorDict.empty`` and the names setter do.
             device (torch.device, optional): a new device.
-            names (list of str, optional): dimension names.
+            names (list of str, optional): dimension names, one per dim of the
+                new batch size. Where ``empty()`` keeps names that the names
+                setter would reject or drop (a list of another length, or a
+                name used twice), it emits a :class:`FutureWarning`. Starting
+                with TensorDict 0.17, the default will change to applying them
+                as the names setter does, with or without ``recurse``.
 
         Examples:
             >>> import torch
@@ -8528,7 +8625,30 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ['b']
 
         """
-        return self._empty(recurse, batch_size, device, names)
+        if (
+            names is None
+            or (
+                len(names) == len(self.batch_size if batch_size is None else batch_size)
+                and len(set(names)) == len(names)
+            )
+            or is_compiling()
+        ):
+            return self._empty(recurse, batch_size, device, names)
+        # names that the names setter may reject or drop: the empty() calls
+        # that build the result do not warn of them, this one does
+        running = getattr(_EMPTY_NAMES_CALL, "running", False)
+        _EMPTY_NAMES_CALL.running = True
+        try:
+            result = self._empty(recurse, batch_size, device, names)
+        finally:
+            _EMPTY_NAMES_CALL.running = running
+        _warn_empty_names(
+            names,
+            self.batch_size if batch_size is None else batch_size,
+            result.names,
+            result.batch_size,
+        )
+        return result
 
     def _empty(self, recurse, batch_size, device, names) -> TensorDictBase:
         """Builds the result of :meth:`empty`.
@@ -9506,6 +9626,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> sorted(td.keys())
             ['a', 'b']
         """
+        # Raise before _propagate_unlock clears the storage flags of the nodes.
+        if self._is_locked:
+            self._check_unlock()
         try:
             sub_tds = self._propagate_unlock()
             for sub_td in sub_tds:
