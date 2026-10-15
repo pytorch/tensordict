@@ -136,7 +136,9 @@ def to_mds(
     for k, v in row.items():
         if isinstance(v, np.ndarray) and v.shape == ():
             row[k] = v.item()
-    writer.write(row)
+    # Same as the batched path: exiting the writer finishes the shard.
+    with writer as w:
+        w.write(row)
 
 
 def _columns(self: TensorCollection) -> dict[str, str]:
