@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import collections
+import contextvars
 import enum
 import gc
 import importlib
@@ -1077,6 +1078,56 @@ _IS_LEAF_WITHOUT_NODES = (
 # read-only, so that the nested calls it makes do not warn again.
 _READ_ONLY_CALL = local()
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
+
+# Storage flags _propagate_unlock clears, apart from the lock. unlock_()
+# keeps one snapshot per node here and writes it back only when a locked
+# parent makes the unlock raise. Entries come from the instance __dict__:
+# a lazy stack's _is_shared and _is_memmap are properties and must not be
+# assigned.
+_UNLOCK_STORAGE_FLAGS = ("_is_shared", "_is_memmap", "_consolidated")
+_UNLOCK_FLAG_ROLLBACK: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "_UNLOCK_FLAG_ROLLBACK", default=None
+)
+
+
+def _remember_unlock_flags(td) -> None:
+    """Record storage flags this node is about to clear.
+
+    No-op unless :meth:`~tensordict.TensorDictBase.unlock_` installed
+    ``_UNLOCK_FLAG_ROLLBACK``. The same node is recorded once, so a second
+    ``_propagate_unlock`` on it cannot replace the original values with the
+    cleared ones.
+    """
+    # Dynamo cannot set a ContextVar, so compiled code does not read it.
+    if is_compiling():
+        return
+    rollback = _UNLOCK_FLAG_ROLLBACK.get()
+    if rollback is None:
+        return
+    key = id(td)
+    if key in rollback:
+        return
+    data = td.__dict__
+    rollback[key] = (
+        td,
+        {name: data[name] for name in _UNLOCK_STORAGE_FLAGS if name in data},
+    )
+
+
+def _restore_unlock_flags(rollback: dict) -> None:
+    """Put storage flags cleared by ``_propagate_unlock`` back on each node.
+
+    Writes through ``__dict__`` only. A name that was not stored on the
+    instance is removed, because the clear assigns ``_is_shared`` and
+    ``_is_memmap`` even when the node was using the class default.
+    """
+    for node, saved in rollback.values():
+        data = node.__dict__
+        for name in _UNLOCK_STORAGE_FLAGS:
+            if name in saved:
+                data[name] = saved[name]
+            elif name in data:
+                del data[name]
 
 
 def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
@@ -9367,6 +9418,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @_erase_cache_first
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
+        # Snapshot first: unlock_() restores these only if the unlock raises.
+        _remember_unlock_flags(self)
         self._is_locked = False
 
         self._is_shared = False
@@ -9442,16 +9495,25 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> sorted(td.keys())
             ['a', 'b']
         """
+        # Dynamo cannot set a ContextVar. Compiled code still clears the
+        # flags in _propagate_unlock and relocks on failure.
+        token = None if is_compiling() else _UNLOCK_FLAG_ROLLBACK.set({})
         try:
-            sub_tds = self._propagate_unlock()
-            for sub_td in sub_tds:
-                sub_td._check_unlock()
+            try:
+                sub_tds = self._propagate_unlock()
+                for sub_td in sub_tds:
+                    sub_td._check_unlock()
 
-            self._check_unlock()
-        except RuntimeError as err:
-            self.lock_()
-            raise err
-        return self
+                self._check_unlock()
+            except RuntimeError as err:
+                if token is not None:
+                    _restore_unlock_flags(_UNLOCK_FLAG_ROLLBACK.get())
+                self.lock_()
+                raise err
+            return self
+        finally:
+            if token is not None:
+                _UNLOCK_FLAG_ROLLBACK.reset(token)
 
     def attrs(
         self,
