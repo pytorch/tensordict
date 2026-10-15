@@ -1030,6 +1030,15 @@ class TestFromTensordict:
             assert (td["a"] == 5).all()
             assert (td["n", "x"] == 2).all()
         assert (tds[0]["a"] == 1).all()
+        # out-of-place math gives a new Nested and leaves the members alone
+        plus = sliced + 1
+        assert isinstance(plus, Nested)
+        assert (plus["a"] == 6).all()
+        assert (tds[1]["a"] == 5).all()
+        sliced.copy_(plus)
+        for td in tds[1:]:
+            assert (td["a"] == 6).all()
+            assert (td["n", "x"] == 3).all()
         # an int on the stack dim gives the member, with its own keys
         first = state[(*index, 0)]
         assert isinstance(first, Nested)
@@ -1037,6 +1046,11 @@ class TestFromTensordict:
         assert "e" in first.keys()
         first["a"] = torch.full((3,), 7.0)
         assert (tds[0]["a"] == 7).all()
+        # typed members: the result wraps the member's source, not the member
+        typed = Nested.from_tensordict(
+            lazy_stack([Nested.from_tensordict(td) for td in tds], stack_dim)
+        )
+        assert typed[(*index, 0)]._source is tds[0]
 
     @pytest.mark.parametrize("exclusive", ["e", ("n", "e")], ids=["top", "nested"])
     def test_from_tensordict_lazy_stack_nested_exclusive_keys_inplace(self, exclusive):

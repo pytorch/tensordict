@@ -849,6 +849,9 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             and names is None
         ):
             result = source[index]
+            if isinstance(result, TypedTensorDict):
+                # an int picks a member that is itself typed: wrap its source
+                result = result._source
         else:
             result = source._index_tensordict(index, new_batch_size, names)
         return type(self)._wrap_td(result)
