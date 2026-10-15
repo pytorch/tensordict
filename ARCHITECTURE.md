@@ -212,7 +212,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_reshape(shape, names, leaf_fn)` | `reshape`, `flatten`, `unflatten` without `inplace` | return a tensordict of batch size `shape`, with views of the leaves where the layout allows | lazy, NTS, typed |
 | `_expand(shape, names)` | `expand` | return expanded views | lazy, params, typed |
 | `_broadcast_to(shape)` | `broadcast_to` | return broadcast views, without names | NTS |
-| `_repeat_interleave(repeats, dim, output_size)` | `repeat_interleave` without `inplace` | repeat the elements along `dim` | lazy, typed |
+| `_repeat_interleave(repeats, dim, output_size)` | `repeat_interleave` without `inplace` | repeat the elements along `dim` | lazy |
 | `_batch_op(fn, batch_size, names, *, index)` | `flip`, `roll`, `rot90`, `tile`, `narrow`, the default `_broadcast_to` | apply `fn` to each leaf, and set the lock, shared and memmap flags | NTS |
 | `_densify(layout)` | `densify` | replace the lazy stacks with dense entries | lazy, NTS |
 | `_compare(other, op, reflected_op, default)` | `==`, `!=`, `<`, `<=`, `>`, `>=`, `\|`, `^` | broadcast, pair the leaves by key, raise `KeyError` on mismatched keys | lazy, params, typed |
@@ -231,8 +231,8 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_empty(recurse, batch_size, device, names)` | `empty` | return a new, unlocked tensordict without tensor leaves | lazy, file, store; one body for lazy store and element |
 | `_contains_str(key)` | `_convert_inplace`, which `_set_str` calls | say whether `key` is a key, without reading data | `TensorDict`, file, store |
 | `_get_tuple(key, default)` | `get` | return the entry, or `default`; raise `ValueError` for a path through a tensor (files and the store return `default`) | every class but element |
-| `_get_at_tuple(key, idx, default)` | `get_at` | read the entry at `idx` | file, store, lazy store, element |
-| `_del(key)` | `del_` | delete the entry at the tuple `key`; raise `KeyError` for an empty or missing key, `ValueError` for a path through a tensor | every class (sub, params and typed forward it) |
+| `_get_at_tuple(key, idx, default)` | `get_at` | read the entry at `idx` | file, store, lazy store, element, params |
+| `_del(key)` | `del_` | delete the entry at the tuple `key`; raise `KeyError` for a missing key and `ValueError` for a path through a tensor (for `()`, the file and the stores keep their own behaviour until 0.17) | every class but params and typed (sub forwards it) |
 | `_members_as_lists()` | `items`, `values` with `_NESTED_TENSORS_AS_LISTS` | return the members to walk one by one, or `None` | lazy |
 | `_contains_tensordict(item)` | `item in td`, when `item` is not a key | say whether `item` is in `self`; the default raises | lazy |
 | `_rename_key(old_key, new_key)` | `rename_key_` | move the entry | file, store, lazy store, element (raises) |
@@ -254,7 +254,7 @@ to compare it with the shapes in their metadata.
 
 | class attribute | effect | set by |
 | --- | --- | --- |
-| `_lazy` | the base treats the class as a lazy view: for example, a new batch size and `masked_select(inplace=True)` raise | lazy, sub, the legacy lazy views; typed reads it from its source |
+| `_lazy` | the base treats the class as a lazy view: for example, a new batch size and `masked_select(inplace=True)` raise | lazy, sub, the legacy lazy views |
 | `_reads_return_copies` | the in-place methods run on copies of the leaves and write them back (see below) | file, store, lazy store, element; a property on sub, lazy and typed |
 | `_nested_reads_return_copies` | `update` and `_fill_` write the leaves of a nested tensordict back under their full keys | lazy store, element |
 | `_masking_on_dense_copy` | `where`, `masked_fill`, and `to` with a new device, dtype or memory format, work on a `to_tensordict()` copy | sub, file, store, lazy store, element, the legacy lazy views |
@@ -270,10 +270,10 @@ to compare it with the shapes in their metadata.
 | `_to_writes_back_in_place` | the exit of `with td.to(...)` calls `_write_back_to` | file |
 | `_has_exclusive_keys` | `to_dict`, `state_dict`, `flatten_keys` and `unflatten_keys` raise | a property on lazy |
 | `_rename_key_lenient` | `rename_key_` renames in a locked tensordict with a warning, until 0.17 | file, store, lazy store |
-| `_inplace_shape_ops_unsupported` | `reshape` and `repeat_interleave` with `inplace=True` raise before they write | lazy; typed reads it from its source |
-| `_inplace_batch_size_change` | `False`: the in-place shape ops that change the batch size raise before they write | file (`False`); typed reads it from its source |
+| `_inplace_shape_ops_unsupported` | `reshape` and `repeat_interleave` with `inplace=True` raise before they write | lazy |
+| `_inplace_batch_size_change` | `False`: the in-place shape ops that change the batch size raise before they write | file (`False`); typed (a property: `False` over a lazy stack, a sub-tensordict or a file) |
 | `_flatten_lenient` | `flatten(d, d)` returns `self`; with `start_dim > end_dim`, `flatten` inserts a dim of size 1 with a `FutureWarning` until 0.17, where the others raise | lazy |
-| `_gather_inplace_lenient` | `gather(inplace=True)` on a lazy source works for an index of the batch shape, with a warning, until 0.17 | typed |
+| `_gather_inplace_warns` | `gather(inplace=True)` with an index of the batch shape writes, and warns that it raises from 0.17 | typed (a property: over a lazy stack) |
 | `_get_ignores_kwargs` | `False`: `get` honors `as_list` and `as_nested_tensor` instead of warning | lazy (`False`) |
 | `_setitem_key_inplace` | the `inplace` argument with which `td[key] = value` calls `_set_tuple` | `BEST_ATTEMPT_INPLACE` on sub, file, store, lazy store, element |
 
@@ -317,8 +317,10 @@ The implementations also reuse code in three ways:
   forwards to `_param_td` through the `_fallback` decorators in
   `nn/params.py`, so that the results keep their parameters.
   `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists
-  at the end of `typedtensordict.py`, and reads the traits in
-  `_SOURCE_TRAITS` from it, so that a lazy source stays lazy.
+  at the end of `typedtensordict.py`, and derives `_reads_return_copies`,
+  `_inplace_batch_size_change` and `_gather_inplace_warns` from it, so that
+  an in-place operation over a lazy stack, a sub-tensordict or a file takes
+  the same path as on the source.
 - The two store classes share their connection, server keys, pickling and
   cleanup through the mixin `_StoreConnection` (`store/_connection.py`),
   which they configure with class attributes (`_global_key_suffixes`,
