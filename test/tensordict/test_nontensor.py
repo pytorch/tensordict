@@ -946,9 +946,15 @@ class TestNonTensorData:
         assert (td[0]["a"] == tensors[0]).all()
         assert (td[1]["a"] == tensors[1]).all()
 
-    def test_lazy_stack_ragged_tensor_list_sets_tensors(self):
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_lazy_stack_ragged_tensor_list_sets_tensors(self, device):
         # A lazy stack writes each tensor of the list into its own member.
-        td = lazy_stack([TensorDict(x0=torch.zeros(1)), TensorDict(x1=torch.zeros(2))])
+        td = lazy_stack(
+            [
+                TensorDict(x0=torch.zeros(1), device=device),
+                TensorDict(x1=torch.zeros(2), device=device),
+            ]
+        )
         tensors = [torch.ones(2), torch.ones(3)]
         td.set("a", tensors)
         assert td.tensordicts[0]._get_str("a", None) is tensors[0]
