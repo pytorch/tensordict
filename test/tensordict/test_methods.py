@@ -4011,6 +4011,24 @@ class TestTensorDicts(TestTensorDictsBase):
         for key in td1.keys(True, True):
             assert key not in td0
 
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_split_keys_callable(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        keys = list(td.keys(True, True))[:3]
+        tuple_keys = {(k,) if isinstance(k, str) else k for k in keys}
+        if td.is_locked and inplace:
+            with pytest.raises(RuntimeError, match="Cannot modify"):
+                td.split_keys(lambda k, v: k in tuple_keys, inplace=inplace)
+            return
+        td0, td1 = td.split_keys(lambda k, v: k in tuple_keys, inplace=inplace)
+        if inplace:
+            assert td1 is td
+        else:
+            assert td is not td1
+        assert set(td0.keys(True, True)) == set(keys)
+        for key in td1.keys(True, True):
+            assert key not in td0
+
     @legacy_lazy_mode()
     def test_squeeze_legacy(self, td_name, device, squeeze_dim=-1):
         torch.manual_seed(1)

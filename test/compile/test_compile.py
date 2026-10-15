@@ -966,6 +966,27 @@ class TestTD:
         assert "a" in result_c.keys()
         assert "b" not in result_c.keys()
 
+    def test_split_keys_callable(self, mode):
+        def split(td: TensorDict):
+            floats, rest = td.split_keys(lambda k, v: v.is_floating_point())
+            return floats + 1, rest
+
+        split_c = torch.compile(split, fullgraph=True, mode=mode)
+
+        for batch in (3, 5):
+            data = TensorDict(
+                a=torch.zeros(batch),
+                b=torch.zeros(batch, dtype=torch.long),
+                nested=TensorDict(c=torch.zeros(batch, 2), batch_size=[batch]),
+                batch_size=[batch],
+            )
+            floats, rest = split(data)
+            floats_c, rest_c = split_c(data)
+            assert set(floats_c.keys(True, True)) == {"a", ("nested", "c")}
+            assert set(rest_c.keys(True, True)) == {"b"}
+            assert (floats_c == floats).all()
+            assert (rest_c == rest).all()
+
     def test_all_any(self, mode):
         def call_all(td: TensorDict):
             return td.all(dim=0)
