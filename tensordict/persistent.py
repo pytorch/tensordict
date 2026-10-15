@@ -2393,6 +2393,7 @@ class PersistentTensorDict(
             clone.names = self._td_dim_names
             return clone
 
+    # Override: replaces the open file with what its backend can pickle.
     def __getstate__(self):
         state = self.__dict__.copy()
         backend_state = self._backend.getstate(state["file"])
@@ -2401,6 +2402,7 @@ class PersistentTensorDict(
         state["__lock_parents_weakrefs"] = None
         return state
 
+    # Override: reopens the file, and reads the pickles of TensorDict 0.14.
     def __setstate__(self, state):
         backend = state["_backend"]
         state["file"] = backend.setstate(state)
