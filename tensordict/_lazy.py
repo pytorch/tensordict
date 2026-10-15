@@ -512,6 +512,131 @@ def _broadcasts_to(shape: torch.Size, target: torch.Size) -> bool:
         return False
 
 
+def _inplace_copy_shape_error(
+    dest_shape: torch.Size, src_shape: torch.Size
+) -> RuntimeError | None:
+    """The ``copy_`` shape error, or ``None`` when ``src`` copies into ``dest``.
+
+    Shapes only: this does not read either tensor. ``copy_`` reports the
+    rightmost mismatched dim, then rejects a broadcast that would grow ``dest``.
+    """
+    dest_shape = tuple(dest_shape)
+    src_shape = tuple(src_shape)
+    if any(size < 0 for size in dest_shape) or any(size < 0 for size in src_shape):
+        return None
+    ndim = max(len(dest_shape), len(src_shape))
+    dest_pad = (1,) * (ndim - len(dest_shape)) + dest_shape
+    src_pad = (1,) * (ndim - len(src_shape)) + src_shape
+    for index in range(ndim - 1, -1, -1):
+        dest_size = dest_pad[index]
+        src_size = src_pad[index]
+        if dest_size == src_size or dest_size == 1 or src_size == 1:
+            continue
+        return RuntimeError(
+            f"The size of tensor a ({dest_size}) must match the size of tensor b "
+            f"({src_size}) at non-singleton dimension {index}"
+        )
+    broadcast = tuple(
+        dest_size if dest_size == src_size or src_size == 1 else src_size
+        for dest_size, src_size in zip(dest_pad, src_pad)
+    )
+    if broadcast != dest_shape:
+        return RuntimeError(
+            f"output with shape {list(dest_shape)} doesn't match the broadcast "
+            f"shape {list(broadcast)}"
+        )
+    return None
+
+
+def _dense_strided_tensor(value: CompatibleType) -> bool:
+    """Whether ``value`` is a dense tensor whose shape decides ``copy_``."""
+    return (
+        isinstance(value, torch.Tensor)
+        and not is_non_tensor(value)
+        and value.layout is torch.strided
+        and not value.is_nested
+    )
+
+
+def _preflight_inplace_nested(td: TensorDictBase, key: NestedKey, value) -> None:
+    """Raise the error an in-place nested ``_set_tuple`` would, without writing.
+
+    A missing intermediate is created and then filled with ``inplace=False``,
+    so it is not an error. A missing leaf, or a dense leaf that cannot
+    ``copy_`` the value, is.
+    """
+    if isinstance(td, LazyStackedTensorDict):
+        _preflight_lazy_stack(td, key, value)
+        return
+    # Other containers raise from their own ``_set_tuple``. Guessing the
+    # message here would change errors that are not TensorDict's.
+    if type(td)._set_tuple is not TensorDict._set_tuple:
+        return
+    node: TensorDictBase = td
+    for index, part in enumerate(key):
+        if isinstance(node, LazyStackedTensorDict):
+            _preflight_lazy_stack(node, key[index:], value)
+            return
+        if index + 1 == len(key):
+            _preflight_tensordict_leaf(node, part, value)
+            return
+        child = node._get_str(part, None)
+        if child is None:
+            return
+        if isinstance(child, LazyStackedTensorDict) or (
+            _is_tensor_collection(type(child))
+            and type(child)._set_tuple is TensorDict._set_tuple
+        ):
+            node = child
+            continue
+        if not _is_tensor_collection(type(child)):
+            raise KeyError(f"The entry {part} is already present in tensordict {node}.")
+        return
+
+
+def _preflight_lazy_stack(stack: LazyStackedTensorDict, key: NestedKey, value) -> None:
+    """Preflight ``stack._set_tuple(key, value, inplace=True)`` without writing."""
+    if len(key) == 1:
+        # ``_set_str`` rejects a missing key before it writes any member.
+        try:
+            stack._convert_inplace(True, key[0])
+        except KeyError as exc:
+            raise KeyError(
+                "setting a value in-place on a stack of TensorDict is only "
+                "permitted if all members of the stack have this key in "
+                "their register."
+            ) from exc
+    if stack._is_vmapped:
+        value = stack._hook_in(value)
+    if len(key) == 1 and isinstance(value, list):
+        # Same split as ``_set_str``: a list is not unbound on dim 0.
+        parts = (
+            list(value)
+            if stack.stack_dim == 0
+            else _recursive_unbind_list(value, stack.stack_dim)
+        )
+    else:
+        parts = value.unbind(stack.stack_dim)
+    for member, item in _zip_strict(stack.tensordicts, parts):
+        _preflight_inplace_nested(member, key, item)
+
+
+def _preflight_tensordict_leaf(node: TensorDictBase, key: str, value) -> None:
+    """Raise the ``TensorDict._set_str(..., inplace=True)`` error, if any."""
+    if type(node)._set_str is not TensorDict._set_str:
+        return
+    if not node._contains_str(key):
+        raise KeyError(_KEY_ERROR.format(key, type(node).__name__, sorted(node.keys())))
+    if not _dense_strided_tensor(value):
+        return
+    dest = node._get_str(key, NO_DEFAULT)
+    if not _dense_strided_tensor(dest):
+        return
+    error = _inplace_copy_shape_error(dest.shape, value.shape)
+    if error is not None:
+        raise ValueError(f"Failed to update '{key}' in tensordict {node}") from error
+
+
 def _fits_stack(
     stack_batch_size: torch.Size, stack_dim: int, batch_size: torch.Size
 ) -> bool:
@@ -1509,27 +1634,19 @@ class LazyStackedTensorDict(TensorDictBase):
                 validated=validated,
                 non_blocking=non_blocking,
             )
-        # if inplace is not False:  # inplace could be None
-        #     # we don't want to end up in the situation where one tensordict has
-        #     # inplace=True and another one inplace=False because inplace was loose.
-        #     # Worse could be writing with inplace=True up until some level then to
-        #     # realize the key is missing in one td, raising an exception and having
-        #     # messed up the data. Hence we must start by checking if the key
-        #     # is present.
-        #     has_key = key in self.keys(True)
-        #     if inplace is True and not has_key:  # inplace could be None
-        #         raise KeyError(
-        #             TensorDictBase.KEY_ERROR.format(
-        #                 key, type(self).__name__, sorted(self.keys())
-        #             )
-        #         )
-        #     inplace = has_key
         if not validated:
             value = self._validate_value(value, non_blocking=non_blocking, key=key)
             validated = True
         if self._is_vmapped:
             value = self._hook_in(value)
         values = value.unbind(self.stack_dim)
+        # Check every member before writing. Only inplace=True must fail
+        # with the stack unchanged; inplace=False and best-effort may create
+        # keys. A missing intermediate is created by the member and is not
+        # an error.
+        if inplace is True:
+            for tensordict, item in _zip_strict(self.tensordicts, values):
+                _preflight_inplace_nested(tensordict, key, item)
         for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_tuple(
                 key,
