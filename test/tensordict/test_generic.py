@@ -49,6 +49,7 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
+from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
@@ -4163,11 +4164,68 @@ class TestGeneric:
     def test_is_empty_non_tensor_only(self):
         # a non-tensor counts as a leaf on a dense tensordict; the lazy stack
         # and the sub-tensordict, which use TensorDictBase.is_empty, do not
-        # count it
+        # count it, and the lazy stack warns that it counts it from 0.17
         td = TensorDict(x=NonTensorData("a", batch_size=[2]), batch_size=[2])
         assert not td.is_empty()
-        assert lazy_stack([td[0], td[1]]).is_empty()
+        with pytest.warns(FutureWarning, match="returning True only if every"):
+            assert lazy_stack([td[0], td[1]]).is_empty()
         assert td._get_sub_tensordict(0).is_empty()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda s: s,
+            lambda s: TensorDict(x=s, batch_size=[2]),
+            lambda s: lazy_stack([s, s.clone()]),
+            lambda s: lazy_stack([TensorDict(sub=s[0]), TensorDict(sub=s[1])]),
+        ],
+        ids=["stack", "nested", "stack_of_stacks", "nested_in_members"],
+    )
+    def test_is_empty_lazy_members_hold_leaves(self, make):
+        # gh-2807: a lazy stack lists only the leaves that its members share.
+        # is_empty() keeps returning True when they share none, and warns that
+        # it returns False from 0.17.
+        s = lazy_stack([TensorDict(a=torch.ones(())), TensorDict(b=torch.ones(()))])
+        td = make(s)
+        with pytest.warns(FutureWarning, match="returning True only if every") as w:
+            assert td.is_empty()
+        assert len(w) == 1
+        assert w[0].filename == __file__
+
+    def test_is_empty_lazy_wrappers(self):
+        @tensorclass
+        class TC:
+            x: TensorDict = None
+
+        class Typed(TypedTensorDict):
+            pass
+
+        s = lazy_stack([TensorDict(a=torch.ones(())), TensorDict(b=torch.ones(()))])
+        tc = lazy_stack([TC(x=s[0]), TC(x=s[1])])
+        with legacy_lazy_mode():
+            view = TensorDict(x=s, batch_size=[2]).unsqueeze(0)
+        assert isinstance(view, _CustomOpTensorDict)
+        for td in (tc, Typed.from_tensordict(s), view):
+            with pytest.warns(FutureWarning, match="returning True only if every"):
+                assert td.is_empty()
+
+    @pytest.mark.parametrize(
+        "make,expected",
+        [
+            (lambda: lazy_stack([TensorDict(), TensorDict()]), True),
+            (lambda: lazy_stack([TensorDict(x=TensorDict()), TensorDict()]), True),
+            (lambda: lazy_stack([TensorDict(a=torch.ones(()))] * 2), False),
+            (lambda: TensorDict(x=TensorDict()), True),
+            (lambda: TensorDict(a=torch.ones(())), False),
+            (lambda: NonTensorStack("a", "b"), False),
+        ],
+        ids=["empty", "empty_members", "shared", "dense_empty", "dense", "nts"],
+    )
+    def test_is_empty_no_lazy_warning(self, make, expected):
+        td = make()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert td.is_empty() is expected
 
     def test_items_values_sort_flat(self):
         td = TensorDict(b=torch.ones(()), a=torch.zeros(()))
