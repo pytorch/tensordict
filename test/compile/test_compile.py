@@ -21,6 +21,7 @@ from packaging import version
 from tensordict import (
     assert_close,
     from_dataclass,
+    is_inexact,
     is_leaf_nontensor,
     is_tensor_collection,
     lazy_stack,
@@ -1199,6 +1200,35 @@ class TestTD:
         assert td_other_c["a"].dtype == torch.float64
         assert td_other_c.device == other.device
 
+    def test_to_dtype_cast_filter(self, mode):
+        def to_bf16(td):
+            return td.to(torch.bfloat16, cast_filter=is_inexact)
+
+        def half_keyed(td):
+            return td.half(cast_filter=lambda k, v: is_inexact(v) and k[0] != "keep")
+
+        to_bf16_c = torch.compile(to_bf16, fullgraph=True, mode=mode)
+        half_keyed_c = torch.compile(half_keyed, fullgraph=True, mode=mode)
+        for batch in (2, 5):
+            td = TensorDict(
+                a=torch.randn(batch, 3),
+                done=torch.zeros(batch, dtype=torch.bool),
+                keep=TensorDict(b=torch.randn(batch), batch_size=[batch]),
+                ids=torch.arange(batch),
+                batch_size=[batch],
+            )
+            out = to_bf16_c(td)
+            assert_close(out, to_bf16(td))
+            assert out["a"].dtype == torch.bfloat16
+            assert out["keep", "b"].dtype == torch.bfloat16
+            assert out["done"].dtype == torch.bool
+            assert out["ids"].dtype == torch.long
+            out = half_keyed_c(td)
+            assert_close(out, half_keyed(td))
+            assert out["a"].dtype == torch.half
+            assert out["keep", "b"].dtype == torch.float32
+            assert out["ids"].dtype == torch.long
+
     @pytest.mark.skipif(
         is_npu_available(),
         reason="torch.device in torch.compile is not supported on NPU currently.",
@@ -1740,8 +1770,31 @@ class MyClass:
     c: Any = None
 
 
+@tensorclass(cast_filter=is_inexact)
+class _CastFilterTC:
+    points: torch.Tensor
+    cells: torch.Tensor
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
+    def test_tc_to_dtype_cast_filter(self, mode):
+        def to_bf16(tc):
+            return tc.to(torch.bfloat16)
+
+        to_bf16_c = torch.compile(to_bf16, fullgraph=True, mode=mode)
+        for batch in (2, 5):
+            data = _CastFilterTC(
+                points=torch.randn(batch, 3),
+                cells=torch.zeros(batch, 3, dtype=torch.long),
+                batch_size=[batch],
+            )
+            out = to_bf16_c(data)
+            assert isinstance(out, _CastFilterTC)
+            assert out.points.dtype == torch.bfloat16
+            assert out.cells.dtype == torch.long
+            assert_close(out, to_bf16(data))
+
     def test_tc_tensor_output(self, mode):
         def add_one(td):
             return td.a.b + 1

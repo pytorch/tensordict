@@ -87,6 +87,10 @@ __all__ = [
     "assert_close",
     "expand_as_right",
     "expand_right",
+    "is_bool",
+    "is_floating",
+    "is_inexact",
+    "is_integer",
     "is_non_tensor",
     "is_tensorclass",
     "isin",
@@ -1105,6 +1109,8 @@ def _parse_to(*args, **kwargs):
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
     inplace = kwargs.pop("inplace", False)
+    # _to reads cast_filter from the kwargs that to() received
+    kwargs.pop("cast_filter", None)
     if not is_compiling():
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
@@ -2850,14 +2856,129 @@ def _make_dtype_promotion(func):
     dtype = getattr(torch, func.__name__)
 
     @wraps(func)
-    def new_func(self):
+    def new_func(self, *, cast_filter=None):
         def todtype(x):
             return x.to(dtype)
 
-        return self._fast_apply(todtype, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(todtype, propagate_lock=True)
+        return _cast_filtered(self, todtype, cast_filter, propagate_lock=True)
 
-    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
+    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``.
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
     return new_func
+
+
+def _cast_filtered(td, cast, cast_filter, **kwargs):
+    """Applies ``cast`` to the tensor leaves of ``td`` that ``cast_filter`` selects.
+
+    ``cast_filter`` gets the key of each leaf as a tuple of str, and the leaf.
+    The other leaves are kept as they are.
+    """
+
+    def cast_if(key, tensor):
+        if cast_filter(key if type(key) is tuple else (key,), tensor):
+            return cast(tensor)
+        return tensor
+
+    return td._fast_apply(cast_if, named=True, nested_keys=True, **kwargs)
+
+
+def is_inexact(*args) -> bool:
+    """Whether the last argument is a floating-point or complex tensor.
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)``, for example to :meth:`~tensordict.TensorDictBase.apply`, and
+    as ``fn(key, value)``, for example as the ``cast_filter`` of
+    :meth:`~tensordict.TensorDictBase.to`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is a floating-point or complex dtype.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, is_inexact
+        >>> is_inexact(torch.zeros(3)), is_inexact("a", torch.zeros(3, dtype=torch.long))
+        (True, False)
+        >>> td = TensorDict(x=torch.zeros(3), i=torch.zeros(3, dtype=torch.long))
+        >>> td_bf16 = td.bfloat16(cast_filter=is_inexact)
+        >>> td_bf16["x"].dtype, td_bf16["i"].dtype
+        (torch.bfloat16, torch.int64)
+    """
+    dtype = args[-1].dtype
+    return dtype.is_floating_point or dtype.is_complex
+
+
+def is_floating(*args) -> bool:
+    """Whether the last argument is a floating-point tensor.
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)`` and as ``fn(key, value)``: see :func:`~tensordict.is_inexact`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is a floating-point dtype.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import is_floating
+        >>> is_floating(torch.zeros(3)), is_floating(torch.zeros(3, dtype=torch.complex64))
+        (True, False)
+    """
+    return args[-1].dtype.is_floating_point
+
+
+def is_integer(*args) -> bool:
+    """Whether the last argument is an integer tensor (signed or unsigned, not bool).
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)`` and as ``fn(key, value)``: see :func:`~tensordict.is_inexact`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is neither floating-point, complex
+        nor ``torch.bool``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import is_integer
+        >>> is_integer(torch.zeros(3, dtype=torch.uint8)), is_integer(torch.zeros(3, dtype=torch.bool))
+        (True, False)
+    """
+    dtype = args[-1].dtype
+    return not (dtype.is_floating_point or dtype.is_complex or dtype is torch.bool)
+
+
+def is_bool(*args) -> bool:
+    """Whether the last argument is a boolean tensor.
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)`` and as ``fn(key, value)``: see :func:`~tensordict.is_inexact`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is ``torch.bool``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import is_bool
+        >>> is_bool(torch.zeros(3, dtype=torch.bool)), is_bool("mask", torch.zeros(3))
+        (True, False)
+    """
+    return args[-1].dtype is torch.bool
 
 
 def _unravel_key_to_tuple(key):

@@ -172,6 +172,37 @@ _TENSORCLASS_FLAGS = (
 )
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
+# the methods that take the cast_filter of the class by default
+_CAST_METHODS = frozenset(
+    (
+        "to",
+        "type",
+        "bool",
+        "double",
+        "float",
+        "half",
+        "int",
+        "bfloat16",
+        "complex128",
+        "complex32",
+        "complex64",
+        "float16",
+        "float32",
+        "float64",
+        "int16",
+        "int32",
+        "int64",
+        "int8",
+        "qint32",
+        "qint8",
+        "quint4x2",
+        "quint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "uint8",
+    )
+)
 
 # The container types that from_pytree records under _pytree_type. memmap
 # pickles them to other.pickle, which older versions read, and also saves their
@@ -678,6 +709,7 @@ class _tensorclass_dec:
     shadow: bool
     tensor_only: bool
     skip_post_init_on_rebuild: bool
+    cast_filter: Callable | None
 
     def __new__(
         cls,
@@ -687,6 +719,7 @@ class _tensorclass_dec:
         shadow: bool = False,
         tensor_only: bool = False,
         skip_post_init_on_rebuild: bool = False,
+        cast_filter: Callable | None = None,
     ):
         if not isinstance(autocast, bool):
             clz = autocast
@@ -709,6 +742,7 @@ class _tensorclass_dec:
         shadow: bool = False,
         tensor_only: bool = False,
         skip_post_init_on_rebuild: bool = False,
+        cast_filter: Callable | None = None,
     ):
         if autocast and nocast:
             raise TypeError("autocast is exclusive with nocast.")
@@ -722,6 +756,7 @@ class _tensorclass_dec:
         self.shadow = shadow
         self.tensor_only = tensor_only
         self.skip_post_init_on_rebuild = skip_post_init_on_rebuild
+        self.cast_filter = cast_filter
 
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
@@ -734,6 +769,10 @@ class _tensorclass_dec:
         clz._frozen = self.frozen
         clz._tensor_only = self.tensor_only
         clz._skip_post_init_on_rebuild = self.skip_post_init_on_rebuild
+        # staticmethod: an instance must not bind the predicate
+        clz._cast_filter = (
+            None if self.cast_filter is None else staticmethod(self.cast_filter)
+        )
         return clz
 
 
@@ -915,6 +954,7 @@ def tensorclass(
     shadow: bool = False,
     tensor_only: bool = False,
     skip_post_init_on_rebuild: bool = False,
+    cast_filter: Callable | None = None,
 ) -> T | None:
     """A decorator that turns a class with annotated fields into a tensorclass.
 
@@ -958,6 +998,14 @@ def tensorclass(
             ``False``: ``__post_init__`` also runs on these rebuilds, except
             on the shells that ``empty()`` builds. On a lazy stack it runs on
             each stacked instance.
+        cast_filter (callable, optional): the default ``cast_filter`` of
+            :meth:`~tensordict.TensorDictBase.to` and of the dtype shorthands
+            (``float()``, ``bfloat16()``, ...) on the instances of the class: a
+            predicate ``fn(key, value) -> bool`` that selects the tensor leaves
+            a dtype cast applies to, ``key`` being the nested key as a tuple of
+            str. A ``cast_filter`` passed to the call overrides it, and
+            ``cast_filter=None`` there casts every leaf. Subclasses inherit it.
+            Defaults to ``None``: every leaf is cast.
 
     Returns:
         the tensorclass, or a decorator if the flags are given without a
@@ -1048,6 +1096,19 @@ def tensorclass(
         >>> r.clone().offsets  # not checked again
         tensor([0, 2, 3])
 
+        ``cast_filter`` keeps the integer and boolean fields out of dtype casts:
+
+        >>> from tensordict import is_inexact
+        >>> @tensorclass(cast_filter=is_inexact)
+        ... class Mesh:
+        ...     points: torch.Tensor
+        ...     cells: torch.Tensor
+        >>> mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long))
+        >>> mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype
+        (torch.bfloat16, torch.int64)
+        >>> mesh.bfloat16(cast_filter=None).cells.dtype  # cast every leaf
+        torch.bfloat16
+
     """
 
     def wrap(cls):
@@ -1058,6 +1119,7 @@ def tensorclass(
             shadow=shadow,
             tensor_only=tensor_only,
             skip_post_init_on_rebuild=skip_post_init_on_rebuild,
+            cast_filter=cast_filter,
         )(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
@@ -1119,6 +1181,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "fields",
         "from_tensordict",
         "_autocast",
+        "_cast_filter",
         "_from_dict_defaults",
         "_from_tensordict",
         "_frozen",
@@ -3408,6 +3471,18 @@ def _wrap_td_method(
                 )
             return deliver_result(self, result, kwargs)
 
+        if funcname in _CAST_METHODS:
+            uncast_func = wrapped_func
+
+            def wrapped_func(self, *args, **kwargs):
+                # The class default, unless the call passes cast_filter
+                if "cast_filter" not in kwargs:
+                    cast_filter = getattr(type(self), "_cast_filter", None)
+                    if cast_filter is not None:
+                        kwargs["cast_filter"] = cast_filter
+                return uncast_func(self, *args, **kwargs)
+
+            return wrapped_func
         if funcname not in _FIELD_KEY_ARGUMENT:
             return wrapped_func
         position, name = _FIELD_KEY_ARGUMENT[funcname]
@@ -5310,6 +5385,7 @@ class _TensorClassMeta(abc.ABCMeta):
         tensor_only=None,
         shadow=None,
         skip_post_init_on_rebuild=None,
+        cast_filter=NO_DEFAULT,
         **kwargs,
     ):
         # Create the class using the ABCMeta's __new__ method
@@ -5330,6 +5406,8 @@ class _TensorClassMeta(abc.ABCMeta):
             cls, "_skip_post_init_on_rebuild"
         ):
             skip_post_init_on_rebuild = cls._skip_post_init_on_rebuild
+        if cast_filter is NO_DEFAULT:
+            cast_filter = getattr(cls, "_cast_filter", None)
         if name == "TensorClass":
             # if "tensordict.tensorclass" in namespace.get(
             #     "__module__", ""
@@ -5351,6 +5429,7 @@ class _TensorClassMeta(abc.ABCMeta):
                 tensor_only=bool(tensor_only),
                 shadow=bool(shadow),
                 skip_post_init_on_rebuild=bool(skip_post_init_on_rebuild),
+                cast_filter=cast_filter,
             )(cls)
 
         return cls
@@ -5568,6 +5647,21 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     ``autocast``, ``nocast`` and ``tensor_only`` are exclusive: combining two
     of them raises a ``TypeError``.
 
+    A class keyword that is not a flag, ``cast_filter``, sets the default
+    ``cast_filter`` of :meth:`~tensordict.TensorDictBase.to` and of the dtype
+    shorthands (``float()``, ``bfloat16()``, ...): a predicate
+    ``fn(key, value) -> bool`` that selects the tensor leaves a dtype cast
+    applies to. A ``cast_filter`` passed to the call overrides it, and
+    ``cast_filter=None`` there casts every leaf. Subclasses inherit it.
+
+        >>> from tensordict import is_inexact
+        >>> class Mesh(TensorClass, cast_filter=is_inexact):
+        ...     points: torch.Tensor
+        ...     cells: torch.Tensor
+        >>> mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long))
+        >>> mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype
+        (torch.bfloat16, torch.int64)
+
     .. rubric:: Subclassing
 
     A class with flags is a regular class. You can subclass it and add
@@ -5605,6 +5699,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     _nocast = False
     _frozen = False
     _tensor_only = False
+    _cast_filter = None
 
     _is_tensorclass = True
     _is_non_tensor = False

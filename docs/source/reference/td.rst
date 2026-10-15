@@ -388,6 +388,11 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.quint8
     TensorDictBase.quint4x2
 
+``to`` and the dtype shorthands take a ``cast_filter`` predicate
+``fn(key, value) -> bool`` that selects the leaves to cast. The predicates
+below test the dtype of their last argument, so they serve as a
+``cast_filter`` and as a test in :meth:`~tensordict.TensorDictBase.apply`.
+
 .. rubric:: Functions
 
 .. autosummary::
@@ -395,6 +400,10 @@ control the memory that holds them. See :ref:`devices`.
     :template: function.rst
 
     from_consolidated
+    is_inexact
+    is_floating
+    is_integer
+    is_bool
 
 .. _api-methods-pointwise:
 
