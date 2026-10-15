@@ -437,7 +437,8 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     for other in map(_unwrap_tensorclass, others):
         if not isinstance(other, TensorDictBase):
             continue
-        if type(other)._wrapped_attr is not None:
+        if not is_stack and type(other)._wrapped_attr is not None:
+            # a lazy stack pairs a typed operand's leaves by key already
             other = getattr(other, type(other)._wrapped_attr)
         if isinstance(other, LazyStackedTensorDict) is not is_stack:
             return True
