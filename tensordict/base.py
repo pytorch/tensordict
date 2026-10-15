@@ -1538,6 +1538,63 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
     return source
 
 
+def _reads_copies_under(td: TensorDictBase, keys: list) -> bool:
+    """Whether a key of ``keys`` passes through or names a nested tensordict of ``td`` whose leaves are read as copies.
+
+    Such as a lazy stack, which stacks the leaves of its members, or an h5
+    file (#2780). Only the entries on the path of each key are read, and the
+    tree under a key that names a tensordict.
+    """
+    # the tensordicts that keys name: the leaves under them are written too
+    named = []
+    for key in keys:
+        node, cls = td, type(td)
+        for part in key:
+            if cls is _TENSORDICT_TYPE:
+                node = node._tensordict.get(part)
+            else:
+                node = node._get_str(part, None)
+            cls = type(node)
+            if cls is _TENSORDICT_TYPE:
+                continue
+            if cls is Tensor:
+                break
+            copies = _entry_reads_copies(node)
+            if copies is None:
+                break
+            if copies:
+                return True
+        else:
+            named.append(node)
+    while named:
+        for value in named.pop().values():
+            cls = type(value)
+            if cls is _TENSORDICT_TYPE:
+                named.append(value)
+            elif cls is not Tensor:
+                copies = _entry_reads_copies(value)
+                if copies:
+                    return True
+                if copies is not None:
+                    named.append(value)
+    return False
+
+
+def _entry_reads_copies(value: Any) -> bool | None:
+    """Whether the tensordict ``value`` reads its leaves as copies, or ``None`` for an entry that is not a tensordict.
+
+    Called by ``_reads_copies_under``.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+
+    cls = type(value)
+    if not _is_tensor_collection(cls) or _is_non_tensor(cls):
+        return None
+    while _is_tensorclass(type(value)):
+        value = value._tensordict
+    return isinstance(value, LazyStackedTensorDict) or value._reads_return_copies
+
+
 def _has_typed_tensordict(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a ``TypedTensorDict``, which lists the leaves of the members of a lazy source.
 
@@ -5055,6 +5112,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
+        if keys_to_update is not None and _reads_copies_under(self, keys_to_update):
+            # the _apply_nest route below would write into the copies that a
+            # nested lazy stack or file reads: write the listed entries on the
+            # route without keys_to_update instead, which writes the stored
+            # data (#2780). A listed entry that self lacks raises KeyError, as
+            # on the _apply_nest route, but before anything is written.
+            input_dict_or_td = input_dict_or_td.select(*keys_to_update, strict=False)
+            dest_keys = self.keys(True, True, is_leaf=_is_leaf_nontensor)
+            for key in input_dict_or_td.keys(True, True, is_leaf=_is_leaf_nontensor):
+                if key not in dest_keys:
+                    raise KeyError(
+                        f"The key {_unravel_key_to_tuple(key)} was not found in the dest tensordict."
+                    )
+            keys_to_update = None
         # The tensor leaves of self that the copy_ calls of _apply_nest below
         # change, to write back where they are copies of the stored data. A
         # lazy stack in the input splits self into its elements: those leaves

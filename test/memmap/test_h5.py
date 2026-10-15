@@ -694,6 +694,51 @@ def test_inplace_methods_write_nested_file(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_update_keys_to_update_writes_nested_file(tmp_path):
+    # #2780: update_ with keys_to_update writes the h5 files that a tensordict
+    # holds, as without keys_to_update, also for a key that names a
+    # tensordict, and raises before it writes for a key that self lacks
+    files = []
+
+    def h5():
+        files.append(
+            PersistentTensorDict.from_dict(
+                TensorDict(x=torch.ones(3), batch_size=[3]),
+                filename=tmp_path / f"{len(files)}.h5",
+            )
+        )
+        return files[-1]
+
+    def member(n):
+        return TensorDict(a=torch.ones(3), n=n, batch_size=[3])
+
+    layouts = (
+        lambda: member(h5()),
+        lambda: member(TensorDict(m=h5(), batch_size=[3])),
+        lambda: member(lazy_stack([h5(), h5()], 1)),
+        lambda: lazy_stack([member(h5()), member(h5())]),
+        lambda: lazy_stack([member(lazy_stack([h5(), h5()], 1)) for _ in range(2)]),
+    )
+    for make in layouts:
+        for keys in (["n"], [key for key in make().keys(True, True) if "x" in key]):
+            start = len(files)
+            data = make()
+            expected = data.to_tensordict()
+            source = expected * 0 + 5
+            assert data.update_(source, keys_to_update=keys) is data
+            expected.update_(source, keys_to_update=keys)
+            torch.testing.assert_close(data.to_tensordict(), expected)
+            assert (data["a"] == 1).all()
+            for file in files[start:]:
+                assert (file["x"] == 5).all()
+            source["n", "y"] = torch.zeros(source["n"].batch_size)
+            with pytest.raises(KeyError, match="not found in the dest"):
+                data.update_(source * 0, keys_to_update=["n"])
+            for file in files[start:]:
+                assert (file["x"] == 5).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_read_only_warns(tmp_path):
     # from_h5 opens files read-only by default: the in-place methods leave the
     # file unchanged, as before they wrote to files, and warn that this will

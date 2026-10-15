@@ -5053,6 +5053,50 @@ class TestLazyStackedTensorDict:
             assert (td["a"] == 1).all()
             assert (td["n", "x"] == 3).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_update__keys_to_update_nested_lazy(self, stack_dim):
+        # #2780: update_ with keys_to_update writes the members of a lazy stack
+        # that self holds, as without keys_to_update, also for a key that names
+        # a tensordict, and raises before it writes for a key that self lacks
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        def holder(cls=TensorDict):
+            # a lazy stack of batch size [2, 3]
+            size = (2, 3)[1 - stack_dim]
+            members = [
+                cls(x=torch.zeros(size, 4), batch_size=[size])
+                for _ in range((2, 3)[stack_dim])
+            ]
+            return TensorDict(
+                a=torch.zeros(2, 3), n=lazy_stack(members, stack_dim), batch_size=[2, 3]
+            )
+
+        def deep():
+            return TensorDict(b=torch.zeros(2, 3), m=holder(), batch_size=[2, 3])
+
+        for make, key in (
+            (holder, ("n", "x")),
+            (holder, "n"),
+            (lambda: holder(MC), ("n", "x")),
+            (lambda: lazy_stack([holder(), holder()]), ("n", "x")),
+            (deep, ("m", "n", "x")),
+            (deep, "m"),
+        ):
+            td = make()
+            expected = td.to_tensordict()
+            source = expected + 1
+            assert td.update_(source, keys_to_update=[key]) is td
+            expected.update_(source, keys_to_update=[key])
+            assert (expected.get(key) == 1).all()
+            torch.testing.assert_close(td.to_tensordict(), expected)
+            source.get(key).zero_()
+            prefix = (key,) if isinstance(key, str) else key[:-1]
+            source.set(prefix + ("y",), torch.zeros(source.batch_size))
+            with pytest.raises(KeyError, match="not found in the dest"):
+                td.update_(source, keys_to_update=[prefix])
+            torch.testing.assert_close(td.to_tensordict(), expected)
+
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
         td = TensorDict(
