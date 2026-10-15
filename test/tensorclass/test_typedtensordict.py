@@ -1366,8 +1366,9 @@ class TestBackends:
         ]
         return Flat.from_tensordict(lazy_stack(tds)), tds
 
-    # (op, outcome): "raise" before any write, "self" without a warning, or
-    # "warn" (returns self with a FutureWarning, until 0.17)
+    # (op, outcome): "raise" before any write, "self" without a warning,
+    # "warn" (returns self with a FutureWarning, until 0.17), or "error" (the
+    # error of torch, with no warning)
     _FLAT_LAZY_INPLACE_OPS = {
         "flatten": (lambda s: s.flatten(0, 1, inplace=True), "raise"),
         "unflatten": (lambda s: s.unflatten(1, (3, 1), inplace=True), "raise"),
@@ -1384,6 +1385,12 @@ class TestBackends:
         "masked_select": (
             lambda s: s.masked_select(torch.ones(4, 3, dtype=torch.bool), inplace=True),
             "raise",
+        ),
+        "pad": (lambda s: s.pad([0, 0, 0, 1], inplace=True), "raise"),
+        "pad_stack_dim": (lambda s: s.pad([1, 0], inplace=True), "raise"),
+        "gather_out_of_bounds": (
+            lambda s: s.gather(1, torch.full((4, 3), 5), inplace=True),
+            "error",
         ),
         "flatten_same": (lambda s: s.flatten(1, 1, inplace=True), "self"),
         "unflatten_same": (lambda s: s.unflatten(1, (3,), inplace=True), "self"),
@@ -1410,7 +1417,12 @@ class TestBackends:
         else:
             obj = state
         before = obj.to_tensordict()
-        if outcome == "raise":
+        if outcome == "error":
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                with pytest.raises(RuntimeError, match="out of bounds"):
+                    fn(obj)
+        elif outcome == "raise":
             with pytest.raises(NotImplementedError, match="inplace=True|in-place"):
                 fn(obj)
             assert obj.batch_size == (4, 3)

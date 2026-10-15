@@ -7213,7 +7213,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``new_batch_size`` is the batch size that the op gives ``self``. When
         it differs from the batch size, a nested tensordict whose
         ``_inplace_batch_size_change`` is False (a file, a ``TypedTensorDict``
-        over a lazy stack) raises too, before any leaf is rewritten.
+        over a lazy stack) raises too, before any leaf is rewritten. The
+        top-level call sets it to None when the batch size stays; the nested
+        calls receive it only as a sign that the batch size changes (it is not
+        their batch size).
         """
         if not prefix:
             if _inplace_shape_state.nested:

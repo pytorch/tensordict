@@ -140,6 +140,10 @@ def pad(
 
     if safe:
         _pad_preflight(tensordict, pad_size)
+        if inplace and any(
+            pad_size[i] + pad_size[i + 1] for i in range(0, len(pad_size), 2)
+        ):
+            _pad_inplace_preflight(tensordict)
 
     if is_non_tensor(tensordict):
         # NonTensorStack is a LazyStackedTensorDict subclass: dispatch before
@@ -430,6 +434,41 @@ def _with_batch_size(
         batch_size=batch_size,
         call_on_nested=True,
     )
+
+
+def _pad_inplace_preflight(tensordict: TensorDictBase, prefix: tuple = ()) -> None:
+    """Raise if ``pad(tensordict, ..., inplace=True)`` would change the batch size of a tensordict that cannot change it.
+
+    A file, a sub-tensordict, a legacy lazy view and a ``TypedTensorDict``
+    over a lazy stack keep their batch size: padding them in place, or a
+    tensordict that holds them, would raise or break them after the earlier
+    leaves were padded. A ``LazyStackedTensorDict`` pads in place on its own
+    and is not walked.
+    """
+    if not prefix and not tensordict._inplace_batch_size_change:
+        raise NotImplementedError(
+            f"pad(inplace=True) changes the batch size, which a "
+            f"{type(tensordict).__name__} cannot do in place. Use inplace=False "
+            "instead."
+        )
+    if isinstance(tensordict, LazyStackedTensorDict):
+        return
+    for key, value in tensordict.items():
+        if not _is_tensor_collection(type(value)) or is_non_tensor(value):
+            continue
+        if is_tensorclass(value):
+            value = value._tensordict
+        nested_key = prefix + (key,)
+        if not value._inplace_batch_size_change or (
+            value._lazy and not isinstance(value, LazyStackedTensorDict)
+        ):
+            raise NotImplementedError(
+                f"pad(inplace=True) changes the batch size, which a "
+                f"{type(value).__name__} at key "
+                f"{nested_key[0] if len(nested_key) == 1 else nested_key!r} "
+                "cannot do in place. Use inplace=False instead."
+            )
+        _pad_inplace_preflight(value, nested_key)
 
 
 def _pad_lazy_stack_inplace(
