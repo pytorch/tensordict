@@ -1227,13 +1227,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
 
     Keyword Args:
-        partial_tolerant (bool, optional): If ``True``, the input tensordict can miss some
-            of the input keys. If so, only the modules that can be executed given the
-            keys that are present will be executed. Also, if the input tensordict is a
-            lazy stack of tensordicts AND if partial_tolerant is ``True`` AND if the stack
-            does not have the required keys, then TensorDictSequential will scan through
-            the sub-tensordicts looking for those that have the required keys, if any.
-            Defaults to ``False``.
+        partial_tolerant (bool, optional): stored as an attribute, but
+            :meth:`forward` does not use it: every module runs on the whole
+            input, as with ``partial_tolerant=False``. To skip the modules whose
+            input keys are missing, or to run them on the members of a lazy
+            stack that have the keys, put this module in a
+            :class:`~tensordict.nn.TensorDictSequential` with
+            ``partial_tolerant=True``. Defaults to ``False``.
         return_composite (bool, optional): If `True` and multiple
             :class:`~tensordict.nn.ProbabilisticTensorDictModule` or
             :class:`~tensordict.nn.ProbabilisticTensorDictSequential` instances are found,
