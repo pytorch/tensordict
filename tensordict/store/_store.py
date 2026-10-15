@@ -359,6 +359,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     _masked_select_on_dense_copy = True
     # each read fetches the entry from the server into a new tensor
     _reads_return_copies = True
+    # update({key: self}) writes a copy of the data on the server
+    _update_stores_copy_of_self = True
     _leaves_built_on_read = True
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True

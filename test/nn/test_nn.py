@@ -4965,9 +4965,19 @@ class TestTensorDictParams:
         assert "z" not in params.keys()
 
     def test_setitem_self(self):
+        # #2741: these wrote params into the tensordict that it wraps
         params = self._params()
-        with pytest.raises(RecursionError):
+        keys = set(params.keys(True))
+        msg = r"Cannot set a tensordict inside itself \(key 'self'\)"
+        with pytest.raises(ValueError, match=msg):
             params["self"] = params
+        with pytest.raises(ValueError, match=msg):
+            params.set("self", params)
+        with pytest.raises(ValueError, match=msg):
+            params.set("self", item=params)
+        with pytest.raises(ValueError, match=msg):
+            params.update({"self": params})
+        assert set(params.keys(True)) == keys
 
     @pytest.mark.parametrize("no_convert", [False, True])
     @pytest.mark.parametrize("lock", [False, True])

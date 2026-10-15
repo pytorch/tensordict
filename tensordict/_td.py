@@ -51,6 +51,7 @@ from tensordict.base import (
     _register_tensor_class,
     _SCALAR_TYPES,
     _select_entry,
+    _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _set_tensordict_type,
@@ -1327,7 +1328,11 @@ class TensorDict(TensorDictBase):
                         or (device is not None and value.device != device)
                     ):
                         kind = 1
-                elif type(value) is TensorDict or type(value) is dict:
+                elif (
+                    type(value) is TensorDict or type(value) is dict
+                ) and value is not self:
+                    # self goes to the general path, which raises before it
+                    # writes anything
                     child = entries.get(key)
                     if type(child) is TensorDict:
                         kind = 2
@@ -3340,8 +3345,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
             )
         keys = set(self.keys(False))
-        for key, value in input_dict_or_td.items():
-            key = _unravel_key_to_tuple(key)
+        for input_key, value in input_dict_or_td.items():
+            key = _unravel_key_to_tuple(input_key)
             firstkey, subkey = key[0], key[1:]
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
@@ -3352,6 +3357,10 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
+            elif value is self and (keys_to_update is None or firstkey not in keys):
+                # with keys_to_update, a merge of self into a sub-tensordict
+                # can leave out the entry that holds the sub-tensordict
+                raise ValueError(_SELF_NESTING_ERROR.format(input_key))
             # the key must be a string by now. Let's check if it is present
             if firstkey in keys:
                 target_class = self.entry_class(firstkey)

@@ -64,6 +64,7 @@ from tensordict.base import (
     _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
+    _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _warn_names_length,
@@ -4044,6 +4045,12 @@ class LazyStackedTensorDict(TensorDictBase):
         # We iterate over the tensordicts rather than iterating over the keys,
         # which requires stacking and unbinding but is also not robust to missing keys.
         if isinstance(input_dict_or_td, dict):
+            if not clone and keys_to_update is None:
+                # each member would hold itself, which a member does not see
+                # for a nested key
+                for key, value in input_dict_or_td.items():
+                    if value is self:
+                        raise ValueError(_SELF_NESTING_ERROR.format(key))
             self._check_tuple_keys(input_dict_or_td)
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=self.batch_size
