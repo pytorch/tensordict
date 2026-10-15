@@ -70,6 +70,7 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
+    _compact_repr,
     _expands_to,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
@@ -4055,6 +4056,8 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
+    if _REPR_OPTIONS["compact"]:
+        return _compact_repr(self)
     fields = _td_fields(self._tensordict, sep="=")
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)

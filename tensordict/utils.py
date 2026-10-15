@@ -1927,6 +1927,182 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
     )
 
 
+# set_printoptions(compact=True): the repr is built from metadata only (shapes,
+# dtypes and devices of the leaves), so that it reads no data, syncs no device
+# and stacks no leaf of a lazy stack. A container is a (prefix, entries) pair,
+# an entry a (key, token or container) pair.
+_COMPACT_WIDTH = 80
+
+
+def _compact_dtype(dtype: torch.dtype) -> str:
+    # f32, i64, u8, c64, bf16, bool, f8_e4m3fn
+    name = str(dtype).replace("torch.", "")
+    for long, short in (("float", "f"), ("uint", "u"), ("int", "i"), ("complex", "c")):
+        name = name.replace(long, short)
+    return name
+
+
+def _compact_leaf(td, key):
+    # Returns the shape after the batch dims, the dtype and the set of devices
+    # of a tensor entry. In a lazy stack, a dim that differs between members
+    # is -1 and the dtype is the promoted one, as the stacked tensor has.
+    from tensordict import LazyStackedTensorDict
+    from tensordict.persistent import PersistentTensorDict
+
+    if isinstance(td, LazyStackedTensorDict):
+        metas = [_compact_leaf(sub, key) for sub in td.tensordicts]
+        shape, dtype, devices = metas[0]
+        shape, devices = list(shape), set(devices)
+        for other_shape, other_dtype, other_devices in metas[1:]:
+            if len(other_shape) != len(shape):
+                shape = [-1]
+            else:
+                shape = [s if s == o else -1 for s, o in zip(shape, other_shape)]
+            dtype = torch.promote_types(dtype, other_dtype)
+            devices |= other_devices
+        return shape, dtype, devices
+    if isinstance(td, PersistentTensorDict):
+        meta = td._get_metadata(key)
+        device = td.device if td.device is not None else torch.device("cpu")
+        return list(meta["shape"][td.batch_dims :]), meta["dtype"], {device}
+    tensor = td._get_str(key, None)
+    # an unbatched tensor does not share the batch dims: its full shape
+    shape = _shape(tensor) if _is_unbatched(tensor) else _shape(tensor)[td.batch_dims :]
+    return list(shape), tensor.dtype, {tensor.device}
+
+
+def _compact_entry(td, key):
+    from tensordict import LazyStackedTensorDict, NonTensorData, TensorDict
+    from tensordict.base import _is_tensor_collection
+    from tensordict.persistent import PersistentTensorDict
+
+    # the entry of the first member decides what the entry of a lazy stack is
+    first = td
+    while isinstance(first, LazyStackedTensorDict) and first.tensordicts:
+        first = first.tensordicts[0]
+    if isinstance(first, PersistentTensorDict):
+        meta = first._get_metadata(key)
+        if meta.get("non_tensor"):
+            return "NonTensorStack" if "shape" in meta else "NonTensorData"
+        item = None if meta.get("array") else first._get_str(key, None)
+    else:
+        item = first._get_str(key, None)
+    if item is None or not _is_tensor_collection(type(item)):
+        shape, dtype, devices = _compact_leaf(td, key)
+        token = f"[{','.join(map(str, shape))}]"
+        if _REPR_OPTIONS["show_dtype"]:
+            token = _compact_dtype(dtype) + token
+        if td.device is None and devices != {torch.device("cpu")}:
+            token += "@" + ",".join(sorted(str(device) for device in devices))
+        return token
+    if isinstance(item, NonTensorData):
+        return type(item.data).__name__
+    if is_non_tensor(item):
+        return type(item).__name__
+    sub = item if first is td else td._get_str(key, None)
+    prefix = "" if type(item) is TensorDict else type(item).__name__
+    extra = sub.batch_size[td.batch_dims :]
+    if extra:
+        prefix += f"[{','.join(map(str, extra))}]"
+    return prefix, _compact_body(sub)
+
+
+def _compact_entries(td, keys) -> list:
+    entries = [(key, _compact_entry(td, key)) for key in keys]
+    sort_keys = _REPR_OPTIONS["sort_keys"]
+    if sort_keys == "alphabetical":
+        entries.sort(key=lambda entry: f"{entry[0]}: {_compact_flat(entry[1])}")
+    elif callable(sort_keys):
+        entries.sort(
+            key=lambda entry: sort_keys(f"{entry[0]}: {_compact_flat(entry[1])}")
+        )
+    return entries
+
+
+def _compact_body(td) -> list:
+    if not is_tensorclass(td):
+        return _compact_entries(td, td.keys())
+    entries = _compact_entries(td._tensordict, td._tensordict.keys())
+    # the fields that hold no tensor: by type name, as non-tensor entries
+    others = [
+        (key, "None" if value is None else type(value).__name__)
+        for key, value in td._non_tensordict.items()
+    ]
+    if not type(td)._is_non_tensor:
+        from tensordict.tensorclass import _none_fields
+
+        others += [(key, "None") for key in _none_fields(td)]
+    return entries + others
+
+
+def _compact_flat(node) -> str:
+    if isinstance(node, str):
+        return node
+    prefix, entries = node
+    return f"{prefix}{{{', '.join(f'{k}: {_compact_flat(v)}' for k, v in entries)}}}"
+
+
+def _compact_render(node, indent: str, used: int, tail: int) -> str:
+    # One line if it fits in _COMPACT_WIDTH columns, given the ``used``
+    # columns before it and the ``tail`` ones after it; otherwise one entry
+    # per line, each rendered by the same rule.
+    flat = _compact_flat(node)
+    if (
+        isinstance(node, str)
+        or not node[1]
+        or used + len(flat) + tail <= _COMPACT_WIDTH
+    ):
+        return flat
+    prefix, entries = node
+    pad = indent + 4 * " "
+    lines = []
+    for i, (key, value) in enumerate(entries):
+        value_tail = tail + 1 if i == len(entries) - 1 else 1
+        value = _compact_render(value, pad, len(pad) + len(key) + 2, value_tail)
+        lines.append(f"{pad}{key}: {value}")
+    return prefix + "{\n" + ",\n".join(lines) + "}"
+
+
+def _compact_repr(obj) -> str | None:
+    """Returns the repr of ``set_printoptions(compact=True)``, or ``None`` for a class that keeps its own."""
+    from tensordict import LazyStackedTensorDict, TensorDictBase
+
+    header = []
+    if is_tensorclass(obj):
+        expected = type(obj).__expected_keys__
+        if _REPR_OPTIONS["show_batch_size"] and "batch_size" not in expected:
+            header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
+        if _REPR_OPTIONS["show_device"] and "device" not in expected:
+            if obj.device is not None:
+                header.append(f"device={obj.device}")
+    else:
+        # The stores list their key names and a non-tensor stack its values:
+        # a class with its own _repr_parts keeps its repr.
+        if type(obj)._repr_parts not in (
+            TensorDictBase._repr_parts,
+            LazyStackedTensorDict._repr_parts,
+        ):
+            return None
+        if _REPR_OPTIONS["show_batch_size"]:
+            header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
+        if _REPR_OPTIONS["show_device"] and obj.device is not None:
+            header.append(f"device={obj.device}")
+    exclusive = []
+    if isinstance(obj, LazyStackedTensorDict):
+        header.append(f"stack_dim={obj.stack_dim}")
+        keys = set(obj.keys())
+        for i, member in enumerate(obj.tensordicts):
+            own = [key for key in member.keys() if key not in keys]
+            if own:
+                exclusive.append((str(i), ("", _compact_entries(member, own))))
+    head = f"{type(obj).__name__}(" + "".join(f"{h}, " for h in header) + "fields="
+    out = head + _compact_render(("", _compact_body(obj)), "", len(head), 1)
+    if exclusive:
+        used = len(out.rsplit("\n", 1)[-1]) + len(", exclusive_fields=")
+        out += ", exclusive_fields=" + _compact_render(("", exclusive), "", used, 1)
+    return out + ")"
+
+
 def _check_keys(
     list_of_tensordicts: Sequence[TensorDictBase],
     strict: bool = False,
