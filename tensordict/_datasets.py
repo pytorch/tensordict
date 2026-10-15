@@ -151,14 +151,17 @@ def to_mds(
         # a writer without column encodings gets the tensordict, as before
         td_dict = self
     else:
-        # the pkl columns of a caller's writer store the entry itself, as before
+        # only the writer's columns are converted; the pkl columns of a
+        # caller's writer store the entry itself, as before
         pkl = () if created else {n for n, e in zip(names, encodings) if e == "pkl"}
-        td_dict = self.tolist(convert_tensors="numpy")
+        td_dict = self.select(*(n for n in names if n not in pkl), strict=False)
+        td_dict = td_dict.tolist(convert_tensors="numpy")
         for k, v in td_dict.items():
-            if k in pkl:
-                td_dict[k] = self[k]
-            elif isinstance(v, np.ndarray) and v.shape == ():
+            if isinstance(v, np.ndarray) and v.shape == ():
                 td_dict[k] = v.item()
+        for k in pkl:
+            if k in self.keys():
+                td_dict[k] = self[k]
     if created:
         with writer as w:
             w.write(td_dict)

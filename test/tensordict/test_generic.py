@@ -9375,10 +9375,15 @@ class TestGeneric:
 
     @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
     def test_to_mds_zero_dim_writer_pkl(self, tmpdir):
-        # a pkl column of the caller's writer stores the tensor itself
+        # a pkl column of the caller's writer stores the tensor itself, and
+        # entries that NumPy cannot take are fine outside the converted columns
         from streaming import MDSWriter
 
-        td = TensorDict(a=torch.arange(3), b=torch.arange(2))
+        td = TensorDict(
+            a=torch.arange(3, dtype=torch.bfloat16),
+            b=torch.arange(2),
+            g=torch.ones(2, requires_grad=True),
+        )
 
         tmpdir = str(tmpdir)
         with MDSWriter(out=tmpdir, columns={"a": "pkl", "b": "ndarray"}) as writer:
@@ -9389,7 +9394,9 @@ class TestGeneric:
         )
         row = dataset[0]
         assert isinstance(row["a"], torch.Tensor)
+        assert row["a"].dtype == torch.bfloat16
         assert (row["a"] == td["a"]).all()
+        assert "g" not in row
         assert isinstance(row["b"], np.ndarray)
         assert (row["b"] == td["b"].numpy()).all()
 
