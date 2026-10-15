@@ -6230,6 +6230,23 @@ class TestAddStateIndependentNormalScale:
         assert scale.shape == (num_outputs,)
         assert (scale == init_value).all()
 
+    @pytest.mark.parametrize("loc_shape", [(), (4,), (3, 4)])
+    def test_add_scale_scalar_shape(self, loc_shape):
+        # The default scale is 0-dim and broadcasts to any loc
+        module_normal = AddStateIndependentNormalScale(init_value=1.0)
+        assert module_normal.state_independent_scale.shape == ()
+        loc = torch.randn(loc_shape)
+        out_loc, scale = module_normal(loc)
+        assert out_loc is loc
+        assert scale.shape == loc_shape
+        torch.testing.assert_close(scale, torch.ones(loc_shape).exp())
+
+    @pytest.mark.parametrize("loc_shape", [(5,), (3, 5), (4,)])
+    def test_add_scale_shape_mismatch(self, loc_shape):
+        module_normal = AddStateIndependentNormalScale((2, 4))
+        with pytest.raises(RuntimeError, match="Last dimensions of loc"):
+            module_normal(torch.randn(loc_shape))
+
 
 class TestStateDict:
     @pytest.mark.parametrize("detach", [True, False])

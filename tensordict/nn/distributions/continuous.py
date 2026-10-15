@@ -167,9 +167,12 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         Returns:
             a tuple of two or more tensors containing the ``(loc, scale, *others)`` values.
         """
-        if self.scale_shape != loc.shape[-len(self.scale_shape) :]:
+        # Slice from the start: with a 0-dim scale, loc.shape[-0:] would be
+        # the whole shape of loc instead of an empty one.
+        loc_trailing_shape = loc.shape[max(loc.ndim - len(self.scale_shape), 0) :]
+        if self.scale_shape != loc_trailing_shape:
             raise RuntimeError(
-                f"Last dimensions of loc ({loc.shape[-len(self.scale_shape) :]}) do not match the number of dimensions "
+                f"Last dimensions of loc ({loc_trailing_shape}) do not match the number of dimensions "
                 f"in scale ({self.state_independent_scale.shape})"
             )
 
