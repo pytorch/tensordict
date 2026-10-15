@@ -48,6 +48,7 @@ from tensordict.utils import (
     _erase_cache_first,
     _lock_blocked,
     _LOCK_ERROR,
+    _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
     _warn_update_ignore_lock,
     _zip_strict,
@@ -313,18 +314,44 @@ def _data_and_non_tensor(value):
     return value if is_non_tensor(value) else value.data
 
 
+def _set_replaced_non_tensor(param_td, data):
+    # set_at_ and update_at_ replace a non-tensor leaf of data with a stack
+    # instead of writing into it: put the new leaf in param_td (#2740).
+    for key, value in data.items(True, True, is_leaf=_is_leaf_nontensor):
+        if not is_non_tensor(value) or value is param_td.get(key):
+            continue
+        key = _unravel_key_to_tuple(key)
+        parent = param_td._get_tuple(key[:-1], NO_DEFAULT) if len(key) > 1 else param_td
+        if isinstance(parent, TensorDictParams):
+            # Its _set_str ignores ignore_lock: write into the tensordict it wraps.
+            parent = parent._param_td
+        parent._set_str(
+            key[-1],
+            value,
+            inplace=False,
+            validated=True,
+            ignore_lock=True,
+            non_blocking=False,
+        )
+
+
 def _apply_on_data_and_non_tensor(func):
     # As _apply_on_data, on a .data that holds the non-tensor leaves of the
     # wrapped tensordict, which .data rebuilds: the writes reach them (#2263).
+    replaces_leaves = func.__name__ in ("set_at_", "update_at_")
+
     @wraps(func)
     def new_func(self, *args, **kwargs):  # type: ignore[misc]
-        if self._param_td._has_non_tensor:
+        has_non_tensor = self._param_td._has_non_tensor
+        if has_non_tensor:
             data = self._param_td._fast_apply(
                 _data_and_non_tensor, is_leaf=_is_leaf_nontensor, propagate_lock=True
             )
         else:
             data = self.data
         getattr(data, func.__name__)(*args, **kwargs)
+        if has_non_tensor and replaces_leaves:
+            _set_replaced_non_tensor(self._param_td, data)
         return self
 
     return new_func
@@ -1349,7 +1376,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data
     def fill_(self, key: NestedKey, value: float | bool) -> Self: ...
 
-    @_apply_on_data
+    @_apply_on_data_and_non_tensor
     def set_at_(
         self, key: NestedKey, value: CompatibleType, index: IndexType
     ) -> Self: ...
@@ -1386,7 +1413,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T: ...
 
-    @_apply_on_data
+    @_apply_on_data_and_non_tensor
     def update_at_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
