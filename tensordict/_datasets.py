@@ -131,7 +131,9 @@ def to_mds(
                 w.write(td_i)
             return
 
-    if writer is None:
+    # a writer passed by the caller is left open: they may write more samples
+    created = writer is None
+    if created:
         if columns is None:
             columns = _columns(self)
         writer = MDSWriter(
@@ -141,8 +143,27 @@ def to_mds(
             compression=compression,
             hashes=hashes,
             size_limit=size_limit,
+            **kwargs,
         )
-    writer.write(self)
+    names = getattr(writer, "column_names", None)
+    encodings = getattr(writer, "column_encodings", None)
+    if names is None or encodings is None:
+        # a writer without column encodings gets the tensordict, as before
+        td_dict = self
+    else:
+        # the pkl columns of a caller's writer store the entry itself, as before
+        pkl = () if created else {n for n, e in zip(names, encodings) if e == "pkl"}
+        td_dict = self.tolist(convert_tensors="numpy")
+        for k, v in td_dict.items():
+            if k in pkl:
+                td_dict[k] = self[k]
+            elif isinstance(v, np.ndarray) and v.shape == ():
+                td_dict[k] = v.item()
+    if created:
+        with writer as w:
+            w.write(td_dict)
+    else:
+        writer.write(td_dict)
 
 
 def _columns(self: TensorCollection) -> dict[str, str]:
