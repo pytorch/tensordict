@@ -840,13 +840,15 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 
     # Override: a lazy source indexes its members, so the result holds views of
     # them, as indexing the stack does; the base method would stack copies of
-    # the flat leaves (#2759). Other sources index as before.
+    # the flat leaves (#2759). Other sources, and members whose reads return
+    # copies (files, stores), index as before.
     def _index_tensordict(self, index, new_batch_size=None, names=None):
         source = self._source
         if (
             isinstance(source, LazyStackedTensorDict)
             and new_batch_size is None
             and names is None
+            and not source._reads_return_copies
         ):
             result = source[index]
             if isinstance(result, TypedTensorDict):

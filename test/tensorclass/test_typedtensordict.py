@@ -1052,6 +1052,24 @@ class TestFromTensordict:
         )
         assert typed[(*index, 0)]._source is tds[0]
 
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_from_tensordict_lazy_stack_files_index_copies(self, tmp_path):
+        # members that read copies (files) index into a copy, as on main, so
+        # select, exclude and empty work on the result
+        files = [
+            PersistentTensorDict.from_dict(
+                self._make_td(), filename=tmp_path / f"{i}.h5"
+            )
+            for i in range(2)
+        ]
+        state = PredictorState.from_tensordict(lazy_stack(files))
+        for sub in (state[0], state[1:]):
+            assert isinstance(sub, PredictorState)
+            assert not isinstance(sub._source, LazyStackedTensorDict)
+            sub.select("eta")
+            sub.exclude("eta")
+            sub.empty()
+
     @pytest.mark.parametrize("exclusive", ["e", ("n", "e")], ids=["top", "nested"])
     def test_from_tensordict_lazy_stack_nested_exclusive_keys_inplace(self, exclusive):
         # #2739: with a nested entry, the in-place methods change the shared
