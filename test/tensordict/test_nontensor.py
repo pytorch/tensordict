@@ -1407,6 +1407,42 @@ class TestNonTensorData:
         assert data.batch_size == ()
         assert torch.equal(data.x, torch.tensor(1.0))
 
+    @pytest.mark.parametrize(
+        "index", [torch.tensor(True), True, None], ids=["tensor", "bool", "none"]
+    )
+    def test_setitem_true_no_batch_dims_tensorclass(self, index):
+        # On a batchless tensorclass, a value with no batch dims is written as
+        # by [...]: a compatible value writes its fields, and a value of
+        # another class raises instead of adding fields to the tensorclass.
+        @tensorclass
+        class M:
+            x: torch.Tensor
+
+        @tensorclass
+        class S:
+            s: str
+
+        data = M(x=torch.zeros(()), batch_size=[])
+        data[index] = M(x=torch.ones(()), batch_size=[])
+        assert torch.equal(data.x, torch.tensor(1.0))
+
+        for dest, value in [
+            (M(x=torch.zeros(()), batch_size=[]), NonTensorData("y")),
+            (S(s="hello", batch_size=[]), M(x=torch.ones(()), batch_size=[])),
+        ]:
+            with pytest.raises(ValueError, match="compatible class"):
+                dest[...] = value
+            with pytest.raises(ValueError, match="compatible class"):
+                dest[index] = value
+            assert set(dest.to_dict()) == set(type(dest).__expected_keys__)
+            dest.clone()
+
+        # [...] adds the keys of a TensorDict value that are not fields.
+        dest = S(s="hello", batch_size=[])
+        with pytest.raises(ValueError, match="not fields"):
+            dest[index] = TensorDict(x=torch.ones(()))
+        assert set(dest.to_dict()) == {"s"}
+
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_subtd_set_at_array_data(self, array):
         # Arrays and tensors compare elementwise, so comparing the old and new

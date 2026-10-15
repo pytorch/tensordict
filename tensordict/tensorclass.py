@@ -3970,8 +3970,21 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         # and is still squeezed.
         value_batch_size = getattr(value, "batch_size", None)
         if value_batch_size is None or value_batch_size:
-            value = value.squeeze(0)
-        return self.update(value)
+            return self.update(value.squeeze(0))
+        # A NonTensorData takes another NonTensorData here, which [...]
+        # refuses. Any other value without a batch dim is written as by
+        # [...], which checks the class of a tensorclass value. [...] does not
+        # check the keys of a TensorDict value, so check them here.
+        if isinstance(self, NonTensorData) and isinstance(value, NonTensorData):
+            return self.update(value)
+        if isinstance(value, TensorDictBase):
+            extra_keys = set(value.keys()) - set(type(self).__expected_keys__)
+            if extra_keys:
+                raise ValueError(
+                    f"Cannot write keys {sorted(extra_keys)} into a "
+                    f"{type(self).__name__}: they are not fields of the class."
+                )
+        item = Ellipsis
     if (
         isinstance(self, NonTensorData)
         and is_non_tensor(value)
