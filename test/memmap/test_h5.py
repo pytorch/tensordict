@@ -13,6 +13,7 @@ import tensordict.persistent as tensordict_persistent
 import torch
 from tensordict import (
     lazy_stack,
+    MemoryMappedTensor,
     NonTensorData,
     NonTensorStack,
     PersistentTensorDict,
@@ -265,6 +266,31 @@ class TestH5Serialization:
         assert h5td.to_tensordict()[1:3]["mission"] == [b"go right", b"stop"]
         assert h5td.clone(False)[3]["mission"] == b"wait"
         h5td.close()
+
+    @pytest.mark.parametrize("non_tensor_as_stack", [False, True])
+    @pytest.mark.parametrize("with_prefix", [False, True])
+    def test_h5_memmap_enum(self, tmp_path, non_tensor_as_stack, with_prefix):
+        # an enum column reads as a non-tensor: memmap() keeps it as one,
+        # as to_tensordict().memmap() does (#2781)
+        enum = h5py.enum_dtype({"A": 0, "B": 1}, basetype="i1")
+        with h5py.File(tmp_path / "file.h5", "w") as f:
+            f["pos"] = np.arange(4, dtype=np.float32)
+            f.create_dataset("color", data=np.array([0, 1, 1, 0]), dtype=enum)
+            f.create_dataset("sub/e", data=np.array([1, 0, 0, 1]), dtype=enum)
+        h5td = PersistentTensorDict.from_h5(
+            tmp_path / "file.h5", non_tensor_as_stack=non_tensor_as_stack
+        )
+        expected = h5td.to_tensordict().memmap()
+        prefix = tmp_path / "memmap" if with_prefix else None
+        out = h5td.memmap(prefix)
+        h5td.close()
+        assert isinstance(out.get("pos"), MemoryMappedTensor)
+        assert (out.get("pos") == torch.arange(4)).all()
+        cls = NonTensorStack if non_tensor_as_stack else NonTensorData
+        for key in ("color", ("sub", "e")):
+            assert type(out.get(key)) is cls
+            assert type(expected.get(key)) is cls
+            assert np.array_equal(out.get(key).tolist(), expected.get(key).tolist())
 
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
