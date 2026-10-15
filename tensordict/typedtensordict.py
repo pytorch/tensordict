@@ -367,6 +367,16 @@ def _reads_copies(td: TensorDictBase) -> bool:
     )
 
 
+def _has_exclusive_keys(td: LazyStackedTensorDict) -> bool:
+    """Whether the lazy stack ``td``, or a lazy stack that it stacks, has keys that only some of its members hold."""
+    # the keys of a member that is a lazy stack are those all its members hold
+    return td._has_exclusive_keys or any(
+        _has_exclusive_keys(member)
+        for member in td.tensordicts
+        if isinstance(member, LazyStackedTensorDict)
+    )
+
+
 def _make_delegate_tuple_wrap(method_name: str) -> Callable:
     """Delegate to ``self._source`` and wrap each element of the returned tuple."""
 
@@ -540,6 +550,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     """
 
     _source: TensorDictBase
+    _wrapped_attr = "_source"
 
     # Override: the flag lives on the source.
     @_StateFromSource._is_shared.setter
@@ -759,16 +770,17 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # Override: the source's in-place methods write into the members of a lazy
     # stack, which writing back the leaves read from self cannot do when they
     # are nested. Other sources and stacks that hold copies, such as files,
-    # take the inherited path. On a stack with exclusive keys, which the method
-    # leaves unchanged, it changes a copy of the shared leaves, each read as
-    # one stacked tensor, which the source writes into its members (#2739).
+    # take the inherited path. On a stack with exclusive keys, also in a stack
+    # that it stacks (#2759), which the method leaves unchanged, it changes a
+    # copy of the shared leaves, each read as one stacked tensor, which the
+    # source writes into its members (#2739).
     def _inplace_on_copies(self, method, *args, **kwargs):
         source = self._source
         if not isinstance(source, LazyStackedTensorDict) or _reads_copies(source):
             return super()._inplace_on_copies(method, *args, **kwargs)
         # the public name of a hook such as _zero_
         name = method.__name__.lstrip("_")
-        if not source._has_exclusive_keys:
+        if not _has_exclusive_keys(source):
             result = getattr(source, name)(*args, **kwargs)
             if result is not source:
                 # broadcasting self returns a new tensordict and writes nothing

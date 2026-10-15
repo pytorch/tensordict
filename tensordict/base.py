@@ -423,18 +423,25 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
         other_lazy = getattr(type(other), "_lazy", None)
         if other_lazy is None and _is_tensorclass(type(other)):
             # a tensorclass counts as the tensordict it wraps
-            other_lazy = other._tensordict._lazy
+            other = other._tensordict
+            other_lazy = other._lazy
+        if other_lazy is False and type(other)._wrapped_attr is not None:
+            # a TypedTensorDict counts as the tensordict it wraps
+            other_lazy = getattr(other, type(other)._wrapped_attr)._lazy
         lazy = lazy or other_lazy
     if not lazy:
         return False
     from tensordict._lazy import LazyStackedTensorDict
 
     is_stack = isinstance(td, LazyStackedTensorDict)
-    return any(
-        isinstance(other, TensorDictBase)
-        and isinstance(other, LazyStackedTensorDict) is not is_stack
-        for other in map(_unwrap_tensorclass, others)
-    )
+    for other in map(_unwrap_tensorclass, others):
+        if not isinstance(other, TensorDictBase):
+            continue
+        if type(other)._wrapped_attr is not None:
+            other = getattr(other, type(other)._wrapped_attr)
+        if isinstance(other, LazyStackedTensorDict) is not is_stack:
+            return True
+    return False
 
 
 def _unwrap_tensorclass(other: Any) -> Any:
@@ -1846,6 +1853,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Whether the members of a lazy stack have different keys, which to_dict
     # and state_dict would silently drop (a property on LazyStackedTensorDict).
     _has_exclusive_keys: bool = False
+    # Set by TypedTensorDict to the name of the attribute that holds the
+    # tensordict it wraps, "_source": the pointwise ops see that a typed
+    # operand over a lazy stack mixes with a dense receiver (#2759).
+    _wrapped_attr: str | None = None
     # Set by _SubTensorDict, whose memmap_ would memory-map its whole source:
     # memmap_ raises.
     _memmap_inplace_unsupported: bool = False
