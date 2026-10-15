@@ -2612,8 +2612,6 @@ class TestLazyStackedTensorDict:
     ):
         # the value is a read of the same stack, so its members share memory
         # with the members that the write changes
-        if op == "update_at_" and isinstance(index, np.ndarray):
-            pytest.skip("TensorDict.update_at_ does not accept an ndarray index")
         lazy = LazyStackedTensorDict.lazy_stack(
             [
                 TensorDict(
