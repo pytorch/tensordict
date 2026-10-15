@@ -1368,6 +1368,45 @@ class TestNonTensorData:
         assert type(td.get(key)) is cls
         assert td.get(key).data == "s1"
 
+    @pytest.mark.parametrize(
+        "index", [torch.tensor(True), True, None], ids=["tensor", "bool", "none"]
+    )
+    def test_set_at_true_no_batch_dims(self, index):
+        # A 0-dim True, True or None index on a non-tensor entry with no batch
+        # dims used to raise IndexError: squeeze(0) rejects dim 0 on shape [].
+        td = TensorDict({"a": NonTensorData("hello")}, [])
+        td.set_at_("a", NonTensorData("y"), index)
+        assert type(td.get("a")) is NonTensorData
+        assert td.get("a").data == "y"
+        assert td.get("a").batch_size == ()
+        assert td.batch_size == ()
+
+    @pytest.mark.parametrize(
+        "index", [torch.tensor(True), True, None], ids=["tensor", "bool", "none"]
+    )
+    def test_setitem_true_no_batch_dims(self, index):
+        # Same index on a batchless NonTensorData. The value has no batch dim,
+        # so it is written as it is.
+        data = NonTensorData("hello")
+        data[index] = NonTensorData("y")
+        assert type(data) is NonTensorData
+        assert data.data == "y"
+        assert data.batch_size == ()
+
+    def test_setitem_true_squeezes_batched_value(self):
+        # A 0-dim True index on a batchless tensorclass still squeezes a value
+        # that has a leading batch dim. The result is x == tensor(1.) and the
+        # batch size stays [].
+        @tensorclass
+        class M:
+            x: torch.Tensor
+
+        data = M(x=torch.zeros(()), batch_size=[])
+        data[torch.tensor(True)] = M(x=torch.ones(1), batch_size=[1])
+        assert type(data) is M
+        assert data.batch_size == ()
+        assert torch.equal(data.x, torch.tensor(1.0))
+
     @pytest.mark.parametrize("array", [np.array, torch.tensor], ids=["numpy", "torch"])
     def test_subtd_set_at_array_data(self, array):
         # Arrays and tensors compare elementwise, so comparing the old and new
