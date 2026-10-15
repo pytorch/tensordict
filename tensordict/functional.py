@@ -754,7 +754,9 @@ def unpad_sequence(
 
     The inverse of :func:`~tensordict.pad_sequence` with
     ``return_mask=True``: each row of ``padded`` keeps, in every entry, the
-    positions that the mask marks along ``pad_dim``. Left and right padding
+    positions that the mask marks along ``pad_dim``. These must form one
+    contiguous run per row, as the masks of :func:`~tensordict.pad_sequence`
+    do. Left and right padding
     are both read from the mask. Non-tensor entries are kept as they are,
     except when ``pad_dim`` is a batch dimension: then they lose their pad
     slots too.
@@ -785,8 +787,12 @@ def unpad_sequence(
         original sample, and its entries are views of ``padded``.
 
     Raises:
-        ValueError: if ``mask`` is ``None`` and ``padded`` has no
-            ``"masks"`` entry, or if a tensor mask is not two-dimensional.
+        ValueError: if ``padded`` has no batch dimension, if ``mask`` is
+            ``None`` and ``padded`` has no ``"masks"`` entry, if a tensor
+            mask does not have shape ``[len(padded), max_len]``, or if the
+            marked positions of a row are not contiguous.
+        KeyError: if a mask tensordict has no mask for an entry of
+            ``padded``.
 
     Examples:
         >>> import torch
@@ -805,6 +811,11 @@ def unpad_sequence(
         >>> [sample.batch_size for sample in samples.tensordicts]
         [torch.Size([3]), torch.Size([5])]
     """
+    if not padded.batch_dims:
+        raise ValueError(
+            "unpad_sequence needs the samples along the first batch dimension "
+            "of padded, which has none."
+        )
     if mask is None:
         if "masks" not in padded.keys():
             raise ValueError(
@@ -813,7 +824,9 @@ def unpad_sequence(
             )
         mask = padded.get("masks")
         padded = padded.exclude("masks")
-    elif isinstance(mask, torch.Tensor) and mask.ndim != 2:
+    elif isinstance(mask, torch.Tensor) and (
+        mask.ndim != 2 or mask.shape[0] != padded.batch_size[0]
+    ):
         raise ValueError(
             "A tensor mask must have shape [len(padded), max_len], got "
             f"{tuple(mask.shape)}."
@@ -828,13 +841,27 @@ def unpad_sequence(
         else:
             # The masks of pad_sequence hold the batch dims, and the padded
             # dim after them if it is not a batch dim.
-            m = mask.get(key).movedim(min(pos_pad_dim, batch_dims) + 1, -1)
+            m = mask.get(key, None)
+            if m is None:
+                raise KeyError(f"The mask has no entry for key {key!r} of padded.")
+            m = m.movedim(min(pos_pad_dim, batch_dims) + 1, -1)
             if m.ndim > 2:
                 m = m.flatten(1, -2).any(1)
-        return (
-            m.to(torch.uint8).argmax(-1).tolist(),
-            m.sum(-1).tolist(),
-        )
+        m = m.to(torch.uint8)
+        # First and last marked positions and their count, in one sync
+        starts, ends, lengths = torch.stack(
+            (m.argmax(-1), m.shape[-1] - 1 - m.flip(-1).argmax(-1), m.sum(-1))
+        ).tolist()
+        if any(
+            n and end - start + 1 != n for start, end, n in zip(starts, ends, lengths)
+        ):
+            raise ValueError(
+                f"The mask{'' if key is None else f' of key {key!r}'} marks "
+                "positions that are not "
+                "contiguous in some row: unpad_sequence keeps one contiguous "
+                "run per row."
+            )
+        return starts, lengths
 
     pad_dims = {}
     for key in padded.keys(True, True, is_leaf=_is_leaf_nontensor):

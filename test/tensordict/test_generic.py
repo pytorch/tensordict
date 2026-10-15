@@ -7095,6 +7095,18 @@ class TestGeneric:
         self._assert_unpadded(unpad_sequence(padded, mask["b"]), tds)
         with pytest.raises(ValueError, match="shape"):
             unpad_sequence(padded, mask["b"][0])
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, mask["b"][:1])
+        with pytest.raises(ValueError, match="batch dimension"):
+            unpad_sequence(padded[0], mask)
+        with pytest.raises(KeyError, match="'a'"):
+            unpad_sequence(padded, mask.exclude("a"))
+        # marked positions that are not one run per row
+        holes = torch.tensor([[True, False, True, False], [True] * 4])
+        with pytest.raises(ValueError, match="contiguous"):
+            unpad_sequence(padded, holes)
+        with pytest.raises(ValueError, match="contiguous"):
+            unpad_sequence(padded, TensorDict(a=holes, b=holes, batch_size=[2]))
         # a lazy stack is not changed
         stack = lazy_stack(list(padded.unbind(0)))
         self._assert_unpadded(unpad_sequence(stack, mask), tds)
