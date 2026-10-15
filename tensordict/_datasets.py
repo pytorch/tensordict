@@ -131,7 +131,9 @@ def to_mds(
                 w.write(td_i)
             return
 
-    if writer is None:
+    # a writer passed by the caller is left open: they may write more samples
+    created = writer is None
+    if created:
         if columns is None:
             columns = _columns(self)
         writer = MDSWriter(
@@ -141,8 +143,30 @@ def to_mds(
             compression=compression,
             hashes=hashes,
             size_limit=size_limit,
+            **kwargs,
         )
-    writer.write(self)
+    names = getattr(writer, "column_names", None)
+    encodings = getattr(writer, "column_encodings", None)
+    if names is None or encodings is None:
+        # a writer without column encodings gets the tensordict, as before
+        td_dict = self
+    else:
+        # only the writer's columns are converted; the pkl columns of a
+        # caller's writer store the entry itself, as before
+        pkl = () if created else {n for n, e in zip(names, encodings) if e == "pkl"}
+        td_dict = self.select(*(n for n in names if n not in pkl), strict=False)
+        td_dict = td_dict.tolist(convert_tensors="numpy")
+        for k, v in td_dict.items():
+            if isinstance(v, np.ndarray) and v.shape == ():
+                td_dict[k] = v.item()
+        for k in pkl:
+            if k in self.keys():
+                td_dict[k] = self[k]
+    if created:
+        with writer as w:
+            w.write(td_dict)
+    else:
+        writer.write(td_dict)
 
 
 def _columns(self: TensorCollection) -> dict[str, str]:
@@ -153,7 +177,6 @@ def _get_elt_type(
     elt,
 ) -> Literal[
     "bytes",
-    "float",
     "float16",
     "float32",
     "float64",
@@ -198,20 +221,21 @@ def _get_elt_type(
             if isinstance(elt, torch.Tensor):
                 dtype = elt.dtype
                 if dtype.is_floating_point:
-                    return "float"
+                    # MDS has no "float" encoding, only one per dtype
+                    return str(dtype).removeprefix("torch.")
                 else:
                     return "int"
             else:
                 dtype = elt.dtype
                 if dtype.kind == "f":
-                    return "float"
+                    return dtype.name
                 elif dtype.kind in ("i", "b"):
                     return "int"
                 else:
                     return "str"
         return "ndarray"
     elif isinstance(elt, float):
-        return "float"
+        return "float64"
     elif isinstance(elt, (int, bool)):
         return "int"
     elif isinstance(elt, str):

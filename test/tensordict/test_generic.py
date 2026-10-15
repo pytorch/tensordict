@@ -9320,6 +9320,8 @@ class TestGeneric:
             b=[0, 1, 0],
             c=torch.tensor([[4, 5], [6, 7], [8, 9]]),
             d=["a string!", "another string!", "again!"],
+            e=torch.tensor([0.5, 1.5, 2.5]),
+            f=torch.tensor([0.25, 1.25, 2.25], dtype=torch.float64),
             batch_size=[3],
         )
 
@@ -9335,6 +9337,69 @@ class TestGeneric:
         batches = [_batch for batch in batches for _batch in batch.unbind(0)]
         test_td = torch.stack(batches)
         assert_allclose_td(td, test_td)
+
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds_zero_dim(self, tmpdir):
+        # a tensordict without batch dims is written as one row
+        td = TensorDict(a=torch.arange(3), s="a string", n=3, x=0.5)
+
+        tmpdir = str(tmpdir)
+        td.to_mds(out=tmpdir)
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        assert len(dataset) == 1
+        assert_allclose_td(td, TensorDict.from_list([dataset[0]])[0])
+
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds_zero_dim_writer(self, tmpdir):
+        # a writer passed by the caller stays open for more samples
+        from streaming import MDSWriter
+
+        tds = [
+            TensorDict(a=torch.arange(3) + k, s=f"string {k}", n=k, x=k + 0.5)
+            for k in range(3)
+        ]
+
+        tmpdir = str(tmpdir)
+        writer = MDSWriter(
+            out=tmpdir,
+            columns={"a": "ndarray", "s": "str", "n": "int", "x": "float32"},
+        )
+        for td in tds:
+            td.to_mds(out=tmpdir, writer=writer)
+        writer.finish()
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        assert len(dataset) == 3
+        test_td = TensorDict.from_list([dataset[i] for i in range(3)])
+        assert_allclose_td(torch.stack(tds), test_td)
+
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds_zero_dim_writer_pkl(self, tmpdir):
+        # a pkl column of the caller's writer stores the tensor itself, and
+        # entries that NumPy cannot take are fine outside the converted columns
+        from streaming import MDSWriter
+
+        td = TensorDict(
+            a=torch.arange(3, dtype=torch.bfloat16),
+            b=torch.arange(2),
+            g=torch.ones(2, requires_grad=True),
+        )
+
+        tmpdir = str(tmpdir)
+        with MDSWriter(out=tmpdir, columns={"a": "pkl", "b": "ndarray"}) as writer:
+            td.to_mds(out=tmpdir, writer=writer)
+
+        dataset = streaming_dataset(
+            local=tmpdir, remote=None, batch_size=1, allow_unsafe_types=True
+        )
+        row = dataset[0]
+        assert isinstance(row["a"], torch.Tensor)
+        assert row["a"].dtype == torch.bfloat16
+        assert (row["a"] == td["a"]).all()
+        assert "g" not in row
+        assert isinstance(row["b"], np.ndarray)
+        assert (row["b"] == td["b"].numpy()).all()
 
     def test_to_module_state_dict(self):
         net0 = nn.Transformer(
