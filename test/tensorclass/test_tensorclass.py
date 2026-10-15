@@ -3930,6 +3930,61 @@ class TestTensorClass:
         assert "nope" not in tc._tensordict.keys()
         assert key in tc._tensordict.keys()
 
+    @pytest.mark.parametrize("index", ["int", "slice", "ellipsis", "mask"])
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_setitem_non_field_key(self, index, nested):
+        # set() rejects keys that are not fields. An indexed write of a
+        # TensorDict stores them and warns until TensorDict 0.17, as update()
+        # does, and writes fields without a warning.
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        idx = {
+            "int": 0,
+            "slice": slice(None),
+            "ellipsis": ...,
+            "mask": torch.tensor([True, False, True]),
+        }[index]
+        batch_size = torch.zeros(3)[idx].shape
+        key = ("nope", "a") if nested else "nope"
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        value = TensorDict(
+            {key: torch.ones(batch_size), "x": torch.ones(batch_size)}, batch_size
+        )
+        with pytest.warns(
+            DeprecationWarning,
+            match=re.escape(
+                "Writing keys that are not fields (['nope']) with "
+                "TC.__setitem__(), which set() rejects with "
+                "AttributeError, is deprecated and will be removed in "
+                "TensorDict 0.17."
+            ),
+        ) as record:
+            tc[idx] = value
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert "nope" in tc._tensordict.keys()
+
+        tc = TC(x=torch.zeros(3), batch_size=[3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            tc[idx] = value.exclude("nope")
+            # tensorclass, scalar and tensor values are not checked here
+            tc[idx] = TC(x=torch.full(batch_size, 2.0), batch_size=batch_size)
+            tc[idx] = 3.0
+            tc[idx] = torch.full(batch_size, 4.0)
+        assert set(tc._tensordict.keys()) == {"x"}
+        assert (tc.x[idx] == 4).all()
+
+        # a tensorclass of another class still raises
+        @tensorclass
+        class Other:
+            nope: torch.Tensor
+
+        with pytest.raises(ValueError, match="compatible class"):
+            tc[idx] = Other(nope=torch.ones(batch_size), batch_size=batch_size)
+
     def test_replace(self):
         @tensorclass
         class MyDataNested:
