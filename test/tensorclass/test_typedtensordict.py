@@ -22,6 +22,7 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     PersistentTensorDict,
+    tensorclass,
     TensorDict,
     TypedTensorDict,
 )
@@ -1111,6 +1112,83 @@ class TestFromTensordict:
         getattr(dest, method)(TensorDict(n=stack(1.0), m=stack(2.0), batch_size=[2, 3]))
         assert (dest["n", "x"] == 1).all()
         assert (dest["m", "x"] == 2).all()
+
+    def test_from_tensordict_lazy_stack_of_stacks_exclusive_keys_inplace(self):
+        # #2759: a key that only some members of an inner stack hold is left
+        # unchanged, as in a single stack
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(4)
+        ]
+        tds[0]["e"] = torch.ones(3)
+        state = Nested.from_tensordict(
+            lazy_stack([lazy_stack(tds[:2]), lazy_stack(tds[2:])])
+        )
+        assert state.add_(state.to_tensordict()) is state
+        assert state.add_(1.0) is state
+        for td in tds:
+            assert (td["a"] == 3).all()
+            assert (td["n", "x"] == 3).all()
+        assert (tds[0]["e"] == 1).all()
+
+    def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace_raises(self):
+        # #2759: the shared leaves differ in shape, so they cannot be changed
+        # without the exclusive keys: the method raises before it writes
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.ones(3, k + 1), n={"x": torch.ones(3, 2)}, batch_size=[3]
+            )
+            for k in range(2)
+        ]
+        tds[0]["e"] = torch.ones(3)
+        state = Nested.from_tensordict(lazy_stack(tds))
+        with pytest.raises(RuntimeError, match="Failed to stack"):
+            state.add_(1.0)
+        for td in tds:
+            assert (td == 1).all()
+
+    @pytest.mark.parametrize("receiver", ["dense", "lazy", "typed"])
+    @pytest.mark.parametrize("wrap", ["typed", "tensorclass"])
+    def test_dense_inplace_typed_lazy_stack_operand(self, wrap, receiver):
+        # #2759: a dense receiver pairs its leaves with those of a typed
+        # operand over a lazy stack, also behind a tensorclass; a lazy
+        # receiver, also behind a TypedTensorDict, still does
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        @tensorclass
+        class Wrapper:
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(4)
+        ]
+        tds[0]["e"] = torch.ones(3)
+        other = Nested.from_tensordict(lazy_stack(tds))
+        if wrap == "tensorclass":
+            other = Wrapper.from_tensordict(other)
+        dense = TensorDict(
+            a=torch.zeros(4, 3), n={"x": torch.zeros(4, 3, 2)}, batch_size=[4, 3]
+        )
+        if receiver == "lazy":
+            dense = lazy_stack(dense.unbind(0))
+        elif receiver == "typed":
+            dense = Nested.from_tensordict(lazy_stack(dense.unbind(0)))
+        assert dense.lerp_(other, 0.5) is dense
+        assert dense.maximum_(other.apply(lambda x: x * 0.75)) is dense
+        assert dense.add_(other) is dense
+        assert (dense == 1.75).all()
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
