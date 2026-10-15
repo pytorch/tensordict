@@ -32,6 +32,7 @@ from functorch import make_functional_with_buffers as make_functional_functorch
 from tensordict import (
     is_leaf_nontensor,
     is_tensor_collection,
+    lazy_stack,
     NonTensorData,
     NonTensorStack,
     set_list_to_stack,
@@ -1496,6 +1497,68 @@ class TestTDSequence:
         assert set(input.keys(True, True)) == {"x", ("nested", "a")}
         assert (output["nested", "y"] == 1).all()
         assert (output["z"] == 2).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("module_inplace", [True, False, "empty"])
+    def test_partial_tolerant_lazy_stack_keeps_outputs(self, module_inplace, stack_dim):
+        # https://github.com/pytorch/tensordict/issues/2757
+        stack = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2]),
+                TensorDict(c=torch.zeros(3, 2), batch_size=[3, 2]),
+            ],
+            stack_dim,
+        )
+        module = TensorDictModule(
+            lambda a: a + 1,
+            in_keys=["a"],
+            out_keys=[("nested", "b")],
+            inplace=module_inplace,
+        )
+        out = TensorDictSequential(module, partial_tolerant=True)(stack)
+        assert out is stack
+        assert (out.tensordicts[0]["nested", "b"] == 1).all()
+        assert set(out.tensordicts[1].keys()) == {"c"}
+
+    def test_partial_tolerant_lazy_stack_copies_out_keys_only(self):
+        # https://github.com/pytorch/tensordict/issues/2757
+        class CopyModule(TensorDictModuleBase):
+            in_keys = ["a"]
+            out_keys = ["b", "missing"]
+
+            def forward(self, td):
+                out = td.copy()
+                out["a"] = td["a"] + 5
+                out["b"] = td["a"] + 1
+                out["extra"] = td["a"]
+                return out
+
+        def make_stack():
+            return lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), batch_size=[3]),
+                    TensorDict(c=torch.zeros(3), batch_size=[3]),
+                ]
+            )
+
+        out = TensorDictSequential(CopyModule(), partial_tolerant=True)(make_stack())
+        member = out.tensordicts[0]
+        assert set(member.keys()) == {"a", "b"}
+        assert (member["a"] == 0).all()
+        assert (member["b"] == 1).all()
+
+        # A locked stack raises as with a module that writes in place, unless
+        # the module returns none of its out_keys.
+        in_place = TensorDictModule(lambda a: a + 1, in_keys=["a"], out_keys=["b"])
+        for module in (in_place, CopyModule()):
+            stack = make_stack().lock_()
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                TensorDictSequential(module, partial_tolerant=True)(stack)
+        no_outputs = CopyModule()
+        no_outputs.out_keys = ["missing"]
+        stack = make_stack().lock_()
+        out = TensorDictSequential(no_outputs, partial_tolerant=True)(stack)
+        assert set(out.tensordicts[0].keys()) == {"a"}
 
     def test_ordered_dict(self):
         linear = nn.Linear(3, 4)
