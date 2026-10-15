@@ -5009,9 +5009,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             # Fastest route using _foreach_copy_
             keys, vals = self._items_list(True, True)
-            new_keys, other_val = input_dict_or_td._items_list(
-                True, True, sorting_keys=keys, default="intersection"
-            )
+            source = dict(zip(*input_dict_or_td._items_list(True, True)))
+            new_keys = [key for key in keys if key in source]
+            if 0 < len(new_keys) < min(len(keys), len(source)) and _has_lazy_stack(
+                input_dict_or_td
+            ):
+                # a nested lazy stack lists the leaves of each member, under
+                # keys that self lacks, which leaves keys of self unmatched:
+                # read them stacked instead (#2768)
+                source = dict(
+                    zip(*input_dict_or_td._items_list(True, True, collapse=True))
+                )
+                new_keys = [key for key in keys if key in source]
+            other_val = [source[key] for key in new_keys]
             if len(new_keys):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))

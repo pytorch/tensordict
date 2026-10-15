@@ -1043,6 +1043,43 @@ class TestFromTensordict:
         for td in tds:
             assert (td["a"] == 4).all()
 
+    @pytest.mark.parametrize("method", ["copy_", "update_"])
+    @pytest.mark.parametrize("dest_type", ["dense", "typed"])
+    @pytest.mark.parametrize("src_type", ["typed", "nested"])
+    def test_from_tensordict_lazy_stack_nested_as_source(
+        self, method, dest_type, src_type
+    ):
+        # #2768: copy_ and update_ write the nested entries of a stack with a
+        # nested entry, read through a TypedTensorDict or held by a tensordict
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.full((3,), i), n={"x": torch.full((3, 2), i)}, batch_size=[3]
+            )
+            for i in (1.0, 2.0, 3.0, 4.0)
+        ]
+        if src_type == "typed":
+            src = Nested.from_tensordict(lazy_stack(tds))
+        else:
+            src = TensorDict(
+                a=lazy_stack(tds)["a"], n=lazy_stack(tds)["n"], batch_size=[4, 3]
+            )
+        dest = TensorDict(
+            a=torch.zeros(4, 3),
+            n={"x": torch.zeros(4, 3, 2)},
+            b=torch.zeros(4, 3),
+            batch_size=[4, 3],
+        )
+        if dest_type == "typed":
+            dest = Nested.from_tensordict(dest)
+        assert getattr(dest, method)(src) is dest
+        expected = lazy_stack(tds).to_tensordict()
+        torch.testing.assert_close(dest.exclude("b").to_tensordict(), expected)
+        assert (dest["b"] == 0).all()
+
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = self._make_td()
