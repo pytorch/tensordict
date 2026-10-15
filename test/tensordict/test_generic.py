@@ -7714,6 +7714,190 @@ class TestGeneric:
         td.rename_key_(("a", "b", "c"), ("a", "b"))
         assert td["a", "b"] == 0
 
+    @staticmethod
+    def _rename_keys_td():
+        return TensorDict(
+            a=torch.zeros(3),
+            b=torch.ones(3),
+            raw=TensorDict(
+                p=torch.full((3,), 2.0), q=torch.full((3,), 3.0), batch_size=[3]
+            ),
+            s=NonTensorData("hi", batch_size=[3]),
+            batch_size=[3],
+            names=["n"],
+        )
+
+    def test_rename_keys_swap_and_chain(self):
+        td = self._rename_keys_td()
+        keys = set(td.keys(True))
+        out = td.rename_keys({"a": "b", "b": "a"})
+        assert type(out) is TensorDict
+        assert out["a"] is td["b"]
+        assert out["b"] is td["a"]
+        # non-tensor data is shared, not copied
+        assert out.get("s") is td.get("s")
+        # a new tree of sub-tensordicts
+        assert out.get("raw") is not td.get("raw")
+        assert out["raw", "p"] is td["raw", "p"]
+        assert out.batch_size == td.batch_size
+        assert out.names == ["n"]
+        assert set(td.keys(True)) == keys
+        out = td.rename_keys({"a": "b", "b": "c"})
+        assert out["b"] is td["a"]
+        assert out["c"] is td["b"]
+        assert "a" not in out.keys()
+        assert set(td.keys(True)) == keys
+
+    def test_rename_keys_nested(self):
+        td = self._rename_keys_td()
+        # emptied sub-tensordicts are removed
+        out = td.rename_keys({("raw", "p"): "p", ("raw", "q"): "q"})
+        assert set(out.keys(True)) == {"a", "b", "p", "q", "s"}
+        # a leaf can move onto its parent once the parent is emptied
+        out = td.rename_keys({("raw", "p"): "raw", ("raw", "q"): "q"})
+        assert out["raw"] is td["raw", "p"]
+        # a whole sub-tensordict
+        out = td.rename_keys({"raw": ("x", "solution")})
+        assert set(out.keys(True, True, is_leaf=is_leaf_nontensor)) == {
+            "a",
+            "b",
+            "s",
+            ("x", "solution", "p"),
+            ("x", "solution", "q"),
+        }
+        # into the source's own sub-key
+        out = td.rename_keys({"a": ("a", "b")})
+        assert out["a", "b"] is td["a"]
+        # empty sub-tensordicts that the move did not empty are kept
+        td["empty"] = TensorDict(batch_size=[3])
+        td["raw", "e"] = TensorDict(batch_size=[3])
+        out = td.rename_keys({("raw", "p"): "p", ("raw", "q"): "q"})
+        assert set(out.keys(True)) == {
+            "a",
+            "b",
+            "p",
+            "q",
+            "s",
+            "empty",
+            "raw",
+            ("raw", "e"),
+        }
+
+    @pytest.mark.parametrize(
+        "mapping,error,match",
+        [
+            ({"a": "b"}, ValueError, "already present"),
+            ({("raw", "p"): "raw"}, ValueError, "already present"),
+            ({"a": ("b", "x")}, ValueError, "not a tensordict"),
+            ({"a": ("s", "x")}, ValueError, "not a tensordict"),
+            ({"a": "x", "b": "x"}, ValueError, "destination more than once"),
+            ({"a": "x", ("a",): "y"}, ValueError, "source more than once"),
+            ({"raw": "r", ("raw", "p"): "p"}, ValueError, "lie inside one another"),
+            ({"a": ("x", "y"), "b": "x"}, ValueError, "lie inside one another"),
+            ({"a": "a", "b": "a"}, ValueError, "destination more than once"),
+            ({"zz": "y"}, KeyError, "zz"),
+            ({"a": "a", "zz": "zz"}, KeyError, "zz"),
+            ({"a": ()}, KeyError, "NestedKeys"),
+            ({1: "x"}, TypeError, "string or a tuple"),
+        ],
+    )
+    def test_rename_keys_errors(self, mapping, error, match):
+        td = self._rename_keys_td()
+        keys = set(td.keys(True))
+        with pytest.raises(error, match=match):
+            td.rename_keys(mapping)
+        assert set(td.keys(True)) == keys
+
+    def test_rename_keys_strict(self):
+        td = self._rename_keys_td()
+        out = td.rename_keys({"zz": "y", ("raw", "p"): "p"}, strict=False)
+        assert "y" not in out.keys()
+        assert out["p"] is td["raw", "p"]
+        assert td.rename_keys({"a": "a"})["a"] is td["a"]
+
+    def test_rename_keys_docstring(self):
+        td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
+        out = td.rename_keys({"a": "b", "b": "a"})
+        assert out["a"] == 1 and td["a"] == 0
+        td = TensorDict(raw=TensorDict(p=torch.zeros(3), u=torch.ones(3)))
+        out = td.rename_keys({("raw", "p"): "pressure", ("raw", "u"): "velocity"})
+        assert sorted(out.keys(include_nested=True)) == ["pressure", "velocity"]
+        out = td.rename_keys({"raw": "solution"})
+        assert sorted(out.keys(include_nested=True, leaves_only=True)) == [
+            ("solution", "p"),
+            ("solution", "u"),
+        ]
+        out = td.rename_keys({("raw", "zz"): "z", ("raw", "p"): "p"}, strict=False)
+        assert (out["p"] == 0).all()
+
+    def test_rename_keys_locked(self):
+        td = self._rename_keys_td().lock_()
+        out = td.rename_keys({"a": "z"})
+        assert not out.is_locked
+        assert td.is_locked
+        assert "a" in td.keys()
+        assert out["z"] is td["a"]
+
+    def test_rename_keys_lazy_stack(self):
+        t1 = TensorDict(
+            a=torch.zeros(()), x=torch.zeros(()), raw=TensorDict(p=torch.zeros(()))
+        )
+        t2 = TensorDict(
+            a=torch.ones(()),
+            y=torch.ones(()),
+            raw=TensorDict(p=torch.zeros(()), q=torch.zeros(())),
+        )
+        ls = lazy_stack([t1, t2])
+        before = [set(td.keys(True)) for td in ls.tensordicts]
+        out = ls.rename_keys({"a": "b"})
+        assert isinstance(out, LazyStackedTensorDict)
+        assert out.tensordicts[0]["b"] is t1["a"]
+        assert out.tensordicts[1]["b"] is t2["a"]
+        # an exclusive key is missing in some members
+        with pytest.raises(KeyError, match="x"):
+            ls.rename_keys({"x": "z"})
+        out = ls.rename_keys({"x": "z"}, strict=False)
+        assert set(out.tensordicts[0].keys()) == {"a", "z", "raw"}
+        assert set(out.tensordicts[1].keys()) == {"a", "y", "raw"}
+        # raw is emptied in the first member only: it is kept
+        out = ls.rename_keys({("raw", "p"): "p"})
+        assert set(out.tensordicts[0].keys(True)) == {"a", "p", "x", "raw"}
+        assert set(out.tensordicts[1].keys(True)) == {
+            "a",
+            "p",
+            "y",
+            "raw",
+            ("raw", "q"),
+        }
+        # raw is emptied in every member: it is removed
+        out = ls.rename_keys({("raw", "p"): "p", ("raw", "q"): "q"}, strict=False)
+        assert set(out.tensordicts[0].keys(True)) == {"a", "p", "x"}
+        assert set(out.tensordicts[1].keys(True)) == {"a", "p", "q", "y"}
+        assert [set(td.keys(True)) for td in ls.tensordicts] == before
+
+    def test_rename_keys_params(self):
+        params = TensorDictParams(
+            TensorDict(
+                w=nn.Parameter(torch.zeros(2)),
+                sub=TensorDict(v=nn.Parameter(torch.zeros(2))),
+            )
+        )
+        out = params.rename_keys({"w": "w2", ("sub", "v"): "v"})
+        assert type(out) is TensorDictParams
+        assert set(out.keys(True)) == {"w2", "v"}
+        assert out.get("w2") is params.get("w")
+        assert isinstance(out.get("v"), nn.Parameter)
+        assert set(params.keys(True)) == {"w", "sub", ("sub", "v")}
+
+    def test_rename_keys_persistent(self, tmp_path):
+        td = PersistentTensorDict.from_dict(
+            TensorDict(a=torch.zeros(3), batch_size=[3]), tmp_path / "file.h5"
+        )
+        with pytest.raises(NotImplementedError, match="to_tensordict"):
+            td.rename_keys({"a": "b"})
+        assert set(td.keys()) == {"a"}
+        td.close()
+
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_memmap_like_no_prefix_new_files(self, tmpdir, num_threads):
         # Without a prefix, memmap_like must not reuse the files of a source

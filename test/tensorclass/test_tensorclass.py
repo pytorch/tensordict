@@ -1735,6 +1735,62 @@ class TestTensorClass:
         assert (data.td["td", "a"] == 0).all()
         assert data.td["td", "c"] is inner
 
+    def test_rename_keys(self):
+        @tensorclass
+        class Inner:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        @tensorclass
+        class MyClass:
+            a: torch.Tensor
+            b: torch.Tensor
+            raw: TensorDict = None
+            inner: Inner = None
+            c: torch.Tensor = None
+
+        data = MyClass(
+            a=torch.zeros(3),
+            b=torch.ones(3),
+            raw=TensorDict(p=torch.full((3,), 2.0), batch_size=[3]),
+            inner=Inner(x=torch.full((3,), 3.0), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = data.rename_keys({"a": "b", "b": "a"})
+        assert type(out) is MyClass
+        assert out.a is data.b
+        assert out.b is data.a
+        assert data.a.sum() == 0
+        # a field renamed away reads as None
+        out = data.rename_keys({"a": "c"})
+        assert out.a is None
+        assert out.c is data.a
+        # fields and nested tensorclasses that the move empties are kept
+        out = data.rename_keys(
+            {("raw", "p"): "c", ("inner", "x"): "a", "a": "b", "b": ("raw", "q")}
+        )
+        assert out.c is data.raw["p"]
+        assert out.a is data.inner.x
+        assert out.b is data.a
+        assert out.raw["q"] is data.b
+        out = data.rename_keys({("raw", "p"): "c", ("inner", "x"): ("inner", "y")})
+        assert isinstance(out.raw, TensorDict)
+        assert out.raw.is_empty()
+        assert type(out.inner) is Inner
+        assert out.inner.x is None
+        assert out.inner.y is data.inner.x
+        assert data.raw["p"] is not None
+        assert data.inner.y is None
+        # a destination that is not a field
+        with pytest.raises(AttributeError, match="not fields of MyClass"):
+            data.rename_keys({"a": "z"})
+        # a tensorclass nested in a TensorDict
+        td = TensorDict(data=data, batch_size=[3])
+        out = td.rename_keys({("data", "raw", "p"): "p"})
+        assert type(out["data"]) is MyClass
+        assert out["data"].raw.is_empty()
+        assert out["p"] is data.raw["p"]
+
     def test_deleted_field_reads_as_none(self):
         # #2147: a deleted field reads as None, so hasattr() and
         # getattr(obj, name, default) work after a delete instead of raising
