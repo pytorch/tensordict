@@ -1359,24 +1359,36 @@ def _empty_misfit(
 
 
 def _warn_empty_names(
-    names: Sequence[str | None], batch_size: Sequence[int], result_names: list
+    names: Sequence[str | None],
+    batch_size: Sequence[int],
+    result_names: list,
+    result_batch_size: Sequence[int] | None = None,
 ) -> None:
-    """Warns that ``empty(batch_size=batch_size, names=names)``, which returns ``result_names``, changes in 0.17 (#2711).
+    """Warns that ``empty(batch_size=batch_size, names=names)``, which returns ``result_names`` and ``result_batch_size``, changes in 0.17 (#2711).
 
-    From 0.17, ``empty()`` applies ``names`` as the names setter does. This
-    warns when the setter raises for them or gives other names than
-    ``result_names``.
+    From 0.17, ``empty()`` applies ``names`` as the names setter does, on a
+    result of batch size ``batch_size``. This warns when the setter raises for
+    them, or gives other names than ``result_names``, or when the result has
+    kept another batch size for them. ``result_batch_size=None`` means
+    ``batch_size``.
     """
     if is_compiling() or getattr(_EMPTY_NAMES_CALL, "running", False):
         return
     # the checks of the names setter, in its order
     value = list(names)
     batch_dims = len(batch_size)
+    # a lazy stack keeps the batch size of its members for names of another
+    # length; for names of the right length, its own warning tells why
+    resized = (
+        result_batch_size is not None
+        and list(result_batch_size) != list(batch_size)
+        and len(value) != batch_dims
+    )
     num_none = 0
     for v in value:
         num_none += v is None
     if num_none == batch_dims:
-        if list(result_names) == [None] * batch_dims:
+        if list(result_names) == [None] * batch_dims and not resized:
             return
         future = "drops these names"
     elif len(value) == batch_dims and len(set(value)) == len(value) - max(
@@ -1389,11 +1401,16 @@ def _warn_empty_names(
     frame, stacklevel = sys._getframe(1), 2
     while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
         frame, stacklevel = frame.f_back, stacklevel + 1
+    result = f"the names {list(result_names)}"
+    future_size = ""
+    if resized:
+        result = f"the batch size {list(result_batch_size)} and {result}"
+        future_size = f"returning the batch size {list(batch_size)} and "
     warnings.warn(
         f"empty(batch_size={list(batch_size)}, names={value}) returns a "
-        f"tensordict with the names {list(result_names)}. Starting with "
-        "TensorDict 0.17, the default will change to applying the names as "
-        f"the names setter does, which {future}. Pass one name per batch dim, "
+        f"tensordict with {result}. Starting with TensorDict 0.17, the default "
+        f"will change to {future_size}applying the names as the names setter "
+        f"does, which {future}. Pass one name per batch dim, "
         "with no name used twice.",
         FutureWarning,
         stacklevel=stacklevel,
@@ -8596,7 +8613,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         finally:
             _EMPTY_NAMES_CALL.running = running
         _warn_empty_names(
-            names, self.batch_size if batch_size is None else batch_size, result.names
+            names,
+            self.batch_size if batch_size is None else batch_size,
+            result.names,
+            result.batch_size,
         )
         return result
 

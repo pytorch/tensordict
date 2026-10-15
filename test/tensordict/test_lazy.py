@@ -1866,6 +1866,7 @@ class TestLazyStackedTensorDict:
         # result, with the FutureWarning of empty() (#2711), instead of a
         # TensorDict with invalid names
         member = TensorDict(a=torch.zeros(3), batch_size=[3])
+        wide = TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3])
         for td, recurse, batch_size, names, expected, expected_names in (
             (lazy_stack([member] * 2), False, [], ["a"], [2], ["a"]),
             (lazy_stack([member] * 2), True, [], ["a"], [2], ["a"]),
@@ -1877,15 +1878,31 @@ class TestLazyStackedTensorDict:
                 [3, 2],
                 ["a", None],
             ),
+            # the members drop names with as many None entries as their batch
+            # dims, with the warning of the names setter (#2600)
+            (lazy_stack([wide] * 2), True, [5], [None, "x"], [2], [None]),
+            (
+                lazy_stack([wide] * 2),
+                True,
+                [5, 3],
+                [None, None, "x"],
+                [2, 3],
+                [None, None],
+            ),
         ):
-            with pytest.warns(
-                FutureWarning,
-                match=r"empty\(batch_size=.*, names=\['a'\]\) returns a tensordict "
-                r".*Starting with TensorDict 0\.17, the default will change to "
-                r"applying the names as the names setter does",
-            ) as record:
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
                 empty = td.empty(recurse, batch_size=batch_size, names=names)
+            record = [w for w in record if str(w.message).startswith("empty(")]
             assert len(record) == 1
+            assert record[0].category is FutureWarning
+            assert re.search(
+                r"returns a tensordict with the batch size \[.*\] and the names "
+                r".*Starting with TensorDict 0\.17, the default will change to "
+                r"returning the batch size \[.*\] and applying the names as the "
+                r"names setter does",
+                str(record[0].message),
+            )
             assert record[0].filename == __file__
             assert type(empty) is LazyStackedTensorDict
             assert empty.batch_size == torch.Size(expected)

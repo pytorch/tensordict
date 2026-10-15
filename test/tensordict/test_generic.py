@@ -2073,8 +2073,9 @@ class TestGeneric:
             assert len(ours) == 1
             assert ours[0].category is FutureWarning
             assert re.search(
-                r"empty\(batch_size=.*\) returns a tensordict with the names .*"
-                r"Starting with TensorDict 0\.17, the default will change to "
+                r"empty\(batch_size=.*\) returns a tensordict with the "
+                r"(batch size .* and the )?names .*Starting with TensorDict 0\.17, "
+                r"the default will change to (returning the batch size .* and )?"
                 rf"applying the names as the names setter does, which {future}",
                 str(ours[0].message),
             )
