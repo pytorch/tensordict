@@ -33,6 +33,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _default_is_leaf,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
@@ -52,6 +53,7 @@ from tensordict.utils import (
     _zip_strict,
     IndexType,
     is_batchedtensor,
+    is_non_tensor,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling
@@ -166,6 +168,9 @@ def _wrap_like(tensor, orig):
     return _maybe_make_param_or_buffer(tensor)
 
 
+# Override: the methods decorated with _unlock_and_set, _get_post_hook,
+# _fallback, _fallback_property, _carry_over and _apply_on_data forward to
+# _param_td, so that results keep their nn.Parameters.
 class _unlock_and_set:
     # temporarily unlocks the nested tensordict to execute a function
     def __new__(cls, *args, **kwargs):
@@ -299,6 +304,27 @@ def _apply_on_data(func):
     @wraps(func)
     def new_func(self, *args, **kwargs):  # type: ignore[misc]
         getattr(self.data, func.__name__)(*args, **kwargs)
+        return self
+
+    return new_func
+
+
+def _data_and_non_tensor(value):
+    return value if is_non_tensor(value) else value.data
+
+
+def _apply_on_data_and_non_tensor(func):
+    # As _apply_on_data, on a .data that holds the non-tensor leaves of the
+    # wrapped tensordict, which .data rebuilds: the writes reach them (#2263).
+    @wraps(func)
+    def new_func(self, *args, **kwargs):  # type: ignore[misc]
+        if self._param_td._has_non_tensor:
+            data = self._param_td._fast_apply(
+                _data_and_non_tensor, is_leaf=_is_leaf_nontensor, propagate_lock=True
+            )
+        else:
+            data = self.data
+        getattr(data, func.__name__)(*args, **kwargs)
         return self
 
     return new_func
@@ -446,14 +472,22 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @classmethod
     def _new_unsafe(
         cls,
-        parameters: TensorDictBase,
+        parameters: TensorDictBase | dict | None = None,
         *,
+        source: TensorDictBase | dict | None = None,
         no_convert=None,
         lock: bool = False,
         params: dict | None = None,
         buffers: dict | None = None,
         **kwargs,
     ):
+        # ``source`` is the name that the base code uses for ``parameters``
+        if source is not None:
+            if parameters is not None:
+                raise TypeError(
+                    "TensorDictParams._new_unsafe() got both parameters and source."
+                )
+            parameters = source
         if is_compiling():
             return TensorDictParams(parameters, no_convert="skip", lock=lock)
 
@@ -461,11 +495,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             parameters = kwargs
 
         if isinstance(parameters, dict):
-            parameters = TensorDict._new_unsafe(parameters, **kwargs)
             if no_convert is None:
                 # Then _new_unsafe is called from somewhere that doesn't know
                 #  that it's a TDParams and we return a TensorDict (eg, torch.gather)
-                return parameters
+                return TensorDict._new_unsafe(parameters, lock=lock, **kwargs)
+            parameters = TensorDict._new_unsafe(parameters, **kwargs)
         elif isinstance(parameters, TensorDictParams):
             if kwargs:
                 raise TypeError(
@@ -491,9 +525,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         self._locked_tensordicts = []
         self._get_post_hook = []
         return self
-
-    def __iter__(self):
-        return iter(self._param_td)
 
     def register_get_post_hook(self, hook):
         """Register a hook to be called after any get operation on leaf tensors.
@@ -566,6 +597,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             return NotImplemented
         return _TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
+    # Override: perf. Through the base front and _set_tuple, a key write is
+    # 10-25% slower.
     @_lock_blocked
     @_unlock_and_set
     def __setitem__(  # type: ignore[misc]
@@ -580,10 +613,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase: ...
 
+    # Override: the base runs with _param_td unlocked, so that a lock=True
+    # content takes nested entries, and the parameters are registered again
+    # afterwards, since the base writes nested entries into the nested
+    # tensordicts directly.
     @_lock_blocked
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -592,18 +629,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         is_leaf: Callable[[Type], bool] | None = None,
         update_batch_size: bool = False,
         ignore_lock: bool = False,
+        **kwargs,
     ) -> TensorDictBase:
         if ignore_lock and ignore_lock is not _UPDATE_IGNORE_LOCK_WARNED:
             _warn_update_ignore_lock(stacklevel=3)
-        # Deprecating this since _set_tuple will do it thx to the decorator
-        # if not self.no_convert:
-        #     func = _maybe_make_param
-        # else:
-        #     func = _maybe_make_param_or_buffer
-        # if _is_tensor_collection(type(input_dict_or_td)):
-        #     input_dict_or_td = input_dict_or_td.apply(func)
-        # else:
-        #     input_dict_or_td = tree_map(func, input_dict_or_td)
         with self._param_td.unlock_():
             TensorDictBase.update(
                 self,
@@ -613,6 +642,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 keys_to_update=keys_to_update,
                 non_blocking=non_blocking,
                 is_leaf=is_leaf,
+                update_batch_size=update_batch_size,
+                **kwargs,
             )
             self._reset_params()
         return self
@@ -621,10 +652,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType: ...
 
-    @_lock_blocked
-    @_unlock_and_set
-    def popitem(self): ...
-
+    # Override: the base would read the entry through the get hooks and write
+    # the hooked value.
     @_lock_blocked
     @_unlock_and_set
     def rename_key_(
@@ -815,6 +844,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def _chunk(self, chunks: int, dim: int) -> tuple[TensorDictBase, ...]: ...
 
+    # Override: the base would read the entries through the get hooks.
     @_fallback
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
 
@@ -844,28 +874,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return hash((id(self), id(self.__dict__.get("_param_td"))))
 
     @_fallback
-    def __eq__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __ne__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __xor__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __or__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __ge__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __gt__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __le__(self, other: object) -> TensorDictBase: ...
-
-    @_fallback
-    def __lt__(self, other: object) -> TensorDictBase: ...
+    def _compare(self, other, op, reflected_op, default): ...
 
     def __getattr__(self, item: str) -> Any:
         if not item.startswith("_"):
@@ -901,6 +910,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def _get_at_str(self, key, idx, default, **kwargs): ...
 
+    # Override: the get hooks run on the indexed value, as get_at reads it;
+    # the base would run them on the whole entry.
     @_get_post_hook
     @_fallback
     def _get_at_tuple(self, key, idx, default, **kwargs): ...
@@ -947,17 +958,18 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback_property
     def batch_size(self) -> torch.Size: ...
 
-    # Override: forwards to _param_td so that results keep their nn.Parameters.
+    # Override: the base would read the entries through the get hooks.
     @_fallback
     def contiguous(self, *args, **kwargs): ...
 
+    # Override: perf, the base front and a _del hook take 13% longer.
     @_lock_blocked
     @_unlock_and_set
     def del_(self, *args, **kwargs): ...
 
     # Override: forwards to _param_td so that results keep their nn.Parameters.
     @_fallback
-    def detach_(self, *args, **kwargs): ...
+    def _detach_(self): ...
 
     @_fallback_property
     def device(self): ...
@@ -972,11 +984,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def keys(self, *args, **kwargs): ...
 
+    # Override: the base fills a clone in place, which a leaf parameter refuses.
     @_fallback
     def masked_fill(self, *args, **kwargs): ...
 
     @_fallback
-    def masked_fill_(self, *args, **kwargs): ...
+    def _masked_fill_(self, mask, value): ...
 
     def memmap_(
         self,
@@ -1006,7 +1019,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     # Override: shares the parameters of _param_td in place.
     @_fallback
-    def share_memory_(self, *args, **kwargs): ...
+    def _share_memory_(self): ...
 
     # Override: setting the flag does not lock the parameters.
     @TensorDictBase.is_locked.setter
@@ -1100,7 +1113,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def _transpose(self, dim0, dim1): ...
 
     @_fallback
-    def where(
+    def _where(
         self,
         condition: Tensor,
         other: Tensor | TensorDictBase,
@@ -1139,14 +1152,16 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def _cast_reduction(self, **kwargs): ...
 
+    # Override: the base reads the entries through the get hooks for a dim.
     @_fallback
     def all(self, dim: int | None = None) -> bool | TensorDictBase: ...
 
+    # Override: as all.
     @_fallback
     def any(self, dim: int | None = None) -> bool | TensorDictBase: ...
 
     @_fallback
-    def expand(self, *args, **kwargs) -> Self: ...
+    def _expand(self, shape, names): ...
 
     def masked_select(self, mask: Tensor, *, inplace: bool = False) -> Self:
         if inplace:
@@ -1165,9 +1180,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         num_threads: int = 0,
     ) -> Self: ...
 
+    # Override: with inplace=True, the base would rewrite the leaves read
+    # through the get hooks.
     @_fallback
     def reshape(self, *shape: int): ...
 
+    # Override: as reshape.
     @_fallback
     def repeat_interleave(self, *shape: int): ...
 
@@ -1175,9 +1193,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def _repeat(self, *repeats: int): ...
 
     @_fallback
-    def split(
-        self, split_size: int | list[int], dim: int = 0
-    ) -> list[TensorDictBase]: ...
+    def _split(self, split_sizes, dim): ...
 
     @_fallback
     def _to_module(
@@ -1335,14 +1351,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def fill_(self, key: NestedKey, value: float | bool) -> Self: ...
 
     @_apply_on_data
-    def copy_(self, tensordict: T, non_blocking: bool | None = None) -> T: ...
-
-    @_apply_on_data
     def set_at_(
         self, key: NestedKey, value: CompatibleType, index: IndexType
     ) -> Self: ...
 
-    @_apply_on_data
+    @_apply_on_data_and_non_tensor
     def set_(
         self,
         key: NestedKey,
@@ -1364,7 +1377,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         idx: IndexType,
     ) -> Self: ...
 
-    @_apply_on_data
+    @_apply_on_data_and_non_tensor
     def update_(
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
