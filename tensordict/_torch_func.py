@@ -13,6 +13,7 @@ from typing import Any, Callable, Sequence, Tuple, TypeVar
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
+from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -235,7 +236,7 @@ def _gather(
 
     def _process_gather_value(value):
         if _is_unbatched(value):
-            return value._with_batch_size(index.shape)
+            return _unbatched_with_batch_size(value, index.shape)
         if _is_non_tensor_stack(value):
             return _gather_non_tensor_stack(value)
         return _gather_tensor(value)
@@ -266,7 +267,7 @@ def _gather(
         if _is_unbatched(value):
             out._set_str(
                 key,
-                value._with_batch_size(out.batch_size),
+                _unbatched_with_batch_size(value, out.batch_size),
                 validated=True,
                 inplace=False,
                 non_blocking=False,
@@ -485,7 +486,7 @@ def _cat(
         for key in keys:
             items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
             if _is_unbatched(items[0]):
-                out[key] = items[0]._with_batch_size(batch_size)
+                out[key] = _unbatched_with_batch_size(items[0], batch_size)
             elif not is_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
@@ -528,7 +529,7 @@ def _cat(
             if _is_unbatched(first_item):
                 out._set_str(
                     key,
-                    first_item._with_batch_size(batch_size),
+                    _unbatched_with_batch_size(first_item, batch_size),
                     validated=True,
                     inplace=False,
                     non_blocking=False,
@@ -883,10 +884,9 @@ def _stack(
                     return _stack_uninit_params(values, dim)
                 if is_tensor:
                     if _is_unbatched(values[0]):
-                        return (
-                            type(values[0])
-                            ._stack_non_tensor(values, dim)
-                            ._with_batch_size(result_batch_size)
+                        return _unbatched_with_batch_size(
+                            type(values[0])._stack_non_tensor(values, dim),
+                            result_batch_size,
                         )
                     return torch.stack(values, dim)
                 with (
