@@ -30,8 +30,10 @@ from tensordict.utils import (
     unravel_key,
 )
 from torch.compiler import is_compiling
+from torch.utils.data import default_collate
 
 __all__ = [
+    "collate",
     "dense_stack_tds",
     "make_tensordict",
     "merge_tensordicts",
@@ -521,6 +523,64 @@ def _pad_lazy_stack_inplace(
         new_batch_size[i] += l + r
     tensordict._change_batch_size(torch.Size(new_batch_size))
     return tensordict
+
+
+def collate(batch: Any) -> Any:
+    """Collates a list of samples into a batch, for :class:`~torch.utils.data.DataLoader`.
+
+    Pass it as ``collate_fn`` when the samples are tensordicts or
+    tensorclasses, or tuples or dicts that hold them, such as
+    ``(td, label)`` pairs. The default ``collate_fn`` of a ``DataLoader``
+    cannot read a tensordict (see :ref:`data-loading`).
+
+    The samples are collated by the type of the first one:
+
+    - tensordicts and tensorclasses go through
+      :meth:`~tensordict.LazyStackedTensorDict.maybe_dense_stack`: the batch
+      is a dense stack if the samples have the same keys and entry shapes,
+      and a :class:`~tensordict.LazyStackedTensorDict` otherwise. A
+      tensorclass keeps its type.
+    - tensors go through :func:`torch.stack`.
+    - mappings give a ``dict`` and tuples a tuple (a namedtuple keeps its
+      type), with each entry collated across the samples.
+    - anything else goes through :func:`torch.utils.data.default_collate`.
+
+    Args:
+        batch (list): the samples of one batch. Anything other than a
+            non-empty list is returned as is, for example the tensordict
+            that a batch sampler reads in one index operation.
+
+    Returns:
+        the collated batch.
+
+    Examples:
+        >>> import torch
+        >>> from torch.utils.data import DataLoader
+        >>> from tensordict import TensorDict, collate
+        >>> samples = [(TensorDict(x=torch.randn(3)), i) for i in range(10)]
+        >>> td, label = next(iter(DataLoader(samples, batch_size=4, collate_fn=collate)))
+        >>> td.batch_size, label
+        (torch.Size([4]), tensor([0, 1, 2, 3]))
+        >>> clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)]
+        >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate)))
+        >>> type(batch).__name__, batch.batch_size
+        ('LazyStackedTensorDict', torch.Size([4]))
+    """
+    if not isinstance(batch, list) or not batch:
+        return batch
+    first = batch[0]
+    if _is_tensor_collection(type(first)):
+        return LazyStackedTensorDict.maybe_dense_stack(batch)
+    if isinstance(first, torch.Tensor):
+        return torch.stack(batch)
+    if isinstance(first, Mapping):
+        return {key: collate([sample[key] for sample in batch]) for key in first}
+    if isinstance(first, tuple):
+        items = (collate(list(entries)) for entries in zip(*batch))
+        if hasattr(first, "_fields"):
+            return type(first)(*items)
+        return tuple(items)
+    return default_collate(batch)
 
 
 def pad_sequence(

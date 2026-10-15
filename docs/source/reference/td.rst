@@ -318,6 +318,7 @@ dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
     dense_stack_tds
     pad
     pad_sequence
+    collate
 
 .. _api-methods-device:
 
