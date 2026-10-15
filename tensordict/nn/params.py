@@ -468,10 +468,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         lock: bool = False,
         **kwargs,
     ):
-        # nn.Module.__init__ through super(): Dynamo does not trace the explicit
-        # nn.Module.__init__(self) call. TensorCollection.__init__ is skipped
-        # because it refuses direct instantiation.
-        super(TensorCollection, self).__init__()
+        if is_compiling():
+            # Dynamo does not trace the explicit nn.Module.__init__(self) call,
+            # but traces it through super(). TensorCollection.__init__ is
+            # skipped because it refuses direct instantiation.
+            super(TensorCollection, self).__init__()
+        else:
+            nn.Module.__init__(self)
         if parameters is None:
             parameters = kwargs
         elif kwargs:
@@ -548,7 +551,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             no_convert = "skip"
 
         self = TensorDictParams.__new__(cls)
-        super(TensorCollection, self).__init__()
+        nn.Module.__init__(self)
 
         self._param_td = parameters
         self.no_convert = no_convert
@@ -673,8 +676,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # Not ``with self._param_td.unlock_()``: Dynamo cannot enter a
         # tensordict passed into the compiled region as a context manager.
         relock = self._param_td.is_locked
-        if relock:
-            self._param_td.unlock_()
+        self._param_td.unlock_()
         try:
             TensorDictBase.update(
                 self,
