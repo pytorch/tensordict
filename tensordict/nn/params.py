@@ -597,8 +597,15 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             return NotImplemented
         return _TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
+    # Override: perf. Through the base front and _set_tuple, a key write is
+    # 10-25% slower.
+    @_lock_blocked
     @_unlock_and_set
-    def _setitem_index(self, index: IndexType, value: Any) -> None: ...
+    def __setitem__(  # type: ignore[misc]
+        self,
+        index: IndexType,
+        value: Any,
+    ) -> None: ...
 
     @_lock_blocked
     @_unlock_and_set

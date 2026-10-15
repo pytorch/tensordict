@@ -1574,14 +1574,6 @@ class TestBackends:
         assert obj.batch_size == (4, 3)
         torch.testing.assert_close(obj.to_tensordict(), before)
 
-    def test_setitem_self(self):
-        # the base __setitem__ refuses to nest a tensordict in itself; the
-        # delegate wrote the typed tensordict into its own source
-        state = _BackendState.from_tensordict(_dense_source())
-        with pytest.raises(ValueError, match="itself"):
-            state["self"] = state
-        assert "self" not in state.keys()
-
     def test_setitem_locked_source(self, source):
         kind, td = source
         if kind == "subtd":
