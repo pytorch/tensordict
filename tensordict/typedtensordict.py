@@ -26,6 +26,7 @@ from tensordict.utils import (
     _cache_while_locked,
     _is_non_tensor,
     _is_tensorclass,
+    _unravel_key_to_tuple,
 )
 from torch.compiler import is_compiling
 
@@ -757,22 +758,49 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 
     # Override: the source's in-place methods write into the members of a lazy
     # stack, which writing back the leaves read from self cannot do when they
-    # are nested. Other sources, stacks that hold copies, such as files, and
-    # stacks with exclusive keys, which the method leaves unchanged, take the
-    # inherited path.
+    # are nested. Other sources and stacks that hold copies, such as files,
+    # take the inherited path. On a stack with exclusive keys, which the method
+    # leaves unchanged, it changes a copy of the shared leaves, each read as
+    # one stacked tensor, which the source writes into its members (#2739).
     def _inplace_on_copies(self, method, *args, **kwargs):
         source = self._source
-        if (
-            not isinstance(source, LazyStackedTensorDict)
-            or source._has_exclusive_keys
-            or _reads_copies(source)
-        ):
+        if not isinstance(source, LazyStackedTensorDict) or _reads_copies(source):
             return super()._inplace_on_copies(method, *args, **kwargs)
         # the public name of a hook such as _zero_
-        result = getattr(source, method.__name__.lstrip("_"))(*args, **kwargs)
-        if result is not source:
+        name = method.__name__.lstrip("_")
+        if not source._has_exclusive_keys:
+            result = getattr(source, name)(*args, **kwargs)
+            if result is not source:
+                # broadcasting self returns a new tensordict and writes nothing
+                return result
+            return self
+        try:
+            items = list(source.items(True, True))
+        except RuntimeError:
+            # members that differ in shape cannot be read as one tensor
+            return super()._inplace_on_copies(method, *args, **kwargs)
+        leaves = TensorDict(batch_size=self.batch_size, device=self.device)
+        for key, value in items:
+            if isinstance(value, torch.Tensor):
+                leaves._set_tuple(
+                    _unravel_key_to_tuple(key),
+                    value,
+                    inplace=False,
+                    validated=True,
+                    non_blocking=False,
+                )
+        # a typed operand counts as its source, as for the dense copy
+        args = [a._source if isinstance(a, TypedTensorDict) else a for a in args]
+        kwargs = {
+            k: v._source if isinstance(v, TypedTensorDict) else v
+            for k, v in kwargs.items()
+        }
+        result = method(leaves, *args, **kwargs)
+        if result is not leaves:
             # broadcasting self returns a new tensordict and writes nothing
             return result
+        keys, values = leaves._items_list(True, True)
+        self._write_back(keys, values, name)
         return self
 
     # Override: the source detaches, with its checks.
