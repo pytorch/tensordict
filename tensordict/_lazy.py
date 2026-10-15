@@ -3124,18 +3124,29 @@ class LazyStackedTensorDict(TensorDictBase):
         _write_back_members(written, name)
         return self
 
+    # Override: a member holds tensordicts that read copies, such as a
+    # TensorDict that holds an h5 file: the method runs on the stack of
+    # copies, as where the members read copies (#2775).
+    def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
+        return LazyStackedTensorDict._inplace_on_copies(self, method, *args, **kwargs)
+
     def _stack_of_copies(self, written: list) -> LazyStackedTensorDict:
         """The stack with each member that reads copies replaced by a copy of its leaves.
 
-        Called by ``_inplace_on_copies``. Appends each such member and its
-        copy to ``written``, for the member to write the copy back.
+        A member that holds such tensordicts, such as h5 files, is replaced by
+        a copy in which they are (``TensorDict._tree_of_copies``). Called by
+        ``_inplace_on_copies``. Appends each such member and its copy to
+        ``written``, for the member to write the copy back.
         """
         members = []
         for td in self.tensordicts:
-            if not td._reads_return_copies:
-                members.append(td)
-            elif isinstance(td, LazyStackedTensorDict):
+            if isinstance(td, TensorDict):
+                # a member that holds files (#2775)
+                members.append(td._tree_of_copies(written))
+            elif isinstance(td, LazyStackedTensorDict) and not td._is_non_tensor:
                 members.append(td._stack_of_copies(written))
+            elif not td._reads_return_copies:
+                members.append(td)
             elif _has_lazy_stack(td):
                 # a TypedTensorDict over a lazy stack, whose copy would split
                 # the keys over the members of that stack: changed as before

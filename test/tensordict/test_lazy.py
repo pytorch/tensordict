@@ -5021,6 +5021,38 @@ class TestLazyStackedTensorDict:
             if non_tensor:
                 assert member.get_non_tensor("s") == "new"
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_update__dense_source_nested_lazy(self, stack_dim):
+        # #2775: update_ and copy_ from a dense tensordict write the members of
+        # a lazy stack that self holds, also in a lazy stack of such members,
+        # and a lazy stack of tensorclasses
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        def holder(cls=TensorDict):
+            # a lazy stack of batch size [2, 3]
+            size = (2, 3)[1 - stack_dim]
+            members = [
+                cls(x=torch.zeros(size, 4), batch_size=[size])
+                for _ in range((2, 3)[stack_dim])
+            ]
+            return TensorDict(
+                a=torch.zeros(2, 3), n=lazy_stack(members, stack_dim), batch_size=[2, 3]
+            )
+
+        for td in (holder(), lazy_stack([holder(), holder()]), holder(MC)):
+            source = td.to_tensordict() + 1
+            assert td.update_(source) is td
+            assert (td.to_tensordict() == 1).all()
+            source["n", "x"] += 1
+            assert td.copy_(source) is td
+            assert (td["a"] == 1).all()
+            assert (td["n", "x"] == 2).all()
+            # an input without the other entries
+            assert td.update_(source.select(("n", "x")) + 1) is td
+            assert (td["a"] == 1).all()
+            assert (td["n", "x"] == 3).all()
+
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
         td = TensorDict(
