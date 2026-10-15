@@ -5503,6 +5503,14 @@ class TestTensorDicts(TestTensorDictsBase):
                 leaf = td.get(k)
                 expected = torch.where(expand_as_right(mask, leaf), value, leaf)
                 assert (td_where.get(k) == expected).all()
+        # a uint8 mask (deprecated by torch, still accepted) selects the same values
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            td_where = torch.where(mask.to(torch.uint8), 0, td)
+        for k in td.keys(True, True):
+            leaf = td.get(k)
+            expected = torch.where(expand_as_right(mask, leaf), 0, leaf)
+            assert (td_where.get(k) == expected).all()
         if td_name == "td_h5":
             return
         td_where = td.clone()
