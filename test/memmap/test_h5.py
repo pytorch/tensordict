@@ -1433,6 +1433,21 @@ class TestH5Indexing:
         flat = h5td.flatten_keys(is_leaf=is_leaf)
         assert list(flat.keys()) == list(td.flatten_keys(is_leaf=is_leaf).keys())
 
+    @pytest.mark.parametrize("idx", [slice(1, 3), 1, torch.tensor([1, 2])])
+    def test_setitem_nested_on_locked_h5(self, data, idx):
+        # writing rows into a locked file writes the nested group too, as on a
+        # locked TensorDict, instead of raising after the top-level entries
+        # (#2745)
+        td, h5td = data
+        td = td.exclude("s").lock_()
+        h5td.lock_()
+        value = td[idx].apply(torch.zeros_like)
+        td[idx] = value
+        h5td[idx] = value
+        for key in td.keys(True, True):
+            assert (h5td.get(key) == td.get(key)).all(), key
+        assert (h5td["nested", "c"][idx] == 0).all()
+
     def test_subtd_rename_on_locked_h5(self, data):
         # a sub-tensordict renames in its locked h5 source, with the source's
         # warning
