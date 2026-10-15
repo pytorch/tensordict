@@ -1489,6 +1489,26 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     )
 
 
+def _has_typed_tensordict(td: TensorDictBase) -> bool:
+    """Whether ``td`` or one of its nested tensordicts is a ``TypedTensorDict``, which lists the leaves of the members of a lazy source.
+
+    No data of a file or a store is read: they cannot hold one.
+    """
+    from tensordict.typedtensordict import TypedTensorDict
+
+    while _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, TypedTensorDict):
+        return True
+    if td._reads_return_copies:
+        return False
+    return any(
+        _has_typed_tensordict(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
 class _NestedReadsCopies(Exception):
     """Raised by a lazy stack whose members read copies when an in-place method lists the leaves of a tensordict that holds it.
 
@@ -5024,14 +5044,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             source = dict(zip(*input_dict_or_td._items_list(True, True)))
             new_keys = [key for key in keys if key in source]
             if (
-                (new_keys or getattr(type(input_dict_or_td), "_wrapped_attr", None))
+                (new_keys or _has_typed_tensordict(input_dict_or_td))
                 and len(new_keys) < min(len(keys), len(source))
                 and _has_lazy_stack(input_dict_or_td)
             ):
                 # a nested lazy stack lists the leaves of each member, under
                 # keys that self lacks, which leaves keys of self unmatched,
-                # and a TypedTensorDict over a lazy stack lists all its leaves
-                # so (#2772): read those keys stacked instead (#2768)
+                # and a TypedTensorDict over a lazy stack, also a nested one,
+                # lists all its leaves so (#2772): read those keys stacked
+                # instead (#2768)
                 for key in keys:
                     if key not in source:
                         val = input_dict_or_td._get_tuple(

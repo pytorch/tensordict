@@ -1163,6 +1163,14 @@ class TestFromTensordict:
         dense = state.to_tensordict().zero_()
         dense.data = state
         assert (dense == 2).all()
+        # a key that only some members hold raises before anything is set
+        tds[0]["e"] = torch.ones(3)
+        value = lazy_stack(tds).to_tensordict() + 1
+        value["e"] = torch.zeros(2, 3)
+        with pytest.raises(KeyError):
+            state.data = value
+        for td in tds:
+            assert (td["a"] == 2).all()
 
     @staticmethod
     def _make_members(kind, tmp_path):
@@ -1256,6 +1264,11 @@ class TestFromTensordict:
             assert (td["a"] == 2).all()
             assert (td["n", "x"] == 2).all()
         assert (tds[0]["e"] == 1).all()
+        # nested in the source of a dense tensordict, as on main
+        outer = TensorDict(t=src, batch_size=[2])
+        dense = outer.to_tensordict().exclude(("t", "e")).zero_()
+        assert getattr(dense, method)(outer) is dense
+        assert (dense == outer.to_tensordict().exclude(("t", "e"))).all()
 
     def test_from_tensordict_lazy_stack_of_stacks_exclusive_keys_inplace(self):
         # #2759: a key that only some members of an inner stack hold is left

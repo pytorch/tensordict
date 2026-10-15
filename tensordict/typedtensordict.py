@@ -844,6 +844,8 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 
     # Override: a lazy source sets the data of each member from its part of
     # value, as the leaves that self lists are those of the members (#2772).
+    # The value is split into a stack of its parts, which the base checks
+    # before it sets anything.
     def _data_setter(self, value):
         source = self._source
         if (
@@ -852,8 +854,8 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         ):
             # the base raises for another batch size
             return super()._data_setter(value)
-        for td, piece in zip(source.tensordicts, value.unbind(source.stack_dim)):
-            td.data = piece
+        pieces = value.unbind(source.stack_dim)
+        super()._data_setter(LazyStackedTensorDict(*pieces, stack_dim=source.stack_dim))
 
     # Override: the traversals walk the members of a lazy source, as on the
     # source, so that the binary ops find the leaves that they list (#2772).
