@@ -4185,6 +4185,24 @@ class TestTensorClass:
         assert isinstance(test_td._tensordict, LazyStackedTensorDict)
         assert_allclose_td(td, test_td)
 
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    def test_to_mds_zero_dim(self, tmpdir):
+        # a tensorclass without batch dims is written as one row
+        class MC(TensorClass):
+            a: torch.Tensor
+            s: str
+
+        tc = MC(a=torch.arange(3), s="a string")
+
+        tmpdir = str(tmpdir)
+        tc.to_mds(out=tmpdir)
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        assert len(dataset) == 1
+        test_tc = MC.from_list([dataset[0]])[0]
+        assert isinstance(test_tc, MC)
+        assert_allclose_td(tc, test_tc)
+
     def test_stack_names(self):
         class MyTensorClass(TensorClass):
             foo: Tensor
