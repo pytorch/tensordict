@@ -1113,6 +1113,177 @@ class TestFromTensordict:
         assert (dest["n", "x"] == 1).all()
         assert (dest["m", "x"] == 2).all()
 
+    @pytest.mark.parametrize("op", ["add", "mul", "sub"])
+    @pytest.mark.parametrize("nested", [False, True], ids=["flat", "nested"])
+    def test_from_tensordict_lazy_stack_binary_ops(self, nested, op):
+        # #2772: the out-of-place binary ops give what they give on the stack,
+        # with a scalar or a typed operand
+        class Flat(TypedTensorDict):
+            a: Tensor
+
+        class Nested(Flat):
+            n: TensorDict
+
+        tds = [
+            TensorDict(
+                a=torch.full((3,), i), n={"x": torch.full((3, 2), i)}, batch_size=[3]
+            )
+            for i in (1.0, 2.0)
+        ]
+        cls = Nested
+        if not nested:
+            tds = [td.exclude("n") for td in tds]
+            cls = Flat
+        before = lazy_stack(tds).to_tensordict()
+        state = cls.from_tensordict(lazy_stack(tds))
+        for other in (2.0, state):
+            result = getattr(state, op)(other)
+            expected = getattr(lazy_stack(tds), op)(
+                other._source if isinstance(other, TypedTensorDict) else other
+            )
+            assert isinstance(result, cls)
+            torch.testing.assert_close(result.to_tensordict(), expected.to_tensordict())
+        torch.testing.assert_close(lazy_stack(tds).to_tensordict(), before)
+
+    def test_from_tensordict_lazy_stack_data_setter(self):
+        # .data pairs the leaves of a stack with a nested entry with those of
+        # a dense tensordict, either way (#2772)
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(2)
+        ]
+        state = Nested.from_tensordict(lazy_stack(tds))
+        state.data = state.to_tensordict() + 1
+        for td in tds:
+            assert (td == 2).all()
+        dense = state.to_tensordict().zero_()
+        dense.data = state
+        assert (dense == 2).all()
+        # a key that only some members hold raises before anything is set
+        tds[0]["e"] = torch.ones(3)
+        value = lazy_stack(tds).to_tensordict() + 1
+        value["e"] = torch.zeros(2, 3)
+        with pytest.raises(KeyError):
+            state.data = value
+        for td in tds:
+            assert (td["a"] == 2).all()
+
+    @staticmethod
+    def _make_members(kind, tmp_path):
+        def nested(i):
+            return TensorDict(
+                a=torch.full((3,), i), n={"x": torch.full((3, 2), i)}, batch_size=[3]
+            )
+
+        members = [nested(i) for i in (1.0, 2.0)]
+        if kind == "locked_members":
+            return lazy_stack([td.lock_() for td in members])
+        if kind == "locked_stack":
+            return lazy_stack(members).lock_()
+        if kind == "shared":
+            return lazy_stack([td.share_memory_() for td in members])
+        if kind == "memmap":
+            return lazy_stack([td.memmap_() for td in members])
+        if kind == "stack_of_stacks":
+            return lazy_stack([lazy_stack(list(td.unbind(0))) for td in members])
+        if kind == "sub_td":
+            return lazy_stack(
+                [td.expand(2, 3).clone()._get_sub_tensordict(0) for td in members]
+            )
+        if kind == "nested_h5":
+            for i, td in enumerate(members):
+                td["n"] = PersistentTensorDict.from_dict(
+                    td["n"], filename=tmp_path / f"n{i}.h5"
+                )
+            return lazy_stack(members)
+        if kind == "h5":
+            return lazy_stack(
+                [
+                    PersistentTensorDict.from_dict(td, filename=tmp_path / f"{i}.h5")
+                    for i, td in enumerate(members)
+                ]
+            )
+        return lazy_stack(members)
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "plain",
+            "locked_members",
+            "locked_stack",
+            "shared",
+            "memmap",
+            "stack_of_stacks",
+            "sub_td",
+            pytest.param(
+                "h5", marks=pytest.mark.skipif(not _has_h5py, reason="no h5py")
+            ),
+            pytest.param(
+                "nested_h5", marks=pytest.mark.skipif(not _has_h5py, reason="no h5py")
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("src_type", ["typed", "dense"])
+    @pytest.mark.parametrize("method", ["copy_", "update_"])
+    def test_from_tensordict_lazy_stack_nested_as_dest(
+        self, method, src_type, kind, tmp_path
+    ):
+        # #2771, #2773: copy_ and update_ write every entry into the members
+        # of a stack with a nested entry, whatever the members are
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        source = self._make_members(kind, tmp_path)
+        dest = Nested.from_tensordict(source)
+        values = source.to_tensordict().apply(lambda x: x + 10)
+        src = values
+        if src_type == "typed":
+            src = Nested.from_tensordict(lazy_stack(list(values.unbind(0))))
+        assert getattr(dest, method)(src) is dest
+        # read back from the members, from the files for h5
+        torch.testing.assert_close(source.to_tensordict(), values)
+        if "h5" in kind:
+            # .data cannot set what the files hold: it raises before it sets
+            with pytest.raises(RuntimeError, match="Cannot assign .data"):
+                dest.data = values + 1
+            torch.testing.assert_close(source.to_tensordict(), values)
+        assert dest.add_(1) is dest
+        assert dest.zero_() is dest
+        assert (source.to_tensordict() == 0).all()
+
+    @pytest.mark.parametrize("method", ["copy_", "update_"])
+    def test_from_tensordict_lazy_stack_exclusive_keys_as_dest(self, method):
+        # #2771: copy_ and update_ leave the keys that only some members hold,
+        # also when the source holds them (#2739)
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(2)
+        ]
+        tds[0]["e"] = torch.ones(3)
+        dest = Nested.from_tensordict(lazy_stack(tds))
+        src = Nested.from_tensordict(
+            lazy_stack([td.apply(lambda x: x + 1) for td in tds])
+        )
+        assert getattr(dest, method)(src) is dest
+        for td in tds:
+            assert (td["a"] == 2).all()
+            assert (td["n", "x"] == 2).all()
+        assert (tds[0]["e"] == 1).all()
+        # nested in the source of a dense tensordict, as on main
+        outer = TensorDict(t=src, batch_size=[2])
+        dense = outer.to_tensordict().exclude(("t", "e")).zero_()
+        assert getattr(dense, method)(outer) is dense
+        assert (dense == outer.to_tensordict().exclude(("t", "e"))).all()
+
     def test_from_tensordict_lazy_stack_of_stacks_exclusive_keys_inplace(self):
         # #2759: a key that only some members of an inner stack hold is left
         # unchanged, as in a single stack
@@ -1135,25 +1306,32 @@ class TestFromTensordict:
             assert (td["n", "x"] == 3).all()
         assert (tds[0]["e"] == 1).all()
 
-    def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace_raises(self):
-        # #2759: the shared leaves differ in shape, so they cannot be changed
-        # without the exclusive keys: the method raises before it writes
+    @pytest.mark.parametrize("op", ["add_", "zero_", "mul_", "copy_"])
+    def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace(self, op):
+        # #2759: the shared leaves differ in shape, so they cannot be read as
+        # one tensor: the method runs on the shared leaves of each member and
+        # leaves the exclusive keys unchanged (#2739)
         class Nested(TypedTensorDict):
             a: Tensor
             n: TensorDict
 
         tds = [
             TensorDict(
-                a=torch.ones(3, k + 1), n={"x": torch.ones(3, 2)}, batch_size=[3]
+                a=torch.full((3, k + 1), 2.0),
+                n={"x": torch.full((3, 2), 2.0)},
+                batch_size=[3],
             )
             for k in range(2)
         ]
-        tds[0]["e"] = torch.ones(3)
+        tds[0]["e"] = torch.full((3,), 2.0)
         state = Nested.from_tensordict(lazy_stack(tds))
-        with pytest.raises(RuntimeError, match="Failed to stack"):
-            state.add_(1.0)
+        args = {"add_": (1.0,), "zero_": (), "mul_": (state,), "copy_": (state + 1,)}
+        assert getattr(state, op)(*args[op]) is state
+        expected = {"add_": 3.0, "zero_": 0.0, "mul_": 4.0, "copy_": 3.0}[op]
         for td in tds:
-            assert (td == 1).all()
+            assert (td["a"] == expected).all()
+            assert (td["n", "x"] == expected).all()
+        assert (tds[0]["e"] == 2).all()
 
     @pytest.mark.parametrize("receiver", ["dense", "lazy", "typed"])
     @pytest.mark.parametrize("wrap", ["typed", "tensorclass"])
