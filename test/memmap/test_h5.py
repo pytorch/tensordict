@@ -292,6 +292,21 @@ class TestH5Serialization:
             assert type(expected.get(key)) is cls
             assert np.array_equal(out.get(key).tolist(), expected.get(key).tolist())
 
+    def test_h5_memmap_non_tensor_list(self, tmp_path):
+        # tensordict writes a NonTensorData that is not a str as an opaque
+        # dataset, whose metadata also has a torch dtype (#2781)
+        td = TensorDict({"a": torch.zeros(3), "l": NonTensorData([1, 2, 3])}, [3])
+        PersistentTensorDict.from_dict(td, tmp_path / "file.h5").close()
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+        expected = h5td.to_tensordict().memmap()
+        out = h5td.memmap(tmp_path / "memmap")
+        h5td.close()
+        assert isinstance(out.get("a"), MemoryMappedTensor)
+        assert type(out.get("l")) is NonTensorData
+        assert type(expected.get("l")) is NonTensorData
+        assert np.array_equal(out.get("l").data, expected.get("l").data)
+        assert np.array_equal(out.get("l").data, [1, 2, 3])
+
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
