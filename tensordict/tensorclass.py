@@ -3965,7 +3965,13 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         or (item is True)
         or (item is None)
     ) and self.batch_size == ():
-        return self.update(value.squeeze(0))
+        # Squeeze a value that has a batch dim. squeeze(0) raises IndexError
+        # on batch size [], unlike Tensor.squeeze. A tensor has no batch size
+        # and is still squeezed.
+        value_batch_size = getattr(value, "batch_size", None)
+        if value_batch_size is None or value_batch_size:
+            value = value.squeeze(0)
+        return self.update(value)
     if (
         isinstance(self, NonTensorData)
         and is_non_tensor(value)
