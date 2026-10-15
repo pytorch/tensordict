@@ -1493,6 +1493,17 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     )
 
 
+def _has_unmatched_member_key(keys: list, source: dict) -> bool:
+    """Whether a key of ``keys`` that ``source`` lacks may pass through a member of a lazy stack.
+
+    Such a key has a member index, as ``("n", "0", "x")`` (#2775).
+    """
+    for key in keys:
+        if type(key) is tuple and key not in source and any(map(str.isdigit, key)):
+            return True
+    return False
+
+
 def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> Any:
     """The tensor of ``source`` for the key of ``td`` that passes through members of lazy stacks, or ``None``.
 
@@ -1506,6 +1517,9 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
 
     members = []
     for part in key:
+        if _is_tensorclass(type(td)):
+            # a lazy stack of tensorclasses is a tensorclass over the stack
+            td = td._tensordict
         if isinstance(td, LazyStackedTensorDict):
             members.append((td.stack_dim, len(td.tensordicts), int(part)))
             td = td.tensordicts[int(part)]
@@ -5113,7 +5127,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         if isinstance(val, Tensor):
                             source[key] = val
                 new_keys = [key for key in keys if key in source]
-            elif unmatched and _has_lazy_stack(self):
+            elif (
+                unmatched
+                # the dense tensordicts skip the walk of _has_lazy_stack
+                and _has_unmatched_member_key(keys, source)
+                and _has_lazy_stack(self)
+            ):
                 # a lazy stack of self lists the leaves of each member, under
                 # keys that the input lacks: read those keys at the index of
                 # each member instead (#2775)
