@@ -8295,6 +8295,34 @@ class TestGeneric:
         else:
             assert "n" not in td_a.keys()
 
+    @pytest.mark.parametrize("reproduce_struct", [False, True])
+    def test_split_keys_tensorclass_non_tensor(self, reproduce_struct):
+        # A non-tensor tensorclass field goes only to the output whose key set
+        # names it, or to the last output: the other outputs hold None.
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor
+            s: str
+
+        tc = MyClass(x=torch.zeros(3), y=torch.ones(3), s="hello", batch_size=[3])
+        parts = tc.split_keys(["x"], ["y"], reproduce_struct=reproduce_struct)
+        assert all(isinstance(part, MyClass) for part in parts)
+        assert [part.s for part in parts] == [None, None, "hello"]
+        parts = tc.split_keys(["x"], ["s"], reproduce_struct=reproduce_struct)
+        assert all(isinstance(part, MyClass) for part in parts)
+        assert [part.s for part in parts] == [None, "hello", None]
+        if not reproduce_struct:
+            # the nested tensorclass is only kept with reproduce_struct=True
+            return
+        td = TensorDict(a=torch.zeros(3), t=tc, batch_size=[3])
+        parts = td.split_keys(["a"], [("t", "x")], reproduce_struct=True)
+        assert all(isinstance(part["t"], MyClass) for part in parts)
+        assert [part["t"].s for part in parts] == [None, None, "hello"]
+        parts = td.split_keys(["a"], [("t", "s")], reproduce_struct=True)
+        assert all(isinstance(part["t"], MyClass) for part in parts)
+        assert [part["t"].s for part in parts] == [None, "hello", None]
+
     @pytest.mark.parametrize("sign", ["plus", "minus"])
     def test_split_uneven(self, sign):
         a = torch.arange(6).unsqueeze(-1).expand(6, 3)
