@@ -789,6 +789,12 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
                     validated=True,
                     non_blocking=False,
                 )
+        # a typed operand counts as its source, as for the dense copy
+        args = [a._source if isinstance(a, TypedTensorDict) else a for a in args]
+        kwargs = {
+            k: v._source if isinstance(v, TypedTensorDict) else v
+            for k, v in kwargs.items()
+        }
         result = method(leaves, *args, **kwargs)
         if result is not leaves:
             # broadcasting self returns a new tensordict and writes nothing

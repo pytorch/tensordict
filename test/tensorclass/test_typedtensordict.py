@@ -1025,9 +1025,14 @@ class TestFromTensordict:
         assert state.add_(1.0) is state
         assert state.add_(other, alpha=2.0) is state
         assert state.lerp_(lazy_stack(tds).apply(torch.ones_like), 0.5) is state
+        # a typed operand, as in a soft update
+        online = Nested.from_tensordict(
+            lazy_stack([td.apply(lambda x: torch.full_like(x, 5.0)) for td in tds])
+        )
+        assert state.lerp_(online, 0.5) is state
         for td in tds:
-            assert (td["a"] == 3).all()
-            assert (td["n", "x"] == 3).all()
+            assert (td["a"] == 4).all()
+            assert (td["n", "x"] == 4).all()
         assert (tds[0][exclusive] == 1).all()
         assert set(tds[0].keys(True, True)) == {"a", ("n", "x"), exclusive}
         for td in tds[1:]:
@@ -1036,7 +1041,7 @@ class TestFromTensordict:
         with pytest.raises(KeyError):
             state.add_(other.exclude(("n", "x")))
         for td in tds:
-            assert (td["a"] == 3).all()
+            assert (td["a"] == 4).all()
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
