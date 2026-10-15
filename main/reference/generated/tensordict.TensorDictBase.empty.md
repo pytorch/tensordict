@@ -20,7 +20,15 @@ Keyword Arguments:
 With `recurse=True`, a sub-tensordict whose batch size is the
 start of the new one gets the new one, a sub-tensordict whose
 batch size starts with the new one keeps it, and any other
-sub-tensordict raises a `RuntimeError`.
+sub-tensordict raises a `RuntimeError`. A
+[`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) whose members took
+the batch size before 0.15 (one stacked along dim 0, for
+instance) keeps that result, the empty stack of its members,
+with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning), when a sub-tensordict does not
+fit the new batch size or `names` has another length.
+Starting with TensorDict 0.17, the default will change to
+raising a `RuntimeError` or a `ValueError`, as
+`TensorDict.empty` and the names setter do.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - a new device.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - dimension names.
 
