@@ -803,6 +803,21 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         self._write_back(keys, values, name)
         return self
 
+    # Override: a lazy source indexes its members, so the result holds views of
+    # them, as indexing the stack does; the base method would stack copies of
+    # the flat leaves (#2759). Other sources index as before.
+    def _index_tensordict(self, index, new_batch_size=None, names=None):
+        source = self._source
+        if (
+            isinstance(source, LazyStackedTensorDict)
+            and new_batch_size is None
+            and names is None
+        ):
+            result = source[index]
+        else:
+            result = source._index_tensordict(index, new_batch_size, names)
+        return type(self)._wrap_td(result)
+
     # Override: the source detaches, with its checks.
     def _detach_(self):
         self._source.detach_()
@@ -1197,7 +1212,6 @@ _WRAP_DELEGATES = [
     "contiguous",
     "masked_fill",
     "masked_select",
-    "_index_tensordict",
 ]
 
 # In-place: delegate to _source, return self
