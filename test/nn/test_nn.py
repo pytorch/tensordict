@@ -4791,8 +4791,10 @@ class TestTensorDictParams:
         assert "z" not in params.keys()
 
     def test_setitem_self(self):
+        # the base __setitem__ refuses to nest a tensordict in itself; the
+        # forwarder recursed until RecursionError
         params = self._params()
-        with pytest.raises(RecursionError):
+        with pytest.raises(ValueError, match="itself"):
             params["self"] = params
 
     @pytest.mark.parametrize("no_convert", [False, True])

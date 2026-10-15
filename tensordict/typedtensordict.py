@@ -565,6 +565,12 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         source = self._source
         return source._inplace_batch_size_change and not source._lazy
 
+    # Override: a sub-tensordict, a file or a store writes td[key] = value
+    # into an existing entry, as the source's __setitem__ did.
+    @property
+    def _setitem_key_inplace(self):
+        return self._source._setitem_key_inplace
+
     # Override: a lazy source writes a gather with an index of the batch shape
     # into its members; the lazy stacks refuse it.
     @property
@@ -1122,8 +1128,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 # base walks the leaves, several times slower), ``all`` and ``any`` (the base
 # is 10-15% slower with a dim), ``reshape`` and ``repeat_interleave`` (with
 # inplace=True, the base rewrites the leaves through self, 50% slower),
-# ``popitem`` (one call to the source),
-# ``__setitem__`` (the source's checks), ``make_memmap*`` (a memory-mapped
+# ``popitem`` (one call to the source), ``make_memmap*`` (a memory-mapped
 # source), ``contiguous`` (one call to the source), ``masked_fill`` (the
 # source's copy: the base would clone a file), ``masked_select`` (the typed
 # result).
@@ -1138,7 +1143,7 @@ _DIRECT_DELEGATES = [
     "is_contiguous",
     "popitem",
     "_cast_reduction",
-    "__setitem__",
+    "_setitem_index",
     "_compare",
     "all",
     "any",
