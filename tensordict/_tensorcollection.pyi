@@ -597,7 +597,7 @@ class TensorCollection:
     ): ...
     def new_tensor(
         self,
-        data: torch.Tensor | TensorCollection,
+        data: torch.Tensor | TensorCollection | np.ndarray | Sequence | float,
         *,
         dtype: torch.dtype = None,
         device: DeviceType = ...,

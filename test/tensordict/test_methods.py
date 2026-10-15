@@ -2697,6 +2697,24 @@ class TestTensorDicts(TestTensorDictsBase):
             assert tdn.shape == td.shape[1:]
             if td._has_non_tensor:
                 assert tdn._has_non_tensor
+        # Array-likes, as torch.Tensor.new_tensor takes them: no warning about
+        # copying a tensor, the default device, and the dtype of each entry.
+        for data in ([0, 1], (0, 1), np.array([0, 1])):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                tdn = td.new_tensor(data)
+            assert not any("To copy construct" in str(w.message) for w in caught)
+            assert tdn.device == torch.device("cpu")
+            assert tdn.shape == (2,)
+            for key in tdn.keys(True, True):
+                value = tdn.get(key)
+                if not isinstance(value, torch.Tensor):
+                    continue
+                assert value.dtype == td.get(key).dtype
+                assert value.tolist() == torch.tensor([0, 1]).to(value.dtype).tolist()
+        tdn = td.new_tensor(1)
+        assert tdn.shape == ()
+        assert (tdn == 1).all()
 
     def test_new_zeros(self, td_name, device):
         td = getattr(self, td_name)(device)
