@@ -190,8 +190,9 @@ one of its code paths. A class puts what it does differently into a hook
 override or a class attribute, not into an override of the public method.
 The docstring of a hook on `TensorDictBase` states its contract: what the
 public method has done before the call, and what the hook must do and
-return (`_chunk`, `_contiguous_inplace` and `_get_at_tuple` have no
-docstring yet). The base implementation of a hook is the generic
+return. `test_conformance.py::TestOneImplementation` checks that each hook
+a subclass overrides has a docstring, apart from a listed set of older
+hooks. The base implementation of a hook is the generic
 algorithm, so only the classes that can do better, or must do something
 else, override it. A new backend therefore implements the abstract
 methods, and overrides a hook or sets a class attribute where its storage
