@@ -382,9 +382,7 @@
  "typed_lazy pointwise": [
   "abs()",
   "add(1)",
-  "add(td)",
-  "mul(2)",
-  "mul(td)"
+  "mul(2)"
  ],
  "typed_lazy reductions": [],
  "typed_lazy select": [
