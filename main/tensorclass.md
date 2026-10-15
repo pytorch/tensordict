@@ -142,8 +142,9 @@ torch.Size([3, 4, 1])
 
 Assigning a name that is not a field, as an attribute or with `set()`,
 raises `AttributeError`. `set_non_tensor()`, `setdefault()`,
-`create_nested()`, `rename_key_()`, and `update()` with a
-`TensorDict` or another tensorclass still store such a key, and warn with a
+`create_nested()`, `rename_key_()`, `update()` with a `TensorDict`
+or another tensorclass, and an indexed assignment of a `TensorDict`
+(`data[idx] = td`) still store such a key, and warn with a
 `DeprecationWarning`. Starting with TensorDict 0.17, they raise
 `AttributeError` too.
 
