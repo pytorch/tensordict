@@ -2499,6 +2499,36 @@ class TestNN:
                 sample = prob_mod_c(td.copy())["sample"]
             assert (sample != td["loc"]).all()
 
+    @pytest.mark.parametrize("method", [False, True])
+    def test_tdparams_gather(self, mode, method):
+        # Gathering from a TensorDictParams gives a plain TensorDict with the
+        # batch size, device and names of eager mode, also once the batch
+        # size is symbolic (from the second size on).
+        def gather(params, index):
+            if method:
+                return params.gather(0, index)
+            return torch.gather(params, 0, index)
+
+        gather_c = torch.compile(gather, fullgraph=True, mode=mode)
+        for n in (4, 6, 8):
+            params = TensorDictParams(
+                TensorDict(
+                    a=torch.randn(n, 3),
+                    b={"c": torch.randn(n)},
+                    batch_size=[n],
+                    device="cpu",
+                    names=["x"],
+                )
+            )
+            index = torch.arange(0, n, 2)
+            expected = gather(params, index)
+            result = gather_c(params, index)
+            assert type(result) is type(expected) is TensorDict
+            assert result.batch_size == expected.batch_size == (n // 2,)
+            assert result.device == expected.device
+            assert result.names == expected.names == ["x"]
+            assert_close(result, expected)
+
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
