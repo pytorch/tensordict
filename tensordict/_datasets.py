@@ -153,7 +153,6 @@ def _get_elt_type(
     elt,
 ) -> Literal[
     "bytes",
-    "float",
     "float16",
     "float32",
     "float64",
@@ -198,20 +197,21 @@ def _get_elt_type(
             if isinstance(elt, torch.Tensor):
                 dtype = elt.dtype
                 if dtype.is_floating_point:
-                    return "float"
+                    # MDS has no "float" encoding, only one per dtype
+                    return str(dtype).removeprefix("torch.")
                 else:
                     return "int"
             else:
                 dtype = elt.dtype
                 if dtype.kind == "f":
-                    return "float"
+                    return dtype.name
                 elif dtype.kind in ("i", "b"):
                     return "int"
                 else:
                     return "str"
         return "ndarray"
     elif isinstance(elt, float):
-        return "float"
+        return "float64"
     elif isinstance(elt, (int, bool)):
         return "int"
     elif isinstance(elt, str):

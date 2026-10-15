@@ -9319,6 +9319,8 @@ class TestGeneric:
             b=[0, 1, 0],
             c=torch.tensor([[4, 5], [6, 7], [8, 9]]),
             d=["a string!", "another string!", "again!"],
+            e=torch.tensor([0.5, 1.5, 2.5]),
+            f=torch.tensor([0.25, 1.25, 2.25], dtype=torch.float64),
             batch_size=[3],
         )
 
