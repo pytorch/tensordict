@@ -320,13 +320,13 @@ TensorDict X.Y.Z is a patch release with N bug fixes. They cover <areas>. There 
 
 ### <Area>
 
-- <What works now, and what happened before, in the user's terms> ([#PR](https://github.com/pytorch/tensordict/pull/PR), fixes [#ISSUE](https://github.com/pytorch/tensordict/issues/ISSUE)).
+- <What works now, and what happened before, in the user's terms> (#PR, fixes #ISSUE).
 
 ## Behavior changes
 
 These fixes can change the behavior of existing code:
 
-- <What existing code now sees, for example a new error> ([#PR](https://github.com/pytorch/tensordict/pull/PR)).
+- <What existing code now sees, for example a new error> (#PR).
 
 ## Installation
 
@@ -361,6 +361,16 @@ Thanks to @login1 (first contribution), @login2, and @login3 for their contribut
   version of each deprecation. The changelog link compares with
   `vX.(Y-1).0`.
 - No emojis.
+- Write PR and issue references as bare `#N`: GitHub links them in a
+  release body, which holds at most 125,000 characters. It links only the
+  first 500, though, so write any later ones as `[#N](../../pull/N)`.
+  GitHub resolves a relative link in a release body against
+  `/pytorch/tensordict/blob/<tag>/`, so `../../pull/N` reaches the PR, and
+  GitHub redirects it to the issue for an issue number. A root-relative
+  `/pytorch/tensordict/pull/N` link breaks. The 0.15.0 notes had 923
+  references. To check the links before publishing, read the `body_html` of
+  the draft release:
+  `gh api -H "Accept: application/vnd.github.html+json" repos/pytorch/tensordict/releases/<id> --jq .body_html`.
 
 ## 6. Ask the maintainer
 
@@ -378,7 +388,8 @@ Then send one message with:
 - the test results: which tests failed, and whether they also fail on
   `$PREV`;
 - the link to the dry run, and its number of wheels;
-- the release notes, in full;
+- the release notes, in full, or, if the maintainer has approved a draft
+  of them, every change since that draft;
 - if the conda-forge recipe must change (see step 7), the change;
 - "Reply ok to publish."
 
