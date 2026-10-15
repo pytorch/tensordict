@@ -4006,10 +4006,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def filter_empty_(self):
         """Filters out all empty tensordicts in-place."""
-        for key, val in reversed(
-            list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS, sort=True))
-        ):
-            if _is_tensor_collection(type(val)) and val.is_empty():
+        # A lazy stack filters each member, and a sub-tensordict is filtered
+        # before it is checked: a nested key that names a member, such as
+        # ("0", "a"), cannot be deleted from the stack (#2796).
+        members = self._members_as_lists()
+        if members is not None:
+            for td in members:
+                td.filter_empty_()
+            return self
+        for key, val in list(self.items()):
+            cls = type(val)
+            if not _is_tensor_collection(cls):
+                continue
+            if not is_non_tensor(cls) and not _pass_through(val):
+                val.filter_empty_()
+            if val.is_empty():
                 del self[key]
         return self
 
