@@ -745,13 +745,16 @@ class TestTD:
             for r, e in zip(result, expected):
                 assert (r["a", "b"] == e["a", "b"]).all()
 
+    @pytest.mark.parametrize("dynamic", [False, True])
     @pytest.mark.parametrize(
         "op",
         ["chunk", "split", "cat", "stack", "or", "update", "update_at_", "setitem"],
     )
-    def test_unbatched_dynamic_batch_size(self, op, mode):
-        # With dynamic shapes, these operations give an unbatched entry a batch
-        # size such as s0 // 2, which Dynamo must read back from it (#2789).
+    def test_unbatched_new_batch_size(self, op, dynamic, mode):
+        # These operations give an unbatched entry a new batch size. With
+        # dynamic shapes it is an expression such as s0 // 2, which Dynamo
+        # must read back from the entry (#2789); with static shapes the entry
+        # must not keep the batch size of the input.
         def setitem(td):
             td[0] = td.to_tensordict()[0] * 0
             return td
@@ -768,7 +771,7 @@ class TestTD:
             ),
             "setitem": lambda td: (setitem(td),),
         }[op]
-        fn_c = torch.compile(fn, fullgraph=True, dynamic=True, mode=mode)
+        fn_c = torch.compile(fn, fullgraph=True, dynamic=dynamic, mode=mode)
         a, u = torch.randn(4, 3, 2, 1, 5), torch.randn(7, 11)
 
         def make():
