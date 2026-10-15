@@ -1549,38 +1549,35 @@ def _reads_copies_under(td: TensorDictBase, keys: list) -> bool:
     file (#2780). Only the entries on the path of each key are read, and the
     tree under a key that names a tensordict.
     """
-    # the tensordicts that keys name: the leaves under them are written too
+    tensordict_type = _TENSORDICT_TYPE
+    # the entries that keys name: the leaves under them are written too
     named = []
     for key in keys:
-        node, cls = td, type(td)
+        node = td
         for part in key:
-            if cls is _TENSORDICT_TYPE:
+            if type(node) is tensordict_type:
                 node = node._tensordict.get(part)
-            else:
-                node = node._get_str(part, None)
-            cls = type(node)
-            if cls is _TENSORDICT_TYPE:
                 continue
-            if cls is Tensor:
-                break
             copies = _entry_reads_copies(node)
-            if copies is None:
-                break
             if copies:
                 return True
+            if copies is None:
+                break
+            node = node._get_str(part, None)
         else:
-            named.append(node)
+            if type(node) is not Tensor:
+                named.append(node)
     while named:
-        for value in named.pop().values():
-            cls = type(value)
-            if cls is _TENSORDICT_TYPE:
+        node = named.pop()
+        if type(node) is not tensordict_type:
+            copies = _entry_reads_copies(node)
+            if copies:
+                return True
+            if copies is None:
+                continue
+        for value in node.values():
+            if type(value) is not Tensor:
                 named.append(value)
-            elif cls is not Tensor:
-                copies = _entry_reads_copies(value)
-                if copies:
-                    return True
-                if copies is not None:
-                    named.append(value)
     return False
 
 
