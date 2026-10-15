@@ -186,6 +186,23 @@ def convert_ellipsis_to_idx(
     return _expand_ellipsis(idx, len(batch_size))
 
 
+def _expand_batch_ellipsis(idx, batch_size):
+    """Replace the ``Ellipsis`` of ``idx`` by the batch dims that it stands for.
+
+    ``idx`` is an ``Ellipsis`` or a tuple holding one, as ``td[idx] = value``
+    gets it: the ``Ellipsis`` covers the batch dims only, not the feature dims
+    of the entries that follow them. The trailing ``:`` after the first
+    element are dropped, as they select the same elements, so that an index
+    that only selects along dim 0 is still read as one. An empty batch gives
+    ``()``, which a 0-d entry accepts.
+    """
+    idx = convert_ellipsis_to_idx(idx, batch_size)
+    end = len(idx)
+    while end > 1 and isinstance(idx[end - 1], slice) and idx[end - 1] == slice(None):
+        end -= 1
+    return idx[:end]
+
+
 def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
     """Replace the ``Ellipsis`` of ``index`` by the ``:`` that it stands for."""
     position = None

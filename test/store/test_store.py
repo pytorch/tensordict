@@ -983,6 +983,80 @@ class TestTensorDictStore:
         assert empty.batch_size == torch.Size([10])
         assert len(list(empty.keys())) == 0
 
+    def test_store_empty_recurse_reads_no_leaf(self, store_td, monkeypatch):
+        store_td["a"] = torch.zeros(10, 2)
+        store_td["s"] = NonTensorData("text", batch_size=[10])
+        store_td["n"] = TensorDict(
+            x=torch.ones(10),
+            m=TensorDict(y=torch.ones(10, 4), batch_size=[10, 4]),
+            batch_size=[10],
+        )
+        reads = []
+        get_tensor = TensorDictStore._aget_tensor
+
+        async def counting_get_tensor(self, key_path):
+            reads.append(key_path)
+            return await get_tensor(self, key_path)
+
+        monkeypatch.setattr(TensorDictStore, "_aget_tensor", counting_get_tensor)
+        for td in (store_td, store_td["n"]):
+            empty = td.empty(recurse=True)
+            assert type(empty) is TensorDict
+            assert empty.batch_size == torch.Size([10])
+        empty = store_td.empty(recurse=True)
+        # the sub-tensordicts keep their batch size; non-tensor data is left out
+        assert set(empty.keys(True)) == {"n", ("n", "m")}
+        assert empty["n", "m"].batch_size == torch.Size([10, 4])
+        assert store_td.empty(recurse=True, batch_size=[])["n", "m"].batch_size == (
+            torch.Size([])
+        )
+        assert reads == []
+
+    def test_store_setitem_scalar_mask_list(self, store_td):
+        dense = TensorDict(
+            a=torch.arange(30.0).view(10, 3),
+            n=TensorDict(c=torch.arange(10), batch_size=[10]),
+            batch_size=[10],
+        )
+        store_td.update(dense)
+        mask = torch.arange(10) % 3 == 0
+        for index, value in (
+            (mask, 0),
+            ([1, 2], -1),
+            (slice(4, 6), {"a": torch.full((2, 3), 7.0)}),
+            ((Ellipsis, 7), 9),
+            ([8, 9], dense[:2] * 0 + 4),
+            (Ellipsis, 3),
+        ):
+            store_td[index] = value
+            dense[index] = value
+            assert (store_td.to_tensordict() == dense).all(), index
+        with pytest.raises(TypeError, match="not a tensor"):
+            store_td[[0, 1]] = torch.zeros(2)
+
+    def test_store_setitem_ellipsis_0d(self, store_kwargs):
+        # with an empty batch size, the Ellipsis covers no dim: a 0-d entry
+        # takes the scalar too
+        store = TensorDictStore.from_tensordict(
+            TensorDict(a=torch.zeros(()), b=torch.zeros(3)), **store_kwargs
+        )
+        try:
+            store[...] = 3
+            assert (store["a"] == 3).all() and (store["b"] == 3).all()
+            store[...] = TensorDict(a=torch.ones(()), b=torch.ones(3))
+            assert (store["a"] == 1).all() and (store["b"] == 1).all()
+        finally:
+            store.clear_redis()
+            store.close()
+
+    def test_store_setitem_self_nesting(self, store_td):
+        store_td["a"] = torch.zeros(10)
+        with pytest.raises(
+            ValueError, match=r"Cannot set a tensordict inside itself \(key 'me'\)"
+        ):
+            store_td["me"] = store_td
+        assert set(store_td.keys()) == {"a"}
+
     def test_fill_(self, store_td):
         """Test fill_."""
         store_td["obs"] = torch.randn(10, 3)
@@ -2722,6 +2796,93 @@ class TestLazyStackedTensorDictStore:
         assert torch.allclose(store_td[4]["a"], torch.ones(4, 3))
         # Middle element unchanged
         assert torch.allclose(store_td[2]["a"], tds[2]["a"])
+
+    def test_lstore_setitem_dict(self, store_stack):
+        # a dict value at an element, at a slice and on an element view
+        store_td, tds, lazy_td = store_stack
+        for target, index, value in (
+            (store_td, 1, {"a": torch.ones(4, 3), "b": torch.ones(4)}),
+            (store_td, slice(2, 4), {"a": torch.zeros(4, 3), "b": torch.zeros(4)}),
+            (store_td[4], slice(0, 2), {"a": torch.full((3,), 5.0)}),
+        ):
+            target[index] = value
+        lazy_td[1] = TensorDict(a=torch.ones(4, 3), b=torch.ones(4), batch_size=[4])
+        lazy_td[2:4] = 0
+        lazy_td[4, 0:2] = TensorDict(a=torch.full((2, 3), 5.0), batch_size=[2])
+        assert (store_td.to_tensordict() == lazy_td.to_tensordict()).all()
+
+    @pytest.mark.parametrize("as_dict", [False, True])
+    def test_lstore_setitem_partial_element(self, store_stack, as_dict):
+        store_td, tds, lazy_td = store_stack
+        value = TensorDict(a=torch.ones(4, 3), batch_size=[4])
+        store_td[0] = value.to_dict() if as_dict else value
+        lazy_td[0] = value
+        assert (store_td.to_tensordict() == lazy_td.to_tensordict()).all()
+        # a key that the store lacks raises before anything is written, as at
+        # a slice
+        for value in (
+            TensorDict(zz=torch.ones(4), batch_size=[4]),
+            TensorDict(
+                a=torch.ones(4, 3), b=torch.ones(4), zz=torch.ones(4), batch_size=[4]
+            ),
+        ):
+            with pytest.raises(
+                KeyError, match="key zz not found in LazyStackedTensorDictStore"
+            ):
+                store_td[1] = value.to_dict() if as_dict else value
+            with pytest.raises(
+                KeyError, match="key zz not found in LazyStackedTensorDictStore"
+            ):
+                store_td[1:2] = value.unsqueeze(0)
+        assert set(store_td.keys()) == {"a", "b"}
+        assert (store_td.to_tensordict() == lazy_td.to_tensordict()).all()
+
+    def test_lstore_setitem_self_nesting(self, store_stack):
+        store_td, tds, lazy_td = store_stack
+        for td in (store_td, store_td[0]):
+            with pytest.raises(
+                ValueError,
+                match=r"Cannot set a tensordict inside itself \(key 'me'\)",
+            ):
+                td["me"] = td
+        assert set(store_td.keys()) == {"a", "b"}
+
+    def test_lstore_empty_skeleton(self, store_kwargs, monkeypatch):
+        # empty() builds a TensorDict from the key registry, without reading data
+        tds = [
+            TensorDict(
+                a=torch.zeros(3),
+                n=TensorDict(x=torch.zeros(3, 2), batch_size=[3, 2]),
+                batch_size=[3],
+            )
+            for _ in range(2)
+        ]
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            lazy_stack(tds), **store_kwargs
+        )
+        try:
+            for td in (store_td, store_td[1]):
+                calls = _count_round_trips(td, monkeypatch)
+                empty = td.empty()
+                assert type(empty) is TensorDict
+                assert empty.batch_size == td.batch_size
+                assert list(empty.keys()) == []
+                empty = td.empty(device="meta")
+                assert empty.device == torch.device("meta")
+                assert calls == []
+                empty = td.empty(
+                    recurse=True, batch_size=td.batch_size[:1], names=["z"]
+                )
+                assert list(empty.keys(True)) == ["n"]
+                assert empty.names == ["z"]
+                # the sub-tensordicts take the batch size of the result
+                assert empty["n"].batch_size == td.batch_size[:1]
+                # at most one read of the key registry
+                assert len(calls) <= 1
+                monkeypatch.undo()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
 
     # ---- to_tensordict / to_local ----
 

@@ -1220,6 +1220,63 @@ class TestH5Indexing:
         assert h5td["s"] == b"a string!"
         assert h5td["f"] == 1
 
+    def test_h5_setitem_key_in_place(self, data):
+        # h5td[key] = value writes into the existing array: the dtype of the
+        # file is kept, and a new shape raises. A new key takes the value.
+        td, h5td = data
+        h5td["a"] = torch.ones(10, 6, dtype=torch.float64)
+        assert h5td["a"].dtype == torch.float32
+        assert (h5td["a"] == 1).all()
+        with pytest.raises(TypeError, match="Can't broadcast"):
+            h5td["a"] = torch.zeros(10, 7)
+        h5td["new"] = torch.ones(10, dtype=torch.float64)
+        assert h5td["new"].dtype == torch.float64
+        h5td["nested", "c"] = torch.zeros(10, 2)
+        assert (h5td["nested", "c"] == 0).all()
+        # set_ of a missing nested key names its path in the file
+        with pytest.raises(
+            KeyError, match='key "zz/y" not found in PersistentTensorDict'
+        ):
+            h5td.set_(("zz", "y"), torch.zeros(10))
+
+    def test_h5_setitem_index_values(self, data):
+        # a list index, a dict, a tensordict that does not broadcast, an Ellipsis
+        td, h5td = data
+        h5td[[0, 3]] = td[[0, 3]].exclude("s") * 0
+        assert (h5td["a"][[0, 3]] == 0).all()
+        assert (h5td["a"][1] == td["a"][1]).all()
+        h5td[1:3] = {"a": torch.full((6,), -1.0)}
+        assert (h5td["a"][1:3] == -1).all()
+        assert (h5td["nested", "c"][1:3] == td["nested", "c"][1:3]).all()
+        with pytest.raises(RuntimeError, match="Cannot broadcast the tensordict"):
+            h5td[0:2] = TensorDict(a=torch.ones(3, 6), batch_size=[3])
+        h5td[..., 4] = 5
+        assert (h5td["a"][4] == 5).all()
+        assert (h5td["a"][5:] == td["a"][5:]).all()
+        h5td[...] = 2
+        assert (h5td["a"] == 2).all()
+        assert h5td["s"] == b"a string!"
+
+    def test_h5_empty_reads_nothing(self, data, monkeypatch):
+        td, h5td = data
+        reads = []
+        backend = type(h5td._backend)
+        read_full = backend.read_full
+
+        def counting_read_full(self, array):
+            reads.append(array.name)
+            return read_full(self, array)
+
+        monkeypatch.setattr(backend, "read_full", counting_read_full)
+        empty = h5td.empty()
+        assert list(empty.keys()) == []
+        empty = h5td.empty(recurse=True, batch_size=[10], names=["x"])
+        assert type(empty) is TensorDict
+        assert empty.names == ["x"]
+        assert list(empty.keys(True)) == ["nested", "s"]
+        assert empty["s"] == b"a string!"
+        assert reads == []
+
     @pytest.mark.parametrize("idx", [slice(0, 2), torch.tensor([1, 3])])
     def test_index_masked_fill_(self, tmp_path, idx):
         # h5td[idx] writes to the file: only the masked rows are filled

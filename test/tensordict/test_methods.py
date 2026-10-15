@@ -978,6 +978,52 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_empty.names == names
         assert td_empty.device == torch.device("meta")
 
+    @pytest.mark.parametrize("recurse", [False, True])
+    def test_empty_names_none(self, td_name, device, recurse):
+        # names=None drops the names of a TensorDict, and keeps them on the
+        # other classes (and with recurse=True)
+        td = getattr(self, td_name)(device)
+        if isinstance(td, (_SubTensorDict, _CustomOpTensorDict)):
+            # their names cannot be set
+            return
+        names = ["w", "x", "y", "z"]
+        td.names = names
+        assert td.empty(recurse).names == names
+        dropped = type(td) is TensorDict and not recurse
+        assert td.empty(recurse, names=None).names == ([None] * 4 if dropped else names)
+
+    def test_setitem_self_nesting(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if isinstance(td, (TypedTensorDict, TensorDictParams)):
+            # they write into their source, which is not the value
+            return
+        with pytest.raises(
+            ValueError,
+            match=re.escape("Cannot set a tensordict inside itself (key 'me')"),
+        ):
+            td["me"] = td
+        assert "me" not in td.keys()
+
+    def test_setitem_key_existing_inplace(self, td_name, device):
+        # td[key] = value replaces the entry; a sub-tensordict writes it into
+        # its source in place, and an h5 file into the file
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        before = td.get("a")
+        value = torch.full_like(before, 3.0)
+        td["a"] = value
+        assert (td.get("a") == 3).all()
+        if isinstance(td, _SubTensorDict):
+            assert td.get("a").data_ptr() == before.data_ptr()
+            assert (before == 3).all()
+        elif isinstance(td, (LazyStackedTensorDict, PersistentTensorDict)):
+            assert not (before == 3).all()
+        else:
+            assert td.get("a").data_ptr() == value.data_ptr()
+            assert not (before == 3).all()
+        td["new"] = value
+        assert td.get("new").shape == value.shape
+
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
             # we do not call skip to avoid systematic skips in internal code base
