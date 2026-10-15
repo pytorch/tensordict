@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import enum
 import gc
 import importlib.util
 import inspect
@@ -8399,6 +8400,16 @@ class TestGeneric:
         assert isinstance(rest, TC)
         assert floats.x is not None and floats.y is None
         assert rest.x is None and rest.y is not None
+
+    def test_split_keys_enum_class(self):
+        # An Enum class is callable but also iterable: it is a list of keys.
+        class K(str, enum.Enum):
+            a = "a"
+
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        td_a, rest = td.split_keys(K)
+        assert set(td_a.keys()) == {"a"}
+        assert set(rest.keys()) == {"b"}
 
     @pytest.mark.parametrize("sign", ["plus", "minus"])
     def test_split_uneven(self, sign):

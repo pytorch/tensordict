@@ -18,7 +18,7 @@ import os.path
 import sys
 import warnings
 import weakref
-from collections.abc import MutableMapping
+from collections.abc import Iterable, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from functools import wraps
 from pathlib import Path
@@ -9348,7 +9348,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_del = set()
         for key_set in key_sets:
             outs.append(self.empty(recurse=reproduce_struct))
-            if callable(key_set):
+            # A key set that is both callable and iterable (an Enum class, for
+            # example) is iterated, as it was before callables were accepted.
+            if callable(key_set) and not isinstance(key_set, Iterable):
                 key_set = [
                     key
                     for key, val in last_out.items(True, True)
