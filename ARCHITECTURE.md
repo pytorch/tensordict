@@ -270,6 +270,7 @@ to compare it with the shapes in their metadata.
 | `_map_on_dense_copies` | `map` sends a `to_tensordict()` copy of each chunk to the workers | file |
 | `_to_writes_back_in_place` | the exit of `with td.to(...)` calls `_write_back_to` | file |
 | `_has_exclusive_keys` | `to_dict`, `state_dict`, `flatten_keys` and `unflatten_keys` raise | a property on lazy |
+| `_wrapped_attr` | the name of the attribute that holds the wrapped tensordict, which the pointwise ops read to find a lazy stack behind an operand | typed (`"_source"`) |
 | `_rename_key_lenient` | `rename_key_` renames in a locked tensordict with a warning, until 0.17 | file, store, lazy store |
 | `_inplace_shape_ops_unsupported` | `reshape` and `repeat_interleave` with `inplace=True` raise before they write | lazy |
 | `_inplace_batch_size_change` | `False`: the in-place shape ops that change the batch size raise before they write | file (`False`); typed (a property: `False` over a lazy stack, a sub-tensordict or a file) |
