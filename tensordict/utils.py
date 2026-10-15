@@ -2254,10 +2254,17 @@ def _get_shared_executor(num_threads: int) -> concurrent.futures.ThreadPoolExecu
         return executor
 
 
-# the workers don't survive a fork: drop the executors in the child so that
-# they are recreated on first use
+def _reset_shared_executors_after_fork() -> None:
+    # the workers don't survive a fork: drop the executors in the child so that
+    # they are recreated on first use. The lock is replaced too, as the child
+    # inherits it locked if another thread held it at the fork.
+    global _SHARED_EXECUTORS_LOCK
+    _SHARED_EXECUTORS_LOCK = threading.Lock()
+    _SHARED_EXECUTORS.clear()
+
+
 if hasattr(os, "register_at_fork"):  # not available on Windows, which cannot fork
-    os.register_at_fork(after_in_child=_SHARED_EXECUTORS.clear)
+    os.register_at_fork(after_in_child=_reset_shared_executors_after_fork)
 
 
 def _is_json_serializable(item):
