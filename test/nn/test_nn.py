@@ -4519,6 +4519,398 @@ class TestTensorDictParams:
         param_td.zero_()
         assert (param_td == 0).all()
 
+    @staticmethod
+    def _params(lock=False, no_convert=False):
+        return TensorDictParams(
+            TensorDict(
+                a=torch.randn(4, 3),
+                b=torch.arange(4),
+                n=TensorDict(c=torch.randn(4, 3), batch_size=[4]),
+                batch_size=[4],
+            ),
+            lock=lock,
+            no_convert=no_convert,
+        )
+
+    _MASK = torch.tensor([True, False, True, False])
+
+    # results that keep the lock of the wrapped tensordict (D7), and the
+    # results that do not
+    _LOCK_OPS = {
+        "expand": (lambda p: p.expand(2, 4), True),
+        "reshape": (lambda p: p.reshape(2, 2), True),
+        "repeat_interleave": (lambda p: p.repeat_interleave(2, dim=0), True),
+        "where": (lambda p: p.where(TestTensorDictParams._MASK, 0.0), True),
+        "split": (lambda p: p.split([1, 3], 0), True),
+        "chunk": (lambda p: p.chunk(2, 0), True),
+        "repeat": (lambda p: p.repeat(2), True),
+        "contiguous": (lambda p: p.contiguous(), False),
+        "masked_fill": (
+            lambda p: p.masked_fill(TestTensorDictParams._MASK, -1.0),
+            False,
+        ),
+        "unbind": (lambda p: p.unbind(0), False),
+        "eq": (lambda p: p == 0, False),
+        "ne": (lambda p: p != p.data, False),
+        "lt": (lambda p: p < 0, False),
+        "any0": (lambda p: (p > 0).any(0), False),
+    }
+
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("op", list(_LOCK_OPS))
+    def test_lock_content_result_lock(self, op, lock, no_convert):
+        # The results are TensorDicts with the values of the wrapped
+        # tensordict; with lock=True, some keep its lock
+        fn, keeps_lock = self._LOCK_OPS[op]
+        params = self._params(lock=lock, no_convert=no_convert)
+        expected = fn(params.data.clone())
+        result = fn(params)
+        results = result if isinstance(result, tuple) else (result,)
+        for r in results:
+            assert type(r) is TensorDict
+            assert r.is_locked is (lock and keeps_lock)
+        if op in ("eq", "ne", "lt", "any0"):
+            # boolean results, which hold no gradient: their lock is checked
+            # above
+            assert all(v.dtype is torch.bool for v in result.values(True, True))
+        else:
+            grads = {
+                key: v.requires_grad for r in results for key, v in r.items(True, True)
+            }
+            assert grads == {
+                "a": not no_convert,
+                ("n", "c"): not no_convert,
+                "b": False,
+            }
+        torch.testing.assert_close(
+            tuple(r.detach() for r in results),
+            expected if isinstance(expected, tuple) else (expected,),
+        )
+
+    def test_split_chunk_lock_content(self):
+        params = self._params(lock=True)
+        for pieces in (params.split([1, 3], 0), params.chunk(2, 0)):
+            assert all(type(p) is TensorDict and p.is_locked for p in pieces)
+            assert all(
+                p["a"].requires_grad and p["n", "c"].requires_grad for p in pieces
+            )
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_split_contiguous_keep_params(self, lock):
+        params = self._params(lock=lock)
+        contiguous = params.contiguous()
+        assert type(contiguous) is TensorDict
+        assert isinstance(contiguous["a"], nn.Parameter)
+        assert contiguous["a"] is params["a"]
+        assert params.contiguous(inplace=True) is params
+        pieces = params.split(2, 0)
+        assert len(pieces) == 2
+        assert all(p["a"]._base is params["a"] for p in pieces)
+
+    @pytest.mark.parametrize("root_locked", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_inplace_ops_on_root_locked(self, lock, root_locked):
+        params = self._params(lock=lock)
+        if root_locked:
+            params.lock_()
+        a = params["a"]
+        with torch.no_grad():
+            assert params.detach_() is params
+            assert params.masked_fill_(self._MASK, -1.0) is params
+            assert (params["a"][0] == -1).all()
+            assert params.copy_(params.data * 0) is params
+            assert (params["a"] == 0).all()
+            assert params.update_({"a": torch.ones(4, 3)}) is params
+            assert params.zero_() is params
+            assert params.share_memory_() is params
+        assert params["a"] is a
+        assert params.is_shared()
+        assert isinstance(params["a"], nn.Parameter)
+        assert sorted(dict(params.named_parameters())) == ["a", "n.c"]
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda p: p.rename_key_("a", "z")._param_td.get("z"),
+            lambda p: p.unbind(0)[1]["a"],
+            lambda p: list(p)[1]["a"],
+            lambda p: p.contiguous()["a"],
+            lambda p: p.reshape(2, 2, inplace=True)._param_td.get("a"),
+            lambda p: p.repeat_interleave(1, dim=0, inplace=True)._param_td.get("a"),
+        ],
+        ids=[
+            "rename_key_",
+            "unbind",
+            "iter",
+            "contiguous",
+            "reshape",
+            "repeat_interleave",
+        ],
+    )
+    def test_get_post_hook_not_written(self, op):
+        # the operations read the wrapped tensordict without the get hooks,
+        # and the stored values stay unchanged
+        params = self._params()
+        a = params["a"].detach().clone()
+        params.register_get_post_hook(lambda self, value: value + 100)
+        result = op(params)
+        assert (result < 50).all()
+        stored = params._param_td.get("z" if "z" in params.keys() else "a")
+        torch.testing.assert_close(stored.detach().reshape(4, 3), a)
+
+    @pytest.mark.parametrize("key", ["a", ("n", "c")])
+    def test_get_post_hook_get_at(self, key):
+        # get_at runs the hooks on the indexed value, as main does; a hook
+        # that is not elementwise shows where it runs
+        params = self._params()
+        params.register_get_post_hook(lambda self, value: value - value.mean())
+        value = params._param_td.get(key)[0]
+        torch.testing.assert_close(params.get_at(key, 0), value - value.mean())
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_comparisons_reductions(self, lock):
+        params = self._params(lock=lock)
+        assert (params == params.data).all()
+        assert not (params != params.data).any()
+        assert ((params < 0) | (params >= 0)).all()
+        assert not ((params < 0) ^ (params < 0)).any()
+        assert (params <= params.data).all() and (params >= params.data).all()
+        assert not (params > params.data).any()
+
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_update_registers_params(self, lock, no_convert):
+        params = self._params(lock=lock, no_convert=no_convert)
+        assert params.update({"q": torch.ones(4), ("n", "r"): torch.ones(4, 2)}) is (
+            params
+        )
+        assert params._param_td.is_locked is lock
+        if no_convert:
+            assert sorted(dict(params.named_parameters())) == []
+            assert sorted(dict(params.named_buffers())) == [
+                "a",
+                "b",
+                "n.c",
+                "n.r",
+                "q",
+            ]
+        else:
+            assert sorted(dict(params.named_parameters())) == ["a", "n.c", "n.r", "q"]
+            assert sorted(dict(params.named_buffers())) == ["b"]
+        a = params["a"]
+        with torch.no_grad():
+            assert params.update(params.data * 0, inplace=True) is params
+        assert params["a"] is a
+        assert (a == 0).all()
+
+    def test_update_ignore_lock_warns(self):
+        params = self._params(lock=True)
+        with pytest.warns(DeprecationWarning, match="ignore_lock") as record:
+            assert params.update({"q": torch.ones(4)}, ignore_lock=True) is params
+        assert record[0].filename == __file__
+        assert sorted(dict(params.named_parameters())) == ["a", "n.c", "q"]
+
+    @pytest.mark.parametrize("dict_source", [False, True], ids=["td", "dict"])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_update_nested_source(self, lock, dict_source):
+        # a nested entry of the source goes into the nested tensordict, also
+        # with lock=True content, and the module registers the new leaves
+        params = self._params(lock=lock)
+        source = TensorDict(
+            a=torch.ones(4, 3),
+            n=TensorDict(c=torch.ones(4, 3), q=torch.ones(4, 2), batch_size=[4]),
+            batch_size=[4],
+        )
+        if dict_source:
+            source = source.to_dict()
+        assert params.update(source) is params
+        assert params._param_td.is_locked is lock
+        registered = {**dict(params.named_parameters()), **dict(params.named_buffers())}
+        entries = {
+            ".".join(key) if isinstance(key, tuple) else key: value
+            for key, value in params._param_td.items(True, True)
+        }
+        assert registered.keys() == entries.keys()
+        assert all(registered[key] is entries[key] for key in entries)
+        assert (params["n", "c"] == 1).all()
+
+    def test_update_root_locked(self):
+        params = self._params().lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            params.update({"q": torch.ones(4)})
+        with pytest.raises(RuntimeError, match="locked"):
+            with torch.no_grad():
+                params.update(params.data * 0, inplace=True)
+
+    def test_update_update_batch_size(self):
+        params = self._params()
+        source = TensorDict(
+            a=torch.zeros(5, 3),
+            b=torch.zeros(5, dtype=torch.long),
+            n=TensorDict(c=torch.zeros(5, 3), batch_size=[5]),
+            batch_size=[5],
+        )
+        result = params.update(source, update_batch_size=True)
+        assert result is params
+        assert params.batch_size == (5,)
+        assert isinstance(params["a"], nn.Parameter)
+        assert params["a"].shape == (5, 3)
+
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_setitem(self, lock, no_convert):
+        params = self._params(lock=lock, no_convert=no_convert)
+        a = params["a"]
+        params["q"] = torch.ones(4)
+        params["n", "r"] = torch.ones(4, 2)
+        params["a"] = torch.zeros(4, 3)
+        expected = (
+            (["b", "a", "n.c", "n.r", "q"], [])
+            if no_convert
+            else (["b"], ["a", "n.c", "n.r", "q"])
+        )
+        assert sorted(dict(params.named_buffers())) == sorted(expected[0])
+        assert sorted(dict(params.named_parameters())) == sorted(expected[1])
+        assert params["a"] is not a
+        assert (params["a"] == 0).all()
+        a = params["a"]
+        with torch.no_grad():
+            params[0] = params.data[1].clone() + 1
+            params[1:3] = 0
+            params[3] = {"a": torch.full((3,), 5.0)}
+        assert params["a"] is a
+        assert (a[0] == 1).all() and (a[1:3] == 0).all() and (a[3] == 5).all()
+        assert params._param_td.is_locked is lock
+        params.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            params["z"] = torch.ones(4)
+        with pytest.raises(RuntimeError, match="locked"):
+            with torch.no_grad():
+                params[0] = 0
+        assert "z" not in params.keys()
+
+    def test_setitem_self(self):
+        params = self._params()
+        with pytest.raises(RecursionError):
+            params["self"] = params
+
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_del_(self, lock, no_convert):
+        params = self._params(lock=lock, no_convert=no_convert)
+        assert params.del_("a") is params
+        assert params.del_(("n", "c")) is params
+        assert list(params.keys(True)) == ["b", "n"]
+        assert dict(params.named_parameters()) == {}
+        assert list(dict(params.named_buffers())) == ["b"]
+        assert params._param_td.is_locked is lock
+        with pytest.raises(KeyError):
+            params.del_("missing")
+        with pytest.raises(KeyError):
+            params.del_(())
+        params.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            params.del_("b")
+        assert "b" in params.keys()
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_iter_popitem_rename_key_get_at(self, lock):
+        params = self._params(lock=lock)
+        assert [td["b"] for td in params] == list(params["b"].unbind(0))
+        assert all(type(td) is TensorDict for td in params)
+        assert params.get_at(("n", "c"), 0).shape == (3,)
+        assert params.get_at(("n", "c"), 0).requires_grad
+        key, value = params.popitem()
+        assert key == "n"
+        assert type(value) is TensorDict
+        assert sorted(dict(params.named_parameters())) == ["a"]
+        assert params.rename_key_("a", "z") is params
+        assert list(params.keys()) == ["b", "z"]
+        assert sorted(dict(params.named_parameters())) == ["z"]
+        assert params._param_td.is_locked is lock
+        params.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            params.rename_key_("z", "y")
+        with pytest.raises(RuntimeError, match="locked"):
+            params.popitem()
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_new_unsafe_base_keywords(self, lock):
+        # the keywords that the base code passes; a dict gives a TensorDict
+        params = self._params()
+        result = type(params)._new_unsafe(
+            source={"a": torch.zeros(4)},
+            batch_size=torch.Size([4]),
+            device=None,
+            names=None,
+            lock=lock,
+            is_shared=False,
+            is_memmap=False,
+        )
+        assert type(result) is TensorDict
+        assert result.batch_size == (4,)
+        assert result.is_locked is lock
+        with pytest.raises(TypeError, match="both parameters and source"):
+            type(params)._new_unsafe(
+                {"a": torch.zeros(4)}, source={"a": torch.zeros(4)}
+            )
+
+    @staticmethod
+    def _params_non_tensor(lock):
+        params = TensorDictParams(
+            TensorDict(
+                a=torch.ones(3), s=NonTensorData("old", batch_size=[3]), batch_size=[3]
+            ),
+            lock=lock,
+        )
+        params.set("ns", NonTensorStack("x", "y", "z"))
+        return params
+
+    @staticmethod
+    def _non_tensor_source():
+        return TensorDict(
+            a=torch.zeros(3),
+            s=NonTensorData("new", batch_size=[3]),
+            ns=NonTensorStack("p", "q", "r"),
+            batch_size=[3],
+        )
+
+    _NON_TENSOR_OPS = {
+        "update_": lambda td, src: td.update_(src),
+        "update_select": lambda td, src: td.update_(src.select("s")),
+        "set_": lambda td, src: td.set_("s", src.get("s")),
+        "copy_": lambda td, src: td.copy_(src),
+    }
+
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("op", list(_NON_TENSOR_OPS))
+    def test_inplace_writes_non_tensor(self, op, lock):
+        # #2263: the in-place methods write the non-tensor leaves, as on the
+        # wrapped tensordict
+        fn = self._NON_TENSOR_OPS[op]
+        params = self._params_non_tensor(lock)
+        with torch.no_grad():
+            assert fn(params, self._non_tensor_source()) is params
+        dense = self._params_non_tensor(lock)._param_td.clone()
+        with torch.no_grad():
+            fn(dense, self._non_tensor_source())
+        assert dense["s"] == "new"
+        assert params["s"] == "new"
+        assert params.get("ns").tolist() == dense.get("ns").tolist()
+        torch.testing.assert_close(params["a"].data, dense["a"])
+        assert isinstance(params["a"], nn.Parameter)
+
+    def test_data_update_non_tensor(self):
+        # .data builds new non-tensor leaves, so plain td.data.update_() does
+        # not write them
+        td = TensorDict(
+            a=torch.ones(3), s=NonTensorData("old", batch_size=[3]), batch_size=[3]
+        )
+        td.data.update_(self._non_tensor_source().select("a", "s"))
+        assert td["s"] == "old"
+        assert (td["a"] == 0).all()
+
 
 class TestCompositeDist:
     def test_const(self):

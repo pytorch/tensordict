@@ -1802,6 +1802,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # start_dim > end_dim it inserted a dim of size 1 before 0.15: until 0.17
     # it still does, with a FutureWarning, where the others raise a ValueError.
     _flatten_lenient: bool = False
+    # Set by a TypedTensorDict over a lazy stack: gather(inplace=True) with an
+    # index of the batch shape writes into the members there, and until 0.17
+    # it warns, where the lazy stacks raise.
+    _gather_inplace_warns: bool = False
     # Whether get() ignores as_list and as_nested_tensor, and warns about them
     # (see _warn_get_kwargs). False for lazy stacks, which honor them.
     _get_ignores_kwargs: bool = True
@@ -1818,10 +1822,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
-        # This to make sure all TensorDictBase subclasses have a proper fallback if they don't have a _new_unsafe
-        # In other words, only TensorDict subclasses will have their type preserved, others will become TensorDict
-        # instances (note that TensorDictBase should not be directly subclassed outside of this codebase, as it is
-        # highly abstract).
+        """Builds a tensordict from ``source`` without validating it.
+
+        Every subclass accepts the arguments of
+        :meth:`TensorDict._new_unsafe <tensordict.TensorDict._new_unsafe>`:
+        ``source=None, batch_size=None, device=None, names=None,
+        non_blocking=None, lock=False, nested=True, is_shared=False,
+        is_memmap=False``, and passes the keywords it does not use to it. The
+        base code calls it on ``self`` with a dict ``source`` for the results
+        of :meth:`split`, :meth:`contiguous`, :meth:`empty`, ``_unbind`` and
+        ``_index_tensordict``. The result is an instance of the class when the
+        class can hold ``source``: the default returns a
+        :class:`~tensordict.TensorDict`, and so does
+        :class:`~tensordict.nn.TensorDictParams` for a dict.
+        """
         from tensordict._td import TensorDict
 
         return TensorDict._new_unsafe(*args, **kwargs)
@@ -7187,7 +7201,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self
 
     def _raise_if_holds_lazy_stack(
-        self, op_name: str, prefix: tuple[str, ...] = ()
+        self,
+        op_name: str,
+        prefix: tuple[str, ...] = (),
+        *,
+        new_batch_size: torch.Size | None = None,
     ) -> None:
         """Raise if any nested entry is lazy, before an in-place shape op.
 
@@ -7204,9 +7222,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``repeat_interleave``, so the check lets them through for those two.
         The calls on nested tensordicts skip the walk, which the top-level
         call has done.
+
+        ``new_batch_size`` is the batch size that the op gives ``self``. When
+        it differs from the batch size, a nested tensordict whose
+        ``_inplace_batch_size_change`` is False (a file, a ``TypedTensorDict``
+        over a lazy stack) raises too, before any leaf is rewritten. The
+        top-level call sets it to None when the batch size stays; the nested
+        calls receive it only as a sign that the batch size changes (it is not
+        their batch size).
         """
-        if not prefix and _inplace_shape_state.nested:
-            return
+        if not prefix:
+            if _inplace_shape_state.nested:
+                return
+            if new_batch_size is not None and (
+                tuple(new_batch_size) == tuple(self.batch_size)
+                or not self._inplace_batch_size_change
+            ):
+                # the batch size stays, or self raises before any write
+                new_batch_size = None
         for key, value in self.items():
             cls = type(value)
             if cls is Tensor:
@@ -7231,7 +7264,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
                         f"Use inplace=False instead."
                     )
-            value._raise_if_holds_lazy_stack(op_name, nested_key)
+            if new_batch_size is not None and not value._inplace_batch_size_change:
+                raise NotImplementedError(
+                    f"{op_name}(inplace=True) changes the batch size, which a "
+                    f"{type(value).__name__} at key "
+                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r} "
+                    "cannot do in place. Use inplace=False instead."
+                )
+            value._raise_if_holds_lazy_stack(
+                op_name, nested_key, new_batch_size=new_batch_size
+            )
 
     def map(
         self,

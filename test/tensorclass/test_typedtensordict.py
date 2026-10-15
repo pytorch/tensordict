@@ -1080,5 +1080,540 @@ class TestFromTensordict:
             PredictorState.from_tensordict(td)
 
 
+# ---------------------------------------------------------------------------
+# Operations over each backend
+# ---------------------------------------------------------------------------
+
+
+class _BackendState(TypedTensorDict):
+    a: Tensor
+    b: Tensor
+    n: TensorDict
+
+
+def _dense_source():
+    return TensorDict(
+        a=torch.randn(4, 3),
+        b=torch.arange(12).reshape(4, 3).clone(),
+        n=TensorDict(c=torch.randn(4, 3, 2), batch_size=[4, 3]),
+        batch_size=[4, 3],
+    )
+
+
+def _lazy_source():
+    return lazy_stack(
+        [
+            TensorDict(
+                a=torch.randn(3),
+                b=torch.arange(3) + i,
+                n=TensorDict(c=torch.randn(3, 2), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(4)
+        ]
+    )
+
+
+def _h5_source(tmp_path):
+    return PersistentTensorDict.from_dict(
+        _dense_source(), filename=tmp_path / "source.h5"
+    )
+
+
+def _subtd_source():
+    big = TensorDict(
+        a=torch.randn(8, 3),
+        b=torch.arange(24).reshape(8, 3),
+        n=TensorDict(c=torch.randn(8, 3, 2), batch_size=[8, 3]),
+        batch_size=[8, 3],
+    )
+    return big._get_sub_tensordict(slice(2, 6))
+
+
+_BACKEND_MASK = torch.tensor([[True, False, True]] * 2 + [[False] * 3] * 2)
+
+# Operations, run on a typed tensordict over each source and over a dense copy
+# of that source. Each returns what the test compares.
+_BACKEND_OPS = {
+    "where": lambda s: s.where(_BACKEND_MASK, 0.0),
+    "where_out": lambda s: (lambda out: (s.where(_BACKEND_MASK, 0.0, out=out), out))(
+        s.to_tensordict().zero_()
+    ),
+    "where_pad": lambda s: s.where(
+        _BACKEND_MASK, s.to_tensordict().exclude("b"), pad=0
+    ),
+    "eq": lambda s: s == 0,
+    "ne": lambda s: s != s.to_tensordict(),
+    "lt": lambda s: s < 0.5,
+    "all": lambda s: (s == s).all(),
+    "any0": lambda s: (s > 0).any(0),
+    "masked_fill": lambda s: s.masked_fill(_BACKEND_MASK, -1.0),
+    "masked_fill_": lambda s: s.masked_fill_(_BACKEND_MASK, -1.0),
+    "split": lambda s: s.split([1, 3], 0),
+    "chunk": lambda s: s.chunk(2, 0),
+    "expand": lambda s: s.expand(2, 4, 3),
+    "reshape": lambda s: s.reshape(-1),
+    "repeat_interleave": lambda s: s.repeat_interleave(2, dim=1),
+    "detach_": lambda s: s.detach_(),
+    "share_memory_": lambda s: s.share_memory_(),
+    "popitem": lambda s: s.popitem(),
+    "masked_select": lambda s: s.masked_select(_BACKEND_MASK[:, 0]),
+    "rename_key_": lambda s: s.rename_key_("a", "z"),
+    "del_": lambda s: s.del_("a"),
+    "setitem_key": lambda s: s.__setitem__("a", torch.zeros(4, 3)),
+    "setitem_index": lambda s: s.__setitem__(0, s[1].to_tensordict()),
+}
+
+# What raises on main, with the type of the error
+_BACKEND_RAISES = {
+    ("h5", "share_memory_"): NotImplementedError,
+    ("subtd", "detach_"): RuntimeError,
+    ("subtd", "share_memory_"): RuntimeError,
+}
+
+# The class of the result of the operations that do not return a typed
+# tensordict, on a lazy source and on the other sources
+_BACKEND_RESULT_CLASS = {
+    "eq": ("LazyStackedTensorDict", "TensorDict"),
+    "ne": ("LazyStackedTensorDict", "TensorDict"),
+    "lt": ("LazyStackedTensorDict", "TensorDict"),
+    "any0": ("TensorDict", "TensorDict"),
+}
+
+
+def _backend_values(result):
+    if isinstance(result, TensorDictBase):
+        return result.to_tensordict()
+    if isinstance(result, tuple):
+        return tuple(_backend_values(r) for r in result)
+    return result
+
+
+class TestBackends:
+    """The operations of a typed tensordict over each kind of source."""
+
+    @pytest.fixture(params=["dense", "lazy", "h5", "subtd"])
+    def source(self, request, tmp_path):
+        if request.param == "h5":
+            if not _has_h5py:
+                pytest.skip("h5py not found.")
+            return request.param, _h5_source(tmp_path)
+        return request.param, {
+            "dense": _dense_source,
+            "lazy": _lazy_source,
+            "subtd": _subtd_source,
+        }[request.param]()
+
+    @pytest.mark.parametrize("op", list(_BACKEND_OPS))
+    def test_ops_lazy_source(self, source, op):
+        kind, td = source
+        fn = _BACKEND_OPS[op]
+        state = _BackendState.from_tensordict(td)
+        dense = _BackendState.from_tensordict(td.to_tensordict())
+        error = _BACKEND_RAISES.get((kind, op))
+        if error is not None:
+            with pytest.raises(error):
+                fn(state)
+            return
+        expected = fn(dense)
+        result = fn(state)
+        # the state that each call leaves
+        torch.testing.assert_close(state.to_tensordict(), dense.to_tensordict())
+        if op in _BACKEND_RESULT_CLASS:
+            lazy_cls, other_cls = _BACKEND_RESULT_CLASS[op]
+            assert type(result).__name__ == (lazy_cls if kind == "lazy" else other_cls)
+        elif op in ("where_out",):
+            assert result[0] is result[1]
+        elif op in ("all",):
+            assert result is True
+        elif op == "popitem":
+            # the source pops: a lazy stack and a file give their own class
+            assert result[0] == "n"
+            assert type(result[1]) is {
+                "lazy": LazyStackedTensorDict,
+                "h5": PersistentTensorDict,
+            }.get(kind, TensorDict)
+            result, expected = result[1], expected[1]
+        elif op in ("split", "chunk"):
+            assert all(type(r) is _BackendState for r in result)
+        elif op in ("setitem_key", "setitem_index"):
+            result = expected = None
+        elif op in (
+            "masked_fill_",
+            "detach_",
+            "share_memory_",
+            "rename_key_",
+            "del_",
+        ):
+            assert result is state
+        else:
+            assert type(result) is _BackendState
+        if op == "share_memory_":
+            assert td.is_shared()
+        if op == "where_out":
+            result, expected = result[1], expected[1]
+        torch.testing.assert_close(_backend_values(result), _backend_values(expected))
+
+    def test_masked_fill_source_class(self, source):
+        # masked_fill fills the source's own copy: a file or a view gives a
+        # dense TensorDict, which the typed result wraps
+        kind, td = source
+        state = _BackendState.from_tensordict(td)
+        result = state.masked_fill(_BACKEND_MASK, -1.0)
+        assert type(result) is _BackendState
+        expected = {
+            "dense": "TensorDict",
+            "lazy": "LazyStackedTensorDict",
+            "h5": "TensorDict",
+            "subtd": "TensorDict",
+        }[kind]
+        assert type(result._source).__name__ == expected
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda s: (s.expand(2, 4, 3),),
+            lambda s: (s.reshape(2, 2, 3),),
+            lambda s: (s.repeat_interleave(2, dim=1),),
+            lambda s: s.split([1, 3], 0),
+            lambda s: s.chunk(2, 0),
+            lambda s: (s.where(_BACKEND_MASK, 0.0),),
+            lambda s: (s.masked_select(_BACKEND_MASK[:, 0]),),
+            lambda s: (s.repeat(2, 1),),
+        ],
+        ids=[
+            "expand",
+            "reshape",
+            "repeat_interleave",
+            "split",
+            "chunk",
+            "where",
+            "masked_select",
+            "repeat",
+        ],
+    )
+    def test_shape_ops_keep_source_class(self, source, op):
+        # the typed result wraps what the source's own operation returns
+        kind, td = source
+        state = _BackendState.from_tensordict(td)
+        expected = [type(r) for r in op(td)]
+        result = op(state)
+        assert all(type(r) is _BackendState for r in result)
+        assert [type(r._source) for r in result] == expected
+
+    def test_contiguous_inplace(self, source):
+        kind, td = source
+        state = _BackendState.from_tensordict(td)
+        if kind == "dense":
+            assert state.contiguous(inplace=True) is state
+        else:
+            with pytest.raises(NotImplementedError, match="contiguous"):
+                state.contiguous(inplace=True)
+
+    def test_new_unsafe_base_keywords(self):
+        # the keywords that the base code passes to _new_unsafe
+        result = _BackendState._new_unsafe(
+            source={"a": torch.zeros(4)},
+            batch_size=torch.Size([4]),
+            device=None,
+            names=None,
+            lock=True,
+            is_shared=False,
+            is_memmap=False,
+        )
+        assert type(result) is _BackendState
+        assert type(result._source) is TensorDict
+        assert result.batch_size == (4,)
+        assert result.is_locked
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda s: s.reshape(-1, inplace=True),
+            lambda s: s.repeat_interleave(2, dim=1, inplace=True),
+            lambda s: s.masked_select(_BACKEND_MASK[:, 0], inplace=True),
+            lambda s: s.flatten(0, 1, inplace=True),
+            lambda s: s.unflatten(0, (2, 2), inplace=True),
+        ],
+        ids=["reshape", "repeat_interleave", "masked_select", "flatten", "unflatten"],
+    )
+    def test_inplace_shape_ops(self, source, op):
+        # a dense source changes shape; the others raise before writing
+        kind, td = source
+        state = _BackendState.from_tensordict(td)
+        expected = op(_BackendState.from_tensordict(td.to_tensordict()))
+        before = td.to_tensordict()
+        if kind == "dense":
+            assert op(state) is state
+            torch.testing.assert_close(state.to_tensordict(), expected.to_tensordict())
+            return
+        with pytest.raises(NotImplementedError, match="inplace=True|in-place"):
+            op(state)
+        assert td.batch_size == (4, 3)
+        torch.testing.assert_close(td.to_tensordict(), before)
+
+    @staticmethod
+    def _flat_lazy_state():
+        class Flat(TypedTensorDict):
+            a: Tensor
+            b: Tensor
+
+        tds = [
+            TensorDict(
+                a=torch.arange(3.0) + 10 * i, b=torch.arange(3) + 10 * i, batch_size=[3]
+            )
+            for i in range(4)
+        ]
+        return Flat.from_tensordict(lazy_stack(tds)), tds
+
+    # (op, outcome): "raise" before any write, "self" without a warning,
+    # "warn" (returns self with a FutureWarning, until 0.17), or "error" (the
+    # error of torch, with no warning)
+    _FLAT_LAZY_INPLACE_OPS = {
+        "flatten": (lambda s: s.flatten(0, 1, inplace=True), "raise"),
+        "unflatten": (lambda s: s.unflatten(1, (3, 1), inplace=True), "raise"),
+        "repeat": (lambda s: s.repeat(1, 2, inplace=True), "raise"),
+        "gather_new_size": (
+            lambda s: s.gather(1, torch.zeros(4, 2, dtype=torch.long), inplace=True),
+            "raise",
+        ),
+        "reshape": (lambda s: s.reshape(12, inplace=True), "raise"),
+        "repeat_interleave": (
+            lambda s: s.repeat_interleave(2, dim=1, inplace=True),
+            "raise",
+        ),
+        "masked_select": (
+            lambda s: s.masked_select(torch.ones(4, 3, dtype=torch.bool), inplace=True),
+            "raise",
+        ),
+        "pad": (lambda s: s.pad([0, 0, 0, 1], inplace=True), "raise"),
+        "pad_stack_dim": (lambda s: s.pad([1, 0], inplace=True), "raise"),
+        "gather_out_of_bounds": (
+            lambda s: s.gather(1, torch.full((4, 3), 5), inplace=True),
+            "error",
+        ),
+        "flatten_same": (lambda s: s.flatten(1, 1, inplace=True), "self"),
+        "unflatten_same": (lambda s: s.unflatten(1, (3,), inplace=True), "self"),
+        "repeat_ones": (lambda s: s.repeat(1, 1, inplace=True), "self"),
+        "gather_same_shape": (
+            lambda s: s.gather(1, torch.tensor([[2, 0, 1]] * 4), inplace=True),
+            "warn",
+        ),
+    }
+
+    @pytest.mark.parametrize("parent", [False, True], ids=["direct", "parent"])
+    @pytest.mark.parametrize("op", list(_FLAT_LAZY_INPLACE_OPS))
+    def test_inplace_shape_ops_flat_lazy_source(self, op, parent):
+        # A call that changes the batch size raises before it writes anything,
+        # also through a tensordict that holds the typed tensordict, whose
+        # leaves before it stay unchanged. The other calls give the result of
+        # a dense copy and keep the members' shapes.
+        fn, outcome = self._FLAT_LAZY_INPLACE_OPS[op]
+        state, tds = self._flat_lazy_state()
+        if parent:
+            obj = TensorDict(
+                x=torch.arange(12.0).reshape(4, 3), t=state, batch_size=[4, 3]
+            )
+        else:
+            obj = state
+        before = obj.to_tensordict()
+        if outcome == "error":
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                with pytest.raises(RuntimeError, match="out of bounds"):
+                    fn(obj)
+        elif outcome == "raise":
+            with pytest.raises(NotImplementedError, match="inplace=True|in-place"):
+                fn(obj)
+            assert obj.batch_size == (4, 3)
+            torch.testing.assert_close(obj.to_tensordict(), before)
+        else:
+            expected = fn(before.clone())
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                assert fn(obj) is obj
+            future = [w for w in record if issubclass(w.category, FutureWarning)]
+            if outcome == "warn":
+                assert len(future) == 1
+                assert "0.17" in str(future[0].message)
+            else:
+                assert not future
+            torch.testing.assert_close(obj.to_tensordict(), expected)
+        assert isinstance(state._source, LazyStackedTensorDict)
+        for td in tds:
+            assert td.batch_size == (3,)
+            assert td["a"].shape == (3,)
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda s: s.zero_(),
+            lambda s: s.add_(1),
+            lambda s: s.mul_(2),
+            lambda s: s.clamp_min_(1.5),
+            lambda s: s.sqrt_(),
+            lambda s: s.lerp_(s.to_tensordict(), 0.5),
+        ],
+        ids=["zero_", "add_", "mul_", "clamp_min_", "sqrt_", "lerp_"],
+    )
+    def test_pointwise_lazy_exclusive_keys_raises(self, op, request):
+        # a stack with a nested entry and keys that only some members hold
+        tds = [
+            TensorDict(
+                a=torch.ones(3),
+                n=TensorDict(x=torch.ones(3, 2), batch_size=[3]),
+                batch_size=[3],
+            )
+            for _ in range(4)
+        ]
+        tds[0]["e"] = torch.zeros(3)
+        state = _BackendState.from_tensordict(lazy_stack(tds), check=False)
+        if request.node.callspec.id == "lerp_":
+            # the dense operand lacks the keys of the stack's members
+            with pytest.raises(KeyError):
+                op(state)
+        else:
+            with pytest.raises(ValueError, match="zip"):
+                op(state)
+
+    @pytest.mark.parametrize(
+        "key",
+        ["a", ("n", "c"), "missing", (), ("a", "x"), 0],
+        ids=["top", "nested", "missing", "empty", "through_tensor", "int"],
+    )
+    def test_del_(self, source, key):
+        # del_ deletes in the source, which checks the key, as on a dense copy
+        kind, td = source
+        state = _BackendState.from_tensordict(td, check=False)
+        dense = _BackendState.from_tensordict(td.to_tensordict(), check=False)
+        try:
+            dense.del_(key)
+        except Exception as err:
+            error = type(err)
+        else:
+            error = None
+        if kind == "h5" and key in ((), 0):
+            # a file raises ValueError for an empty key until 0.17
+            error = ValueError
+        elif kind == "h5" and key == ("a", "x"):
+            # and h5py's KeyError for a path through a tensor
+            error = KeyError
+        if error is not None:
+            with pytest.raises(error):
+                state.del_(key)
+            torch.testing.assert_close(td.to_tensordict(), dense.to_tensordict())
+            return
+        assert state.del_(key) is state
+        assert sorted(td.keys(True, True), key=str) == sorted(
+            dense.keys(True, True), key=str
+        )
+
+    _SETITEM_OPS = {
+        "key": lambda s: s.__setitem__("a", torch.zeros(4, 3)),
+        "new_key": lambda s: s.__setitem__("z", torch.zeros(4, 3)),
+        "nested_key": lambda s: s.__setitem__(("n", "c"), torch.zeros(4, 3, 2)),
+        "new_nested_key": lambda s: s.__setitem__(("n", "z"), torch.zeros(4, 3)),
+        "int": lambda s: s.__setitem__(0, s[1].to_tensordict()),
+        "slice_scalar": lambda s: s.__setitem__(slice(1, 3), 0),
+        "mask_scalar": lambda s: s.__setitem__(_BACKEND_MASK, -1),
+        "ellipsis": lambda s: s.__setitem__((Ellipsis, 0), s[:, 1].to_tensordict()),
+        "dict": lambda s: s.__setitem__(
+            1, {"a": torch.ones(3), "b": torch.ones(3, dtype=torch.long)}
+        ),
+        "tensor_index": lambda s: s.__setitem__(
+            torch.tensor([0, 2]), s[torch.tensor([1, 3])].to_tensordict()
+        ),
+    }
+
+    @pytest.mark.parametrize("op", list(_SETITEM_OPS))
+    def test_setitem(self, source, op):
+        # the source writes, as a dense copy does; a sub-tensordict and a file
+        # write into an existing key and add a new one
+        kind, td = source
+        fn = self._SETITEM_OPS[op]
+        state = _BackendState.from_tensordict(td, check=False)
+        dense = _BackendState.from_tensordict(td.to_tensordict(), check=False)
+        try:
+            fn(dense)
+        except Exception as err:
+            error = type(err)
+        else:
+            error = None
+        if kind == "subtd" and op in ("new_key", "new_nested_key"):
+            # a sub-tensordict cannot add a key for its slice only
+            error = None if op == "new_key" else error
+        if error is not None:
+            with pytest.raises(error):
+                fn(state)
+            return
+        assert fn(state) is None
+        if kind == "subtd" and op == "new_key":
+            assert "z" in td.keys()
+            return
+        torch.testing.assert_close(state.to_tensordict(), dense.to_tensordict())
+
+    @pytest.mark.parametrize("parent", [False, True], ids=["direct", "parent"])
+    def test_pad_inplace(self, source, parent):
+        # a dense source pads in place; the others cannot change their batch
+        # size and raise before anything is padded, also through a parent
+        kind, td = source
+        state = _BackendState.from_tensordict(td, check=False)
+        obj = state
+        if parent:
+            obj = TensorDict(
+                x=torch.arange(12.0).reshape(4, 3), t=state, batch_size=[4, 3]
+            )
+        before = obj.to_tensordict()
+        if kind == "dense":
+            assert obj.pad([0, 0, 0, 1], inplace=True) is obj
+            torch.testing.assert_close(obj.to_tensordict(), before.pad([0, 0, 0, 1]))
+            return
+        error = RuntimeError if kind == "subtd" and not parent else None
+        with pytest.raises(error or NotImplementedError):
+            obj.pad([0, 0, 0, 1], inplace=True)
+        assert obj.batch_size == (4, 3)
+        torch.testing.assert_close(obj.to_tensordict(), before)
+
+    def test_setitem_locked_source(self, source):
+        kind, td = source
+        if kind == "subtd":
+            td._source.lock_()
+        else:
+            td.lock_()
+        state = _BackendState.from_tensordict(td, check=False)
+        with pytest.raises(RuntimeError, match="locked"):
+            state["z"] = torch.zeros(4, 3)
+        assert "z" not in td.keys()
+        if kind != "lazy":
+            # an existing key and an index write in place
+            state[0] = 0
+            assert (td["a"][0] == 0).all()
+
+    def test_del_locked_source(self, source):
+        kind, td = source
+        if kind == "subtd":
+            td._source.lock_()
+        else:
+            td.lock_()
+        state = _BackendState.from_tensordict(td, check=False)
+        with pytest.raises(RuntimeError, match="locked"):
+            state.del_("a")
+        assert "a" in td.keys()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_rename_key_locked_h5_source(self, tmp_path):
+        # a locked file renames, with a FutureWarning, as the file does
+        td = _h5_source(tmp_path)
+        td.lock_()
+        state = _BackendState.from_tensordict(td, check=False)
+        with pytest.warns(FutureWarning, match="renames keys of a locked"):
+            assert state.rename_key_("a", "z") is state
+        assert "z" in td.keys()
+        assert "a" not in td.keys()
+        dense = _BackendState.from_tensordict(_dense_source().lock_())
+        with pytest.raises(RuntimeError, match="locked"):
+            dense.rename_key_("a", "z")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
