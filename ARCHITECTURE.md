@@ -31,8 +31,9 @@ containers:
   operations that some backends cannot support (see "The TensorDictBase
   contract"). `_base/factories.py` holds the module-level
   constructors (`from_dict`, `from_h5`, ...) that `base.py` re-exports.
-- `_td.py`: `TensorDict`, the dense implementation, and `_SubTensorDict`, a
-  view on an index of another tensordict.
+- `_td.py`: `TensorDict`, the dense implementation, `_SubTensorDict`, a
+  view on an index of another tensordict, and `_StateFromSource`, the mixin
+  through which a view reports the state of its source.
 - `_td_functions.py`: the module-level functions `stack`, `lazy_stack`,
   `cat`, `save`, `load`, `memmap`, `load_memmap`, `from_module`,
   `from_pytree` and others. `_td.py` re-exports them.
@@ -104,6 +105,9 @@ Stores (`store/`):
 - `store/_lazy.py`: `LazyStackedTensorDictStore`, a lazy stack of stores,
   and `_StoreStackElementView`, its write-through view of one member.
   `store/_store.py` re-exports them.
+- `store/_connection.py`: `_StoreConnection`, the mixin of both store
+  classes that connects to the server, names the server keys, pickles and
+  cleans up.
 - `store/_utils.py`: byte-range helpers and the Lua scripts that the stores
   run on the server.
 
@@ -170,51 +174,135 @@ are `torch.Tensor` subclasses that a tensordict can store as entries.
 ## The TensorDictBase contract
 
 `TensorDictBase` marks its backend-specific methods with
-`@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`, ...),
-the shape operations (`_view`, `_permute`, `_unsqueeze`, ...), `keys`,
-`_clone` and others. A class that lacks one
-cannot be instantiated. The rest of `TensorDictBase` (`base.py` and the mixins in
-`_base/`) is written on top of these methods, and all the implementations
-share it, including generic
-implementations of operations such as `reshape`, `split`, `__setitem__`,
-`_index_tensordict`, `_apply_nest` and the comparison operators, which a class
-overrides only when it can do better.
+`@abc.abstractmethod`: the storage hooks (`_get_str`, `_set_str`,
+`_set_at_str`, ...), the shape operations (`_view`, `_permute`,
+`_unsqueeze`, ...), `keys`, `entry_class`, `from_dict`, `_clone` and others.
+A class that lacks one cannot be instantiated. The rest of `TensorDictBase`
+(`base.py` and the mixins in `_base/`) is written on top of these methods,
+and all the implementations share it.
 
-When only part of an operation depends on the storage, the public method is
-written once, with its argument checks and error messages, and calls a small
-private hook that a class overrides:
+Each public method is written once, on `TensorDictBase`, with its signature,
+docstring, argument normalization, validation, lock checks, error types and
+messages, and the bookkeeping of its result (batch size, names, device,
+lock). When part of an operation depends on the storage, the public method
+calls a private hook for that part, or reads a class attribute that selects
+one of its code paths. A class puts what it does differently into a hook
+override or a class attribute, not into an override of the public method.
+The docstring of a hook on `TensorDictBase` states its contract: what the
+public method has done before the call, and what the hook must do and
+return. `test_conformance.py::TestOneImplementation` checks that each hook
+a subclass overrides has a docstring, apart from a listed set of older
+hooks. The base implementation of a hook is the generic
+algorithm, so only the classes that can do better, or must do something
+else, override it. A new backend therefore implements the abstract
+methods, and overrides a hook or sets a class attribute where its storage
+can do better; it inherits the public methods.
 
-- `chunk` calls `_chunk`. `TensorDict` overrides it with a loop over its
-  leaves, and a store element with a single read from the server.
-- `rename_key_` checks the lock, the key types and `safe`, then calls
-  `_rename_key`. `PersistentTensorDict` and the stores override it to move the
-  entry without reading it.
-- `pop` and `popitem` pass the value they remove through `_popped_value`,
-  which a store or a zarr group overrides to copy a nested view before `del_`
-  deletes its data.
-- `lock_` and `unlock_` walk the sub-tensordicts that `_lock_sub_tensordicts`
-  returns. A store returns the ones it has cached, so that locking reads
-  nothing from the server.
-- `contiguous(inplace=True)` calls `_contiguous_inplace`, which raises unless
-  the class supports it.
+In the tables below, *lazy* is `LazyStackedTensorDict` and so also its
+subclass `NonTensorStack`, *NTS* is `NonTensorStack` alone, *sub* is
+`_SubTensorDict`, *file* is `PersistentTensorDict` (h5 and zarr), *store*
+is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
+*element* is `_StoreStackElementView` (`store[i]`), *typed* is
+`TypedTensorDict` and *params* is `TensorDictParams`.
+
+| hook | called by | what it must do | overridden by |
+| --- | --- | --- | --- |
+| `_chunk(chunks, dim)` | `chunk` | return the chunks; the default calls `split` | `TensorDict`, element, params, typed |
+| `_split(split_sizes, dim)` | `split`, the default `_chunk` | return the pieces, each with the names, device and lock of `self` | lazy, params, typed |
+| `_reshape(shape, names, leaf_fn)` | `reshape`, `flatten`, `unflatten` without `inplace` | return a tensordict of batch size `shape`, with views of the leaves where the layout allows | lazy, NTS, typed |
+| `_expand(shape, names)` | `expand` | return expanded views | lazy, params, typed |
+| `_broadcast_to(shape)` | `broadcast_to` | return broadcast views, without names | NTS |
+| `_repeat_interleave(repeats, dim, output_size)` | `repeat_interleave` without `inplace` | repeat the elements along `dim` | lazy |
+| `_batch_op(fn, batch_size, names, *, index)` | `flip`, `roll`, `rot90`, `tile`, `narrow`, the default `_broadcast_to` | apply `fn` to each leaf, and set the lock, shared and memmap flags | NTS |
+| `_densify(layout)` | `densify` | replace the lazy stacks with dense entries | lazy, NTS |
+| `_compare(other, op, reflected_op, default)` | `==`, `!=`, `<`, `<=`, `>`, `>=`, `\|`, `^` | broadcast, pair the leaves by key, raise `KeyError` on mismatched keys | lazy, params, typed |
+| `_where(condition, other, *, out, pad, update_batch_size)` | `where`, without `_masking_on_dense_copy` | return the result, written into `out` if given | lazy, params, typed |
+| `_reduction_parts()` | `all()`, `any()` without a dim | return the parts to reduce: the values, or the members of a lazy stack | lazy |
+| `_reduced_names(dim)` | `all(dim)`, `any(dim)` | return the names of the result | lazy |
+| `_masked_fill_(mask, value)` | `masked_fill_` | fill in place where `mask` is True | sub, lazy, file, lazy store, params, typed |
+| `_fill_(key, value)` | `fill_`, and `zero_` with `_fills_without_reading` | fill the entry at the tuple `key`; raise `KeyError` if it is missing | file |
+| `_detach_()` | `detach_`, without `_storage_holds_no_gradients` | detach the leaves in place | sub (raises), lazy, params, typed |
+| `_apply_(fn, *others, **kwargs)` | `apply_` | write the results into the leaves; the default calls `apply(..., inplace=True)` | lazy |
+| `_update_fast(source)` | `update` with default arguments, outside of `torch.compile` | write without the checks and return `True`, or write nothing and return `False` | `TensorDict` |
+| `_update_entries(source, *, clone, inplace, ...)` | `update` | write the entries, after the lock check and the handling of `None`, `self` and `keys_to_update` | sub, lazy, lazy store |
+| `_update_(source, *, clone, non_blocking, keys_to_update)` | `update_` | copy into the existing leaves | sub, lazy, store, lazy store, element |
+| `_update_at_(source, idx, *, ...)` | `update_at_` with a non-empty index | copy into the leaves at `idx` | lazy, NTS |
+| `_setitem_index(index, value)` | `td[index] = value` | write `value` at the batch `index`; a str or tuple key and an `Ellipsis` are handled before the call | lazy, file, store, lazy store, element |
+| `_empty(recurse, batch_size, device, names)` | `empty` | return a new, unlocked tensordict without tensor leaves | lazy, file, store; one body for lazy store and element |
+| `_contains_str(key)` | `_convert_inplace`, which `_set_str` calls | say whether `key` is a key, without reading data | `TensorDict`, file, store |
+| `_get_tuple(key, default)` | `get` | return the entry, or `default`; raise `ValueError` for a path through a tensor (files and the store return `default`) | every class but element |
+| `_get_at_tuple(key, idx, default)` | `get_at` | read the entry at `idx` | file, store, lazy store, element, params |
+| `_del(key)` | `del_` | delete the entry at the tuple `key`; raise `KeyError` for a missing key and `ValueError` for a path through a tensor (for `()`, the file and the stores keep their own behaviour until 0.17) | every class but params and typed (sub forwards it) |
+| `_members_as_lists()` | `items`, `values` with `_NESTED_TENSORS_AS_LISTS` | return the members to walk one by one, or `None` | lazy |
+| `_contains_tensordict(item)` | `item in td`, when `item` is not a key | say whether `item` is in `self`; the default raises | lazy |
+| `_rename_key(old_key, new_key)` | `rename_key_` | move the entry | file, store, lazy store, element (raises) |
+| `_popped_value(value)` | `pop`, `popitem` | return a copy of a nested view that `del_` is about to delete | file, store |
+| `_lock_sub_tensordicts()` | `lock_`, `unlock_`, the default `_rename_subtds` | return the sub-tensordicts to reach, without reading data | file, store, lazy store, element |
+| `_rename_subtds(value)` | each change of names | rename the sub-tensordicts; the default renames those of `_lock_sub_tensordicts` | `TensorDict`, sub, lazy, file, params, typed |
+| `_share_memory_()` | `share_memory_` | place the leaves in shared memory and lock; the default raises | `TensorDict`, sub (raises), lazy, params, typed |
+| `_contiguous_inplace(canonical)` | `contiguous(inplace=True)` | make the leaves contiguous; the default raises | `TensorDict` |
+| `_to(device, dtype, ...)` | `to`, after it parses the arguments | return the cast tensordict, or `self` | sub, lazy, file |
+| `_write_back_to(result)` | the exit of `with td.to(...)`, with `_to_writes_back_in_place` | write the copy back into the storage | file (no default) |
+| `_to_tensordict(*, retain_none)` | `to_tensordict` | return the dense copy | store, element, NTS (returns `self`) |
+| `_repr_parts()` | `__repr__` | return the lines inside `ClassName(...)`, without reading data | lazy, NTS, store, lazy store, element |
+| `_new_unsafe(source, *, batch_size, ...)` | `split`, `contiguous`, `empty`, `_unbind`, `_index_tensordict` | build an instance without validation; accept every keyword of `TensorDict._new_unsafe` | `TensorDict`, params, typed |
+
+`from_h5` and `from_zarr` open the file with `PersistentTensorDict._open_h5`
+and `_open_zarr`. The `batch_size` setter checks a new batch size with
+`_check_new_batch_size` (in `_batch_size_setter`), which the stores override
+to compare it with the shapes in their metadata.
+
+| class attribute | effect | set by |
+| --- | --- | --- |
+| `_lazy` | the base treats the class as a lazy view: for example, a new batch size and `masked_select(inplace=True)` raise | lazy, sub, the legacy lazy views |
+| `_reads_return_copies` | the in-place methods run on copies of the leaves and write them back (see below) | file, store, lazy store, element; a property on sub, lazy and typed |
+| `_nested_reads_return_copies` | `update` and `_fill_` write the leaves of a nested tensordict back under their full keys | lazy store, element |
+| `_masking_on_dense_copy` | `where`, `masked_fill`, and `to` with a new device, dtype or memory format, work on a `to_tensordict()` copy | sub, file, store, lazy store, element, the legacy lazy views |
+| `_masked_select_on_dense_copy` | `masked_select` masks a `to_tensordict()` copy | store, lazy store, element |
+| `_masked_select_inplace_unsupported` | `masked_select(inplace=True)` raises, as on a lazy stack | lazy store, element |
+| `_storage_holds_no_gradients` | `detach_` returns without reading | file, store, lazy store, element |
+| `_fills_without_reading` | `zero_` calls `_fill_` for each key | file |
+| `_leaves_built_on_read` | `is_contiguous()` returns `False` without reading | lazy, file, store, lazy store, element |
+| `_contiguous_via_to_tensordict` | `contiguous()` returns `to_tensordict()` | store, lazy store, element |
+| `_pin_memory_unsupported` | `pin_memory` raises | sub, file, store, lazy store, element |
+| `_memmap_inplace_unsupported` | `memmap_` raises | sub |
+| `_map_on_dense_copies` | `map` sends a `to_tensordict()` copy of each chunk to the workers | file |
+| `_to_writes_back_in_place` | the exit of `with td.to(...)` calls `_write_back_to` | file |
+| `_has_exclusive_keys` | `to_dict`, `state_dict`, `flatten_keys` and `unflatten_keys` raise | a property on lazy |
+| `_rename_key_lenient` | `rename_key_` renames in a locked tensordict with a warning, until 0.17 | file, store, lazy store |
+| `_inplace_shape_ops_unsupported` | `reshape` and `repeat_interleave` with `inplace=True` raise before they write | lazy |
+| `_inplace_batch_size_change` | `False`: the in-place shape ops that change the batch size raise before they write | file (`False`); typed (a property: `False` over a lazy stack, a sub-tensordict or a file) |
+| `_flatten_lenient` | `flatten(d, d)` returns `self`; with `start_dim > end_dim`, `flatten` inserts a dim of size 1 with a `FutureWarning` until 0.17, where the others raise | lazy |
+| `_gather_inplace_warns` | `gather(inplace=True)` with an index of the batch shape writes, and warns that it raises from 0.17 | typed (a property: over a lazy stack) |
+| `_get_ignores_kwargs` | `False`: `get` honors `as_list` and `as_nested_tensor` instead of warning | lazy (`False`) |
+| `_setitem_key_inplace` | the `inplace` argument with which `td[key] = value` calls `_set_tuple` | `BEST_ATTEMPT_INPLACE` on sub, file, store, lazy store, element |
+
+A view reports the state of the tensordict that it reads, `_source`:
+`_SubTensorDict` and `TypedTensorDict` list the mixin `_StateFromSource`
+(`_td.py`) before `TensorDictBase`. The mixin reads `is_locked`, `device`,
+the shared and memmap flags, `_has_names()`, `_storage_is_read_only()` and
+`_has_non_tensor` from the source.
 
 The `batch_size` and `device` properties read the `_batch_size` and `_device`
 attributes, which each class sets, and `_change_batch_size` writes
-`_batch_size`. A class that derives one of them (a lazy stack, a view, a store
-that persists it) replaces only the accessor it needs, with
+`_batch_size`. A class that derives one of them (a lazy stack, a store that
+persists it) replaces only the accessor it needs, with
 `@TensorDictBase.batch_size.getter` or `@TensorDictBase.device.setter`.
 
 The generic `_select` and `_exclude` return a `TensorDict` copy of the entries
 they keep. `TensorDict` and `LazyStackedTensorDict` override them to share the
-values instead. With `_masking_on_dense_copy = True`, `where` and
-`masked_fill` work on a `to_tensordict()` copy: the stores set it because they
-read the copy in one round trip, and `PersistentTensorDict` and the views
-because that copy is the result they return.
+values instead.
 
-Each override that a class keeps says why in a comment that starts with
-`# Override:`.
+Each public override that a class keeps, and each hook override, says why in
+a comment that starts with `# Override:`. Some classes keep public
+overrides: the constructors and the pickling methods, the value API of
+`NonTensorStack`, dense fast paths on `TensorDict` (`del_`, `popitem`,
+`empty`, ...), and the forwarders of `TensorDictParams` and
+`TypedTensorDict`. `test_conformance.py::TestOneImplementation` lists the
+public overrides that each class may keep, so that a new one fails the test
+until it is replaced by a hook or added to the list with its reason.
 
-The implementations also reuse code in two ways:
+The implementations also reuse code in three ways:
 
 - A few class-level aliases still borrow TensorDict's code where it is
   specific to dense storage: `_SubTensorDict._add_batch_dim`, the vmap hooks
@@ -222,32 +310,44 @@ The implementations also reuse code in two ways:
   `_load_memmap` of `TensorDictBase` calls `TensorDict._load_memmap`, so that
   a store, a `PersistentTensorDict` or a `TensorDictParams` loads a memmap as
   a `TensorDict`.
-- `TensorDictParams` forwards most calls to the tensordict it wraps
-  (`_param_td`), through the `_fallback` decorators in `nn/params.py`.
-  `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists at
-  the end of `typedtensordict.py`.
+- `TensorDictParams` and `TypedTensorDict` forward calls to the tensordict
+  they wrap. Where they can, they forward the hook and inherit the public
+  method; a comment gives the reason for each public forwarder they keep.
+  `TensorDictParams`
+  forwards to `_param_td` through the `_fallback` decorators in
+  `nn/params.py`, so that the results keep their parameters.
+  `TypedTensorDict` forwards to `_source` through the `_*_DELEGATES` lists
+  at the end of `typedtensordict.py`, and derives `_reads_return_copies`,
+  `_inplace_batch_size_change` and `_gather_inplace_warns` from it, so that
+  an in-place operation over a lazy stack, a sub-tensordict or a file takes
+  the same path as on the source.
+- The two store classes share their connection, server keys, pickling and
+  cleanup through the mixin `_StoreConnection` (`store/_connection.py`),
+  which they configure with class attributes (`_global_key_suffixes`,
+  `_pickled_attrs`, `_caches_keys`) and two hooks (`_entry_server_keys`,
+  `_init_local_state`).
 
 Some classes read copies of their data: each read of a
 `PersistentTensorDict` or a store returns a new tensor, and so does a read of
 a `TypedTensorDict` over a lazy stack or of a `_SubTensorDict` with an index
-tensor. They set `_reads_return_copies` (a class attribute, or a property).
-The in-place methods (`add_`, `abs_`, `+=`, ...) change the tensors that
-`_items_list` returns. On these classes, the `@_write_back_inplace` decorator
-runs the method on a `TensorDict` of the leaves that it reads
-(`_inplace_on_copies`), and `_write_back` writes each leaf back with
-`_set_tuple(..., inplace=True)`; `update_` calls `_write_back` itself. The
-lazy stores also set `_nested_reads_return_copies`: a sub-tensordict read
-with `_get_str` is a new `TensorDict`, so `update` writes the leaves it
-merges into it back under their full keys (`_update_write_back`). A new
-in-place method that changes the leaves takes the decorator. A file opened
-read-only stays unchanged, with a warning (`_storage_is_read_only`).
+tensor. They set `_reads_return_copies`. The in-place methods (`add_`,
+`abs_`, `+=`, ...) change the tensors that `_items_list` returns. On these
+classes, the `@_write_back_inplace` decorator runs the method on a
+`TensorDict` of the leaves that it reads (`_inplace_on_copies`, which a lazy
+stack, a lazy store and `TypedTensorDict` override), and `_write_back`
+writes each leaf back with `_set_tuple(..., inplace=True)`; `update_` calls
+`_write_back` itself. A new in-place method that changes the leaves takes
+the decorator. A file opened read-only stays unchanged, with a warning
+(`_storage_is_read_only`).
 
 An operation that a backend cannot support raises. The raising bodies are
-written once, in the mixins of `_base/unsupported.py`: `_NoShapeOps` (the
-shape hooks), `_NoVmap` (the vmap hooks), `_NoSetNonTensor`, and
-`_StoreUnsupported` for the stores. A class lists them before
-`TensorDictBase` in its bases, so the hooks stay abstract on
-`TensorDictBase`. For example, `TensorDictStore._view` raises a
+written once: private hooks in the mixins of `_base/unsupported.py`
+(`_NoShapeOps` for the shape hooks, `_NoVmap` for the vmap hooks,
+`_NoSetNonTensor`, `_NoSelectExclude`, and `_StoreUnsupported`, which
+combines them for the stores), and public methods behind a class attribute
+(`_pin_memory_unsupported`, `_memmap_inplace_unsupported`, ...). A class
+lists the mixins before `TensorDictBase` in its bases, so the hooks stay
+abstract on `TensorDictBase`. For example, `TensorDictStore._view` raises a
 `RuntimeError` that asks the user to call `to_tensordict()` first. The
 `make_memmap*` methods, which only `TensorDict` implements, raise by
 default on `TensorDictBase` instead.
@@ -255,7 +355,11 @@ default on `TensorDictBase` instead.
 ## How calls reach a tensordict
 
 - Methods: a public method of `TensorDictBase` (in `base.py` or a mixin of
-  `_base/`) calls the abstract hooks, which each class implements.
+  `_base/`) handles the arguments, the checks and the bookkeeping of the
+  result, and calls the abstract methods and the private hooks of "The
+  TensorDictBase contract", which the classes implement or override.
+  `TensorDictParams` and `TypedTensorDict` mostly inherit the public method
+  and forward the hook to the tensordict they wrap.
 - Torch functions: `TensorDictBase.__torch_function__` looks up the function
   in `TD_HANDLED_FUNCTIONS`, which the `@implements_for_td(torch.<name>)`
   decorators in `_torch_func.py` fill. A function that is not in the table
@@ -287,8 +391,14 @@ touches these places:
    `_base/` for its area, or in `base.py` for core operations. If it can be
    written with other methods, write it once there. Make it abstract only if
    each backend needs its own code. If only part of it depends on the
-   storage, write the public method once and let it call a private hook, as
-   in "The TensorDictBase contract". Abstract methods, properties,
+   storage, write the public method once, with the argument checks, the
+   error messages and the bookkeeping of the result, and let it call a
+   private hook named after it (`chunk` calls `_chunk`), as in "The
+   TensorDictBase contract". The hook's base implementation is the generic
+   algorithm, and its docstring states its contract. When the classes differ
+   only in whether they take one path or another, read a class attribute
+   with a default on `TensorDictBase`, rather than check the class
+   with `isinstance`. Abstract methods, properties,
    `implement_for` overloads and methods that read a global that `base.py`
    rebinds stay in `base.py`. The comment above the mixin imports in
    `base.py` gives the rules for code in a mixin. In particular, a mixin
@@ -299,8 +409,13 @@ touches these places:
    imports it locally (ruff's TC004 flags a run-time use of the
    `TYPE_CHECKING` import).
 2. If it is abstract: an implementation in each class of the hierarchy
-   above (or a raise), and the name in one of the `_*_DELEGATES` lists of
-   `typedtensordict.py`.
+   above (or a raise, in a mixin of `_base/unsupported.py`). If it is a
+   hook: an override in each class that can do better. `TypedTensorDict`
+   and `TensorDictParams` inherit the public method. When the hook must run
+   on the tensordict they wrap, to keep a lazy source lazy or the
+   parameters in the result, add its name to one of the `_*_DELEGATES`
+   lists of `typedtensordict.py` and a `_fallback` forwarder to
+   `nn/params.py`.
 3. `tensorclass.py`: the name in `_FALLBACK_METHOD_FROM_TD`, or in another
    `_METHOD_FROM_TD*` list. `test_sorted_methods` checks that the lists are
    sorted.
@@ -331,7 +446,10 @@ touches these places:
      operations on each type and on its dense copy and compares the
      results. Its known failures are in
      `test/tensordict/conformance_known_failures.json`, rewritten the same
-     way.
+     way. Its `TestOneImplementation` fails when a class overrides a
+     public method of `TensorDictBase` that is not in its list of allowed
+     overrides: write a hook instead, or add the override to the list and
+     give the reason in its `# Override:` comment.
 9. `benchmarks/` when the operation is on a hot path.
 
 ## Where things live
