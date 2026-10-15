@@ -9536,6 +9536,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> sorted(td.keys())
             ['a', 'b']
         """
+        # Raise before _propagate_unlock clears the storage flags of the nodes.
+        if self._is_locked:
+            self._check_unlock()
         try:
             sub_tds = self._propagate_unlock()
             for sub_td in sub_tds:

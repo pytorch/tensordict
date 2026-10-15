@@ -698,6 +698,85 @@ class TestLock:
         ):
             b.unlock_()
 
+    def test_failed_unlock_keeps_storage_flags(self):
+        # A locked parent blocks the nested unlock_. The shared flag must stay.
+        parent = TensorDict({"child": TensorDict({"a": torch.zeros(3)}, [3])}, [3])
+        parent.share_memory_()
+        child = parent["child"]
+        assert child["a"].is_shared()
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            child.unlock_()
+        assert child.is_locked
+        assert child._is_shared
+        assert child["a"].is_shared()
+        assert parent._is_shared
+
+        # memmap_() locks without recording parents. Locking a new parent does,
+        # so the nested unlock_ fails and must keep _is_memmap.
+        child = TensorDict({"a": torch.zeros(3)}, [3])
+        child.memmap_()
+        parent = TensorDict({"child": child}, [3])
+        parent.lock_()
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            child.unlock_()
+        assert child.is_locked
+        assert child._is_memmap
+
+        # parent.memmap_() still records no lock parents, so the child unlock_
+        # succeeds today. It must not start raising.
+        parent = TensorDict({"child": TensorDict({"a": torch.zeros(3)}, [3])}, [3])
+        parent.memmap_()
+        child = parent["child"]
+        assert child._is_memmap
+        child.unlock_()
+        assert not child.is_locked
+        assert not child._is_memmap
+        assert parent._is_memmap
+        assert parent.is_locked
+
+        child = TensorDict({"a": torch.zeros(3)}, [3]).consolidate()
+        assert hasattr(child, "_consolidated")
+        parent = TensorDict({"child": child}, [3])
+        parent.lock_()
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            child.unlock_()
+        assert child.is_locked
+        assert hasattr(child, "_consolidated")
+
+        # A successful unlock_ still clears the flags, including nested ones.
+        parent = TensorDict({"child": TensorDict({"a": torch.zeros(3)}, [3])}, [3])
+        parent.share_memory_()
+        assert parent["child"]._is_shared
+        parent.unlock_()
+        assert not parent._is_shared
+        assert not parent["child"]._is_shared
+
+        parent = TensorDict({"child": TensorDict({"a": torch.zeros(3)}, [3])}, [3])
+        parent.memmap_()
+        assert parent["child"]._is_memmap
+        parent.unlock_()
+        assert not parent._is_memmap
+        assert not parent["child"]._is_memmap
+
+        child = TensorDict(
+            {"a": torch.zeros(3), "nested": TensorDict({"b": torch.ones(3)}, [3])},
+            [3],
+        ).consolidate()
+        assert hasattr(child, "_consolidated")
+        child.unlock_()
+        assert not hasattr(child, "_consolidated")
+        assert not child.is_locked
+        assert not child["nested"].is_locked
+
     def test_stack_cache_lock(self):
         td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td1 = td0.clone()
