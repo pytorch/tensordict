@@ -7086,6 +7086,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
         return cls(*[_maybe_from_list(nontensor) for nontensor in non_tensors])
 
+    # Override: a NonTensorStack holds a value, so it is never empty.
     def is_empty(self) -> bool:
         return False
 
@@ -7503,6 +7504,7 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return self
 
+    # Override: an advanced index copies the entries, as it does for tensors.
     def __getitem__(self, index: IndexType) -> NonTensorStack | NonTensorDataBase | Any:
         result = super().__getitem__(index)
         if not isinstance(result, NonTensorStack):
@@ -7594,6 +7596,7 @@ class NonTensorStack(LazyStackedTensorDict):
             )
         return self
 
+    # Override: the value that every element holds.
     @property
     def data(self) -> Self:
         """Returns the value of the stack, if every element holds the same value.

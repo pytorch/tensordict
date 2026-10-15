@@ -1603,8 +1603,16 @@ class _ShapeOps:
         return self._chunk(chunks, dim)
 
     def _chunk(self, chunks: int, dim: int) -> tuple[TensorCollection, ...]:
-        # chunk with a positive int `chunks` along a non-negative `dim` of
-        # non-zero size: torch.chunk splits with the upper-rounded size
+        """Splits the tensordict into ``chunks`` pieces along ``dim``, for :meth:`chunk`.
+
+        :meth:`chunk` has checked ``chunks``, turned it into a positive
+        ``int``, made ``dim`` non-negative and handled a zero-size ``dim``.
+        The hook returns the pieces as ``torch.chunk`` would: pieces of the
+        upper-rounded size (the last one can be smaller), and fewer than ``chunks``
+        pieces when the size does not allow more. The default calls
+        :meth:`split`.
+        """
+        # torch.chunk splits with the upper-rounded size
         return self.split(-(self.batch_size[dim] // -chunks), dim)
 
     def split(

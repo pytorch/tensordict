@@ -716,6 +716,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def hook_in(self, value: Callable | None) -> None:
         self._hook_in = value
 
+    # Override: reads the pickles of TensorDict 0.14 and earlier.
     def __setstate__(self, state: dict[str, Any]) -> None:
         # Pickles made with TensorDict 0.14 and earlier store the hooks under
         # their public names.
@@ -725,6 +726,7 @@ class LazyStackedTensorDict(TensorDictBase):
             state["_hook_in"] = state.pop("hook_in", None)
         super().__setstate__(state)
 
+    # Override: dispatches the torch functions that lazy stacks implement.
     @classmethod
     def __torch_function__(
         cls,
@@ -2989,6 +2991,7 @@ class LazyStackedTensorDict(TensorDictBase):
             sort=sort,
         )
 
+    # Override: stacks the non-tensor leaves that every member holds.
     def non_tensor_items(self, include_nested: bool = False):
         """Returns all non-tensor leaves, maybe recursively."""
         items = self.tensordicts[0].non_tensor_items(include_nested=include_nested)
