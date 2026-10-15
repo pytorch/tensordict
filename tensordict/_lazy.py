@@ -2242,15 +2242,16 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key[0], default)
         if len(key) == 1:
             return first
-        try:
-            return first._get_tuple(key[1:], default=default, **kwargs)
-        except AttributeError as err:
-            if "has no attribute" in str(err):
-                rest = key[1] if len(key) == 2 else key[1:]
-                raise _KeyThroughLeafError(
-                    f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
-                    f"so it has no entry {rest!r}."
-                )
+        # getattr, not a try/except AttributeError: torch.compile breaks the
+        # graph on a missing method of a tensor made in the graph
+        get_tuple = getattr(first, "_get_tuple", None)
+        if get_tuple is None:
+            rest = key[1] if len(key) == 2 else key[1:]
+            raise _KeyThroughLeafError(
+                f"{key[0]!r} is a {type(first).__name__}, not a tensordict, "
+                f"so it has no entry {rest!r}."
+            )
+        return get_tuple(key[1:], default=default, **kwargs)
 
     # Override: the constructor that TensorDictBase.lazy_stack calls; its
     # signature differs (items, keyword-only device and stack_dim_name).
@@ -4858,9 +4859,11 @@ class LazyStackedTensorDict(TensorDictBase):
             dims_list
         ) != list(range(len(dims_list)))
         dims = dims_list
-        dims_list_sort = np.argsort(dims_list)
-        # find the new stack dim
-        stack_dim = dims_list_sort[self.stack_dim]
+        # find the new stack dim, as np.argsort(dims_list)[self.stack_dim]: a
+        # Python int, which torch.compile traces
+        stack_dim = sorted(range(len(dims_list)), key=dims_list.__getitem__)[
+            self.stack_dim
+        ]
         # remove that dim from the dims_list
         dims_list = [
             d if d < self.stack_dim else d - 1 for d in dims_list if d != self.stack_dim

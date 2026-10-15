@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 import sys
 import warnings
 from collections.abc import Callable, Sequence
@@ -789,8 +790,10 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         source = self._source
         if not isinstance(source, LazyStackedTensorDict):
             return super()._inplace_on_copies(method, *args, **kwargs)
-        # the public name of a hook such as _zero_
-        name = method.__name__.lstrip("_")
+        # the public name of a hook such as _zero_. inspect.unwrap: under
+        # torch.compile, newer torch gives the name of the code of a wrapper
+        # such as new_func, not the name that functools.wraps set
+        name = inspect.unwrap(method).__name__.lstrip("_")
         if not _has_exclusive_keys(source) and (
             source._reads_return_copies or not _reads_copies(source)
         ):

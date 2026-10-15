@@ -710,6 +710,33 @@ class TestTD:
         assert "a" not in data_c.keys()
         assert (data_c == data).all()
 
+    @pytest.mark.parametrize("dynamic", [False, True])
+    def test_lazy_stack_permute(self, dynamic, mode):
+        # #2786: the new stack dim was a NumPy value
+        def permute(td):
+            return td.permute(1, 0)
+
+        permute_c = torch.compile(permute, fullgraph=True, dynamic=dynamic, mode=mode)
+        data = lazy_stack(
+            [TensorDict(a=torch.randn(3, 2), batch_size=[3]) for _ in range(4)]
+        )
+        result = permute_c(data)
+        assert isinstance(result, LazyStackedTensorDict)
+        assert result.stack_dim == 1
+        assert (result == permute(data)).all()
+
+    @pytest.mark.parametrize("dynamic", [False, True])
+    def test_lazy_stack_get_through_leaf_default(self, dynamic, mode):
+        # #2786: a key that runs through a tensor returns the default
+        def get(td):
+            return td.get(("a", "x"), None), td["a"] + 1
+
+        get_c = torch.compile(get, fullgraph=True, dynamic=dynamic, mode=mode)
+        data = lazy_stack([TensorDict(a=torch.randn(3)) for _ in range(2)])
+        x, a = get_c(data)
+        assert x is None
+        torch.testing.assert_close(a, data["a"] + 1)
+
     @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor"])
     def test_dense_get_ignored_kwargs(self, kwarg, mode):
         # a dense get warns about these keywords in eager mode only (#2551)
@@ -1668,6 +1695,33 @@ class TestTTD:
         compiled = add_one_c(data.clone())
         assert (eager["a"] == compiled["a"]).all()
         assert (eager["b"] == compiled["b"]).all()
+
+    # #2787: Dynamo reads the name of a function from its code from torch 2.16
+    # on, so the name that functools.wraps gives add_ and mul_ was lost.
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.16.0"),
+        reason="Dynamo gives the name that functools.wraps sets before torch 2.16",
+    )
+    @pytest.mark.parametrize("op", ["add_", "mul_"])
+    def test_inplace_arithmetic_lazy_stack(self, op, mode):
+        def inplace(td):
+            return getattr(td, op)(2)
+
+        def make():
+            return _TTDState.from_tensordict(
+                lazy_stack(
+                    [
+                        TensorDict(a=torch.ones(3), b=torch.ones(3), batch_size=[3])
+                        for _ in range(2)
+                    ]
+                )
+            )
+
+        inplace_c = torch.compile(inplace, fullgraph=True, mode=mode)
+        data = make()
+        result = inplace_c(data)
+        assert result is data
+        assert (data == inplace(make())).all()
 
     def test_arithmetic_self(self, mode):
         def add_self(td):
