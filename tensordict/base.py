@@ -8850,10 +8850,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     [0., 0., 0., 0.]])
         """
         if self._masking_on_dense_copy:
-            td_copy = self.to_tensordict()
-        else:
-            td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
+            return self.to_tensordict().masked_fill_(mask, value)
+        return self._masked_fill(mask, value)
+
+    def _masked_fill(self, mask: Tensor, value: float | bool) -> Self:
+        """Storage-specific part of :meth:`masked_fill`, called when ``_masking_on_dense_copy`` is False.
+
+        Takes the arguments of :meth:`masked_fill` as they are and returns a
+        filled copy, leaving ``self`` untouched. The base fills a clone in
+        place. :class:`~tensordict.LazyStackedTensorDict` splits ``mask``
+        along the stack dim, runs :meth:`masked_fill` on each member and
+        stacks the results lazily.
+        """
+        result = self._clone(recurse=True)
+        result._masked_fill_(mask, value)
+        return result
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
