@@ -1,0 +1,17 @@
+﻿.. currentmodule:: tensordict
+
+
+LazyStackedTensorDict
+=====================
+
+``LazyStackedTensorDict`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``LazyStackedTensorDict`` adds, and the overrides that have their own
+documentation.
+
+.. autoclass:: LazyStackedTensorDict
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.LazyStackedTensorDict
+    :add-heading: Tutorials that use ``LazyStackedTensorDict``

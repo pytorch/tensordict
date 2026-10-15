@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.qint8
+====================
+
+.. automethod:: TensorDictBase.qint8
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.qint8 tensordict.TensorDictBase.qint8
+    :add-heading: Tutorials that use ``qint8``

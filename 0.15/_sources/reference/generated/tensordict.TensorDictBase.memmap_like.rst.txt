@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.memmap_like
+==========================
+
+.. automethod:: TensorDictBase.memmap_like
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.memmap_like tensordict.TensorDictBase.memmap_like
+    :add-heading: Tutorials that use ``memmap_like``

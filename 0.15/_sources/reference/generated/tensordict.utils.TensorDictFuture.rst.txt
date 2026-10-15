@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+TensorDictFuture
+================
+
+.. autoclass:: TensorDictFuture
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.utils.TensorDictFuture
+    :add-heading: Tutorials that use ``TensorDictFuture``

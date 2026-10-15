@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.nn.distributions.truncated_normal
+
+
+TruncatedStandardNormal
+=======================
+
+.. autoclass:: TruncatedStandardNormal
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal
+    :add-heading: Tutorials that use ``TruncatedStandardNormal``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.amin
+===================
+
+.. automethod:: TensorDictBase.amin
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.amin tensordict.TensorDictBase.amin
+    :add-heading: Tutorials that use ``amin``

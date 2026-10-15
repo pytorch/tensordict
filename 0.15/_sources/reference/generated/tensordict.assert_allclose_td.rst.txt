@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+assert_allclose_td
+==================
+
+.. autofunction:: assert_allclose_td
+
+.. minigallery:: tensordict.assert_allclose_td
+    :add-heading: Tutorials that use ``assert_allclose_td``

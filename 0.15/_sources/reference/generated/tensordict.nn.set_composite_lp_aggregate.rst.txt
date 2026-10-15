@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+set_composite_lp_aggregate
+==========================
+
+.. autoclass:: set_composite_lp_aggregate
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.set_composite_lp_aggregate
+    :add-heading: Tutorials that use ``set_composite_lp_aggregate``

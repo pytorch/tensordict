@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+make_tensordict
+===============
+
+.. autofunction:: make_tensordict
+
+.. minigallery:: tensordict.make_tensordict
+    :add-heading: Tutorials that use ``make_tensordict``

@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+dispatch
+========
+
+.. autoclass:: dispatch
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.dispatch
+    :add-heading: Tutorials that use ``dispatch``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.batch_size
+=========================
+
+.. autoproperty:: TensorDictBase.batch_size
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.batch_size tensordict.TensorDictBase.batch_size
+    :add-heading: Tutorials that use ``batch_size``

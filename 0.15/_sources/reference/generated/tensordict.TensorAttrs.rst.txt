@@ -1,0 +1,17 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorAttrs
+===========
+
+``TensorAttrs`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``TensorAttrs`` adds, and the overrides that have their own
+documentation.
+
+.. autoclass:: TensorAttrs
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.TensorAttrs
+    :add-heading: Tutorials that use ``TensorAttrs``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.split_keys
+=========================
+
+.. automethod:: TensorDictBase.split_keys
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.split_keys tensordict.TensorDictBase.split_keys
+    :add-heading: Tutorials that use ``split_keys``

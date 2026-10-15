@@ -1,0 +1,17 @@
+﻿.. currentmodule:: tensordict
+
+
+NonTensorStack
+==============
+
+``NonTensorStack`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``NonTensorStack`` adds, and the overrides that have their own
+documentation.
+
+.. autoclass:: NonTensorStack
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.NonTensorStack
+    :add-heading: Tutorials that use ``NonTensorStack``

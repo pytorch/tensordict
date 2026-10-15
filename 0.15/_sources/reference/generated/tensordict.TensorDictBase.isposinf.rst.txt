@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.isposinf
+=======================
+
+.. automethod:: TensorDictBase.isposinf
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.isposinf tensordict.TensorDictBase.isposinf
+    :add-heading: Tutorials that use ``isposinf``

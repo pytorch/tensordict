@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.from_parquet
+===========================
+
+.. automethod:: TensorDictBase.from_parquet
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.from_parquet tensordict.TensorDictBase.from_parquet
+    :add-heading: Tutorials that use ``from_parquet``

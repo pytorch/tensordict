@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.tensor_split
+===========================
+
+.. automethod:: TensorDictBase.tensor_split
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.tensor_split tensordict.TensorDictBase.tensor_split
+    :add-heading: Tutorials that use ``tensor_split``

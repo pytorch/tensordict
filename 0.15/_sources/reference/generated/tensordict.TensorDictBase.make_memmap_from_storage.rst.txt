@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.make_memmap_from_storage
+=======================================
+
+.. automethod:: TensorDictBase.make_memmap_from_storage
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.make_memmap_from_storage tensordict.TensorDictBase.make_memmap_from_storage
+    :add-heading: Tutorials that use ``make_memmap_from_storage``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.is_consolidated
+==============================
+
+.. automethod:: TensorDictBase.is_consolidated
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.is_consolidated tensordict.TensorDictBase.is_consolidated
+    :add-heading: Tutorials that use ``is_consolidated``

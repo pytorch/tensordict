@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict
+
+
+NestedKey
+=========
+
+.. autoclass:: NestedKey
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.NestedKey
+    :add-heading: Tutorials that use ``NestedKey``

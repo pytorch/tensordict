@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.utils
+
+
+LinkedList
+==========
+
+.. autoclass:: LinkedList
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.utils.LinkedList
+    :add-heading: Tutorials that use ``LinkedList``

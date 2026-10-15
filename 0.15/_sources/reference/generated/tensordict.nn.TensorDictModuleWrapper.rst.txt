@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+TensorDictModuleWrapper
+=======================
+
+.. autoclass:: TensorDictModuleWrapper
+    :members:
+    :inherited-members: Module
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.TensorDictModuleWrapper
+    :add-heading: Tutorials that use ``TensorDictModuleWrapper``

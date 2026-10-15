@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict
+
+
+UnbatchedTensor
+===============
+
+.. autoclass:: UnbatchedTensor
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.UnbatchedTensor
+    :add-heading: Tutorials that use ``UnbatchedTensor``

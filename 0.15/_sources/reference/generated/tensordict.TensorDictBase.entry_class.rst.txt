@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.entry_class
+==========================
+
+.. automethod:: TensorDictBase.entry_class
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.entry_class tensordict.TensorDictBase.entry_class
+    :add-heading: Tutorials that use ``entry_class``

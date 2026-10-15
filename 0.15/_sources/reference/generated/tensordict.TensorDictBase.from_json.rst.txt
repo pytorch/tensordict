@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.from_json
+========================
+
+.. automethod:: TensorDictBase.from_json
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.from_json tensordict.TensorDictBase.from_json
+    :add-heading: Tutorials that use ``from_json``

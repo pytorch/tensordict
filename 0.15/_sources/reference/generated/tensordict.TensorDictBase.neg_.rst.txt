@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.neg_
+===================
+
+.. automethod:: TensorDictBase.neg_
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.neg_ tensordict.TensorDictBase.neg_
+    :add-heading: Tutorials that use ``neg_``

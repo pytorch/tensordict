@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.expand_as
+========================
+
+.. automethod:: TensorDictBase.expand_as
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.expand_as tensordict.TensorDictBase.expand_as
+    :add-heading: Tutorials that use ``expand_as``

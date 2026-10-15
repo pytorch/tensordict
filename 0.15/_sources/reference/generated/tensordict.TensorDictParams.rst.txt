@@ -1,0 +1,17 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictParams
+================
+
+``TensorDictParams`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``TensorDictParams`` adds, and the overrides that have their own
+documentation.
+
+.. autoclass:: TensorDictParams
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.TensorDictParams
+    :add-heading: Tutorials that use ``TensorDictParams``

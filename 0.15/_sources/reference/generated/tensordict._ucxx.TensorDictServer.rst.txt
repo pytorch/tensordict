@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict._ucxx
+
+
+TensorDictServer
+================
+
+.. autoclass:: TensorDictServer
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict._ucxx.TensorDictServer
+    :add-heading: Tutorials that use ``TensorDictServer``

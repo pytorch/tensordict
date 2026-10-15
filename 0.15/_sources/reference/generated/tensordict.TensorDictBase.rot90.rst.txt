@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.rot90
+====================
+
+.. automethod:: TensorDictBase.rot90
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.rot90 tensordict.TensorDictBase.rot90
+    :add-heading: Tutorials that use ``rot90``

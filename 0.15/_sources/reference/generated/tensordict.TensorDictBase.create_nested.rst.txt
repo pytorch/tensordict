@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.create_nested
+============================
+
+.. automethod:: TensorDictBase.create_nested
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.create_nested tensordict.TensorDictBase.create_nested
+    :add-heading: Tutorials that use ``create_nested``

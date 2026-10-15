@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.filter_non_tensor_data
+=====================================
+
+.. automethod:: TensorDictBase.filter_non_tensor_data
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.filter_non_tensor_data tensordict.TensorDictBase.filter_non_tensor_data
+    :add-heading: Tutorials that use ``filter_non_tensor_data``

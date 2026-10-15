@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.detach
+=====================
+
+.. automethod:: TensorDictBase.detach
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.detach tensordict.TensorDictBase.detach
+    :add-heading: Tutorials that use ``detach``

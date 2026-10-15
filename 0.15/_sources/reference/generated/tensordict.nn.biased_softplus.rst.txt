@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+biased_softplus
+===============
+
+.. autoclass:: biased_softplus
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.biased_softplus
+    :add-heading: Tutorials that use ``biased_softplus``

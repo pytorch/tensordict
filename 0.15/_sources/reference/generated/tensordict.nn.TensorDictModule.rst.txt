@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+TensorDictModule
+================
+
+.. autoclass:: TensorDictModule
+    :members:
+    :inherited-members: Module
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.TensorDictModule
+    :add-heading: Tutorials that use ``TensorDictModule``

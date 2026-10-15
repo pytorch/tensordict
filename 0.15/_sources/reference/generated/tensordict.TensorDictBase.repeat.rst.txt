@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.repeat
+=====================
+
+.. automethod:: TensorDictBase.repeat
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.repeat tensordict.TensorDictBase.repeat
+    :add-heading: Tutorials that use ``repeat``

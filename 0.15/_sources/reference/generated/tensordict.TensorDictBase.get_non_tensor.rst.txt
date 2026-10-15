@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.get_non_tensor
+=============================
+
+.. automethod:: TensorDictBase.get_non_tensor
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.get_non_tensor tensordict.TensorDictBase.get_non_tensor
+    :add-heading: Tutorials that use ``get_non_tensor``

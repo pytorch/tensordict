@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+TensorDictModuleBase
+====================
+
+.. autoclass:: TensorDictModuleBase
+    :members:
+    :inherited-members: Module
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.TensorDictModuleBase
+    :add-heading: Tutorials that use ``TensorDictModuleBase``

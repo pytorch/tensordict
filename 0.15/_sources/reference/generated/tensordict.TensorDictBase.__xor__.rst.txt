@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.__xor__
+======================
+
+.. automethod:: TensorDictBase.__xor__
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.__xor__ tensordict.TensorDictBase.__xor__
+    :add-heading: Tutorials that use ``__xor__``

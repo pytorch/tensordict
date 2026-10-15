@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.gather_and_stack
+===============================
+
+.. automethod:: TensorDictBase.gather_and_stack
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.gather_and_stack tensordict.TensorDictBase.gather_and_stack
+    :add-heading: Tutorials that use ``gather_and_stack``

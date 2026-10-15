@@ -1,0 +1,17 @@
+﻿.. currentmodule:: tensordict.store
+
+
+TensorDictStore
+===============
+
+``TensorDictStore`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``TensorDictStore`` adds, and the overrides that have their own
+documentation.
+
+.. autoclass:: TensorDictStore
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.store.TensorDictStore
+    :add-heading: Tutorials that use ``TensorDictStore``

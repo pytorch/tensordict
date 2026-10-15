@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+memmap
+======
+
+.. autofunction:: memmap
+
+.. minigallery:: tensordict.memmap
+    :add-heading: Tutorials that use ``memmap``

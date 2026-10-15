@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.get_at
+=====================
+
+.. automethod:: TensorDictBase.get_at
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.get_at tensordict.TensorDictBase.get_at
+    :add-heading: Tutorials that use ``get_at``

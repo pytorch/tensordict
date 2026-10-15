@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.load_memmap
+==========================
+
+.. automethod:: TensorDictBase.load_memmap
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.load_memmap tensordict.TensorDictBase.load_memmap
+    :add-heading: Tutorials that use ``load_memmap``

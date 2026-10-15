@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.movedim
+======================
+
+.. automethod:: TensorDictBase.movedim
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.movedim tensordict.TensorDictBase.movedim
+    :add-heading: Tutorials that use ``movedim``

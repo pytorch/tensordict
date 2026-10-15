@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.as_tensor
+========================
+
+.. automethod:: TensorDictBase.as_tensor
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.as_tensor tensordict.TensorDictBase.as_tensor
+    :add-heading: Tutorials that use ``as_tensor``

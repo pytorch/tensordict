@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.float16
+======================
+
+.. automethod:: TensorDictBase.float16
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.float16 tensordict.TensorDictBase.float16
+    :add-heading: Tutorials that use ``float16``

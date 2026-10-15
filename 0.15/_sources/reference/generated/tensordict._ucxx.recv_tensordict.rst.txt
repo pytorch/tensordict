@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict._ucxx
+
+
+recv_tensordict
+===============
+
+.. autofunction:: recv_tensordict
+
+.. minigallery:: tensordict._ucxx.recv_tensordict
+    :add-heading: Tutorials that use ``recv_tensordict``

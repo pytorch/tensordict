@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+as_tensordict_module
+====================
+
+.. autoclass:: as_tensordict_module
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.as_tensordict_module
+    :add-heading: Tutorials that use ``as_tensordict_module``

@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.items
+====================
+
+.. automethod:: TensorDictBase.items
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.items tensordict.TensorDictBase.items
+    :add-heading: Tutorials that use ``items``

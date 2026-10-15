@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.__invert__
+=========================
+
+.. automethod:: TensorDictBase.__invert__
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.__invert__ tensordict.TensorDictBase.__invert__
+    :add-heading: Tutorials that use ``__invert__``

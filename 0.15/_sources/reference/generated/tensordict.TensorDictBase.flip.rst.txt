@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.flip
+===================
+
+.. automethod:: TensorDictBase.flip
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.flip tensordict.TensorDictBase.flip
+    :add-heading: Tutorials that use ``flip``

@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+refresh_archive_checksums
+=========================
+
+.. autofunction:: refresh_archive_checksums
+
+.. minigallery:: tensordict.refresh_archive_checksums
+    :add-heading: Tutorials that use ``refresh_archive_checksums``

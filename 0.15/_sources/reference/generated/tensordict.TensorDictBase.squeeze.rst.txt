@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.squeeze
+======================
+
+.. automethod:: TensorDictBase.squeeze
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.squeeze tensordict.TensorDictBase.squeeze
+    :add-heading: Tutorials that use ``squeeze``

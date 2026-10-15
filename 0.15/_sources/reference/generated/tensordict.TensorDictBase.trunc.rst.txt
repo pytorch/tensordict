@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.trunc
+====================
+
+.. automethod:: TensorDictBase.trunc
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.trunc tensordict.TensorDictBase.trunc
+    :add-heading: Tutorials that use ``trunc``

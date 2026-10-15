@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.state_dict
+=========================
+
+.. automethod:: TensorDictBase.state_dict
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.state_dict tensordict.TensorDictBase.state_dict
+    :add-heading: Tutorials that use ``state_dict``

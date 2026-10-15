@@ -1,0 +1,17 @@
+﻿.. currentmodule:: tensordict
+
+
+TypedTensorDict
+===============
+
+``TypedTensorDict`` has the methods of :class:`~tensordict.TensorDictBase`,
+listed by task in :ref:`api-tensordict-methods`. This page lists only the
+methods that ``TypedTensorDict`` adds, and the overrides that have their own
+documentation.
+
+.. autoclass:: TypedTensorDict
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.TypedTensorDict
+    :add-heading: Tutorials that use ``TypedTensorDict``

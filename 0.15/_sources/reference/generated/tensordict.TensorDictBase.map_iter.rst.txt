@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.map_iter
+=======================
+
+.. automethod:: TensorDictBase.map_iter
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.map_iter tensordict.TensorDictBase.map_iter
+    :add-heading: Tutorials that use ``map_iter``

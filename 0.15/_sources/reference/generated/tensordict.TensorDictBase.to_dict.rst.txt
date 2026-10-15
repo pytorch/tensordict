@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.to_dict
+======================
+
+.. automethod:: TensorDictBase.to_dict
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.to_dict tensordict.TensorDictBase.to_dict
+    :add-heading: Tutorials that use ``to_dict``

@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict._ucxx
+
+
+TensorDictPipe
+==============
+
+.. autoclass:: TensorDictPipe
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict._ucxx.TensorDictPipe
+    :add-heading: Tutorials that use ``TensorDictPipe``

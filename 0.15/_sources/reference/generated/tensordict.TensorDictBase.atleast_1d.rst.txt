@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.atleast_1d
+=========================
+
+.. automethod:: TensorDictBase.atleast_1d
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.atleast_1d tensordict.TensorDictBase.atleast_1d
+    :add-heading: Tutorials that use ``atleast_1d``

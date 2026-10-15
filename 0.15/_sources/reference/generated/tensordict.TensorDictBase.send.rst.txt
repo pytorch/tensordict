@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.send
+===================
+
+.. automethod:: TensorDictBase.send
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.send tensordict.TensorDictBase.send
+    :add-heading: Tutorials that use ``send``

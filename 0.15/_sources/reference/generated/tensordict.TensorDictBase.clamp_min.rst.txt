@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.clamp_min
+========================
+
+.. automethod:: TensorDictBase.clamp_min
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.clamp_min tensordict.TensorDictBase.clamp_min
+    :add-heading: Tutorials that use ``clamp_min``

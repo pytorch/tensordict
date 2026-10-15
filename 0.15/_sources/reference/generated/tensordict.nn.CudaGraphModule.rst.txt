@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+CudaGraphModule
+===============
+
+.. autoclass:: CudaGraphModule
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.CudaGraphModule
+    :add-heading: Tutorials that use ``CudaGraphModule``

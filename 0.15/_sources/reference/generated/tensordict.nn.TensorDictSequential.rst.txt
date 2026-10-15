@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict.nn
+
+
+TensorDictSequential
+====================
+
+.. autoclass:: TensorDictSequential
+    :members:
+    :inherited-members: Module
+    :show-inheritance:
+
+.. minigallery:: tensordict.nn.TensorDictSequential
+    :add-heading: Tutorials that use ``TensorDictSequential``

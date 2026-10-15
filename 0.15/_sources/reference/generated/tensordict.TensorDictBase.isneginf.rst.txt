@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.isneginf
+=======================
+
+.. automethod:: TensorDictBase.isneginf
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.isneginf tensordict.TensorDictBase.isneginf
+    :add-heading: Tutorials that use ``isneginf``
