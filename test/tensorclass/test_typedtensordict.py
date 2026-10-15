@@ -1006,6 +1006,37 @@ class TestFromTensordict:
         assert (tds[1]["a"] == 2).all()
         assert (tds[1]["c"] == 1).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_from_tensordict_lazy_stack_index_views(self, stack_dim):
+        # #2759: indexing returns views of the members, as indexing the stack
+        # does, so writes through the result reach them
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(4)
+        ]
+        tds[0]["e"] = torch.ones(3)
+        state = Nested.from_tensordict(lazy_stack(tds, stack_dim))
+        index = (slice(None),) * stack_dim
+        sliced = state[(*index, slice(1, None))]
+        assert isinstance(sliced, Nested)
+        assert sliced.add_(1) is sliced
+        sliced.set_("a", torch.full_like(sliced["a"], 5.0))
+        for td in tds[1:]:
+            assert (td["a"] == 5).all()
+            assert (td["n", "x"] == 2).all()
+        assert (tds[0]["a"] == 1).all()
+        # an int on the stack dim gives the member, with its own keys
+        first = state[(*index, 0)]
+        assert isinstance(first, Nested)
+        assert first._source is tds[0]
+        assert "e" in first.keys()
+        first["a"] = torch.full((3,), 7.0)
+        assert (tds[0]["a"] == 7).all()
+
     @pytest.mark.parametrize("exclusive", ["e", ("n", "e")], ids=["top", "nested"])
     def test_from_tensordict_lazy_stack_nested_exclusive_keys_inplace(self, exclusive):
         # #2739: with a nested entry, the in-place methods change the shared
@@ -1042,37 +1073,6 @@ class TestFromTensordict:
             state.add_(other.exclude(("n", "x")))
         for td in tds:
             assert (td["a"] == 4).all()
-
-    @pytest.mark.parametrize("stack_dim", [0, 1])
-    def test_from_tensordict_lazy_stack_index_views(self, stack_dim):
-        # #2759: indexing returns views of the members, as indexing the stack
-        # does, so writes through the result reach them
-        class Nested(TypedTensorDict):
-            a: Tensor
-            n: TensorDict
-
-        tds = [
-            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
-            for _ in range(4)
-        ]
-        tds[0]["e"] = torch.ones(3)
-        state = Nested.from_tensordict(lazy_stack(tds, stack_dim))
-        index = (slice(None),) * stack_dim
-        sliced = state[(*index, slice(1, None))]
-        assert isinstance(sliced, Nested)
-        assert sliced.add_(1) is sliced
-        sliced.set_("a", torch.full_like(sliced["a"], 5.0))
-        for td in tds[1:]:
-            assert (td["a"] == 5).all()
-            assert (td["n", "x"] == 2).all()
-        assert (tds[0]["a"] == 1).all()
-        # an int on the stack dim gives the member, with its own keys
-        first = state[(*index, 0)]
-        assert isinstance(first, Nested)
-        assert first._source is tds[0]
-        assert "e" in first.keys()
-        first["a"] = torch.full((3,), 7.0)
-        assert (tds[0]["a"] == 7).all()
 
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
