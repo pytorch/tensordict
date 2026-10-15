@@ -1496,6 +1496,65 @@ class TestBackends:
             dense.keys(True, True), key=str
         )
 
+    _SETITEM_OPS = {
+        "key": lambda s: s.__setitem__("a", torch.zeros(4, 3)),
+        "new_key": lambda s: s.__setitem__("z", torch.zeros(4, 3)),
+        "nested_key": lambda s: s.__setitem__(("n", "c"), torch.zeros(4, 3, 2)),
+        "new_nested_key": lambda s: s.__setitem__(("n", "z"), torch.zeros(4, 3)),
+        "int": lambda s: s.__setitem__(0, s[1].to_tensordict()),
+        "slice_scalar": lambda s: s.__setitem__(slice(1, 3), 0),
+        "mask_scalar": lambda s: s.__setitem__(_BACKEND_MASK, -1),
+        "ellipsis": lambda s: s.__setitem__((Ellipsis, 0), s[:, 1].to_tensordict()),
+        "dict": lambda s: s.__setitem__(
+            1, {"a": torch.ones(3), "b": torch.ones(3, dtype=torch.long)}
+        ),
+        "tensor_index": lambda s: s.__setitem__(
+            torch.tensor([0, 2]), s[torch.tensor([1, 3])].to_tensordict()
+        ),
+    }
+
+    @pytest.mark.parametrize("op", list(_SETITEM_OPS))
+    def test_setitem(self, source, op):
+        # the source writes, as a dense copy does; a sub-tensordict and a file
+        # write into an existing key and add a new one
+        kind, td = source
+        fn = self._SETITEM_OPS[op]
+        state = _BackendState.from_tensordict(td, check=False)
+        dense = _BackendState.from_tensordict(td.to_tensordict(), check=False)
+        try:
+            fn(dense)
+        except Exception as err:
+            error = type(err)
+        else:
+            error = None
+        if kind == "subtd" and op in ("new_key", "new_nested_key"):
+            # a sub-tensordict cannot add a key for its slice only
+            error = None if op == "new_key" else error
+        if error is not None:
+            with pytest.raises(error):
+                fn(state)
+            return
+        assert fn(state) is None
+        if kind == "subtd" and op == "new_key":
+            assert "z" in td.keys()
+            return
+        torch.testing.assert_close(state.to_tensordict(), dense.to_tensordict())
+
+    def test_setitem_locked_source(self, source):
+        kind, td = source
+        if kind == "subtd":
+            td._source.lock_()
+        else:
+            td.lock_()
+        state = _BackendState.from_tensordict(td, check=False)
+        with pytest.raises(RuntimeError, match="locked"):
+            state["z"] = torch.zeros(4, 3)
+        assert "z" not in td.keys()
+        if kind != "lazy":
+            # an existing key and an index write in place
+            state[0] = 0
+            assert (td["a"][0] == 0).all()
+
     def test_del_locked_source(self, source):
         kind, td = source
         if kind == "subtd":

@@ -4759,6 +4759,44 @@ class TestTensorDictParams:
 
     @pytest.mark.parametrize("no_convert", [False, True])
     @pytest.mark.parametrize("lock", [False, True])
+    def test_setitem(self, lock, no_convert):
+        params = self._params(lock=lock, no_convert=no_convert)
+        a = params["a"]
+        params["q"] = torch.ones(4)
+        params["n", "r"] = torch.ones(4, 2)
+        params["a"] = torch.zeros(4, 3)
+        expected = (
+            (["b", "a", "n.c", "n.r", "q"], [])
+            if no_convert
+            else (["b"], ["a", "n.c", "n.r", "q"])
+        )
+        assert sorted(dict(params.named_buffers())) == sorted(expected[0])
+        assert sorted(dict(params.named_parameters())) == sorted(expected[1])
+        assert params["a"] is not a
+        assert (params["a"] == 0).all()
+        a = params["a"]
+        with torch.no_grad():
+            params[0] = params.data[1].clone() + 1
+            params[1:3] = 0
+            params[3] = {"a": torch.full((3,), 5.0)}
+        assert params["a"] is a
+        assert (a[0] == 1).all() and (a[1:3] == 0).all() and (a[3] == 5).all()
+        assert params._param_td.is_locked is lock
+        params.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            params["z"] = torch.ones(4)
+        with pytest.raises(RuntimeError, match="locked"):
+            with torch.no_grad():
+                params[0] = 0
+        assert "z" not in params.keys()
+
+    def test_setitem_self(self):
+        params = self._params()
+        with pytest.raises(RecursionError):
+            params["self"] = params
+
+    @pytest.mark.parametrize("no_convert", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
     def test_del_(self, lock, no_convert):
         params = self._params(lock=lock, no_convert=no_convert)
         assert params.del_("a") is params
