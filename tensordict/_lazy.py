@@ -49,12 +49,12 @@ from tensordict._indexing import (
     _NONE,
     _read_element,
     _SLICE,
-    convert_ellipsis_to_idx,
 )
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
+    _empty_misfit,
     _has_lazy_stack,
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -64,7 +64,6 @@ from tensordict.base import (
     _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
-    _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _warn_names_length,
@@ -72,7 +71,6 @@ from tensordict.base import (
     _warn_set_at_cast,
     _warn_stack_dim_name_taken,
     _write_back_members,
-    BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
     NO_DEFAULT,
@@ -102,6 +100,7 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
+    _user_stacklevel,
     _warn_dim_past_batch_dims,
     _warn_lazy_shape_args,
     _warn_nested_key_in_flat_keys,
@@ -2793,22 +2792,76 @@ class LazyStackedTensorDict(TensorDictBase):
         return result
 
     # Override: a lazy stack of the members' empty tensordicts.
-    def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> Self:
+    def _empty(self, recurse, batch_size, device, names):
         # names=None keeps the names of the stack and of its members
         name = self._td_dim_name
-        if batch_size is not None and (
-            self.stack_dim
-            and batch_size[: self.stack_dim] != self.batch_size[: self.stack_dim]
-        ):
-            return TensorDict.empty(
-                self,
-                recurse=recurse,
-                batch_size=batch_size,
-                device=device if device is not NO_DEFAULT else self.device,
-                names=names if names is not None else NO_DEFAULT,
-            )
+        warning = None
+        if batch_size is not None:
+            given = batch_size
+            if type(batch_size) is not torch.Size:
+                batch_size = torch.Size(batch_size)
+            if self._is_non_tensor:
+                # the members of a NonTensorStack must stay non-tensors: only
+                # new leading dims give a TensorDict
+                stack_end = self.stack_dim
+            else:
+                # also a batch size that ends before the stack dim
+                stack_end = self.stack_dim + 1
+            if batch_size[:stack_end] != self._batch_size[:stack_end]:
+                # the members cannot give the leading dims or the stack dim:
+                # the result is a TensorDict. Before 0.15, the members got the
+                # batch size without the stack dim when the dims before it were
+                # equal (a list never compared equal to them): until 0.17, keep
+                # that result where the TensorDict cannot be built, or would get
+                # invalid names (#2711: TensorDict.empty does not check them).
+                stack_dim = self.stack_dim
+                members_before = (
+                    not stack_dim or given[:stack_dim] == self._batch_size[:stack_dim]
+                )
+                source = self
+                problem = None
+                if (
+                    members_before
+                    and names is not None
+                    and len(names) != len(batch_size)
+                ):
+                    problem = (
+                        f"cannot name a batch size of {len(batch_size)} dims with "
+                        f"{len(names)} names",
+                        "a ValueError, as the names setter does",
+                    )
+                elif recurse:
+                    # a TensorDict with the sub-tensordicts of self
+                    source = self._empty(True, None, NO_DEFAULT, None).to_tensordict()
+                    misfit = (
+                        _empty_misfit(source, batch_size) if members_before else None
+                    )
+                    if misfit is not None:
+                        key, value = misfit
+                        problem = (
+                            f"cannot give that batch size to the entry {key!r}, whose "
+                            f"batch size {list(value.batch_size)} does not start with it",
+                            "a RuntimeError, as TensorDict.empty does",
+                        )
+                if problem is None:
+                    return TensorDict.empty(
+                        source,
+                        recurse=recurse,
+                        batch_size=batch_size,
+                        device=device if device is not NO_DEFAULT else self.device,
+                        names=names if names is not None else NO_DEFAULT,
+                    )
+                args = f"batch_size={list(batch_size)}"
+                if recurse:
+                    args = f"recurse=True, {args}"
+                if names is not None:
+                    args = f"{args}, names={list(names)}"
+                warning = (
+                    f"LazyStackedTensorDict.empty({args}) {problem[0]}, and returns "
+                    "the empty stack of its members, which keeps the size of the "
+                    "stack dim. Starting with TensorDict 0.17, the default will "
+                    f"change to raising {problem[1]}."
+                )
         names_kwarg = {}
         if names is not None:
             name = names[self.stack_dim] if len(names) > self.stack_dim else None
@@ -2819,7 +2872,7 @@ class LazyStackedTensorDict(TensorDictBase):
             batch_size = torch.Size(
                 [b for i, b in enumerate(batch_size) if i != self.stack_dim]
             )
-        return type(self)(
+        result = type(self)(
             *[
                 td.empty(
                     recurse=recurse, batch_size=batch_size, device=device, **names_kwarg
@@ -2829,6 +2882,10 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim=self.stack_dim,
             stack_dim_name=name,
         )
+        if warning is not None:
+            # once the result exists: a call that raises, as before 0.15, warns not
+            warnings.warn(warning, FutureWarning, stacklevel=_user_stacklevel())
+        return result
 
     def _clone(self, recurse: bool = True) -> Self:
         if not self.tensordicts:
@@ -3405,26 +3462,9 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return result
 
-    def __setitem__(self, index: IndexType, value: T) -> Self:
-        if isinstance(index, (tuple, str)):
-            # try:
-            index_unravel = _unravel_key_to_tuple(index)
-            if index_unravel:
-                if value is self:
-                    raise ValueError(_SELF_NESTING_ERROR.format(index))
-                self._set_tuple(
-                    index_unravel,
-                    value,
-                    inplace=(
-                        BEST_ATTEMPT_INPLACE
-                        if isinstance(self, _SubTensorDict)
-                        else False
-                    ),
-                    validated=False,
-                    non_blocking=False,
-                )
-                return
-
+    # Override: writes the part of the value that falls in each member into it,
+    # so a new key goes only into the members that the index touches.
+    def _setitem_index(self, index: IndexType, value: Any) -> None:
         if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
@@ -3447,9 +3487,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     self._setitem_member(member, member_index, piece)
         else:
-            # the Ellipsis covers the batch dims, where set_at_ would read it on
-            # the entries
-            index = convert_ellipsis_to_idx(index, self.batch_size)
             _set_at_each_key(self, value, index)
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:

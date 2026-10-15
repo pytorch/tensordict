@@ -724,8 +724,15 @@ class TensorDict(TensorDictBase):
         # the fast path for a tensordict of plain tensors.
         values = self._tensordict.values()
         for value in values:
-            if type(value) is not Tensor:
-                break
+            cls = type(value)
+            if cls is Tensor:
+                continue
+            if cls is TensorDict:
+                # a nested TensorDict answers for itself, as below
+                if value._has_non_tensor:
+                    return True
+                continue
+            break
         else:
             return False
         for cls in set(map(type, values)):
@@ -868,8 +875,18 @@ class TensorDict(TensorDictBase):
         max_size = batch_size[dim]
         split_size = -(max_size // -chunks)
         segments = _create_segments_from_int(split_size, max_size)
+        # The front has checked chunks and dim, and a sub-tensordict has
+        # the same batch dim: call its hook directly. A call through the
+        # front adds a Python frame per nesting level, which slows deep
+        # tensordicts.
         splits = {
-            k: (v,) * len(segments) if _is_unbatched(v) else v.chunk(chunks, dim)
+            k: (
+                (v,) * len(segments)
+                if _is_unbatched(v)
+                else v.chunk(chunks, dim)
+                if type(v) is Tensor or not isinstance(v, TensorDictBase)
+                else v._chunk(chunks, dim)
+            )
             for k, v in self.items()
         }
         names = self._maybe_names()
@@ -1280,9 +1297,20 @@ class TensorDict(TensorDictBase):
         device = self._device
         entries = self._tensordict
         consolidated = "_consolidated" in self.__dict__
+        # New keys for the general path are collected in `pending` and
+        # written with one _update_entries call, made before the next write
+        # of any other kind and at the end. The general path writes the keys
+        # of a dict in order, so the result and the entries written before an
+        # error are those of one call per key, without the fixed cost of a
+        # call per key. Writing a key that self does not hold yet cannot change
+        # source or another entry, so deferring it to the next write changes
+        # nothing else; keys that self holds keep their own call.
+        pending = None
         # Iterate over source itself, as the general path does: a merge that
         # writes into source (if source is a sub-tensordict of self) shows.
         for key, value in source.items():
+            # 0: the general path, 1: a valid tensor, 2: a merge into child
+            kind = 0
             if type(key) is str:
                 if type(value) is Tensor:
                     if not (
@@ -1295,17 +1323,49 @@ class TensorDict(TensorDictBase):
                         )
                         or (device is not None and value.device != device)
                     ):
-                        entries[key] = value
-                        if consolidated:
-                            self._mark_consolidated_stale()
-                        continue
+                        kind = 1
                 elif type(value) is TensorDict or type(value) is dict:
                     child = entries.get(key)
                     if type(child) is TensorDict:
-                        child.update(value)
-                        continue
+                        kind = 2
+                if not kind and key not in entries:
+                    if pending is None:
+                        pending = {}
+                    pending[key] = value
+                    continue
+            if pending:
+                self._update_entries(
+                    pending,
+                    clone=False,
+                    inplace=False,
+                    non_blocking=False,
+                    keys_to_update=None,
+                    is_leaf=_is_leaf_nontensor,
+                    update_batch_size=False,
+                    ignore_lock=False,
+                )
+                pending = None
+            if kind == 1:
+                # a valid tensor: written as the general path writes it
+                entries[key] = value
+                if consolidated:
+                    self._mark_consolidated_stale()
+            elif kind == 2:
+                child.update(value)
+            else:
+                self._update_entries(
+                    {key: value},
+                    clone=False,
+                    inplace=False,
+                    non_blocking=False,
+                    keys_to_update=None,
+                    is_leaf=_is_leaf_nontensor,
+                    update_batch_size=False,
+                    ignore_lock=False,
+                )
+        if pending:
             self._update_entries(
-                {key: value},
+                pending,
                 clone=False,
                 inplace=False,
                 non_blocking=False,
@@ -1314,6 +1374,10 @@ class TensorDict(TensorDictBase):
                 update_batch_size=False,
                 ignore_lock=False,
             )
+
+    # Override: dense fast path.
+    def _contains_str(self, key: str) -> bool:
+        return key in self._tensordict
 
     def _set_str(
         self,
@@ -2463,7 +2527,8 @@ class TensorDict(TensorDictBase):
 
         return self._inplace_rebind_leaves(leaf_fn, nested_fn, None)
 
-    # Override: fast path for the dense root, which many operations call.
+    # Override: fast path for the dense root, which many operations call; its
+    # names default is NO_DEFAULT, as names=None drops the names.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> Self:
@@ -2915,6 +2980,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
+    # td[key] = value writes into an existing entry of the source
+    _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
     def __init__(
         self,

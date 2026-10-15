@@ -30,14 +30,13 @@ from tensordict.base import (
     _is_tensor_collection,
     _normalize_from_dict_args,
     _register_tensor_class,
+    BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
-    T,
     TensorDictBase,
 )
 from tensordict.utils import (
     _as_context_manager,
     _is_tensorclass,
-    _KEY_ERROR,
     _LOCK_ERROR,
     _warn_nested_key_in_flat_keys,
     is_non_tensor,
@@ -71,7 +70,6 @@ from tensordict.store._utils import (  # noqa: F401
     _compute_covering_range,
     _decode_meta,
     _dtype_to_str,
-    _expand_batch_ellipsis,
     _get_local_idx,
     _getitem_result_shape,
     _is_scattered_index,
@@ -366,6 +364,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
     _rename_key_lenient = True
+    # td[key] = value writes into an existing entry on the server
+    _setitem_key_inplace = BEST_ATTEMPT_INPLACE
     # Set on the shallow copies that _clone(recurse=False) returns: they share
     # the data and the metadata keys of the store, but not its batch size.
     _is_shallow_copy = False
@@ -1347,16 +1347,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
         return _build(source, new_batch_size)
 
-    def __setitem__(self, index, value):
-        index_unravel = _unravel_key_to_tuple(index)
-        if index_unravel:
-            return self.set(index_unravel, value, inplace=True)
-
-        # Index-based assignment: bypass _SubTensorDict, batch SETRANGE
+    # Override: writes the indexed entries on the server in one batch (SETRANGE),
+    # without a _SubTensorDict.
+    def _setitem_index(self, index, value):
         if isinstance(index, list):
             index = torch.tensor(index)
-        index = _expand_batch_ellipsis(index, self.batch_size)
-
         _check_indexed_value(self, value)
         if isinstance(value, Number):
             # a scalar is written to every tensor entry, in its dtype; the
@@ -1524,22 +1519,15 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             )
         return first._get_at_tuple(key[1:], idx, default=default, **kwargs)
 
-    def _convert_inplace(self, inplace, key):
-        """Convert BEST_ATTEMPT_INPLACE sentinel to a bool."""
-        if inplace is not False:
-            key_path = self._full_key_path(key)
-            all_keys = self._get_all_keys()
-            has_key = key_path in all_keys
-            # Also check if it's a nested key prefix
-            if not has_key:
-                prefix_check = key_path + _KEY_SEP
-                has_key = any(k.startswith(prefix_check) for k in all_keys)
-            if inplace is True and not has_key:
-                raise KeyError(
-                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
-                )
-            inplace = has_key
-        return inplace
+    # Override: looks the key up in the key registry.
+    def _contains_str(self, key):
+        key_path = self._full_key_path(key)
+        all_keys = self._get_all_keys()
+        if key_path in all_keys:
+            return True
+        # Also check if it's a nested key prefix
+        prefix_check = key_path + _KEY_SEP
+        return any(k.startswith(prefix_check) for k in all_keys)
 
     def _write_non_tensor(self, key_path: str, value: Any) -> None:
         """Write a ``NonTensorData`` or ``NonTensorStack`` value."""
@@ -2407,19 +2395,26 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             keys_to_update=keys_to_update,
         )
 
-    # Override: a TensorDict skeleton, built without reading the data.
-    def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> T:
+    # Override: a TensorDict skeleton of the sub-tensordicts, found in the key
+    # registry: no data is read. Each sub-tensordict keeps its own batch size.
+    def _empty(self, recurse, batch_size, device, names):
+        out = TensorDict(
+            {},
+            device=self.device if device is NO_DEFAULT else device,
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            names=self.names if names is None and self._has_names() else names,
+        )
         if recurse:
-            out = self.empty(
-                recurse=False, batch_size=batch_size, device=device, names=names
-            )
-            for key, val in self.items():
-                if is_tensor_collection(val):
+            nested = {
+                key[0]
+                for key in self.keys(include_nested=True, leaves_only=True)
+                if isinstance(key, tuple)
+            }
+            for key in self.keys():
+                if key in nested:
                     out._set_str(
                         key,
-                        val.empty(
+                        self._get_str(key).empty(
                             recurse=True,
                             batch_size=batch_size,
                             device=device,
@@ -2429,13 +2424,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                         validated=True,
                         non_blocking=False,
                     )
-            return out
-        return TensorDict(
-            {},
-            device=self.device if device is NO_DEFAULT else device,
-            batch_size=self.batch_size if batch_size is None else batch_size,
-            names=self.names if names is None and self._has_names() else names,
-        )
+        return out
 
     # Override: lists the key names, without reading the entries.
     def _repr_parts(self) -> list[str]:

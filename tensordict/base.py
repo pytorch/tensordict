@@ -50,6 +50,7 @@ from tensordict._deprecation import (
 )
 from tensordict._indexing import (
     _entry_index,
+    _expand_batch_ellipsis,
     _getitem_batch_size,
     _getitem_names,
     _is_new_dim_index,
@@ -62,6 +63,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
+    _any_unbatched,
     _as_context_manager,
     _cache_while_locked,
     _canonicalize_tensor,
@@ -1337,6 +1339,22 @@ def _set_at_each_key(
         )
 
 
+def _empty_misfit(
+    td: TensorDictBase, batch_size: torch.Size
+) -> tuple[NestedKey, TensorDictBase] | None:
+    """The first ``(key, entry)`` of ``td`` whose batch size ``empty(recurse=True, batch_size=batch_size)`` cannot set, or ``None``.
+
+    The batch_size setter gives the new batch size to the shorter
+    sub-tensordicts and skips the empty ones of other shapes: an entry fits if
+    its batch size and ``batch_size`` agree on the dims that they both have.
+    """
+    for key, value in td.items(True):
+        ndim = min(value.batch_dims, len(batch_size))
+        if value.batch_size[:ndim] != batch_size[:ndim]:
+            return key, value
+    return None
+
+
 def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
     """Whether writing the list or number ``value`` at an index of every entry of ``td``, which has a non-tensor entry, casts it to a tensor there."""
     if is_compiling() or td._is_shared or td._is_memmap:
@@ -1793,6 +1811,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by PersistentTensorDict, which writes a constant without reading the
     # array: zero_ fills each entry through _fill_ instead of reading copies.
     _fills_without_reading: bool = False
+    # The inplace argument with which td[key] = value writes the key: False
+    # replaces the entry. BEST_ATTEMPT_INPLACE (_SubTensorDict, the files and
+    # stores) writes into an existing entry and adds a new one.
+    _setitem_key_inplace = False
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
@@ -1997,26 +2019,39 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
-            # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
-                from tensordict._td import _SubTensorDict
-
                 if value is self:
                     raise ValueError(_SELF_NESTING_ERROR.format(index))
                 self._set_tuple(
                     index_unravel,
                     value,
-                    inplace=(
-                        BEST_ATTEMPT_INPLACE
-                        if isinstance(self, _SubTensorDict)
-                        else False
-                    ),
+                    inplace=self._setitem_key_inplace,
                     validated=False,
                     non_blocking=False,
                 )
                 return
+        # we must use any and because using Ellipsis in index can break with some indices
+        if index is Ellipsis or (istuple and any(idx is Ellipsis for idx in index)):
+            index = _expand_batch_ellipsis(index, self.batch_size)
+        self._setitem_index(index, value)
 
+    def _setitem_index(self, index: IndexType, value: Any) -> None:
+        """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.
+
+        ``__setitem__`` has written the keys (a str or a tuple of str), and has
+        replaced an ``Ellipsis`` in ``index`` by the batch dims that it covers
+        (see :func:`~tensordict._indexing._expand_batch_ellipsis`). Any other
+        index, a list included, is passed as given (the h5 file and the stores
+        convert a list to a tensor). ``value`` is passed as given too: a tensor
+        collection (a tensorclass is not unwrapped: the base hook does it), a
+        dict, a tensor or a scalar. The return value is ignored.
+
+        The base reads the index as ``__getitem__`` does, writes the entries of
+        a tensor collection or a dict key by key (a new key through a
+        sub-tensordict of ``self``), and writes any other value into every
+        entry.
+        """
         if (
             # is_tensorclass reads this class attribute: skip the call for the
             # values whose class does not have it, such as tensordicts
@@ -2028,11 +2063,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # NonTensorData keeps the leaf path (its _tensordict is empty)
             value = value._tensordict
 
-        # we must use any and because using Ellipsis in index can break with some indices
-        if index is Ellipsis or (
-            isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
-        ):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
         if (
@@ -3841,9 +3871,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 del self[key]
         return self
 
+    def _contains_str(self, key: str) -> bool:
+        """Returns whether ``key`` is a key of ``self`` (not of a sub-tensordict), without reading data.
+
+        :meth:`_convert_inplace` calls it with the str key of a ``_set_str``
+        call. The base checks ``key in self.keys()``; a file or a store asks
+        its storage.
+        """
+        return key in self.keys()
+
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
-            has_key = key in self.keys()
+            has_key = self._contains_str(key)
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
                     _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
@@ -4848,13 +4887,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     vals = [vals[k] for k in new_keys]
                 # _foreach_copy_compiled cannot run under a torch.func transform
                 # (vmap), _foreach can. Same check as in _foreach, which explains it.
-                if (
-                    is_compiling()
-                    and torch._C._functorch.get_dynamic_layer_stack_depth() == 0
-                ):
-                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
-                else:
+                if torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
                     _foreach("copy_", vals, other_val, non_blocking=non_blocking)
+                elif is_compiling():
+                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
+                elif _any_unbatched(vals) or _any_unbatched(other_val):
+                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
+                else:
+                    # what _foreach does for copy_ outside of a torch.func
+                    # transform and without unbatched tensors, without its
+                    # overhead (about 2 µs, as much as the copy of 2 leaves)
+                    torch._foreach_copy_(vals, other_val, non_blocking=non_blocking)
                 if self._reads_return_copies:
                     self._write_back(new_keys, vals, "update_")
                 if not input_dict_or_td._has_non_tensor:
@@ -8407,7 +8450,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 With ``recurse=True``, a sub-tensordict whose batch size is the
                 start of the new one gets the new one, a sub-tensordict whose
                 batch size starts with the new one keeps it, and any other
-                sub-tensordict raises a ``RuntimeError``.
+                sub-tensordict raises a ``RuntimeError``. A
+                :class:`~tensordict.LazyStackedTensorDict` whose members took
+                the batch size before 0.15 (one stacked along dim 0, for
+                instance) keeps that result, the empty stack of its members,
+                with a :class:`FutureWarning`, when a sub-tensordict does not
+                fit the new batch size or ``names`` has another length.
+                Starting with TensorDict 0.17, the default will change to
+                raising a ``RuntimeError`` or a ``ValueError``, as
+                ``TensorDict.empty`` and the names setter do.
             device (torch.device, optional): a new device.
             names (list of str, optional): dimension names.
 
@@ -8421,6 +8472,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> list(td.empty(recurse=True).keys(include_nested=True))
             ['b']
 
+        """
+        return self._empty(recurse, batch_size, device, names)
+
+    def _empty(self, recurse, batch_size, device, names) -> TensorDictBase:
+        """Builds the result of :meth:`empty`.
+
+        The arguments are those of :meth:`empty`, as given: ``batch_size`` is
+        ``None`` or the new batch size, ``device`` is ``NO_DEFAULT`` to keep the
+        device, and ``names=None`` keeps the names. Returns a new, unlocked
+        tensordict without tensor leaves (with ``recurse=True``, with the
+        sub-tensordicts of ``self``, without their tensor leaves; a dense
+        tensordict and an h5 file keep their non-tensor entries). A file or a
+        store builds it without reading its tensors.
         """
         if not recurse:
             result = self._select(set_shared=False)
@@ -8442,18 +8506,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if token is not None:
                     _SKIP_TENSORCLASS_POST_INIT.reset(token)
             if batch_size is not None:
-                # The batch_size setter gives the new batch size to the shorter
-                # sub-tensordicts and skips the empty ones of other shapes:
-                # those must already fit it.
                 batch_size = torch.Size(batch_size)
-                for key, value in result.items(True):
-                    ndim = min(value.batch_dims, len(batch_size))
-                    if value.batch_size[:ndim] != batch_size[:ndim]:
-                        raise RuntimeError(
-                            f"empty(recurse=True) cannot give the batch size "
-                            f"{batch_size} to the entry {key!r}, whose batch size "
-                            f"{value.batch_size} does not start with it."
-                        )
+                misfit = _empty_misfit(result, batch_size)
+                if misfit is not None:
+                    key, value = misfit
+                    raise RuntimeError(
+                        f"empty(recurse=True) cannot give the batch size "
+                        f"{batch_size} to the entry {key!r}, whose batch size "
+                        f"{value.batch_size} does not start with it."
+                    )
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not NO_DEFAULT:
