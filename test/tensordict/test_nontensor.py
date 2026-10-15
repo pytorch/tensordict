@@ -924,6 +924,52 @@ class TestNonTensorData:
         td = TensorDict(q=rows).auto_batch_size_(batch_dims=batch_dims)
         assert td.batch_size == batch_size
 
+    def test_tensordict_stacks_a_list_of_equal_shaped_tensors(self):
+        # One shared shape is a stacked tensor, not a NonTensorStack.
+        td = TensorDict({"a": [torch.ones(2), torch.ones(2)]}, batch_size=[2])
+        value = td.get("a")
+        assert isinstance(value, torch.Tensor)
+        assert not isinstance(value, NonTensorStack)
+        assert value.shape == (2, 2)
+        assert (value == 1).all()
+
+    def test_tensordict_ragged_tensor_list_is_non_tensor_stack(self):
+        # Differently shaped tensors cannot be stacked. Each tensor stays the value
+        # of one batch element, as NonTensorStack(t0, t1) does, without a copy.
+        tensors = [torch.ones(2), torch.ones(3)]
+        td = TensorDict({"a": tensors}, batch_size=[2])
+        value = td.get("a")
+        assert isinstance(value, NonTensorStack)
+        assert value.batch_size == torch.Size([2])
+        assert value.tolist()[0] is tensors[0]
+        assert value.tolist()[1] is tensors[1]
+        assert (td[0]["a"] == tensors[0]).all()
+        assert (td[1]["a"] == tensors[1]).all()
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_lazy_stack_ragged_tensor_list_sets_tensors(self, device):
+        # A lazy stack writes each tensor of the list into its own member.
+        td = lazy_stack(
+            [
+                TensorDict(x0=torch.zeros(1), device=device),
+                TensorDict(x1=torch.zeros(2), device=device),
+            ]
+        )
+        tensors = [torch.ones(2), torch.ones(3)]
+        td.set("a", tensors)
+        assert td.tensordicts[0]._get_str("a", None) is tensors[0]
+        assert td.tensordicts[1]._get_str("a", None) is tensors[1]
+
+    def test_lazy_stack_non_tensor_list_keeps_non_tensor_data(self):
+        # A list of NonTensorData is not unwrapped into plain tensors.
+        td = lazy_stack([TensorDict(x0=torch.zeros(1)), TensorDict(x1=torch.zeros(2))])
+        tensors = [torch.ones(2), torch.ones(3)]
+        td.set("a", [NonTensorData(tensors[0]), NonTensorData(tensors[1])])
+        for member, tensor in zip(td.tensordicts, tensors):
+            value = member._get_str("a", None)
+            assert isinstance(value, NonTensorData)
+            assert value.data is tensor
+
     def test_new_empty_nontensorstack(self):
         td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))
         assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)
