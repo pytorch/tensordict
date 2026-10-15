@@ -447,8 +447,10 @@ class TensorDict(TensorDictBase):
                 lock=lock,
                 **kwargs,
             )
+            # The data is already in shared memory: set the flag as the eager
+            # branch does, without copying it.
             if is_shared:
-                td.share_memory_()
+                td._is_shared = True
             if is_memmap:
                 td.memmap_()
             return td

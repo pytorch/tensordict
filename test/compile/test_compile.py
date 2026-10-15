@@ -25,6 +25,7 @@ from tensordict import (
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     MetaData,
     NonTensorData,
     NonTensorStack,
@@ -729,6 +730,45 @@ class TestTD:
         unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    @staticmethod
+    def _unbind_split(td, op):
+        if op == "unbind":
+            return td.unbind(0)
+        if op == "iter":
+            return list(td)
+        if op == "chunk":
+            return td.chunk(2, 0)
+        return td.split(2, 0)
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    def test_unbind_split_shared(self, op, mode):
+        # A shared tensordict can be unbound, iterated, chunked and split in
+        # a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4]).share_memory_()
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert r.batch_size == e.batch_size
+            assert r.is_shared() == e.is_shared()
+            assert (r == e).all()
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    def test_unbind_split_memmap_leaf_type(self, op, mode, tmpdir):
+        # Without fullgraph, compiled unbind, iteration, chunk and split of a
+        # memory-mapped tensordict keep MemoryMappedTensor leaves, as in eager.
+        fn_c = torch.compile(self._unbind_split, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4]).memmap_(tmpdir)
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert r.batch_size == e.batch_size
+            assert r.is_memmap()
+            assert isinstance(r["a", "b"], MemoryMappedTensor)
+            assert (r == e).all()
 
     def test_split_across_batch_sizes(self, mode):
         # From the second batch size on, the batch size is dynamic: the split
