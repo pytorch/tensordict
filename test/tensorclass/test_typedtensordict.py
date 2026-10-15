@@ -1006,6 +1006,38 @@ class TestFromTensordict:
         assert (tds[1]["a"] == 2).all()
         assert (tds[1]["c"] == 1).all()
 
+    @pytest.mark.parametrize("exclusive", ["e", ("n", "e")], ids=["top", "nested"])
+    def test_from_tensordict_lazy_stack_nested_exclusive_keys_inplace(self, exclusive):
+        # #2739: with a nested entry, the in-place methods change the shared
+        # keys of every member, add no key and leave the exclusive keys
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(4)
+        ]
+        tds[0][exclusive] = torch.ones(3)
+        state = Nested.from_tensordict(lazy_stack(tds))
+        other = state.to_tensordict().apply(lambda x: torch.full_like(x, 2.0))
+        assert state.zero_() is state
+        assert state.add_(1.0) is state
+        assert state.add_(other, alpha=2.0) is state
+        assert state.lerp_(lazy_stack(tds).apply(torch.ones_like), 0.5) is state
+        for td in tds:
+            assert (td["a"] == 3).all()
+            assert (td["n", "x"] == 3).all()
+        assert (tds[0][exclusive] == 1).all()
+        assert set(tds[0].keys(True, True)) == {"a", ("n", "x"), exclusive}
+        for td in tds[1:]:
+            assert set(td.keys(True, True)) == {"a", ("n", "x")}
+        # a call that raises writes nothing
+        with pytest.raises(KeyError):
+            state.add_(other.exclude(("n", "x")))
+        for td in tds:
+            assert (td["a"] == 3).all()
+
     def test_from_tensordict_memmap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             td = self._make_td()
@@ -1456,8 +1488,9 @@ class TestBackends:
         ],
         ids=["zero_", "add_", "mul_", "clamp_min_", "sqrt_", "lerp_"],
     )
-    def test_pointwise_lazy_exclusive_keys_raises(self, op, request):
-        # a stack with a nested entry and keys that only some members hold
+    def test_pointwise_lazy_exclusive_keys(self, op):
+        # #2739: a stack with a nested entry and keys that only some members
+        # hold changes the shared keys as a dense copy does, and adds no key
         tds = [
             TensorDict(
                 a=torch.ones(3),
@@ -1468,13 +1501,13 @@ class TestBackends:
         ]
         tds[0]["e"] = torch.zeros(3)
         state = _BackendState.from_tensordict(lazy_stack(tds), check=False)
-        if request.node.callspec.id == "lerp_":
-            # the dense operand lacks the keys of the stack's members
-            with pytest.raises(KeyError):
-                op(state)
-        else:
-            with pytest.raises(ValueError, match="zip"):
-                op(state)
+        expected = op(state.to_tensordict())
+        assert op(state) is state
+        torch.testing.assert_close(state.to_tensordict(), expected)
+        assert (tds[0]["e"] == 0).all()
+        assert set(tds[0].keys(True, True)) == {"a", ("n", "x"), "e"}
+        for td in tds[1:]:
+            assert set(td.keys(True, True)) == {"a", ("n", "x")}
 
     @pytest.mark.parametrize(
         "key",
