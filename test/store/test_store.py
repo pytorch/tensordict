@@ -723,6 +723,13 @@ class TestTensorDictStore:
         assert torch.allclose(store_td["obs"], source["obs"])
         assert torch.allclose(store_td["action"], source["action"])
 
+    def test_update_self_writes_copy(self, store_td):
+        """update({key: store}) writes a copy of the data, where a TensorDict raises (#2741)."""
+        store_td["obs"] = torch.ones(10, 3)
+        store_td.update({"me": store_td})
+        torch.testing.assert_close(store_td["me", "obs"], torch.ones(10, 3))
+        assert "me" not in store_td["me"].keys()
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_update__copy__lazy_source(self, store_td, stack_dim):
         """copy_ and update_ write a lazy stack into the store (#2593).
@@ -3928,6 +3935,22 @@ class TestLazyStackedTensorDictStore:
                 store_td.update({"n": {"e": torch.ones(5, 3)}}, inplace=True)
             assert ("n", "e") not in store_td.keys(True)
             store_td.unlock_()
+        finally:
+            store_td.clear_redis()
+            store_td.close()
+
+    def test_update_self_writes_copy(self, store_kwargs):
+        """update({key: store}) writes a copy of the data, where a TensorDict raises (#2741)."""
+        store_td = LazyStackedTensorDictStore.from_lazy_stack(
+            self._nested_lazy_td(), **store_kwargs
+        )
+        try:
+            store_td.update({"me": store_td})
+            torch.testing.assert_close(store_td["me", "a"], store_td["a"])
+            assert "me" not in store_td["me"].keys()
+            element = store_td[1]
+            element.update({"el": element})
+            torch.testing.assert_close(element["el", "a"], element["a"])
         finally:
             store_td.clear_redis()
             store_td.close()

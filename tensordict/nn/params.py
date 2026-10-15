@@ -38,6 +38,7 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
+    _SELF_NESTING_ERROR,
     CompatibleType,
     NO_DEFAULT,
     T,
@@ -184,6 +185,8 @@ class _unlock_and_set:
 
     def __call__(self, func):
         name = func.__name__
+        # p["x"] = p would write p into the tensordict that p wraps
+        check_self = name in ("__setitem__", "set")
 
         @wraps(func)
         def new_func(_self, *args, **kwargs):  # type: ignore[misc]
@@ -196,6 +199,11 @@ class _unlock_and_set:
                         meth = getattr(_self._param_td, name)
                         out = meth(*args, **kwargs)
                         return out
+            if check_self:
+                value = args[1] if len(args) > 1 else kwargs.get("item")
+                if value is _self:
+                    key = args[0] if args else kwargs.get("key")
+                    raise ValueError(_SELF_NESTING_ERROR.format(key))
             if not _self.no_convert:
                 args = tree_map(_maybe_make_param, args)
                 kwargs = tree_map(_maybe_make_param, kwargs)

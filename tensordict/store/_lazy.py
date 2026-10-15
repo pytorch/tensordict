@@ -204,6 +204,8 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
     _nested_reads_return_copies = True
+    # update({key: self}) writes a copy of the data on the server
+    _update_stores_copy_of_self = True
     _leaves_built_on_read = True
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True
@@ -746,6 +748,8 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     _reads_return_copies = True
     # and each sub-tensordict is a new TensorDict
     _nested_reads_return_copies = True
+    # update({key: self}) writes a copy of the data on the server
+    _update_stores_copy_of_self = True
     _leaves_built_on_read = True
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True

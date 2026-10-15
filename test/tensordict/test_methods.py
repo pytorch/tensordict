@@ -1005,6 +1005,26 @@ class TestTensorDicts(TestTensorDictsBase):
             td["me"] = td
         assert "me" not in td.keys()
 
+    def test_update_self_nesting(self, td_name, device):
+        # #2741: update() stored the tensordict in itself, and the next
+        # repr or clone raised a RecursionError
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td["nested"] = TensorDict(
+            z=torch.zeros(td.batch_size, device=device), batch_size=td.batch_size
+        )
+        keys = set(td.keys(True))
+        # an existing sub-tensordict is left unchanged too
+        for source in ({"me": td}, {("nested", "me"): td}, {"nested": td}):
+            with pytest.raises(
+                ValueError, match=re.escape("Cannot set a tensordict inside itself")
+            ):
+                td.update(source)
+        assert set(td.keys(True)) == keys
+        # a copy is not the tensordict itself
+        td.update({"me": td}, clone=True)
+        assert "me" in td.keys()
+
     def test_setitem_key_existing_inplace(self, td_name, device):
         # td[key] = value replaces the entry; a sub-tensordict writes it into
         # its source in place, and an h5 file into the file
