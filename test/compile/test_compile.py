@@ -585,8 +585,9 @@ class TestTD:
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("value", [1, torch.tensor(2.0)], ids=["int", "tensor"])
     @pytest.mark.parametrize("mask_dims", [1, 2])
+    @pytest.mark.parametrize("exclusive", [False, True])
     def test_lazy_stack_write_rows_bool_mask(
-        self, mode, dynamic, stack_dim, value, mask_dims
+        self, mode, dynamic, stack_dim, value, mask_dims, exclusive
     ):
         # Each member takes its slice of the mask (#2785)
         def fill(td, mask):
@@ -594,15 +595,20 @@ class TestTD:
             return td
 
         def make():
-            return LazyStackedTensorDict(
-                *[
-                    TensorDict(
-                        a=torch.zeros(4, 5), b={"c": torch.zeros(4)}, batch_size=[4]
-                    )
-                    for _ in range(4)
-                ],
-                stack_dim=stack_dim,
-            )
+            tds = [
+                TensorDict(a=torch.zeros(4, 5), b={"c": torch.zeros(4)}, batch_size=[4])
+                for _ in range(4)
+            ]
+            if exclusive:
+                # Eager writes only the keys that every member has
+                tds[1]["x"] = torch.zeros(4, 2)
+            return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+
+        if exclusive:
+            # The stack cannot be indexed in one graph here
+            fill_c = torch.compile(fill, mode=mode, dynamic=dynamic)
+        else:
+            fill_c = torch.compile(fill, fullgraph=True, mode=mode, dynamic=dynamic)
 
         mask = torch.tensor(
             [[True, False, True, True], [0, 1, 1, 0], [1, 1, 0, 0], [0, 0, 0, 1]],
@@ -610,11 +616,11 @@ class TestTD:
         )
         if mask_dims == 1:
             mask = mask[:, 0]
-        fill_c = torch.compile(fill, fullgraph=True, mode=mode, dynamic=dynamic)
         result = fill_c(make(), mask)
         expected = fill(make(), mask)
-        assert (result == expected).all()
         assert expected["a"].sum() > 0
+        for r, e in zip(result.tensordicts, expected.tensordicts):
+            assert (r == e).all()
 
     def test_stack(self, mode):
         def stack_tds(td0, td1):

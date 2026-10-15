@@ -3511,7 +3511,7 @@ class LazyStackedTensorDict(TensorDictBase):
             _set_at_each_key(self, value, index)
 
     def _mask_covers_stack_dim(self, index: IndexType, value: Any) -> bool:
-        """Whether ``index`` is a boolean mask of the leading batch dims, the stack dim included, and ``value`` a number or a 0-dim tensor."""
+        """Whether ``index`` is a boolean mask of the leading batch dims, the stack dim included, ``value`` a number or a 0-dim tensor, and the members share their keys."""
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
         return (
@@ -3525,6 +3525,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 isinstance(value, numbers.Number)
                 or (isinstance(value, Tensor) and not value.ndim)
             )
+            # A member writes all its keys; the stack writes only the shared ones
+            and not self._has_exclusive_keys
         )
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
