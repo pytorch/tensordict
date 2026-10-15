@@ -30,7 +30,12 @@ Starting with TensorDict 0.17, the default will change to
 raising a `RuntimeError` or a `ValueError`, as
 `TensorDict.empty` and the names setter do.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - a new device.
-- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - dimension names.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - dimension names, one per dim of the
+new batch size. Where `empty()` keeps names that the names
+setter would reject or drop (a list of another length, or a
+name used twice), it emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting
+with TensorDict 0.17, the default will change to applying them
+as the names setter does, with or without `recurse`.
 
 Examples
 
