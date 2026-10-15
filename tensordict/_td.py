@@ -61,7 +61,6 @@ from tensordict.base import (
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
     _wrap_extra_state,
-    _write_back_inplace,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -2865,11 +2864,6 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=self._maybe_names(),
         )
-
-    # Override: the base implementation, which writes the leaves of the
-    # nested tensordicts that read copies, such as h5 files, through
-    # _inplace_on_nested_copies, as the in-place methods do (#2775).
-    _update_ = _write_back_inplace(TensorDictBase._update_)
 
     # some custom methods for efficiency
     # Override: dense fast path over the dict of entries.

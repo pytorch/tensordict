@@ -725,6 +725,9 @@ def test_inplace_read_only_warns(tmp_path):
         lambda: lazy_stack([h5td, h5td]).zero_(),
         # #2592: and for a lazy stack of rows held by a tensordict
         lambda: TensorDict({"s": lazy_stack([h5td[0], h5td[1]])}, [2]).add_(1.0),
+        # #2775: and for the file held by a tensordict
+        lambda: TensorDict({"f": h5td}, [3]).add_(1.0),
+        lambda: TensorDict({"f": h5td}, [3]).update_({"f": {"a": torch.zeros(3)}}),
         lambda: h5td.update_({"a": torch.zeros(3)}),
         lambda: h5td.copy_(td.clone().zero_()),
     ):

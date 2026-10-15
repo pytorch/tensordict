@@ -1570,17 +1570,20 @@ def _raise_if_inplace_call() -> None:
     """Raises ``_NestedReadsCopies`` if an in-place method changes the leaves being listed.
 
     Called by a lazy stack whose members read copies, such as h5 files, when
-    a tensordict that holds it lists its leaves (#2592). The in-place method
-    would change copies: ``_write_back_inplace`` catches the error and runs
-    the method again through ``_inplace_on_nested_copies``. The frames are
-    only searched here, so that the in-place methods of the tensordicts that
-    hold no such stack pay nothing.
+    a tensordict that holds it lists its leaves (#2592), and by a tensordict
+    that reads copies, such as a file, which a tensordict holds (#2775). The
+    in-place method would change copies: ``_write_back_inplace`` catches the
+    error and runs the method again through ``_inplace_on_nested_copies``, as
+    ``TensorDictBase._update_`` does. The frames are only searched here, so
+    that the in-place methods of the tensordicts that hold no such stack pay
+    nothing.
     """
     if getattr(_ON_COPIES_CALL, "running", False):
         return
     frame = sys._getframe(1)
     while frame is not None:
-        if frame.f_code is _WRITE_BACK_INPLACE_CODE:
+        code = frame.f_code
+        if code is _WRITE_BACK_INPLACE_CODE or code is _UPDATE_INPLACE_CODE:
             raise _NestedReadsCopies
         frame = frame.f_back
 
@@ -5075,12 +5078,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         else:
             # Fastest route using _foreach_copy_
-            keys, vals = self._items_list(True, True)
-            source = dict(zip(*input_dict_or_td._items_list(True, True)))
+            try:
+                keys, vals = self._items_list(True, True)
+                source = dict(zip(*input_dict_or_td._items_list(True, True)))
+            except _NestedReadsCopies:
+                # a nested tensordict reads copies, such as an h5 file: update
+                # a copy of self in which it is a copy of its leaves, written
+                # back as by the in-place methods (#2775)
+                return _on_copies(
+                    self._inplace_on_nested_copies,
+                    TensorDictBase._update_,
+                    input_dict_or_td,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
             new_keys = [key for key in keys if key in source]
+            unmatched = len(new_keys) < min(len(keys), len(source))
             if (
-                (new_keys or _has_typed_tensordict(input_dict_or_td))
-                and len(new_keys) < min(len(keys), len(source))
+                unmatched
+                and (new_keys or _has_typed_tensordict(input_dict_or_td))
                 and _has_lazy_stack(input_dict_or_td)
             ):
                 # a nested lazy stack lists the leaves of each member, under
@@ -5096,7 +5113,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         if isinstance(val, Tensor):
                             source[key] = val
                 new_keys = [key for key in keys if key in source]
-            elif len(new_keys) < min(len(keys), len(source)) and _has_lazy_stack(self):
+            elif unmatched and _has_lazy_stack(self):
                 # a lazy stack of self lists the leaves of each member, under
                 # keys that the input lacks: read those keys at the index of
                 # each member instead (#2775)
@@ -10134,6 +10151,9 @@ _ACCEPTED_CLASSES = (
     Tensor,
     TensorDictBase,
 )
+
+# the frame of update_, which _raise_if_inplace_call looks for too
+_UPDATE_INPLACE_CODE = TensorDictBase._update_.__code__
 
 
 from tensordict._base.factories import (  # noqa: F401
