@@ -1502,11 +1502,56 @@ class PersistentTensorDict(
         array = self._get_array(key, default)
         if array is default:
             return default
-        if self._backend.is_array(array) and not self._backend.is_non_tensor(array):
-            return self._read_array_at(array, idx)
+        if self._backend.is_array(array):
+            if not self._backend.is_non_tensor(array):
+                return self._read_array_at(array, idx)
+            out = self._read_non_tensor_rows_at(key, array, idx)
+            if out is not None:
+                return out
         return super()._get_at_str(key, idx, default, **kwargs)
 
     _get_at_tuple = _get_at_str
+
+    def _read_non_tensor_rows_at(self, key, array, idx):
+        """Reads ``idx`` of a non-tensor ``array`` read as rows, or returns ``None``.
+
+        Only the indexed rows are read, so that the cost does not grow with
+        the length of the array. ``None`` is returned for an array that is not
+        read as rows, and for an index that is not supported here.
+        """
+        if self._backend.non_tensor_stack_shape(array) is not None:
+            return None
+        rows = self._non_tensor_rows(key, array)
+        if rows is None:
+            return None
+        try:
+            if _is_basic_index(idx):
+                items = idx if isinstance(idx, tuple) else (idx,)
+                # an Ellipsis would reach the dimensions after the rows
+                if Ellipsis in items or len(items) > len(rows):
+                    return None
+                values = array[idx]
+            else:
+                span = _index_span(idx, rows[0])
+                if span is None:
+                    return None
+                start, stop, local_idx = span
+                values = np.asarray(array[start:stop])[local_idx.numpy()]
+        except (TypeError, ValueError, IndexError, OSError):
+            # e.g. out of bounds: the full read below raises as torch does
+            return None
+        from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+        device = self.device if self.device is not None else torch.device("cpu")
+        shape = np.shape(values)
+        ndim = len(shape) - (array.ndim - len(rows))
+        if not math.prod(shape[:ndim]):
+            # no row: leave the empty stack to the full read
+            return None
+        values = values.tolist() if hasattr(values, "tolist") else values
+        if not ndim:
+            return NonTensorData(data=values, device=device, batch_size=torch.Size([]))
+        return NonTensorStack._from_list(values, device=device, ndim=ndim)
 
     def _get_metadata(self, key):
         """Gets the metadata for an entry.

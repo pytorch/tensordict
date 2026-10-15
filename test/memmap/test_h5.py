@@ -266,6 +266,48 @@ class TestH5Serialization:
         assert h5td.clone(False)[3]["mission"] == b"wait"
         h5td.close()
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            2,
+            -1,
+            slice(1, 5, 2),
+            [0, 3],
+            torch.tensor([4, 1]),
+            torch.tensor([True, False, True, False, False, True]),
+            (slice(1, 3),),
+        ],
+    )
+    def test_h5_foreign_column_as_stack_reads_rows_at(self, tmp_path, idx, monkeypatch):
+        # an indexed read of a column read as rows builds only the indexed
+        # rows, with the result of indexing the whole column (#2814)
+        with h5py.File(tmp_path / "file.h5", "w") as f:
+            f["pos"] = np.zeros(6, dtype=np.float32)
+            strings = [f"mission {i}" for i in range(6)]
+            f.create_dataset("mission", data=strings, dtype=h5py.string_dtype())
+            f["obs/y"] = np.zeros(6, dtype=np.float32)
+            f["obs/s"] = np.array([f"s{i}".encode() for i in range(6)])
+        h5td = PersistentTensorDict.from_h5(
+            tmp_path / "file.h5", non_tensor_as_stack=True
+        )
+        expected = {key: h5td.get(key)[idx] for key in ("mission", ("obs", "s"))}
+        num_rows = torch.zeros(6)[idx].numel()
+        from_list = NonTensorStack._from_list.__func__
+        sizes = []
+
+        def spy(cls, datalist, *args, **kwargs):
+            sizes.append(len(datalist))
+            return from_list(cls, datalist, *args, **kwargs)
+
+        monkeypatch.setattr(NonTensorStack, "_from_list", classmethod(spy))
+        for key, value in expected.items():
+            for out in (h5td.get_at(key, idx), h5td[idx].get(key)):
+                assert type(out) is type(value)
+                assert out.batch_size == value.batch_size
+                assert out.tolist() == value.tolist()
+        assert max(sizes, default=0) <= num_rows
+        h5td.close()
+
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])
