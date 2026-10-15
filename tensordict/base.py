@@ -1558,11 +1558,13 @@ def _reads_copies_under(td: TensorDictBase, keys: list) -> bool:
             if type(node) is tensordict_type:
                 node = node._tensordict.get(part)
                 continue
-            copies = _entry_reads_copies(node)
-            if copies:
-                return True
-            if copies is None:
-                break
+            if node is not td:
+                # td itself writes back the copies that it reads
+                copies = _entry_reads_copies(node)
+                if copies:
+                    return True
+                if copies is None:
+                    break
             node = node._get_str(part, None)
         else:
             if type(node) is not Tensor:
@@ -5119,7 +5121,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # route without keys_to_update instead, which writes the stored
             # data (#2780). A listed entry that self lacks raises KeyError, as
             # on the _apply_nest route, but before anything is written.
-            input_dict_or_td = input_dict_or_td.select(*keys_to_update, strict=False)
+            try:
+                input_dict_or_td = input_dict_or_td.select(
+                    *keys_to_update, strict=False
+                )
+            except NotImplementedError:
+                # a file cannot select its entries
+                input_dict_or_td = input_dict_or_td.to_tensordict().select(
+                    *keys_to_update, strict=False
+                )
             dest_keys = self.keys(True, True, is_leaf=_is_leaf_nontensor)
             for key in input_dict_or_td.keys(True, True, is_leaf=_is_leaf_nontensor):
                 if key not in dest_keys:

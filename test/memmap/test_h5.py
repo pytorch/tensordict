@@ -731,11 +731,19 @@ def test_update_keys_to_update_writes_nested_file(tmp_path):
             assert (data["a"] == 1).all()
             for file in files[start:]:
                 assert (file["x"] == 5).all()
+            # from a file
+            source = PersistentTensorDict.from_dict(
+                expected * 0 + 6, filename=tmp_path / f"src{start}.h5"
+            )
+            assert data.update_(source, keys_to_update=keys) is data
+            for file in files[start:]:
+                assert (file["x"] == 6).all()
+            source = expected * 0 + 5
             source["n", "y"] = torch.zeros(source["n"].batch_size)
             with pytest.raises(KeyError, match="not found in the dest"):
                 data.update_(source * 0, keys_to_update=["n"])
             for file in files[start:]:
-                assert (file["x"] == 5).all()
+                assert (file["x"] == 6).all()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
