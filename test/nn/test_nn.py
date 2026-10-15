@@ -2097,6 +2097,180 @@ class TestTDSequence:
             lp["sample0_log_prob"], Normal(out["loc0"], 1.0).log_prob(out["sample0"])
         )
 
+    def test_probtdseq_nested_last_return_composite_false(self):
+        # return_composite=False passes _requires_sample into the last module.
+        # A nested sequence must accept that argument and sample its out key.
+        inner = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc0"]),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc0"},
+                out_keys=["sample0"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        )
+        loc1 = TensorDictModule(lambda x: x - 1, in_keys=["x"], out_keys=["loc1"])
+        prob1 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc1"},
+            out_keys=["sample1"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        seq = ProbabilisticTensorDictSequential(
+            loc1, prob1, inner, return_composite=False
+        )
+        x = torch.zeros(3)
+        with set_interaction_type("mode"):
+            out = seq(TensorDict(x=x, batch_size=[3]))
+        torch.testing.assert_close(out["sample0"], x + 1)
+        torch.testing.assert_close(out["sample1"], x - 1)
+
+    def test_probtdseq_preset_last_sample_keeps_earlier_sample(self):
+        # _requires_sample is False because "b" is already an out key of the
+        # prefix. The earlier module must still sample "a". "b" stays preset.
+        loc_a = torch.tensor([2.0, 3.0])
+        preset_b = torch.tensor([7.0, 8.0])
+        seq = ProbabilisticTensorDictSequential(
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc_a"},
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+            TensorDictModule(lambda b: b, in_keys=["preset_b"], out_keys=["b"]),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc_b"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        )
+        assert seq.return_composite is True
+        assert seq._requires_sample is False
+        with set_interaction_type("mode"):
+            out = seq(
+                TensorDict(
+                    loc_a=loc_a,
+                    preset_b=preset_b,
+                    loc_b=torch.zeros_like(preset_b),
+                    batch_size=[2],
+                )
+            )
+        assert "a" in out.keys()
+        torch.testing.assert_close(out["a"], loc_a)
+        torch.testing.assert_close(out["b"], preset_b)
+
+    def test_probtdseq_single_module_samples_mode(self):
+        seq = ProbabilisticTensorDictSequential(
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc"},
+                out_keys=["sample"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            )
+        )
+        assert seq._requires_sample is True
+        loc = torch.tensor([1.5, -2.0])
+        with set_interaction_type("mode"):
+            out = seq(TensorDict(loc=loc, batch_size=[2]))
+        torch.testing.assert_close(out["sample"], loc)
+
+    def test_probtdseq_requires_sample_true_samples_last_key(self):
+        # The last sample key is not produced earlier, so forward samples it.
+        loc_a = torch.tensor([1.0, 2.0])
+        loc_b = torch.tensor([-3.0, 4.0])
+        seq = ProbabilisticTensorDictSequential(
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc_a"},
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc_b"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        )
+        assert seq.return_composite is True
+        assert seq._requires_sample is True
+        with set_interaction_type("mode"):
+            out = seq(TensorDict(loc_a=loc_a, loc_b=loc_b, batch_size=[2]))
+        torch.testing.assert_close(out["a"], loc_a)
+        torch.testing.assert_close(out["b"], loc_b)
+
+    @pytest.mark.parametrize(
+        "last,return_composite", [(True, True), (False, True), (True, False)]
+    )
+    def test_probtdseq_nested_keeps_preset_sample(self, last, return_composite):
+        # The inner prefix writes "b", so the inner sequence only scores it.
+        # Nesting must not make it resample "b".
+        inner = ProbabilisticTensorDictSequential(
+            TensorDictModule(lambda b: b, in_keys=["preset_b"], out_keys=["b"]),
+            ProbabilisticTensorDictModule(
+                in_keys={"loc": "loc_b"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+            ),
+        )
+        assert inner._requires_sample is False
+        prob_a = ProbabilisticTensorDictModule(
+            in_keys={"loc": "loc_a"},
+            out_keys=["a"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        modules = (prob_a, inner) if last else (inner, prob_a)
+        seq = ProbabilisticTensorDictSequential(
+            *modules, return_composite=return_composite
+        )
+        preset_b = torch.tensor([7.0, 8.0])
+        loc_b = torch.tensor([-1.0, 4.0])
+        with set_interaction_type("mode"):
+            out = seq(
+                TensorDict(
+                    loc_a=torch.tensor([2.0, 3.0]),
+                    loc_b=loc_b,
+                    preset_b=preset_b,
+                    batch_size=[2],
+                )
+            )
+        torch.testing.assert_close(out["b"], preset_b)
+        torch.testing.assert_close(
+            out["b_log_prob"], Normal(loc_b, 1.0).log_prob(preset_b)
+        )
+
+    @pytest.mark.parametrize("last", [True, False])
+    def test_probtdseq_nested_receives_kwargs(self, last):
+        class Shift(nn.Module):
+            def forward(self, x, shift=0.0):
+                return x + shift
+
+        def normal(loc, out):
+            return ProbabilisticTensorDictModule(
+                in_keys={"loc": loc},
+                out_keys=[out],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            )
+
+        inner = ProbabilisticTensorDictSequential(
+            TensorDictModule(Shift(), in_keys=["x"], out_keys=["loc_i"]),
+            normal("loc_i", "i"),
+            return_composite=True,
+        )
+        modules = (normal("x", "a"), inner)
+        if not last:
+            modules = modules + (normal("x", "b"),)
+        seq = ProbabilisticTensorDictSequential(*modules, return_composite=True)
+        x = torch.zeros(2)
+        with set_interaction_type("mode"):
+            out = seq(TensorDict(x=x, batch_size=[2]), shift=10.0)
+        torch.testing.assert_close(out["i"], x + 10.0)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)

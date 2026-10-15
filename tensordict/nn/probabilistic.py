@@ -1817,8 +1817,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         self,
         tensordict: TensorDictBase,
         tensordict_out: TensorDictBase | None = None,
+        _requires_sample: bool | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        # None means this sequence's own flag. A nested sequence receives the
+        # caller's value as a real parameter, not through **kwargs, and still
+        # keeps a sample its own prefix wrote.
+        if _requires_sample is None:
+            _requires_sample = self._requires_sample
+        else:
+            _requires_sample = _requires_sample and self._requires_sample
         if (
             tensordict_out is not None
             or self._select_before_return
@@ -1830,14 +1838,31 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         else:
             tensordict_exec = tensordict
         if self.return_composite:
-            for m in self._module_iter():
+            last_index = len(self) - 1
+            for i, m in enumerate(self._module_iter()):
                 try:
                     if isinstance(
                         m,
-                        (ProbabilisticTensorDictModule, ProbabilisticTensorDictModule),
+                        (
+                            ProbabilisticTensorDictModule,
+                            ProbabilisticTensorDictSequential,
+                        ),
                     ):
+                        # Only the last module may keep a sample the prefix
+                        # already wrote. Every earlier one still samples.
+                        module_requires_sample = (
+                            _requires_sample if i == last_index else True
+                        )
+                        # A nested sequence also passes **kwargs to its modules.
+                        module_kwargs = (
+                            kwargs
+                            if isinstance(m, ProbabilisticTensorDictSequential)
+                            else {}
+                        )
                         tensordict_exec = m(
-                            tensordict_exec, _requires_sample=self._requires_sample
+                            tensordict_exec,
+                            _requires_sample=module_requires_sample,
+                            **module_kwargs,
                         )
                     else:
                         tensordict_exec = m(tensordict_exec, **kwargs)
@@ -1848,9 +1873,17 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     ) from e
         else:
             tensordict_exec = self.get_dist_params(tensordict_exec, **kwargs)
-            tensordict_exec = self._last_module(
-                tensordict_exec, _requires_sample=self._requires_sample
-            )
+            last_module = self._last_module
+            if isinstance(last_module, ProbabilisticTensorDictSequential):
+                tensordict_exec = last_module(
+                    tensordict_exec, _requires_sample=_requires_sample, **kwargs
+                )
+            elif isinstance(last_module, ProbabilisticTensorDictModule):
+                tensordict_exec = last_module(
+                    tensordict_exec, _requires_sample=_requires_sample
+                )
+            else:
+                tensordict_exec = last_module(tensordict_exec, **kwargs)
 
         if self.inplace is True:
             tensordict_out = tensordict
