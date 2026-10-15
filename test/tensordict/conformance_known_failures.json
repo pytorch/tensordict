@@ -379,11 +379,7 @@
   "is_contiguous()"
  ],
  "typed_lazy masking": [],
- "typed_lazy pointwise": [
-  "abs()",
-  "add(1)",
-  "mul(2)"
- ],
+ "typed_lazy pointwise": [],
  "typed_lazy reductions": [],
  "typed_lazy select": [
   "contiguous(inplace=True)"
