@@ -1076,6 +1076,9 @@ _IS_LEAF_WITHOUT_NODES = (
 # Set while an in-place method runs on a tensordict whose file is opened
 # read-only, so that the nested calls it makes do not warn again.
 _READ_ONLY_CALL = local()
+# Set while empty() builds a result for the names it was given, so that the
+# empty() calls it makes do not warn of the names again.
+_EMPTY_NAMES_CALL = local()
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
@@ -1353,6 +1356,65 @@ def _empty_misfit(
         if value.batch_size[:ndim] != batch_size[:ndim]:
             return key, value
     return None
+
+
+def _warn_empty_names(
+    names: Sequence[str | None],
+    batch_size: Sequence[int],
+    result_names: list,
+    result_batch_size: Sequence[int] | None = None,
+) -> None:
+    """Warns that ``empty(batch_size=batch_size, names=names)``, which returns ``result_names`` and ``result_batch_size``, changes in 0.17 (#2711).
+
+    From 0.17, ``empty()`` applies ``names`` as the names setter does, on a
+    result of batch size ``batch_size``. This warns when the setter raises for
+    them, or gives other names than ``result_names``, or when the result has
+    kept another batch size for them. ``result_batch_size=None`` means
+    ``batch_size``.
+    """
+    if is_compiling() or getattr(_EMPTY_NAMES_CALL, "running", False):
+        return
+    # the checks of the names setter, in its order
+    value = list(names)
+    batch_dims = len(batch_size)
+    # a lazy stack keeps the batch size of its members for names of another
+    # length; for names of the right length, its own warning tells why
+    resized = (
+        result_batch_size is not None
+        and list(result_batch_size) != list(batch_size)
+        and len(value) != batch_dims
+    )
+    num_none = 0
+    for v in value:
+        num_none += v is None
+    if num_none == batch_dims:
+        if list(result_names) == [None] * batch_dims and not resized:
+            return
+        future = "drops these names"
+    elif len(value) == batch_dims and len(set(value)) == len(value) - max(
+        num_none - 1, 0
+    ):
+        return
+    else:
+        future = "raises a ValueError for these names"
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    result = f"the names {list(result_names)}"
+    future_size = ""
+    if resized:
+        result = f"the batch size {list(result_batch_size)} and {result}"
+        future_size = f"returning the batch size {list(batch_size)} and "
+    warnings.warn(
+        f"empty(batch_size={list(batch_size)}, names={value}) returns a "
+        f"tensordict with {result}. Starting with TensorDict 0.17, the default "
+        f"will change to {future_size}applying the names as the names setter "
+        f"does, which {future}. Pass one name per batch dim, "
+        "with no name used twice.",
+        FutureWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
@@ -8515,7 +8577,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raising a ``RuntimeError`` or a ``ValueError``, as
                 ``TensorDict.empty`` and the names setter do.
             device (torch.device, optional): a new device.
-            names (list of str, optional): dimension names.
+            names (list of str, optional): dimension names, one per dim of the
+                new batch size. Where ``empty()`` keeps names that the names
+                setter would reject or drop (a list of another length, or a
+                name used twice), it emits a :class:`FutureWarning`. Starting
+                with TensorDict 0.17, the default will change to applying them
+                as the names setter does, with or without ``recurse``.
 
         Examples:
             >>> import torch
@@ -8528,7 +8595,30 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ['b']
 
         """
-        return self._empty(recurse, batch_size, device, names)
+        if (
+            names is None
+            or (
+                len(names) == len(self.batch_size if batch_size is None else batch_size)
+                and len(set(names)) == len(names)
+            )
+            or is_compiling()
+        ):
+            return self._empty(recurse, batch_size, device, names)
+        # names that the names setter may reject or drop: the empty() calls
+        # that build the result do not warn of them, this one does
+        running = getattr(_EMPTY_NAMES_CALL, "running", False)
+        _EMPTY_NAMES_CALL.running = True
+        try:
+            result = self._empty(recurse, batch_size, device, names)
+        finally:
+            _EMPTY_NAMES_CALL.running = running
+        _warn_empty_names(
+            names,
+            self.batch_size if batch_size is None else batch_size,
+            result.names,
+            result.batch_size,
+        )
+        return result
 
     def _empty(self, recurse, batch_size, device, names) -> TensorDictBase:
         """Builds the result of :meth:`empty`.

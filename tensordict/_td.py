@@ -55,6 +55,7 @@ from tensordict.base import (
     _set_at_each_key,
     _set_tensordict_type,
     _UNSET,
+    _warn_empty_names,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
     _wrap_extra_state,
@@ -2542,6 +2543,16 @@ class TensorDict(TensorDictBase):
                     names = (names + [None] * len(batch_size))[: len(batch_size)]
                     if all(name is None for name in names):
                         names = None
+            elif names is not None and (
+                len(names)
+                != len(self._batch_size if batch_size is None else batch_size)
+                or len(set(names)) != len(names)
+            ):
+                # names that the names setter may reject or drop: the result
+                # keeps them as given
+                _warn_empty_names(
+                    names, self._batch_size if batch_size is None else batch_size, names
+                )
             return self._new_unsafe(
                 device=self._device if device is NO_DEFAULT else device,
                 batch_size=(

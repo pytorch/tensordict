@@ -2815,7 +2815,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 # batch size without the stack dim when the dims before it were
                 # equal (a list never compared equal to them): until 0.17, keep
                 # that result where the TensorDict cannot be built, or would get
-                # invalid names (#2711: TensorDict.empty does not check them).
+                # invalid names (empty() warns of these, #2711).
                 stack_dim = self.stack_dim
                 members_before = (
                     not stack_dim or given[:stack_dim] == self._batch_size[:stack_dim]
@@ -2827,11 +2827,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     and names is not None
                     and len(names) != len(batch_size)
                 ):
-                    problem = (
-                        f"cannot name a batch size of {len(batch_size)} dims with "
-                        f"{len(names)} names",
-                        "a ValueError, as the names setter does",
-                    )
+                    problem = "names"
                 elif recurse:
                     # a TensorDict with the sub-tensordicts of self
                     source = self._empty(True, None, NO_DEFAULT, None).to_tensordict()
@@ -2853,17 +2849,16 @@ class LazyStackedTensorDict(TensorDictBase):
                         device=device if device is not NO_DEFAULT else self.device,
                         names=names if names is not None else NO_DEFAULT,
                     )
-                args = f"batch_size={list(batch_size)}"
-                if recurse:
-                    args = f"recurse=True, {args}"
-                if names is not None:
-                    args = f"{args}, names={list(names)}"
-                warning = (
-                    f"LazyStackedTensorDict.empty({args}) {problem[0]}, and returns "
-                    "the empty stack of its members, which keeps the size of the "
-                    "stack dim. Starting with TensorDict 0.17, the default will "
-                    f"change to raising {problem[1]}."
-                )
+                if problem != "names":
+                    args = f"recurse=True, batch_size={list(batch_size)}"
+                    if names is not None:
+                        args = f"{args}, names={list(names)}"
+                    warning = (
+                        f"LazyStackedTensorDict.empty({args}) {problem[0]}, and "
+                        "returns the empty stack of its members, which keeps the "
+                        "size of the stack dim. Starting with TensorDict 0.17, the "
+                        f"default will change to raising {problem[1]}."
+                    )
         names_kwarg = {}
         if names is not None:
             name = names[self.stack_dim] if len(names) > self.stack_dim else None
