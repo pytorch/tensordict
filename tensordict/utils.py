@@ -2175,6 +2175,13 @@ def _convert_list_to_stack(
     return NonTensorStack(*a_list), True
 
 
+def _is_tensor_list(value: Any) -> bool:
+    """Whether ``value`` is a list, or nested lists, of plain tensors only."""
+    if isinstance(value, list):
+        return all(_is_tensor_list(elt) for elt in value)
+    return isinstance(value, Tensor) and not is_non_tensor(value)
+
+
 def _tensor_list_from_non_tensor_stack(value: Any) -> list[Any] | Tensor | None:
     """Tensors held by a non-tensor stack, or ``None`` if a leaf is not a tensor.
 

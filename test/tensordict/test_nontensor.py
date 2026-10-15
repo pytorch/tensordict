@@ -946,6 +946,24 @@ class TestNonTensorData:
         assert (td[0]["a"] == tensors[0]).all()
         assert (td[1]["a"] == tensors[1]).all()
 
+    def test_lazy_stack_ragged_tensor_list_sets_tensors(self):
+        # A lazy stack writes each tensor of the list into its own member.
+        td = lazy_stack([TensorDict(x0=torch.zeros(1)), TensorDict(x1=torch.zeros(2))])
+        tensors = [torch.ones(2), torch.ones(3)]
+        td.set("a", tensors)
+        assert td.tensordicts[0]._get_str("a", None) is tensors[0]
+        assert td.tensordicts[1]._get_str("a", None) is tensors[1]
+
+    def test_lazy_stack_non_tensor_list_keeps_non_tensor_data(self):
+        # A list of NonTensorData is not unwrapped into plain tensors.
+        td = lazy_stack([TensorDict(x0=torch.zeros(1)), TensorDict(x1=torch.zeros(2))])
+        tensors = [torch.ones(2), torch.ones(3)]
+        td.set("a", [NonTensorData(tensors[0]), NonTensorData(tensors[1])])
+        for member, tensor in zip(td.tensordicts, tensors):
+            value = member._get_str("a", None)
+            assert isinstance(value, NonTensorData)
+            assert value.data is tensor
+
     def test_new_empty_nontensorstack(self):
         td = TensorDict(a=NonTensorStack("a", "b").unsqueeze(-1), batch_size=(2,))
         assert isinstance(td.new_empty((4,), empty_lazy=True).get("a"), NonTensorStack)

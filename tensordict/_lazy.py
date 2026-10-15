@@ -89,6 +89,7 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _import_and_wrap_functorch,
     _infer_size_impl,
+    _is_tensor_list,
     _is_unbatched,
     _KEY_ERROR,
     _lock_blocked,
@@ -1468,6 +1469,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 "their register."
             ) from e
         assign_list = isinstance(value, list) and list_to_stack()
+        # Recover only a list of plain tensors. A list the caller built from
+        # non-tensor data keeps its NonTensorData in the members.
+        recover_list = assign_list and _is_tensor_list(value)
         if not validated:
             value = self._validate_value(
                 value,
@@ -1476,7 +1480,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 key=key,
             )
             validated = True
-        if assign_list:
+        if recover_list:
             # Ragged tensors come back as a NonTensorStack. Write the tensors
             # themselves into the members, as the list did.
             recovered = _tensor_list_from_non_tensor_stack(value)
