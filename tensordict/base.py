@@ -1514,12 +1514,16 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
     ``source`` lacks the entry or the size of the stack dim differs.
     """
     from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
 
     members = []
     for part in key:
         if _is_tensorclass(type(td)):
             # a lazy stack of tensorclasses is a tensorclass over the stack
             td = td._tensordict
+        if isinstance(td, TypedTensorDict):
+            # a TypedTensorDict over a lazy stack lists the leaves of its members
+            td = td._source
         if isinstance(td, LazyStackedTensorDict):
             members.append((td.stack_dim, len(td.tensordicts), int(part)))
             td = td.tensordicts[int(part)]
