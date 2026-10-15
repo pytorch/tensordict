@@ -1375,6 +1375,10 @@ class TensorDict(TensorDictBase):
                 ignore_lock=False,
             )
 
+    # Override: dense fast path.
+    def _contains_str(self, key: str) -> bool:
+        return key in self._tensordict
+
     def _set_str(
         self,
         key: NestedKey,
@@ -2523,7 +2527,8 @@ class TensorDict(TensorDictBase):
 
         return self._inplace_rebind_leaves(leaf_fn, nested_fn, None)
 
-    # Override: fast path for the dense root, which many operations call.
+    # Override: fast path for the dense root, which many operations call; its
+    # names default is NO_DEFAULT, as names=None drops the names.
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> Self:
@@ -2975,6 +2980,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
+    # td[key] = value writes into an existing entry of the source
+    _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
     def __init__(
         self,

@@ -288,6 +288,44 @@ _OPS = {
             lambda td: td.update_at_(td.to_tensordict()[0] * 0, 0, keys_to_update=["a"])
         ),
     },
+    "setitem": {
+        "td['a'] = zeros": _inplace(
+            lambda td: td.__setitem__("a", torch.zeros(4, 3, 2, 1, 5))
+        ),
+        "td['new'] = zeros": _inplace(
+            lambda td: td.__setitem__("new", torch.zeros(4, 3, 2, 1))
+        ),
+        "td[('n', 'x')] = zeros": _inplace(
+            lambda td: td.__setitem__(("n", "x"), torch.zeros(4, 3, 2, 1))
+        ),
+        "td[0] = dense[0] * 0": _inplace(
+            lambda td: td.__setitem__(0, td.to_tensordict()[0] * 0)
+        ),
+        "td[1:3] = {'a': zeros}": _inplace(
+            lambda td: td.__setitem__(slice(1, 3), {"a": torch.zeros(2, 3, 2, 1, 5)})
+        ),
+        "td[0] = {'new': ones}": _inplace(
+            lambda td: td.__setitem__(0, {"new": torch.ones(3, 2, 1)})
+        ),
+        "td[0] = 0": _inplace(lambda td: td.__setitem__(0, 0)),
+        "td[mask] = 0": _inplace(lambda td: td.__setitem__(_MASK, 0)),
+        "td[..., 0] = 0": _inplace(lambda td: td.__setitem__((Ellipsis, 0), 0)),
+        "td[1, ...] = -1": _inplace(lambda td: td.__setitem__((1, Ellipsis), -1)),
+        "td[...] = 1": _inplace(lambda td: td.__setitem__(Ellipsis, 1)),
+    },
+    "empty": {
+        "empty()": lambda td: td.empty(),
+        "empty(recurse=True)": lambda td: td.empty(recurse=True),
+        "empty(batch_size=[4, 3])": lambda td: td.empty(batch_size=[4, 3]),
+        "empty(recurse=True, batch_size=[4, 3, 2, 1])": lambda td: td.empty(
+            recurse=True, batch_size=[4, 3, 2, 1]
+        ),
+        "empty(batch_size=[4, 3], names=['w', 'x'])": lambda td: td.empty(
+            batch_size=[4, 3], names=["w", "x"]
+        ),
+        "empty(names=None)": lambda td: td.empty(names=None),
+        "empty(device=None)": lambda td: td.empty(device=None),
+    },
     "apply": {
         "apply(x + 1)": lambda td: td.apply(lambda x: x + 1),
         "apply(x + y, td)": lambda td: td.apply(lambda x, y: x + y, td),
