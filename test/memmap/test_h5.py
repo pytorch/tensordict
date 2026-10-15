@@ -650,6 +650,50 @@ def test_inplace_methods_write_nested_lazy_stack(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_inplace_methods_write_nested_file(tmp_path):
+    # #2775: copy_, update_ and the in-place math write to the h5 files that a
+    # tensordict holds, also in the members of a lazy stack, and to the lazy
+    # stacks of files that those members hold
+    files = []
+
+    def h5():
+        files.append(
+            PersistentTensorDict.from_dict(
+                TensorDict(x=torch.ones(3), batch_size=[3]),
+                filename=tmp_path / f"{len(files)}.h5",
+            )
+        )
+        return files[-1]
+
+    def member(n):
+        return TensorDict(a=torch.ones(3), n=n, batch_size=[3])
+
+    layouts = (
+        lambda: member(h5()),
+        lambda: member(TensorDict(m=h5(), batch_size=[3])),
+        lambda: lazy_stack([member(h5()), member(h5())]),
+        lambda: lazy_stack([member(lazy_stack([h5(), h5()], 1)) for _ in range(2)]),
+    )
+    calls = (
+        lambda td: td.add_(1.0),
+        lambda td: td.mul_(torch.tensor(3.0)),
+        lambda td: td.copy_(td.to_tensordict() * 0 + 2),
+        lambda td: td.update_(td.to_tensordict() * 0 + 5),
+        lambda td: td.update_(td.to_tensordict().apply(lambda x: x * 0 + 4).to_dict()),
+    )
+    for make in layouts:
+        for call in calls:
+            start = len(files)
+            data = make()
+            expected = data.to_tensordict()
+            assert call(data) is data
+            call(expected)
+            torch.testing.assert_close(data.to_tensordict(), expected)
+            for file in files[start:]:
+                assert (file["x"] != 1).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_read_only_warns(tmp_path):
     # from_h5 opens files read-only by default: the in-place methods leave the
     # file unchanged, as before they wrote to files, and warn that this will
@@ -681,6 +725,9 @@ def test_inplace_read_only_warns(tmp_path):
         lambda: lazy_stack([h5td, h5td]).zero_(),
         # #2592: and for a lazy stack of rows held by a tensordict
         lambda: TensorDict({"s": lazy_stack([h5td[0], h5td[1]])}, [2]).add_(1.0),
+        # #2775: and for the file held by a tensordict
+        lambda: TensorDict({"f": h5td}, [3]).add_(1.0),
+        lambda: TensorDict({"f": h5td}, [3]).update_({"f": {"a": torch.zeros(3)}}),
         lambda: h5td.update_({"a": torch.zeros(3)}),
         lambda: h5td.copy_(td.clone().zero_()),
     ):
