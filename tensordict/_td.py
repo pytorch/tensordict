@@ -40,6 +40,7 @@ from tensordict.base import (
     _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _has_lazy_stack,
     _holds_its_tensors,
     _is_accepted_class,
     _is_leaf_nontensor,
@@ -60,6 +61,7 @@ from tensordict.base import (
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
     _wrap_extra_state,
+    _write_back_inplace,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -2809,10 +2811,12 @@ class TensorDict(TensorDictBase):
             sort=sort,
         )
 
-    # Override: the method runs on a copy of self in which each nested lazy
-    # stack whose members read copies, such as h5 files, is replaced by a
-    # stack of copies of their leaves, and each such member writes its copy
-    # back, as the in-place methods of the lazy stack do (#2592).
+    # Override: the method runs on a copy of self in which each nested
+    # tensordict that reads copies, such as an h5 file, is replaced by a copy
+    # of its leaves, and each nested lazy stack whose members read copies by a
+    # stack of copies of their leaves, and each such tensordict or member
+    # writes its copy back, as the in-place methods of the lazy stack do
+    # (#2592, #2775).
     def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
         # the public name of a hook such as _zero_
         name = method.__name__.lstrip("_")
@@ -2826,10 +2830,12 @@ class TensorDict(TensorDictBase):
         return self
 
     def _tree_of_copies(self, written: list) -> TensorDict:
-        """A shallow copy of ``self``, with each nested lazy stack whose members read copies replaced by a stack of copies.
+        """A shallow copy of ``self``, with each nested tensordict that reads copies replaced by a copy of its leaves.
 
-        Called by ``_inplace_on_nested_copies``. Appends each such member and
-        its copy to ``written``, for the member to write the copy back.
+        A nested lazy stack whose members read copies is replaced by a stack
+        of copies. Called by ``_inplace_on_nested_copies``. Appends each such
+        tensordict or member and its copy to ``written``, for it to write the
+        copy back.
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -2837,10 +2843,21 @@ class TensorDict(TensorDictBase):
         for key, value in self._tensordict.items():
             if isinstance(value, TensorDict):
                 value = value._tree_of_copies(written)
+            elif isinstance(value, LazyStackedTensorDict):
+                if not _is_non_tensor(type(value)):
+                    # also for members that hold files
+                    value = value._stack_of_copies(written)
             elif (
-                isinstance(value, LazyStackedTensorDict) and value._reads_return_copies
+                isinstance(value, TensorDictBase)
+                and value._reads_return_copies
+                and not _has_lazy_stack(value)
             ):
-                value = value._stack_of_copies(written)
+                # a TypedTensorDict over a lazy stack, whose copy would split
+                # the keys over the members of that stack, is left out, as in
+                # _stack_of_copies
+                leaves = value._copy_of_leaves()
+                written.append((value, leaves))
+                value = leaves
             source[key] = value
         return self._new_unsafe(
             source=source,
@@ -2848,6 +2865,11 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=self._maybe_names(),
         )
+
+    # Override: the base implementation, which writes the leaves of the
+    # nested tensordicts that read copies, such as h5 files, through
+    # _inplace_on_nested_copies, as the in-place methods do (#2775).
+    _update_ = _write_back_inplace(TensorDictBase._update_)
 
     # some custom methods for efficiency
     # Override: dense fast path over the dict of entries.

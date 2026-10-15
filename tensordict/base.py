@@ -1106,7 +1106,11 @@ def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
 
 
 def _check_member_as_lists(td: TensorDictBase, is_leaf) -> None:
-    """Raises if an in-place method walks the copies that the member ``td`` reads (#2592)."""
+    """Raises if an in-place method walks the copies that ``td`` reads (#2592).
+
+    ``td`` is a member of a lazy stack, or a tensordict that reads copies,
+    such as a file, which a tensordict holds (#2775).
+    """
     if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
         _raise_if_inplace_call()
 
@@ -1487,6 +1491,37 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
         for value in td.values()
         if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
     )
+
+
+def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> Any:
+    """The tensor of ``source`` for the key of ``td`` that passes through members of lazy stacks, or ``None``.
+
+    ``key`` is listed by ``_NESTED_TENSORS_AS_LISTS``, as ``("n", "0", "x")``
+    for the entry ``"x"`` of member ``0`` of the lazy stack ``td["n"]``.
+    ``source`` has no such keys: its tensor at ``("n", "x")`` is read at the
+    index of the member along the stack dim (#2775). ``None`` where
+    ``source`` lacks the entry or the size of the stack dim differs.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+
+    members = []
+    for part in key:
+        if isinstance(td, LazyStackedTensorDict):
+            members.append((td.stack_dim, len(td.tensordicts), int(part)))
+            td = td.tensordicts[int(part)]
+            continue
+        if not _is_tensor_collection(type(source)):
+            return None
+        td, source = td._get_str(part, None), source._get_str(part, None)
+        if td is None:
+            return None
+    if not isinstance(source, Tensor):
+        return None
+    for dim, size, index in members:
+        if source.ndim <= dim or source.shape[dim] != size:
+            return None
+        source = source.select(dim, index)
+    return source
 
 
 def _has_typed_tensordict(td: TensorDictBase) -> bool:
@@ -5061,6 +5096,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         if isinstance(val, Tensor):
                             source[key] = val
                 new_keys = [key for key in keys if key in source]
+            elif len(new_keys) < min(len(keys), len(source)) and _has_lazy_stack(self):
+                # a lazy stack of self lists the leaves of each member, under
+                # keys that the input lacks: read those keys at the index of
+                # each member instead (#2775)
+                for key in keys:
+                    if key not in source:
+                        val = _read_at_members(
+                            self, input_dict_or_td, _unravel_key_to_tuple(key)
+                        )
+                        if val is not None:
+                            source[key] = val
+                new_keys = [key for key in keys if key in source]
             other_val = [source[key] for key in new_keys]
             if len(new_keys):
                 if len(other_val) != len(vals):
@@ -5579,6 +5626,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         else:
                             yield (str(i), *key), val
                 return
+            # a file nested in a tensordict, also in a member of a lazy stack
+            _check_member_as_lists(self, is_leaf)
         if sort:
 
             def keyfunc(item):
@@ -5726,6 +5775,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         sort=sort,
                     )
                 return
+            # a file nested in a tensordict, also in a member of a lazy stack
+            _check_member_as_lists(self, is_leaf)
         if sort:
             for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
@@ -5790,11 +5841,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self
 
     def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
-        """Runs the in-place ``method`` where a nested lazy stack reads copies, and writes them back.
+        """Runs the in-place ``method`` where a nested tensordict reads copies, and writes them back.
 
-        Called by the in-place methods when a lazy stack that ``self`` holds
-        raises ``_NestedReadsCopies``. ``TensorDict`` overrides it. Here the
-        method runs on ``self``, which leaves the copies unchanged.
+        Called by the in-place methods when a tensordict that ``self`` holds
+        raises ``_NestedReadsCopies``: a lazy stack whose members read
+        copies, or a file. ``TensorDict`` and ``LazyStackedTensorDict``
+        override it. Here the method runs on ``self``, which leaves the
+        copies unchanged.
         """
         return method(self, *args, **kwargs)
 
