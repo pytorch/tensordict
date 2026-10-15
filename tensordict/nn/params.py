@@ -488,9 +488,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     "TensorDictParams._new_unsafe() got both parameters and source."
                 )
             parameters = source
-        if is_compiling():
-            return TensorDictParams(parameters, no_convert="skip", lock=lock)
-
         if parameters is None:
             parameters = kwargs
 
@@ -500,7 +497,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 #  that it's a TDParams and we return a TensorDict (eg, torch.gather)
                 return TensorDict._new_unsafe(parameters, lock=lock, **kwargs)
             parameters = TensorDict._new_unsafe(parameters, **kwargs)
-        elif isinstance(parameters, TensorDictParams):
+        if is_compiling():
+            return TensorDictParams(parameters, no_convert="skip", lock=lock)
+        if isinstance(parameters, TensorDictParams):
             if kwargs:
                 raise TypeError(
                     f"parameters cannot be passed along with extra keyword arguments, but got {kwargs.keys()} extra args."
