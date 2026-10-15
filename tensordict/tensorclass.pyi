@@ -605,7 +605,7 @@ class TensorClass(_TensorClassInitArgs):
     ) -> Self: ...
     def new_tensor(
         self,
-        data: torch.Tensor | TensorDictBase,
+        data: torch.Tensor | TensorDictBase | np.ndarray | Sequence | float,
         *,
         dtype: torch.dtype = None,
         device: DeviceType = ...,
