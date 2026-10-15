@@ -5023,12 +5023,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys, vals = self._items_list(True, True)
             source = dict(zip(*input_dict_or_td._items_list(True, True)))
             new_keys = [key for key in keys if key in source]
-            if 0 < len(new_keys) < min(len(keys), len(source)) and _has_lazy_stack(
-                input_dict_or_td
+            if (
+                (new_keys or getattr(type(input_dict_or_td), "_wrapped_attr", None))
+                and len(new_keys) < min(len(keys), len(source))
+                and _has_lazy_stack(input_dict_or_td)
             ):
                 # a nested lazy stack lists the leaves of each member, under
-                # keys that self lacks, which leaves keys of self unmatched:
-                # read those keys stacked instead (#2768)
+                # keys that self lacks, which leaves keys of self unmatched,
+                # and a TypedTensorDict over a lazy stack lists all its leaves
+                # so (#2772): read those keys stacked instead (#2768)
                 for key in keys:
                     if key not in source:
                         val = input_dict_or_td._get_tuple(
@@ -5939,11 +5942,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _data_setter(self, value: Self):
+        """Sets the ``data`` of each tensor leaf of ``self`` to the leaf of ``value`` under the same key: the storage part of the ``data`` setter.
+
+        The setter passes ``value`` unchanged. The hook raises
+        ``RuntimeError`` if the batch sizes differ, and ``KeyError``, before
+        it sets anything, if ``value`` has a key that ``self`` lacks. Returns
+        ``None``.
+        """
         if value.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Cannot assign .data from a source with batch size {value.batch_size} "
                 f"to a destination with batch size {self.batch_size}."
             )
+        if (
+            getattr(type(value), "_wrapped_attr", None)
+            and self._members_as_lists() is None
+            and _has_lazy_stack(value)
+        ):
+            # a TypedTensorDict over a lazy stack lists the leaves of each
+            # member (#2772): read them stacked, as self lists them
+            value = value.to_tensordict()
         nodes_self = dict(
             zip(*self._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS))
         )

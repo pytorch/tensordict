@@ -769,28 +769,28 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
 
     # Override: the source's in-place methods write into the members of a lazy
     # stack, which writing back the leaves read from self cannot do when they
-    # are nested. Other sources and stacks that hold copies, such as files,
-    # take the inherited path. On a stack with exclusive keys, also in a stack
-    # that it stacks (#2759), which the method leaves unchanged, it changes a
-    # copy of the shared leaves, each read as one stacked tensor, which the
-    # source writes into its members (#2739).
+    # are nested, also where the members read copies, such as h5 files (#2773).
+    # Other sources take the inherited path. On a stack with exclusive keys,
+    # also in a stack that it stacks (#2759), which the method leaves
+    # unchanged, and where only the entries of the members read copies, it
+    # changes a copy of the shared leaves, each read as one stacked tensor,
+    # which the source writes into its members (#2739).
     def _inplace_on_copies(self, method, *args, **kwargs):
         source = self._source
-        if not isinstance(source, LazyStackedTensorDict) or _reads_copies(source):
+        if not isinstance(source, LazyStackedTensorDict):
             return super()._inplace_on_copies(method, *args, **kwargs)
         # the public name of a hook such as _zero_
         name = method.__name__.lstrip("_")
-        if not _has_exclusive_keys(source):
+        if not _has_exclusive_keys(source) and (
+            source._reads_return_copies or not _reads_copies(source)
+        ):
             result = getattr(source, name)(*args, **kwargs)
             if result is not source:
                 # broadcasting self returns a new tensordict and writes nothing
                 return result
             return self
-        try:
-            items = list(source.items(True, True))
-        except RuntimeError:
-            # members that differ in shape cannot be read as one tensor
-            return super()._inplace_on_copies(method, *args, **kwargs)
+        # raises before the method writes if the members differ in shape
+        items = list(source.items(True, True))
         leaves = TensorDict(batch_size=self.batch_size, device=self.device)
         for key, value in items:
             if isinstance(value, torch.Tensor):
@@ -814,6 +814,51 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         keys, values = leaves._items_list(True, True)
         self._write_back(keys, values, name)
         return self
+
+    # Override: a lazy source splits the input over its members, which write
+    # it in place, also when they are locked or nested, read copies or are
+    # lazy stacks themselves (#2771, #2773). The keys that only some members
+    # hold are left unchanged, as in the other in-place methods (#2739).
+    def _update_(self, input_dict_or_td, *, clone, non_blocking, keys_to_update):
+        source = self._source
+        if not isinstance(source, LazyStackedTensorDict):
+            return super()._update_(
+                input_dict_or_td,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+            )
+        if isinstance(input_dict_or_td, TypedTensorDict):
+            input_dict_or_td = input_dict_or_td._source
+        if keys_to_update is None and _has_exclusive_keys(source):
+            keys_to_update = [
+                _unravel_key_to_tuple(key) for key in source.keys(True, True)
+            ]
+        source._update_(
+            input_dict_or_td,
+            clone=clone,
+            non_blocking=non_blocking,
+            keys_to_update=keys_to_update,
+        )
+        return self
+
+    # Override: a lazy source sets the data of each member from its part of
+    # value, as the leaves that self lists are those of the members (#2772).
+    def _data_setter(self, value):
+        source = self._source
+        if (
+            not isinstance(source, LazyStackedTensorDict)
+            or value.batch_size != self.batch_size
+        ):
+            # the base raises for another batch size
+            return super()._data_setter(value)
+        for td, piece in zip(source.tensordicts, value.unbind(source.stack_dim)):
+            td.data = piece
+
+    # Override: the traversals walk the members of a lazy source, as on the
+    # source, so that the binary ops find the leaves that they list (#2772).
+    def _members_as_lists(self):
+        return self._source._members_as_lists()
 
     # Override: the source detaches, with its checks.
     def _detach_(self):
