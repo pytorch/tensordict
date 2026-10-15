@@ -4578,6 +4578,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
+            elif value is self and (keys_to_update is None or target is None):
+                # with keys_to_update, a merge of self into a sub-tensordict
+                # can leave out the entry that holds the sub-tensordict
+                raise ValueError(_SELF_NESTING_ERROR.format(input_key))
             # the key must be a string by now. Let's check if it is present
             if target is not None:
                 if not is_leaf(type(target)) and not is_leaf(type(value)):
