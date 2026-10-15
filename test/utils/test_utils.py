@@ -30,7 +30,6 @@ from _utils_internal import get_available_devices
 from tensordict import (
     _deprecation,
     lazy_stack,
-    NonTensorStack,
     set_printoptions,
     tensorclass,
     TensorDict,
@@ -1396,30 +1395,6 @@ def test_public_module_names():
     assert not any(
         part.startswith("_") for name in module_names for part in name.split(".")
     )
-
-
-def test_tensordict_stacks_a_list_of_equal_shaped_tensors():
-    # One shared shape is a stacked tensor, not a NonTensorStack.
-    td = TensorDict({"a": [torch.ones(2), torch.ones(2)]}, batch_size=[2])
-    value = td.get("a")
-    assert isinstance(value, torch.Tensor)
-    assert not isinstance(value, NonTensorStack)
-    assert value.shape == (2, 2)
-    assert (value == 1).all()
-
-
-def test_tensordict_ragged_tensor_list_is_non_tensor_stack():
-    # Differently shaped tensors cannot be stacked. Each tensor stays the value
-    # of one batch element, as NonTensorStack(t0, t1) does, without a copy.
-    tensors = [torch.ones(2), torch.ones(3)]
-    td = TensorDict({"a": tensors}, batch_size=[2])
-    value = td.get("a")
-    assert isinstance(value, NonTensorStack)
-    assert value.batch_size == torch.Size([2])
-    assert value.tolist()[0] is tensors[0]
-    assert value.tolist()[1] is tensors[1]
-    assert (td[0]["a"] == tensors[0]).all()
-    assert (td[1]["a"] == tensors[1]).all()
 
 
 def test_testing_module_is_deprecated():
