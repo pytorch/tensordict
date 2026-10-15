@@ -322,6 +322,9 @@ def _set_replaced_non_tensor(param_td, data):
             continue
         key = _unravel_key_to_tuple(key)
         parent = param_td._get_tuple(key[:-1], NO_DEFAULT) if len(key) > 1 else param_td
+        if isinstance(parent, TensorDictParams):
+            # Its _set_str ignores ignore_lock: write into the tensordict it wraps.
+            parent = parent._param_td
         parent._set_str(
             key[-1],
             value,

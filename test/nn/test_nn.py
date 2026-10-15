@@ -4927,6 +4927,34 @@ class TestTensorDictParams:
         assert isinstance(params["a"], nn.Parameter)
         assert params._param_td.is_locked is old._param_td.is_locked
 
+    @pytest.mark.parametrize("op", ["set_at_", "update_at_"])
+    def test_inplace_at_writes_non_tensor_nested_params(self, op):
+        # #2740: a string in a TensorDictParams nested in a locked one
+        params = TensorDictParams(
+            TensorDict(
+                a=torch.ones(3),
+                m=TensorDictParams(
+                    TensorDict(s="old", c=torch.ones(3), batch_size=[3])
+                ),
+                batch_size=[3],
+            )
+        ).lock_()
+        src = TensorDict(
+            a=torch.zeros(3),
+            m=TensorDict(s="new", c=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        with torch.no_grad():
+            if op == "set_at_":
+                params.set_at_(("m", "s"), "new", 1)
+            else:
+                params.update_at_(src[1], 1)
+        assert params.get(("m", "s")).tolist() == ["old", "new", "old"]
+        if op == "update_at_":
+            assert params.get(("m", "c")).tolist() == [1.0, 0.0, 1.0]
+        assert params.is_locked
+        assert params.get("m").is_locked
+
     def test_data_update_non_tensor(self):
         # .data builds new non-tensor leaves, so plain td.data.update_() does
         # not write them
