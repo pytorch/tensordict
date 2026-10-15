@@ -3968,7 +3968,26 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         or (item is True)
         or (item is None)
     ) and self.batch_size == ():
-        return self.update(value.squeeze(0))
+        # Squeeze a value that has a batch dim. squeeze(0) raises IndexError
+        # on batch size [], unlike Tensor.squeeze. A tensor has no batch size
+        # and is still squeezed.
+        value_batch_size = getattr(value, "batch_size", None)
+        if value_batch_size is None or value_batch_size:
+            return self.update(value.squeeze(0))
+        # A NonTensorData takes another NonTensorData here, which [...]
+        # refuses. Any other value without a batch dim is written as by
+        # [...], which checks the class of a tensorclass value. [...] does not
+        # check the keys of a TensorDict value, so check them here.
+        if isinstance(self, NonTensorData) and isinstance(value, NonTensorData):
+            return self.update(value)
+        if isinstance(value, TensorDictBase):
+            extra_keys = set(value.keys()) - set(type(self).__expected_keys__)
+            if extra_keys:
+                raise ValueError(
+                    f"Cannot write keys {sorted(extra_keys)} into a "
+                    f"{type(self).__name__}: they are not fields of the class."
+                )
+        item = Ellipsis
     if (
         isinstance(self, NonTensorData)
         and is_non_tensor(value)
@@ -4022,6 +4041,14 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
         self._tensordict[item] = value._tensordict
     else:
+        if isinstance(value, TensorDictBase):
+            # As in update(): the keys of the dict of a TensorDict are faster
+            # to read than its keys(), and valid calls only pay for issuperset.
+            keys = value._tensordict if type(value) is TensorDict else value.keys()
+            if not type(self).__expected_keys__.issuperset(keys):
+                unknown = _non_field_keys(self, keys)
+                if unknown:
+                    _warn_non_field_keys(self, unknown, "__setitem__")
         # int, float etc.
         self._tensordict[item] = value
 

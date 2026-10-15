@@ -1596,13 +1596,19 @@ class TensorDict(TensorDictBase):
                 and idx.dtype == torch.bool
                 and idx
             ):
-                self._set_str(
-                    key,
-                    dest.squeeze(0),
-                    validated=True,
-                    inplace=False,
-                    ignore_lock=True,
-                )
+                # squeeze(0) raises IndexError on an entry with no batch dim,
+                # unlike Tensor.squeeze. Skip it and let the write below run.
+                # An entry with a batch dim is still squeezed. A tensor has no
+                # batch size, so it is squeezed too.
+                dest_batch_size = getattr(dest, "batch_size", None)
+                if dest_batch_size is None or dest_batch_size:
+                    self._set_str(
+                        key,
+                        dest.squeeze(0),
+                        validated=True,
+                        inplace=False,
+                        ignore_lock=True,
+                    )
             dest_data = dest[idx].tolist()
             value_data = value.tolist()
             try:

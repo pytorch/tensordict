@@ -423,18 +423,26 @@ def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
         other_lazy = getattr(type(other), "_lazy", None)
         if other_lazy is None and _is_tensorclass(type(other)):
             # a tensorclass counts as the tensordict it wraps
-            other_lazy = other._tensordict._lazy
+            other = other._tensordict
+            other_lazy = other._lazy
+        if other_lazy is False and type(other)._wrapped_attr is not None:
+            # a TypedTensorDict counts as the tensordict it wraps
+            other_lazy = getattr(other, type(other)._wrapped_attr)._lazy
         lazy = lazy or other_lazy
     if not lazy:
         return False
     from tensordict._lazy import LazyStackedTensorDict
 
     is_stack = isinstance(td, LazyStackedTensorDict)
-    return any(
-        isinstance(other, TensorDictBase)
-        and isinstance(other, LazyStackedTensorDict) is not is_stack
-        for other in map(_unwrap_tensorclass, others)
-    )
+    for other in map(_unwrap_tensorclass, others):
+        if not isinstance(other, TensorDictBase):
+            continue
+        if not is_stack and type(other)._wrapped_attr is not None:
+            # a lazy stack pairs a typed operand's leaves by key already
+            other = getattr(other, type(other)._wrapped_attr)
+        if isinstance(other, LazyStackedTensorDict) is not is_stack:
+            return True
+    return False
 
 
 def _unwrap_tensorclass(other: Any) -> Any:
@@ -1481,6 +1489,26 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     )
 
 
+def _has_typed_tensordict(td: TensorDictBase) -> bool:
+    """Whether ``td`` or one of its nested tensordicts is a ``TypedTensorDict``, which lists the leaves of the members of a lazy source.
+
+    No data of a file or a store is read: they cannot hold one.
+    """
+    from tensordict.typedtensordict import TypedTensorDict
+
+    while _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, TypedTensorDict):
+        return True
+    if td._reads_return_copies:
+        return False
+    return any(
+        _has_typed_tensordict(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
 class _NestedReadsCopies(Exception):
     """Raised by a lazy stack whose members read copies when an in-place method lists the leaves of a tensordict that holds it.
 
@@ -1846,6 +1874,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Whether the members of a lazy stack have different keys, which to_dict
     # and state_dict would silently drop (a property on LazyStackedTensorDict).
     _has_exclusive_keys: bool = False
+    # Set by TypedTensorDict to the name of the attribute that holds the
+    # tensordict it wraps, "_source": the pointwise ops see that a typed
+    # operand over a lazy stack mixes with a dense receiver (#2759).
+    _wrapped_attr: str | None = None
     # Set by _SubTensorDict, whose memmap_ would memory-map its whole source:
     # memmap_ raises.
     _memmap_inplace_unsupported: bool = False
@@ -5009,9 +5041,27 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         else:
             # Fastest route using _foreach_copy_
             keys, vals = self._items_list(True, True)
-            new_keys, other_val = input_dict_or_td._items_list(
-                True, True, sorting_keys=keys, default="intersection"
-            )
+            source = dict(zip(*input_dict_or_td._items_list(True, True)))
+            new_keys = [key for key in keys if key in source]
+            if (
+                (new_keys or _has_typed_tensordict(input_dict_or_td))
+                and len(new_keys) < min(len(keys), len(source))
+                and _has_lazy_stack(input_dict_or_td)
+            ):
+                # a nested lazy stack lists the leaves of each member, under
+                # keys that self lacks, which leaves keys of self unmatched,
+                # and a TypedTensorDict over a lazy stack, also a nested one,
+                # lists all its leaves so (#2772): read those keys stacked
+                # instead (#2768)
+                for key in keys:
+                    if key not in source:
+                        val = input_dict_or_td._get_tuple(
+                            _unravel_key_to_tuple(key), None
+                        )
+                        if isinstance(val, Tensor):
+                            source[key] = val
+                new_keys = [key for key in keys if key in source]
+            other_val = [source[key] for key in new_keys]
             if len(new_keys):
                 if len(other_val) != len(vals):
                     vals = dict(zip(keys, vals))
@@ -5913,11 +5963,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _data_setter(self, value: Self):
+        """Sets the ``data`` of each tensor leaf of ``self`` to the leaf of ``value`` under the same key: the storage part of the ``data`` setter.
+
+        The setter passes ``value`` unchanged. The hook raises
+        ``RuntimeError`` if the batch sizes differ, and ``KeyError``, before
+        it sets anything, if ``value`` has a key that ``self`` lacks. Returns
+        ``None``.
+        """
         if value.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Cannot assign .data from a source with batch size {value.batch_size} "
                 f"to a destination with batch size {self.batch_size}."
             )
+        if (
+            getattr(type(value), "_wrapped_attr", None)
+            and self._members_as_lists() is None
+            and _has_lazy_stack(value)
+        ):
+            # a TypedTensorDict over a lazy stack lists the leaves of each
+            # member (#2772): read them stacked, as self lists them
+            value = value.to_tensordict()
         nodes_self = dict(
             zip(*self._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS))
         )
