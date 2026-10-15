@@ -4006,22 +4006,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def filter_empty_(self):
         """Filters out all empty tensordicts in-place."""
+
         # A lazy stack filters each member, and a sub-tensordict is filtered
         # before it is checked: a nested key that names a member, such as
-        # ("0", "a"), cannot be deleted from the stack (#2796).
-        members = self._members_as_lists()
-        if members is not None:
-            for td in members:
-                td.filter_empty_()
-            return self
-        for key, val in list(self.items()):
-            cls = type(val)
-            if not _is_tensor_collection(cls):
-                continue
-            if not is_non_tensor(cls) and not _pass_through(val):
-                val.filter_empty_()
-            if val.is_empty():
-                del self[key]
+        # ("0", "a"), cannot be deleted from the stack (#2796). A lazy stack
+        # is empty if all its members are: is_empty() only sees the keys that
+        # all members share.
+        def filter_td(td) -> bool:
+            # Filters td in place and returns whether it is then empty.
+            members = td._members_as_lists()
+            if members is not None:
+                return all([filter_td(member) for member in members])
+            kept = False
+            for key, val in list(td.items()):
+                cls = type(val)
+                if not _is_tensor_collection(cls):
+                    continue
+                if is_non_tensor(cls) or _pass_through(val):
+                    if val.is_empty():
+                        del td[key]
+                elif filter_td(val._tensordict if _is_tensorclass(cls) else val):
+                    del td[key]
+                else:
+                    kept = True
+            return not kept and td.is_empty()
+
+        filter_td(self)
         return self
 
     def _contains_str(self, key: str) -> bool:

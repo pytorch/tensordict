@@ -5509,6 +5509,38 @@ class TestLazyStackedTensorDict:
         assert set(lazy.filter_empty_().keys(True)) == {"x", "n", ("n", "y")}
         assert set(lazy[1].keys(True)) == {"x", "n", ("n", "y")}
 
+    def test_filter_empty_keeps_member_leaves(self):
+        # A lazy stack in a tensordict is kept if one of its members keeps a
+        # leaf, even when the members share no leaf (#2796)
+        td = TensorDict(
+            l=lazy_stack(
+                [TensorDict(e=TensorDict()), TensorDict(e=TensorDict(x=torch.ones(())))]
+            ),
+            y=torch.zeros(2),
+            batch_size=[2],
+        )
+        td.filter_empty_()
+        assert set(td.keys()) == {"l", "y"}
+        assert set(td["l"].tensordicts[0].keys()) == set()
+        assert set(td["l"].tensordicts[1].keys(True)) == {"e", ("e", "x")}
+        assert td["l"].tensordicts[1]["e", "x"] == 1
+        assert (td["y"] == 0).all()
+        td = TensorDict(
+            p=TensorDict(
+                l=lazy_stack(
+                    [TensorDict(a=torch.ones(())), TensorDict(b=torch.full((), 2.0))]
+                ),
+                batch_size=[2],
+            ),
+            x=torch.zeros(2),
+            batch_size=[2],
+        )
+        td.filter_empty_()
+        assert set(td.keys(True)) == {"p", ("p", "l"), "x"}
+        assert td["p", "l"].tensordicts[0]["a"] == 1
+        assert td["p", "l"].tensordicts[1]["b"] == 2
+        assert (td["x"] == 0).all()
+
     def test_lazy_empty_selection_batch_size(self):
         lst = LazyStackedTensorDict(
             *[TensorDict({"a": torch.ones(2)}, [2]) for _ in range(3)],
