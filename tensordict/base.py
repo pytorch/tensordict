@@ -2972,7 +2972,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def new_tensor(
         self,
-        data: torch.Tensor | TensorCollection,
+        data: torch.Tensor | TensorCollection | np.ndarray | Sequence | float,
         *,
         dtype: torch.dtype = None,
         device: DeviceType = NO_DEFAULT,
@@ -2981,30 +2981,57 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     ) -> Self:  # noqa: D417
         """Returns a new TensorDict with data as the tensor ``data``.
 
-        By default, the returned TensorDict values have the same ``torch.dtype`` and ``torch.device`` as this tensor.
+        By default, each entry of the returned TensorDict has the ``torch.dtype`` of the
+        matching entry of this tensordict, and the returned TensorDict is on the device
+        of ``data``.
 
         The ``data`` can also be a tensor collection (``TensorDict`` or ``tensorclass``), in which case
         the ``new_tensor`` method iterates over the tensor pairs of ``self`` and ``data``.
 
         Args:
-            data (torch.Tensor or TensorDictBase): the data to be copied.
+            data (torch.Tensor, TensorDictBase or array_like): the data to be copied. As
+                for :meth:`torch.Tensor.new_tensor`, it can be a list, a tuple, a NumPy
+                array or a scalar; such data has no device, so the result is on the
+                device that :func:`torch.as_tensor` gives it, the default device.
 
         Keyword Args:
             dtype (torch.dtype, optional): the desired type of returned tensordict.
-                Default: if ``None``, the `torch.dtype` will be unchanged.
+                Default: if ``None``, each entry keeps the ``torch.dtype`` of the
+                matching entry of this tensordict.
             device (torch.device, optional): the desired device of returned tensordict.
-                Default: if ``None``, the ``torch.device`` will be unchanged.
+                Default: the device of ``data``.
             requires_grad (bool, optional): If autograd should record operations on the
                 returned tensors. Default: ``False``.
             pin_memory (bool, optional): If set, returned tensor would be allocated in the
                 pinned memory. Works only for CPU tensors. Default: ``False``.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     a=torch.zeros(3), b=torch.zeros(3, dtype=torch.int64), batch_size=[3]
+            ... )
+            >>> out = td.new_tensor([1, 2])
+            >>> out.batch_size
+            torch.Size([2])
+            >>> out["a"], out["b"]
+            (tensor([1., 2.]), tensor([1, 2]))
+
         """
+        if isinstance(data, torch.Tensor) or _is_tensor_collection(type(data)):
+            shape = data.shape
+            data_device = data.device
+        else:
+            # An array_like, as torch.Tensor.new_tensor takes. The entries read
+            # ``data`` as it is, so torch does not warn about copying a tensor.
+            as_tensor = torch.as_tensor(data)
+            shape = as_tensor.shape
+            data_device = as_tensor.device
         kwargs = {}
         if device is not NO_DEFAULT:
             kwargs["device"] = device
         else:
-            device = kwargs["device"] = data.device
+            device = kwargs["device"] = data_device
         if pin_memory is not None:
             kwargs["pin_memory"] = pin_memory
 
@@ -3024,13 +3051,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 data,
                 call_on_nested=True,
                 device=device,
-                batch_size=data.shape,
+                batch_size=shape,
             )
         return self._fast_apply(
             func,
             call_on_nested=True,
             device=device,
-            batch_size=data.shape,
+            batch_size=shape,
         )
 
     def _unbind(self, dim: int):
