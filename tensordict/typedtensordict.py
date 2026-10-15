@@ -352,28 +352,44 @@ def _make_delegate_inplace(method_name: str) -> Callable:
     return method
 
 
-def _reads_copies(td: TensorDictBase) -> bool:
-    """Whether ``td``, or a tensordict that it holds or stacks, reads copies of its tensors."""
+def _reads_copies(td: TensorDictBase, exclusive_keys: bool = False) -> bool:
+    """Whether ``td``, or a tensordict that it holds or stacks, reads copies of its tensors.
+
+    With ``exclusive_keys``, also whether a lazy stack that ``td`` is, holds
+    or stacks has keys that only some of its members hold: one walk for both.
+    """
     if _is_tensorclass(type(td)):
         td = td._tensordict
     if td._reads_return_copies:
         return True
     if isinstance(td, LazyStackedTensorDict):
-        return any(_reads_copies(member) for member in td.tensordicts)
+        if exclusive_keys and td._has_exclusive_keys:
+            return True
+        return any(_reads_copies(member, exclusive_keys) for member in td.tensordicts)
     return any(
-        _reads_copies(value)
+        _reads_copies(value, exclusive_keys)
         for value in td.values()
         if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
     )
 
 
-def _has_exclusive_keys(td: LazyStackedTensorDict) -> bool:
-    """Whether the lazy stack ``td``, or a lazy stack that it stacks, has keys that only some of its members hold."""
-    # the keys of a member that is a lazy stack are those all its members hold
-    return td._has_exclusive_keys or any(
-        _has_exclusive_keys(member)
-        for member in td.tensordicts
-        if isinstance(member, LazyStackedTensorDict)
+def _has_exclusive_keys(td: TensorDictBase) -> bool:
+    """Whether a lazy stack that ``td`` is, stacks or holds, at any depth, has keys that only some of its members hold."""
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, LazyStackedTensorDict):
+        # the keys of a member that is a lazy stack, or that holds one, are
+        # those all the members of that stack hold
+        return td._has_exclusive_keys or any(
+            _has_exclusive_keys(member) for member in td.tensordicts
+        )
+    if td._reads_return_copies:
+        # a file or a store holds no lazy stack
+        return False
+    return any(
+        _has_exclusive_keys(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
     )
 
 
@@ -780,8 +796,8 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # stack, which writing back the leaves read from self cannot do when they
     # are nested, also where the members read copies, such as h5 files (#2773).
     # Other sources take the inherited path. On a stack with exclusive keys,
-    # also in a stack that it stacks (#2759), which the method leaves
-    # unchanged, and where only the entries of the members read copies, it
+    # also in a stack that it stacks or that a member holds (#2759), which the
+    # method leaves unchanged, and where only the entries of the members read copies, it
     # changes a copy of the shared leaves, each read as one stacked tensor,
     # which the source writes into its members (#2739). Members that differ
     # in shape change their shared leaves through a selection of them.
@@ -791,9 +807,11 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             return super()._inplace_on_copies(method, *args, **kwargs)
         # the public name of a hook such as _zero_
         name = method.__name__.lstrip("_")
-        if not _has_exclusive_keys(source) and (
-            source._reads_return_copies or not _reads_copies(source)
-        ):
+        if source._reads_return_copies:
+            on_copies = _has_exclusive_keys(source)
+        else:
+            on_copies = _reads_copies(source, exclusive_keys=True)
+        if not on_copies:
             result = getattr(source, name)(*args, **kwargs)
             if result is not source:
                 # broadcasting self returns a new tensordict and writes nothing
@@ -874,11 +892,24 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             )
         if isinstance(input_dict_or_td, TypedTensorDict):
             input_dict_or_td = input_dict_or_td._source
-        if keys_to_update is None and _has_exclusive_keys(source):
-            keys_to_update = [
-                _unravel_key_to_tuple(key) for key in source.keys(True, True)
-            ]
-        if not source._reads_return_copies and _reads_copies(source):
+        # one walk on the common path, where nothing reads copies and every
+        # member holds the same keys
+        if source._reads_return_copies or _reads_copies(source, exclusive_keys=True):
+            exclusive = _has_exclusive_keys(source)
+            reads_copies = not source._reads_return_copies and _reads_copies(source)
+        else:
+            exclusive = reads_copies = False
+        if keys_to_update is None and exclusive:
+            # keep the keys that every member holds; keys_to_update would miss
+            # those of a lazy stack that a member holds (#2759)
+            if not _is_tensor_collection(type(input_dict_or_td)):
+                input_dict_or_td = TensorDict.from_dict(
+                    input_dict_or_td, batch_dims=self.batch_dims
+                )
+            input_dict_or_td = input_dict_or_td.select(
+                *source.keys(True, True), strict=False
+            )
+        if reads_copies:
             # the update_ of a member leaves the files that it holds
             # unchanged: update a stacked copy, written back as for add_
             return self._inplace_on_copies(

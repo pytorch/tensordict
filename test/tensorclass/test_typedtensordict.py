@@ -1369,6 +1369,57 @@ class TestFromTensordict:
             assert (td["n", "x"] == 3).all()
         assert (tds[0]["e"] == 1).all()
 
+    @pytest.mark.parametrize("depth", [1, 2])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "op", ["add_", "mul_", "zero_", "lerp_", "clamp_min_", "copy_", "update_"]
+    )
+    def test_from_tensordict_lazy_stack_held_exclusive_keys_inplace(
+        self, op, stack_dim, depth
+    ):
+        # #2759: a key that only some members of a lazy stack that a member
+        # holds is left unchanged, as in a single stack (#2739)
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        batch = [3] if stack_dim else []
+
+        def member(extra):
+            inner = [TensorDict(x=torch.ones(3), batch_size=batch) for _ in range(2)]
+            if extra:
+                inner[0]["e"] = torch.ones(3)
+            n = lazy_stack(inner, stack_dim)
+            if depth == 2:
+                n = TensorDict(m=n, batch_size=batch)
+            return TensorDict(a=torch.ones(3), n=n, batch_size=batch)
+
+        tds = [member(True), member(False)]
+        state = Nested.from_tensordict(lazy_stack(tds))
+        other = state.to_tensordict().apply(lambda x: torch.full_like(x, 3.0))
+        args = {
+            "add_": (1.0,),
+            "mul_": (2.0,),
+            "zero_": (),
+            "lerp_": (other, 0.5),
+            "clamp_min_": (3.0,),
+            "copy_": (other,),
+            "update_": (other,),
+        }[op]
+        assert getattr(state, op)(*args) is state
+        expected = {"zero_": 0.0, "copy_": 3.0, "update_": 3.0, "clamp_min_": 3.0}
+        expected = expected.get(op, 2.0)
+        inner = ("n", "m") if depth == 2 else ("n",)
+        for td in tds:
+            assert (td["a"] == expected).all()
+            assert (td[inner + ("x",)] == expected).all()
+        assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
+        # a call that raises writes nothing
+        with pytest.raises(KeyError):
+            state.add_(other.exclude(inner + ("x",)))
+        for td in tds:
+            assert (td["a"] == expected).all()
+
     @pytest.mark.parametrize("op", ["add_", "zero_", "mul_", "copy_"])
     def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace(self, op):
         # #2759: the shared leaves differ in shape, so they cannot be read as
