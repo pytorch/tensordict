@@ -2945,13 +2945,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device = kwargs["device"] = data.device
         if pin_memory is not None:
             kwargs["pin_memory"] = pin_memory
+        if dtype is not None:
+            # Under torch.compile, Tensor.new_tensor(data, dtype=None) takes the
+            # dtype of data, not of the tensor, so pass dtype only when it is set.
+            kwargs["dtype"] = dtype
 
         def func(x, tensor_b=None):
             if tensor_b is None:
                 tensor_b = data
             return x.new_tensor(
                 tensor_b,
-                dtype=dtype,
                 requires_grad=requires_grad,
                 **kwargs,
             )
