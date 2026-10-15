@@ -85,6 +85,7 @@ from tensordict.utils import (
     _cast_scalar,
     _check_is_flatten,
     _check_is_unflatten,
+    _convert_list_to_stack,
     _erase_cache_first,
     _GENERIC_NESTED_ERR,
     _import_and_wrap_functorch,
@@ -1466,14 +1467,23 @@ class LazyStackedTensorDict(TensorDictBase):
                 "permitted if all members of the stack have this key in "
                 "their register."
             ) from e
+        assign_list = isinstance(value, list) and list_to_stack()
         if not validated:
-            value = self._validate_value(
-                value,
-                non_blocking=non_blocking,
-                check_shape=not (isinstance(value, list) and list_to_stack()),
-                key=key,
-            )
-            validated = True
+            if assign_list:
+                # Each member takes one tensor of a ragged tensor list, so
+                # keep it a list rather than a NonTensorStack.
+                value = _convert_list_to_stack(value, wrap_ragged=False)[0]
+            if assign_list and isinstance(value, list):
+                # The members validate the tensors when they need a device.
+                validated = self.device is None
+            else:
+                value = self._validate_value(
+                    value,
+                    non_blocking=non_blocking,
+                    check_shape=not assign_list,
+                    key=key,
+                )
+                validated = True
         if self._is_vmapped:
             value = self._hook_in(value)
         if isinstance(value, list):
