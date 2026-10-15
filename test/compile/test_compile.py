@@ -745,6 +745,28 @@ class TestTD:
             for r, e in zip(result, expected):
                 assert (r["a", "b"] == e["a", "b"]).all()
 
+    @pytest.mark.parametrize("dtype", [None, torch.float64])
+    def test_new_tensor_dtype(self, dtype, mode):
+        # Each entry takes its own dtype, or dtype if given, as in eager mode;
+        # not the dtype of the data.
+        def new_tensor(td, data):
+            return td.new_tensor(data, dtype=dtype)
+
+        new_tensor_c = torch.compile(new_tensor, fullgraph=True, mode=mode)
+        for n in (4, 6, 8):
+            td = TensorDict(
+                {"a": torch.zeros(n), "b": {"c": torch.zeros(n, dtype=torch.int32)}},
+                [n],
+            )
+            data = torch.arange(n)
+            with pytest.warns(UserWarning, match="To copy construct from a tensor"):
+                expected = new_tensor(td, data)
+            result = new_tensor_c(td, data)
+            assert result.batch_size == expected.batch_size
+            for key in (("a",), ("b", "c")):
+                assert result[key].dtype == expected[key].dtype
+                assert (result[key] == expected[key]).all()
+
     def test_iter(self, mode):
         def iterate(td):
             return torch.stack([t["a", "b"] + 1 for t in td])
