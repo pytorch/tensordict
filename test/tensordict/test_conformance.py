@@ -53,7 +53,7 @@ _CONTAINERS = list(
         for name, device in TestTensorDictsBase.TYPES_DEVICES
         if torch.device(device).type == "cpu"
     )
-)
+) + ["typed_lazy"]
 
 # Every tensordict of the pool has batch size [4, 3, 2, 1] and the keys "a"
 # (float), "b" (float) and "c" (int).
@@ -98,6 +98,7 @@ _OPS = {
         "get('a')": lambda td: td.get("a"),
         "get('missing', None)": lambda td: td.get("missing", None),
         "entry_class(key) is type(get(key))": _entry_class_mismatches,
+        "list(td)": list,
     },
     "key_edits": {
         "popitem()": lambda td: [*td.popitem(), td],
@@ -142,6 +143,7 @@ _OPS = {
         "clone(recurse=False)": lambda td: td.clone(recurse=False),
         "contiguous()": lambda td: td.contiguous(),
         "contiguous(canonical=True)": lambda td: td.contiguous(canonical=True),
+        "contiguous(inplace=True)": _inplace(lambda td: td.contiguous(inplace=True)),
     },
     "pointwise": {
         "abs()": lambda td: td.abs(),
@@ -220,6 +222,12 @@ _OPS = {
             _MASK, td.apply(torch.zeros_like)
         ),
         "torch.where(mask, td, 0)": lambda td: torch.where(_MASK, td, 0),
+        "where(mask, 0, out=dense)": lambda td: (
+            lambda out: [td.where(_MASK, 0, out=out) is out, out]
+        )(td.to_tensordict().zero_()),
+        "where(mask, dense.exclude('b'), pad=0)": lambda td: td.where(
+            _MASK, td.to_tensordict().exclude("b"), pad=0
+        ),
         "masked_fill(mask, -1)": lambda td: td.masked_fill(_MASK, -1),
         "masked_select(mask)": lambda td: td.masked_select(_MASK),
         "masked_fill_(mask, -1)": _inplace(lambda td: td.masked_fill_(_MASK, -1)),
@@ -238,6 +246,7 @@ _OPS = {
         "fill_('missing', 2.0)": _inplace(lambda td: td.fill_("missing", 2.0)),
         "zero_()": _inplace(lambda td: td.zero_()),
         "detach_()": _inplace(lambda td: td.detach_()),
+        "share_memory_()": _inplace(lambda td: td.share_memory_()),
     },
     "update": {
         "update({'a': zeros})": _inplace(
@@ -262,6 +271,7 @@ _OPS = {
         "update(dense[0], update_batch_size=True)": _inplace(
             lambda td: td.update(td.to_tensordict()[0], update_batch_size=True)
         ),
+        "copy_(dense * 0)": _inplace(lambda td: td.copy_(td.to_tensordict() * 0)),
         "update_({'a': zeros})": _inplace(
             lambda td: td.update_({"a": torch.zeros(4, 3, 2, 1, 5)})
         ),
