@@ -177,8 +177,13 @@ The dtype codes are those of JAX and polars: ``f32`` for ``torch.float32``,
   ``sub: [5]{y: f32[3]}``.
 - In a lazy stack, a dim whose size differs between the members prints as
   ``-1``, the header shows ``stack_dim=``, and the keys that only some members
-  have follow under ``exclusive_fields=``.
-- A non-tensor entry prints as the type name of its value (``str``).
+  have follow under ``exclusive_fields=``. A lazy stack nested in another
+  entry shows only the keys that all its members have; the default display
+  shows the others.
+- A non-tensor entry prints as the type name of its value (``str``). In a
+  :class:`~tensordict.PersistentTensorDict`, it prints as ``NonTensorData`` or
+  ``NonTensorStack`` instead, since reading the type of the value would read
+  the file.
 - When the tensordict has no device (``device=None``), a leaf that is not on
   the CPU shows its device: ``f32[3]@cuda:0``.
 - ``show_batch_size``, ``show_device``, ``show_dtype`` and ``sort_keys``

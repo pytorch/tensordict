@@ -18,6 +18,7 @@ from tensordict import (
     set_printoptions,
     tensorclass,
     TensorDict,
+    TypedTensorDict,
 )
 from tensordict._torch_func import _stack as stack_td
 
@@ -820,6 +821,11 @@ class Mesh:
     cells: torch.Tensor
 
 
+class _TypedMesh(TypedTensorDict):
+    points: torch.Tensor
+    cells: torch.Tensor
+
+
 def _mesh_sample():
     return TensorDict(
         points=torch.zeros(1000, 3),
@@ -901,10 +907,8 @@ class TestCompactRepr:
         with set_printoptions(compact=True):
             r = repr(td)
         assert r == (
-            "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={a: f32[3]}, "
-            "exclusive_fields={\n"
-            "    0: {b: f32[]},\n"
-            "    1: {c: {d: f32[2]}}})"
+            "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={\n"
+            "    a: f32[3]}, exclusive_fields={0: {b: f32[]}, 1: {c: {d: f32[2]}}})"
         )
 
     def test_compact_lazy_stack_calls_no_stack(self, monkeypatch):
@@ -945,6 +949,36 @@ class TestCompactRepr:
         # the default repr stacks the leaves
         repr(td)
         assert calls
+
+    @pytest.mark.parametrize("ragged", [False, True])
+    def test_compact_typed_lazy_stack_calls_no_stack(self, monkeypatch, ragged):
+        # a TypedTensorDict over a lazy stack reads the metadata of its members
+        td = _TypedMesh.from_tensordict(
+            LazyStackedTensorDict.lazy_stack(
+                [
+                    TensorDict(
+                        points=torch.zeros(3 + ragged * i),
+                        cells=torch.zeros(4, dtype=torch.long),
+                    )
+                    for i in range(2)
+                ]
+            )
+        )
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(*args, **kwargs):
+            calls.append(args)
+            return stack(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "stack", counting_stack)
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert not calls
+        points = "f32[-1]" if ragged else "f32[3]"
+        assert r == (
+            f"_TypedMesh(batch_size=[2], fields={{cells: i64[4], points: {points}}})"
+        )
 
     def test_compact_non_tensor(self):
         td = _mesh_sample()
@@ -1063,6 +1097,19 @@ class TestCompactRepr:
         assert lines[1] == "    sub: {"
         assert lines[2] == "        aaaaaaaaaaaa: f32[3],"
         assert lines[-1] == "        ffffffffffff: f32[3]}})"
+
+    def test_compact_width_exclusive_fields(self):
+        # the fields part leaves room for the exclusive_fields that follow it
+        for n in (1, 30, 40):
+            td = LazyStackedTensorDict.lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), x=torch.zeros(1)),
+                    TensorDict(a=torch.zeros(3), **{"y" * n: torch.zeros(1)}),
+                ]
+            )
+            with set_printoptions(compact=True):
+                r = repr(td)
+            assert all(len(line) <= 80 for line in r.split("\n")), r
 
     def test_compact_shape_only(self):
         td = TensorDict(

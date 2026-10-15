@@ -1948,7 +1948,10 @@ def _compact_leaf(td, key):
     # is -1 and the dtype is the promoted one, as the stacked tensor has.
     from tensordict import LazyStackedTensorDict
     from tensordict.persistent import PersistentTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
 
+    if isinstance(td, TypedTensorDict):
+        td = td._source
     if isinstance(td, LazyStackedTensorDict):
         metas = [_compact_leaf(sub, key) for sub in td.tensordicts]
         shape, dtype, devices = metas[0]
@@ -1975,11 +1978,17 @@ def _compact_entry(td, key):
     from tensordict import LazyStackedTensorDict, NonTensorData, TensorDict
     from tensordict.base import _is_tensor_collection
     from tensordict.persistent import PersistentTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
 
     # the entry of the first member decides what the entry of a lazy stack is
     first = td
-    while isinstance(first, LazyStackedTensorDict) and first.tensordicts:
-        first = first.tensordicts[0]
+    while isinstance(first, TypedTensorDict) or (
+        isinstance(first, LazyStackedTensorDict) and first.tensordicts
+    ):
+        if isinstance(first, TypedTensorDict):
+            first = first._source
+        else:
+            first = first.tensordicts[0]
     if isinstance(first, PersistentTensorDict):
         meta = first._get_metadata(key)
         if meta.get("non_tensor"):
@@ -2096,7 +2105,9 @@ def _compact_repr(obj) -> str | None:
             if own:
                 exclusive.append((str(i), ("", _compact_entries(member, own))))
     head = f"{type(obj).__name__}(" + "".join(f"{h}, " for h in header) + "fields="
-    out = head + _compact_render(("", _compact_body(obj)), "", len(head), 1)
+    # on the last line of the fields come the exclusive fields, if any
+    tail = 1 + len(", exclusive_fields={") if exclusive else 1
+    out = head + _compact_render(("", _compact_body(obj)), "", len(head), tail)
     if exclusive:
         used = len(out.rsplit("\n", 1)[-1]) + len(", exclusive_fields=")
         out += ", exclusive_fields=" + _compact_render(("", exclusive), "", used, 1)
