@@ -5984,7 +5984,11 @@ class NonTensorDataBase(TensorClass):
         *,
         non_blocking: bool = False,
     ) -> T:
-        if idx != () and idx != slice(None):
+        # Check the type first: comparing an ndarray with () or slice(None) raises.
+        if not (
+            (isinstance(idx, tuple) and not idx)
+            or (isinstance(idx, slice) and idx == slice(None))
+        ):
             raise RuntimeError("Cannot update a part of a NonTensorDataBase.")
         return self.update_(
             input_dict_or_td=input_dict_or_td, clone=clone, non_blocking=non_blocking
