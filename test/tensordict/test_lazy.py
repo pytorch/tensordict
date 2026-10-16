@@ -3816,6 +3816,49 @@ class TestLazyStackedTensorDict:
             getattr(lazy_stack(tds), op)(inplace=inplace)
         assert [list(td.keys(True)) for td in tds] == keys
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_flatten_keys_per_member(self, stack_dim):
+        # each member is flattened: it keeps its own values, an UnbatchedTensor
+        # included, and the result shares the leaves of the members (#2869)
+        tds = [
+            TensorDict(
+                n=TensorDict(
+                    x=torch.full((2,), float(i)),
+                    s=NonTensorData(f"s{i}", batch_size=[2]),
+                ),
+                u=UnbatchedTensor(torch.full((4,), float(i))),
+                batch_size=[2],
+                names=["b"],
+            )
+            for i in range(3)
+        ]
+        lazy = lazy_stack(tds, stack_dim, stack_dim_name="s")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            flat = lazy.flatten_keys()
+            out = flat.unflatten_keys()
+        assert isinstance(flat, LazyStackedTensorDict)
+        assert flat.stack_dim == stack_dim
+        assert flat.names == lazy.names
+        assert set(flat.keys()) == {"n.x", "n.s", "u"}
+        for i, (td, member, back) in enumerate(
+            zip(tds, flat.tensordicts, out.tensordicts)
+        ):
+            assert member.get("n.x") is td.get(("n", "x"))
+            assert member.get("u").data_ptr() == td.get("u").data_ptr()
+            assert member["n.s"] == f"s{i}"
+            assert back.get(("n", "x")) is td.get(("n", "x"))
+            assert back.get("u").data_ptr() == td.get("u").data_ptr()
+        assert (out == lazy).all()
+        # a stack of stacks flattens each inner stack in the same way
+        outer = lazy_stack([lazy, lazy_stack([td.clone() for td in tds], stack_dim)])
+        flat = outer.flatten_keys()
+        assert isinstance(flat.tensordicts[0], LazyStackedTensorDict)
+        assert flat.tensordicts[0].tensordicts[2].get("u").data_ptr() == (
+            tds[2].get("u").data_ptr()
+        )
+        assert (flat.unflatten_keys() == outer).all()
+
     def test_non_tensor_items_ragged_tensors(self):
         lazy = lazy_stack(
             [
