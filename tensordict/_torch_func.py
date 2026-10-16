@@ -853,7 +853,7 @@ def _stack(
                     v0 = values[0]
                     if type(v0) is Tensor and not v0.is_nested:
                         shape = v0.shape
-                        for v in values:
+                        for v in values[1:]:
                             if type(v) is not Tensor or v.is_nested or v.shape != shape:
                                 break
                         else:
