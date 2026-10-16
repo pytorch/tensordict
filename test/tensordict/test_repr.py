@@ -946,9 +946,10 @@ class TestCompactRepr:
             "    sub: {y: f32[3]},\n"
             "    x: f32[10]})"
         )
-        # the default repr stacks the leaves
+        # Since #2799 the default repr of a lazy stack does not stack the
+        # leaves either.
         repr(td)
-        assert calls
+        assert not calls
 
     @pytest.mark.parametrize("ragged", [False, True])
     def test_compact_typed_lazy_stack_calls_no_stack(self, monkeypatch, ragged):
