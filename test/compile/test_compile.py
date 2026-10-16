@@ -2716,6 +2716,20 @@ class TestNN:
 
         assert module_compile(td) is td
 
+    def test_named_sequence_shared_module(self, mode):
+        key = ("nested", "x")
+        shared = Mod(lambda x: x + 1, in_keys=[key], out_keys=[key])
+        module = Seq(
+            {
+                "first": shared,
+                "middle": Mod(lambda x: x * 10, in_keys=[key], out_keys=[key]),
+                "last": shared,
+            }
+        )
+        compiled = torch.compile(module, fullgraph=True, mode=mode)
+        result = compiled(TensorDict({key: torch.zeros(3)}, batch_size=[3]))
+        torch.testing.assert_close(result[key], torch.full((3,), 11.0))
+
     def test_seq_lmbda(self, mode):
         net0 = torch.nn.Linear(4, 5)
         module0 = Mod(net0, in_keys=["a"], out_keys=["hidden"])

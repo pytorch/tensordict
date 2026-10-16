@@ -1581,6 +1581,33 @@ class TestTDSequence:
         assert (td["y"] == 2).all()
         assert seq["layer0"] is layer0
 
+    @pytest.mark.parametrize("mapping", [dict, OrderedDict])
+    @pytest.mark.parametrize("key", ["x", ("nested", "x")])
+    def test_named_sequence_shared_module(self, mapping, key):
+        linear = nn.Linear(1, 1, bias=False)
+        with torch.no_grad():
+            linear.weight.fill_(2)
+        shared = TensorDictModule(linear, in_keys=[key], out_keys=[key])
+        seq = TensorDictSequential(
+            mapping(
+                first=shared,
+                middle=TensorDictModule(lambda x: x + 1, [key], [key]),
+                last=shared,
+            )
+        )
+        x = torch.ones(1, requires_grad=True)
+        result = seq(TensorDict({key: x}))[key]
+        torch.testing.assert_close(result, torch.tensor([6.0]))
+        result.sum().backward()
+        torch.testing.assert_close(linear.weight.grad, torch.tensor([[5.0]]))
+        torch.testing.assert_close(x.grad, torch.tensor([4.0]))
+
+        selected = seq.select_subsequence(out_keys=[key])
+        assert selected["first"] is selected["last"] is shared
+        torch.testing.assert_close(
+            selected(TensorDict({key: torch.ones(1)}))[key], torch.tensor([6.0])
+        )
+
     def test_ordered_dict_select_subsequence(self):
         ordered_dict = OrderedDict(
             layer0=TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"]),
