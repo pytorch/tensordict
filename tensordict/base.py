@@ -1598,6 +1598,21 @@ def _warn_lazy_is_empty() -> None:
     )
 
 
+def _warn_split_keys_kept_in_last() -> None:
+    """Warns that ``split_keys(strict=False)`` keeps a named entry that only some members of a lazy stack hold in the last part, until 0.17 (#2827)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        "split_keys(strict=False) leaves an entry that only some members of a "
+        "lazy stack hold in the last part, although a key set names it. "
+        "Starting with TensorDict 0.17, the default will change to putting it "
+        "in the part of that key set, in the members that hold it, as with "
+        "strict=True.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -1630,17 +1645,27 @@ def _warn_get_kwargs(
     warnings.warn(message, FutureWarning, stacklevel=stacklevel)
 
 
+def _unwrap(td: TensorDictBase) -> TensorDictBase:
+    """The tensordict that ``td`` holds its entries in: the one that a tensorclass or a TypedTensorDict wraps, else ``td``."""
+    while True:
+        if _is_tensorclass(type(td)):
+            td = td._tensordict
+        elif getattr(type(td), "_wrapped_attr", None) is not None:
+            # a TypedTensorDict
+            td = getattr(td, type(td)._wrapped_attr)
+        else:
+            return td
+
+
 def _has_lazy_stack(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
     No data of a file or a store is read: they cannot hold a lazy stack.
     """
     from tensordict._lazy import LazyStackedTensorDict
-    from tensordict.typedtensordict import TypedTensorDict
 
     # these apply their functions through the tensordict that they wrap
-    while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
-        td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+    td = _unwrap(td)
     if isinstance(td, LazyStackedTensorDict):
         return True
     if td._reads_return_copies:
@@ -1660,7 +1685,6 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
-    from tensordict.typedtensordict import TypedTensorDict
 
     keys = {}
     nodes = [((), td)]
@@ -1671,8 +1695,7 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
             items = td._tensordict.items()
         else:
             # these hold their entries in the tensordict that they wrap
-            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
-                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+            td = _unwrap(td)
             if isinstance(td, LazyStackedTensorDict):
                 nodes.extend((prefix, member) for member in td.tensordicts)
                 continue
@@ -1686,6 +1709,123 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
             else:
                 keys[(*prefix, key)] = None
     return list(keys)
+
+
+def _lazy_on_path(td: TensorDictBase, key: tuple) -> bool:
+    """Whether ``td`` or a tensordict that ``key`` runs through in it is lazy, as a lazy stack is: a cheap test before ``_held_by_member``."""
+    if type(td)._wrapped_attr is not None:
+        td = _unwrap(td)
+    for name in key[:-1]:
+        if td._lazy:
+            return True
+        td = td._get_str(name, None)
+        if not _is_tensor_collection(type(td)) or _is_non_tensor(type(td)):
+            return False
+        td = _unwrap(td)
+    return td._lazy
+
+
+def _held_by_member(td: TensorDictBase, key: tuple) -> bool:
+    """Whether ``td`` holds ``key``, in some member of each lazy stack that ``key`` runs through."""
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+
+    # each node is a tensordict that holds key[:i], and the next name
+    nodes = [(0, td)]
+    while nodes:
+        i, td = nodes.pop()
+        if i == len(key):
+            return True
+        if type(td) is TensorDict:
+            # the common case, read without the checks below
+            value = td._tensordict.get(key[i])
+        elif not _is_tensor_collection(type(td)) or _is_non_tensor(type(td)):
+            continue
+        else:
+            td = _unwrap(td)
+            if isinstance(td, LazyStackedTensorDict):
+                nodes.extend((i, member) for member in td.tensordicts)
+                continue
+            value = td._get_str(key[i], None)
+        if value is not None:
+            nodes.append((i + 1, value))
+    return False
+
+
+def _split_keys_by_member(
+    td: TensorDictBase, key_sets: list, inplace: bool, reproduce_struct: bool
+) -> list:
+    """``td.split_keys(*key_sets)``, splitting each member of a lazy stack in ``td`` on its own (#2827).
+
+    An entry that only some members hold goes to the part whose key set
+    names it, in those members. ``key_sets`` are dicts of key tuples.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    if _is_tensorclass(type(td)) or isinstance(td, TypedTensorDict):
+        # split the tensordict that it wraps and wrap the parts, as
+        # td.split_keys does
+        inner = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+        parts = _split_keys_by_member(inner, key_sets, inplace, reproduce_struct)
+        if isinstance(td, TypedTensorDict):
+            parts = [type(td)._wrap_td(part) for part in parts]
+        else:
+            parts = [
+                td._from_tensordict(part, dict(td._non_tensordict), safe=False)
+                for part in parts
+            ]
+        if inplace:
+            parts[-1] = td
+        return parts
+    if isinstance(td, LazyStackedTensorDict):
+        members = zip(
+            *(
+                _split_keys_by_member(member, key_sets, inplace, reproduce_struct)
+                for member in td.tensordicts
+            )
+        )
+        parts = [LazyStackedTensorDict(*m, stack_dim=td.stack_dim) for m in members]
+        if inplace:
+            parts[-1] = td
+        return parts
+    # a key in a tensordict that holds a lazy stack is split in it
+    own_sets, nested = [], {}
+    for i, key_set in enumerate(key_sets):
+        own_sets.append({})
+        for key, out_key in key_set.items():
+            value = td._get_str(key[0], None) if len(key) > 1 else None
+            if not (_is_tensor_collection(type(value)) and _has_lazy_stack(value)):
+                own_sets[-1][key] = out_key
+            elif out_key[0] == key[0] and len(out_key) > 1:
+                sets = nested.setdefault(key[0], [{} for _ in key_sets])
+                sets[i][key[1:]] = out_key[1:]
+            elif _held_by_member(value, key[1:]) and td.get(key, None) is None:
+                raise KeyError(
+                    f"split_keys cannot move {key}, which only some members of "
+                    f"a lazy stack hold, to {out_key}, outside that stack."
+                )
+            else:
+                own_sets[-1][key] = out_key
+    parts = td.split_keys(
+        *own_sets, inplace=inplace, strict=False, reproduce_struct=reproduce_struct
+    )
+    for name, sets in nested.items():
+        # the last part lacks the keys that own_sets moved out of name
+        sub_parts = _split_keys_by_member(
+            parts[-1].get(name), sets, inplace, reproduce_struct
+        )
+        for part, sub_part in zip(parts, sub_parts):
+            if part.get(name, None) is sub_part:
+                # inplace: the last part is td, split in place
+                pass
+            elif reproduce_struct or _all_leaf_keys(sub_part):
+                part.set(name, sub_part)
+            else:
+                part.pop(name, None)
+    if inplace and not reproduce_struct:
+        parts[-1].filter_empty_()
+    return list(parts)
 
 
 def _has_unmatched_member_key(keys: list, source: dict) -> bool:
@@ -9980,6 +10120,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if inplace:
             keys_to_del = set()
         leaf_keys = None
+        warn = True
+        dict_sets = []
         for key_set in key_sets:
             out = self.empty(recurse=reproduce_struct)
             if reproduce_struct:
@@ -10003,8 +10145,41 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ]
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
+            # a key set may be an iterator, read once
+            dict_sets.append(key_set)
             for key in key_set:
-                val = last_out.pop(key, default)
+                try:
+                    val = last_out.pop(key, default)
+                except KeyError:
+                    if not _has_lazy_stack(self):
+                        raise
+                    key_sets = [
+                        {
+                            _unravel_key_to_tuple(k): _unravel_key_to_tuple(
+                                ks[k] if isinstance(ks, dict) else k
+                            )
+                            for k in ks
+                        }
+                        for ks in (*dict_sets, *key_sets[len(dict_sets) :])
+                    ]
+                    for k in (k for ks in key_sets for k in ks):
+                        if not _held_by_member(self, k):
+                            # no member holds k: the KeyError of pop
+                            raise
+                    return tuple(
+                        _split_keys_by_member(self, key_sets, inplace, reproduce_struct)
+                    )
+                if (
+                    val is default
+                    and not strict
+                    and warn
+                    and _lazy_on_path(self, _unravel_key_to_tuple(key))
+                    and _held_by_member(self, _unravel_key_to_tuple(key))
+                ):
+                    # once per call, for a key that only some members of a
+                    # lazy stack hold (#2827)
+                    warn = False
+                    _warn_split_keys_kept_in_last()
                 if val is not None:
                     outs[-1].set(key_set[key], val)
                 if inplace:

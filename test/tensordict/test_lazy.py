@@ -4145,7 +4145,9 @@ class TestLazyStackedTensorDict:
         assert empty.split([], 0) == ()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
-    @pytest.mark.parametrize("nesting", ["stack", "stack of stacks", "in a td"])
+    @pytest.mark.parametrize(
+        "nesting", ["stack", "stack of stacks", "in a td", "typed", "typed in a td"]
+    )
     @pytest.mark.parametrize("inplace", [False, True])
     @pytest.mark.parametrize("reproduce_struct", [False, True])
     def test_split_keys_exclusive_entries(
@@ -4154,6 +4156,12 @@ class TestLazyStackedTensorDict:
         # An entry that only some members hold goes to the part that holds it
         # in those members, the last one, and is not copied into the other
         # parts with reproduce_struct=True (#2803)
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+            b: torch.Tensor
+
+        prefix = ("s",) if nesting.endswith("in a td") else ()
+
         def make():
             members = [
                 TensorDict(
@@ -4170,7 +4178,9 @@ class TestLazyStackedTensorDict:
             td = lazy_stack(members, stack_dim)
             if nesting == "stack of stacks":
                 td = lazy_stack([td, td.clone()], stack_dim)
-            elif nesting == "in a td":
+            if nesting.startswith("typed"):
+                td = Typed.from_tensordict(td)
+            if prefix:
                 td = TensorDict(s=td, batch_size=td.batch_size)
             return td
 
@@ -4185,7 +4195,6 @@ class TestLazyStackedTensorDict:
 
         def split(*key_sets, **kwargs):
             td = make()
-            prefix = ("s",) if nesting == "in a td" else ()
             key_sets = [[(*prefix, *key) for key in keys] for keys in key_sets]
             parts = td.split_keys(
                 *key_sets,
@@ -4195,7 +4204,11 @@ class TestLazyStackedTensorDict:
             )
             if inplace:
                 assert parts[-1] is td
-            if nesting == "in a td":
+            if nesting == "typed":
+                assert all(type(part) is Typed for part in parts)
+            elif nesting == "typed in a td":
+                assert type(parts[-1]["s"]) is Typed
+            if prefix:
                 # a part without leaves may have no "s"
                 parts = [part.get("s", part) for part in parts]
             return [leaves(part) for part in parts]
@@ -4215,13 +4228,88 @@ class TestLazyStackedTensorDict:
             [{("b",)}, {("b",)}],
             [{("n", "c")}, {("n", "c"), ("extra",), ("t",), ("n", "x")}],
         )
-        # As on main, a key set that names an exclusive entry raises, and with
-        # strict=False the entry stays in the last part
+        # A key set that names an exclusive entry gets it from the members
+        # that hold it; a key that no member holds raises (#2827)
+        assert split([("a",)], [("extra",)]) == expected(
+            [{("a",)}, {("a",)}],
+            [set(), {("extra",)}],
+            [common, common | {("t",), ("n", "x")}],
+        )
+        assert split([("b",), ("t",), ("n", "x")]) == expected(
+            [{("b",)}, {("b",), ("t",), ("n", "x")}],
+            [{("a",), ("n", "c")}, {("a",), ("n", "c"), ("extra",)}],
+        )
         with pytest.raises(KeyError):
-            split([("a",)], [("extra",)])
-        assert split([("a",)], [("extra",)], strict=False) == expected(
+            split([("a",)], [("extra",), ("nope",)])
+        # with strict=False the entry stays in the last part, as on main, with
+        # one FutureWarning per call until 0.17
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
+            parts = split([("a",)], [("extra",), ("t",)], strict=False)
+        assert len(w) == 1
+        assert parts == expected(
             [{("a",)}, {("a",)}], [set(), set()], [common, common | exclusive]
         )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            split([("a",)], [("nope",)], strict=False)
+        # a renamed exclusive entry stays in its lazy stack
+        parts = make().split_keys({(*prefix, "extra"): (*prefix, "e")})
+        parts = [part.get("s", part) if prefix else part for part in parts]
+        assert leaves(parts[0]) == expected([set(), {("e",)}])[0]
+        # a key set may be an iterator
+        parts = make().split_keys(
+            (key for key in [(*prefix, "a")]), [(*prefix, "extra")], inplace=inplace
+        )
+        parts = [part.get("s", part) if prefix else part for part in parts]
+        assert [leaves(part) for part in parts[:2]] == expected(
+            [{("a",)}, {("a",)}], [set(), {("extra",)}]
+        )
+        if prefix:
+            # main's error for a key that no member holds
+            for keys, missed in (
+                ([("s", "nope")], "nope"),
+                ([("s", "extra"), ("s", "nope")], "extra"),
+            ):
+                with pytest.raises(KeyError) as err:
+                    make().split_keys(keys)
+                assert err.value.args[0].startswith(f"key \"('s', '{missed}')\"")
+            with pytest.raises(KeyError, match="outside that stack"):
+                make().split_keys({("s", "extra"): "e"})
+            # an entry moved out of the stack is in no other part
+            parts = make().split_keys(
+                {("s", "a"): "a2"},
+                [("s", "extra")],
+                inplace=inplace,
+                reproduce_struct=reproduce_struct,
+            )
+            assert set(parts[0].keys(True, True)) == {"a2"}
+            assert leaves(parts[1]["s"]) == [set(), {("extra",)}]
+            assert leaves(parts[2]["s"]) == [common, common | {("t",), ("n", "x")}]
+
+        if nesting == "in a td":
+            # a lazy stack in a tensorclass is split in the same way
+            class MC(TensorClass):
+                a: torch.Tensor
+                extra: torch.Tensor | None = None
+
+            members = [TensorDict(a=torch.zeros(2), batch_size=[2]) for _ in range(2)]
+            members[1]["extra"] = torch.ones(2)
+            td = TensorDict(
+                s=MC._from_tensordict(lazy_stack(members, stack_dim)),
+                batch_size=[2, 2],
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                parts = td.split_keys(
+                    [("s", "extra")],
+                    inplace=inplace,
+                    reproduce_struct=reproduce_struct,
+                )
+            assert all(isinstance(part["s"], MC) for part in parts)
+            assert [leaves(part["s"]._tensordict) for part in parts] == [
+                [set(), {("extra",)}],
+                [{("a",)}, {("a",)}],
+            ]
 
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim
