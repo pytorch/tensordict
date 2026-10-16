@@ -728,7 +728,7 @@ def _stack(
     if maybe_dense_stack is None:
         maybe_dense_stack = lazy_legacy()
     td_types = [type(td) for td in list_of_tensordicts]
-    is_tc = any(_is_tensorclass(td_type) for td_type in td_types)
+    is_tc = any(_is_tensorclass(td_type) for td_type in set(td_types))
     if all(_pass_through(td) for td in list_of_tensordicts):
         return type(list_of_tensordicts[0])._stack_non_tensor(
             list_of_tensordicts, dim=dim
@@ -784,8 +784,18 @@ def _stack(
         # The second requires a check over the tensor shapes.
         device = list_of_tensordicts[0].device
         if contiguous or not _lazy_legacy:
+            # perf: exact TensorDicts compare the key views of their dicts and
+            # read their dense leaves from them in the loop below
+            dicts = None
+            if all(type(td) is TensorDict for td in list_of_tensordicts):
+                dicts = [td._tensordict for td in list_of_tensordicts]
             try:
-                keys = _check_keys(list_of_tensordicts, strict=True)
+                if dicts is not None and all(
+                    d.keys() == dicts[0].keys() for d in dicts[1:]
+                ):
+                    keys = list(dicts[0])
+                else:
+                    keys = _check_keys(list_of_tensordicts, strict=True)
             except KeyError:
                 if not _lazy_legacy and not contiguous:
                     if maybe_dense_stack:
@@ -836,6 +846,19 @@ def _stack(
 
             out = {}
             for key in keys:
+                if dicts is not None:
+                    # The loop below gives the same entry when every value
+                    # is a dense tensor of one shape; it handles any other key.
+                    values = [d[key] for d in dicts]
+                    v0 = values[0]
+                    if type(v0) is Tensor and not v0.is_nested:
+                        shape = v0.shape
+                        for v in values:
+                            if type(v) is not Tensor or v.is_nested or v.shape != shape:
+                                break
+                        else:
+                            out[key] = (values, False, True)
+                            continue
                 out[key] = []
                 is_not_init = None
                 tensor_shape = None

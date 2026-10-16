@@ -1104,6 +1104,24 @@ def test_stack_nested(benchmark):
     benchmark(torch.stack, [td] * 4, 0)
 
 
+def test_stack_rollout_steps(benchmark):
+    # a rollout stacks one flat tensordict per step
+    n = 64
+    tds = [
+        TensorDict(
+            obs=torch.randn(n, 48),
+            done=torch.zeros(n, dtype=torch.bool),
+            value=torch.randn(n),
+            action=torch.randn(n, 12),
+            logprob=torch.randn(n),
+            reward=torch.randn(n),
+            batch_size=[n],
+        )
+        for _ in range(24)
+    ]
+    benchmark(torch.stack, tds, 0)
+
+
 def test_cat_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(torch.cat, [td] * 4, 0)
