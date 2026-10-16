@@ -1007,6 +1007,69 @@ class TestFromTensordict:
         assert (tds[1]["a"] == 2).all()
         assert (tds[1]["c"] == 1).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_from_tensordict_lazy_stack_index_views(self, stack_dim):
+        # #2759: indexing returns views of the members, as indexing the stack
+        # does, so writes through the result reach them
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        tds = [
+            TensorDict(a=torch.ones(3), n={"x": torch.ones(3, 2)}, batch_size=[3])
+            for _ in range(4)
+        ]
+        tds[0]["e"] = torch.ones(3)
+        state = Nested.from_tensordict(lazy_stack(tds, stack_dim))
+        index = (slice(None),) * stack_dim
+        sliced = state[(*index, slice(1, None))]
+        assert isinstance(sliced, Nested)
+        assert sliced.add_(1) is sliced
+        sliced.set_("a", torch.full_like(sliced["a"], 5.0))
+        for td in tds[1:]:
+            assert (td["a"] == 5).all()
+            assert (td["n", "x"] == 2).all()
+        assert (tds[0]["a"] == 1).all()
+        # out-of-place math gives a new Nested and leaves the members alone
+        plus = sliced + 1
+        assert isinstance(plus, Nested)
+        assert (plus["a"] == 6).all()
+        assert (tds[1]["a"] == 5).all()
+        sliced.copy_(plus)
+        for td in tds[1:]:
+            assert (td["a"] == 6).all()
+            assert (td["n", "x"] == 3).all()
+        # an int on the stack dim gives the member, with its own keys
+        first = state[(*index, 0)]
+        assert isinstance(first, Nested)
+        assert first._source is tds[0]
+        assert "e" in first.keys()
+        first["a"] = torch.full((3,), 7.0)
+        assert (tds[0]["a"] == 7).all()
+        # typed members: the result wraps the member's source, not the member
+        typed = Nested.from_tensordict(
+            lazy_stack([Nested.from_tensordict(td) for td in tds], stack_dim)
+        )
+        assert typed[(*index, 0)]._source is tds[0]
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_from_tensordict_lazy_stack_files_index_copies(self, tmp_path):
+        # members that read copies (files) index into a copy, as on main, so
+        # select, exclude and empty work on the result
+        files = [
+            PersistentTensorDict.from_dict(
+                self._make_td(), filename=tmp_path / f"{i}.h5"
+            )
+            for i in range(2)
+        ]
+        state = PredictorState.from_tensordict(lazy_stack(files))
+        for sub in (state[0], state[1:]):
+            assert isinstance(sub, PredictorState)
+            assert not isinstance(sub._source, LazyStackedTensorDict)
+            sub.select("eta")
+            sub.exclude("eta")
+            sub.empty()
+
     @pytest.mark.parametrize("exclusive", ["e", ("n", "e")], ids=["top", "nested"])
     def test_from_tensordict_lazy_stack_nested_exclusive_keys_inplace(self, exclusive):
         # #2739: with a nested entry, the in-place methods change the shared

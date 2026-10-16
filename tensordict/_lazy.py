@@ -549,6 +549,17 @@ def _restore_names(td, snapshot) -> None:
         td.names = snapshot
 
 
+def _is_plain_tensor(tensor) -> bool:
+    # A dense tensor that torch.stack stacks into a plain torch.Tensor.
+    return (
+        type(tensor) in (Tensor, torch.nn.Parameter, MemoryMappedTensor)
+        and tensor.layout is torch.strided
+        and not tensor.is_nested
+        and not tensor.is_quantized
+        and not torch._C._functorch.is_batchedtensor(tensor)
+    )
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A stack of tensordicts that keeps each input as a separate tensordict.
 
@@ -1329,9 +1340,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
         Heterogeneous dimensions are returned as -1.
 
-        This implementation is inefficient as it will attempt to stack the items
-        to compute their shape, and should only be used for printing.
+        The shape of a tensor entry is read from the members. Other entries
+        are read with :meth:`get`, which stacks them.
         """
+        leaf = self._plain_leaf(key)
+        if leaf is not None:
+            return leaf[0]
         try:
             item = self.get(key)
             return item.shape
@@ -1357,6 +1371,43 @@ class LazyStackedTensorDict(TensorDictBase):
                 return torch.Size(shape)
             else:
                 raise err
+
+    def _plain_leaf(self, key):
+        """Returns the shape of entry ``key`` and the members' tensors, without stacking them.
+
+        The shape is the one :meth:`get_item_shape` gives, with -1 for the
+        dims where the members differ. Returns ``None`` if the entry is not a
+        plain tensor in every member, or if a hook changes what :meth:`get`
+        returns.
+        """
+        if (
+            not isinstance(key, str)
+            or not self.tensordicts
+            or self._hook_out is not None
+            or self._is_vmapped
+        ):
+            return None
+        shapes, tensors = [], []
+        for td in self.tensordicts:
+            if isinstance(td, LazyStackedTensorDict):
+                leaf = td._plain_leaf(key)
+                if leaf is None:
+                    return None
+                shapes.append(leaf[0])
+                tensors.extend(leaf[1])
+                continue
+            tensor = td._get_str(key, None)
+            if not _is_plain_tensor(tensor):
+                return None
+            shapes.append(tensor.shape)
+            tensors.append(tensor)
+        shape = list(shapes[0])
+        for other in shapes[1:]:
+            if len(shape) != len(other):
+                return torch.Size([-1]), tensors
+            shape = [s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, other)]
+        shape.insert(self.stack_dim, len(self.tensordicts))
+        return torch.Size(shape), tensors
 
     # Override: the members must agree.
     def is_shared(self) -> bool:
@@ -3124,18 +3175,29 @@ class LazyStackedTensorDict(TensorDictBase):
         _write_back_members(written, name)
         return self
 
+    # Override: a member holds tensordicts that read copies, such as a
+    # TensorDict that holds an h5 file: the method runs on the stack of
+    # copies, as where the members read copies (#2775).
+    def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
+        return LazyStackedTensorDict._inplace_on_copies(self, method, *args, **kwargs)
+
     def _stack_of_copies(self, written: list) -> LazyStackedTensorDict:
         """The stack with each member that reads copies replaced by a copy of its leaves.
 
-        Called by ``_inplace_on_copies``. Appends each such member and its
-        copy to ``written``, for the member to write the copy back.
+        A member that holds such tensordicts, such as h5 files, is replaced by
+        a copy in which they are (``TensorDict._tree_of_copies``). Called by
+        ``_inplace_on_copies``. Appends each such member and its copy to
+        ``written``, for the member to write the copy back.
         """
         members = []
         for td in self.tensordicts:
-            if not td._reads_return_copies:
-                members.append(td)
-            elif isinstance(td, LazyStackedTensorDict):
+            if isinstance(td, TensorDict):
+                # a member that holds files (#2775)
+                members.append(td._tree_of_copies(written))
+            elif isinstance(td, LazyStackedTensorDict) and not td._is_non_tensor:
                 members.append(td._stack_of_copies(written))
+            elif not td._reads_return_copies:
+                members.append(td)
             elif _has_lazy_stack(td):
                 # a TypedTensorDict over a lazy stack, whose copy would split
                 # the keys over the members of that stack: changed as before
@@ -4403,6 +4465,24 @@ class LazyStackedTensorDict(TensorDictBase):
         for _mask, td in _zip_strict(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
+
+    # Override: each member returns its own filled copy, so that a member
+    # whose clone cannot be filled in place (TensorDictParams) works.
+    def _masked_fill(self, mask: Tensor, value: float | bool) -> Self:
+        if not self.tensordicts:
+            return super()._masked_fill(mask, value)
+        if mask.ndim < self.batch_dims:
+            mask = expand_right(mask, self.batch_size)
+        return self._new_lazy_unsafe(
+            *[
+                td.masked_fill(_mask, value)
+                for _mask, td in _zip_strict(
+                    mask.unbind(dim=self.stack_dim), self.tensordicts
+                )
+            ],
+            stack_dim=self.stack_dim,
+            stack_dim_name=self._td_dim_name,
+        )
 
     @_lock_blocked
     def insert(self, index: int, tensordict: T) -> None:
