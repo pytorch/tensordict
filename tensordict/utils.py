@@ -2891,10 +2891,10 @@ def _cast_filtered(td, cast, cast_filter, **kwargs):
 def is_inexact(*args) -> bool:
     """Whether the last argument is a floating-point or complex tensor.
 
-    The predicate tests its last argument only, so it can be passed as
-    ``fn(value)``, for example to :meth:`~tensordict.TensorDictBase.apply`, and
-    as ``fn(key, value)``, for example as the ``cast_filter`` of
-    :meth:`~tensordict.TensorDictBase.to`.
+    The predicate tests its last argument only, so it works both as
+    ``fn(value)``, for example inside a function given to
+    :meth:`~tensordict.TensorDictBase.apply`, and as ``fn(key, value)``, for
+    example as the ``cast_filter`` of :meth:`~tensordict.TensorDictBase.to`.
 
     Args:
         *args: the value to test is the last one. A key may come before it.
