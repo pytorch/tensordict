@@ -447,12 +447,12 @@ class TensorDict(TensorDictBase):
                 lock=lock,
                 **kwargs,
             )
-            # The data is already in shared memory: set the flag as the eager
-            # branch does, without copying it.
+            # The data is already in shared or memory-mapped storage: set the
+            # flags as the eager branch does, without copying it.
             if is_shared:
                 td._is_shared = True
             if is_memmap:
-                td.memmap_()
+                td._is_memmap = True
             return td
         if kwargs and not source:
             source = kwargs
