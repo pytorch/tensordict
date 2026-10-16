@@ -18,7 +18,7 @@ import os.path
 import sys
 import warnings
 import weakref
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from functools import wraps
 from pathlib import Path
@@ -68,6 +68,7 @@ from tensordict.utils import (
     _cache_while_locked,
     _canonicalize_tensor,
     _CloudpickleWrapper,
+    _compact_repr,
     _convert_list_to_stack,
     _copy_cached_result,
     _erase_cache_first,
@@ -79,6 +80,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _KEY_ERROR,
+    _LIBRARY_DIRS,
     _lock_blocked,
     _LOCK_ERROR,
     _lock_warn,
@@ -97,6 +99,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _user_stacklevel,
     _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
@@ -363,6 +366,129 @@ def _is_inside(key: NestedKey, other: NestedKey) -> bool:
     key = (key,) if isinstance(key, str) else key
     other = (other,) if isinstance(other, str) else other
     return len(key) > len(other) and key[: len(other)] == other
+
+
+def _rename_keys_pairs(
+    mapping: Mapping[NestedKey, NestedKey],
+) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
+    """The pairs of tuple keys of :meth:`~TensorDictBase.rename_keys`, after the checks that read no data."""
+    pairs = []
+    for src, dst in mapping.items():
+        pair = []
+        for key in (src, dst):
+            if not isinstance(key, (str, tuple)):
+                raise TypeError(
+                    f"Expected a key to be a string or a tuple of strings but found {type(key)}"
+                )
+            key_tuple = _unravel_key_to_tuple(key)
+            if not key_tuple:
+                raise KeyError(_GENERIC_NESTED_ERR.format(key))
+            pair.append(key_tuple)
+        pairs.append(tuple(pair))
+    for side, keys in (
+        ("source", [src for src, _ in pairs]),
+        ("destination", [dst for _, dst in pairs]),
+    ):
+        for i, key in enumerate(keys):
+            for other in keys[:i]:
+                if key == other:
+                    raise ValueError(f"The key {key} is a {side} more than once.")
+                if _is_inside(key, other) or _is_inside(other, key):
+                    raise ValueError(
+                        f"The {side}s {other} and {key} lie inside one another, so "
+                        "the result would depend on the order of the mapping."
+                    )
+    return pairs
+
+
+def _keep(value):
+    return value
+
+
+def _rename_entries(
+    tds: list[TensorDictBase],
+    pairs: list[tuple[tuple[str, ...], tuple[str, ...]]],
+    *,
+    strict: bool,
+    prune_root: bool,
+) -> None:
+    """Moves the entries of ``pairs`` in each tensordict of ``tds``: the end of :meth:`~TensorDictBase.rename_keys`.
+
+    ``tds`` are private copies, so a call that raises halfway changes nothing
+    the user holds. Every source is read before any is deleted, and the
+    collisions are checked after the deletions, so swaps and chains work. A
+    sub-tensordict that the move empties is deleted only if it is empty in
+    every tensordict of ``tds``, and never when it is a field of a
+    tensorclass (``prune_root=False`` for the fields of the root).
+    """
+    moves = []
+    for td in tds:
+        keys = td.keys(include_nested=True)
+        present = []
+        for src, dst in pairs:
+            if src not in keys:
+                if strict:
+                    raise KeyError(
+                        _KEY_ERROR.format(
+                            src[0] if len(src) == 1 else src,
+                            type(td).__name__,
+                            sorted(keys, key=str),
+                        )
+                    )
+                continue
+            if src != dst:
+                present.append((src, dst))
+        moves.append(present)
+    values = [
+        [td._get_tuple(src, NO_DEFAULT) for src, _ in present]
+        for td, present in zip(tds, moves)
+    ]
+    for td, present in zip(tds, moves):
+        for src, _ in present:
+            td.del_(src)
+    parents = {
+        src[:i]
+        for present in moves
+        for src, _ in present
+        for i in range(1 if prune_root else 2, len(src))
+    }
+    for parent in sorted(parents, key=len, reverse=True):
+        holders = []
+        for td in tds:
+            group = td._get_tuple(parent, None)
+            if group is None:
+                continue
+            container = td._get_tuple(parent[:-1], None) if len(parent) > 1 else td
+            if (
+                _is_tensorclass(type(container))
+                or not isinstance(group, TensorDictBase)
+                or group._has_exclusive_keys
+                or list(group.keys())
+            ):
+                holders = None
+                break
+            holders.append(td)
+        for td in holders or ():
+            td.del_(parent)
+    for td, present in zip(tds, moves):
+        keys = td.keys(include_nested=True)
+        for _, dst in present:
+            if dst in keys:
+                raise ValueError(
+                    f"The destination {dst} is already present and is not renamed away."
+                )
+            for i in range(1, len(dst)):
+                value = td._get_tuple(dst[:i], None)
+                if value is None:
+                    break
+                if _is_leaf_nontensor(type(value)):
+                    raise ValueError(
+                        f"The destination {dst} runs through the entry {dst[:i]}, "
+                        "which is not a tensordict."
+                    )
+    for td, present, vals in zip(tds, moves, values):
+        for (_, dst), value in zip(present, vals):
+            td._set_tuple(dst, value, inplace=False, validated=True, non_blocking=False)
 
 
 def _holds_its_tensors(td: TensorDictBase) -> bool:
@@ -1439,6 +1565,38 @@ def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
     return True
 
 
+def _members_hold_leaf(members: list[TensorDictBase]) -> bool:
+    """Whether a member of a lazy stack holds a leaf, counting non-tensor data and the members of the lazy stacks it holds (#2807)."""
+    for member in members:
+        for _ in member.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR):
+            return True
+    return False
+
+
+def _in_dense_is_empty() -> bool:
+    """Whether the calling ``is_empty()`` runs for a ``TensorDict.is_empty`` call, which warns once, if its own result is ``True`` (#2807)."""
+    frame = sys._getframe(2)
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        if (
+            frame.f_code.co_name == "is_empty"
+            and frame.f_globals.get("__name__") == "tensordict._td"
+        ):
+            return True
+        frame = frame.f_back
+    return False
+
+
+def _warn_lazy_is_empty() -> None:
+    """Warns that ``is_empty()`` returns ``True`` for a lazy stack whose members hold leaves, until 0.17 (#2807)."""
+    warnings.warn(
+        "is_empty() returns True for a lazy stack that lists no leaf, while "
+        "some of its members hold leaves. Starting with TensorDict 0.17, the "
+        "default will change to returning True only if every member is empty.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -1999,6 +2157,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def __repr__(self) -> str:
         try:
+            if _REPR_OPTIONS["compact"]:
+                compact = _compact_repr(self)
+                if compact is not None:
+                    return compact
             string = ",\n".join(self._repr_parts())
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
@@ -4058,11 +4220,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def filter_empty_(self):
         """Filters out all empty tensordicts in-place."""
-        for key, val in reversed(
-            list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS, sort=True))
-        ):
-            if _is_tensor_collection(type(val)) and val.is_empty():
-                del self[key]
+
+        # A lazy stack filters each member, and a sub-tensordict is filtered
+        # before it is checked: a nested key that names a member, such as
+        # ("0", "a"), cannot be deleted from the stack (#2796). A lazy stack
+        # is empty if all its members are: is_empty() only sees the keys that
+        # all members share.
+        def filter_td(td) -> bool:
+            # Filters td in place and returns whether it is then empty.
+            members = td._members_as_lists()
+            if members is not None:
+                return all([filter_td(member) for member in members])
+            kept = False
+            for key, val in list(td.items()):
+                cls = type(val)
+                if not _is_tensor_collection(cls):
+                    continue
+                if is_non_tensor(cls) or _pass_through(val):
+                    if val.is_empty():
+                        del td[key]
+                elif filter_td(val._tensordict if _is_tensorclass(cls) else val):
+                    del td[key]
+                else:
+                    kept = True
+            return not kept and td.is_empty()
+
+        filter_td(self)
         return self
 
     def _contains_str(self, key: str) -> bool:
@@ -5542,7 +5725,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def is_empty(self) -> bool:
         """Returns ``True`` if the tensordict has no leaf.
 
-        Empty sub-tensordicts do not count as leaves.
+        Empty sub-tensordicts do not count as leaves. A lazy stack counts only
+        the tensors that all its members share: it returns ``True`` when they
+        share none, and warns when some member holds a leaf. Starting with
+        TensorDict 0.17, the default will change to returning ``True`` only if
+        every member is empty.
 
         Examples:
             >>> import torch
@@ -5559,6 +5746,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return not list(self.keys(True, True))
         for _ in self.keys(True, True):
             return False
+        members = self._members_as_lists()
+        if (
+            members is not None
+            and _members_hold_leaf(members)
+            and not _in_dense_is_empty()
+        ):
+            _warn_lazy_is_empty()
         return True
 
     # Dict features: setdefault, items, values, keys, ...
@@ -6385,6 +6579,96 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ):
             # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
             self.del_(old_key)
+
+    def rename_keys(
+        self, mapping: Mapping[NestedKey, NestedKey], *, strict: bool = True
+    ) -> Self:
+        """Returns a tensordict with several keys renamed at once.
+
+        ``self`` is not modified. The result has a new tree of sub-tensordicts and
+        shares every leaf with ``self``, tensors and non-tensor data alike. Its
+        batch size, device and dim names are those of ``self``, and it is not
+        locked.
+
+        Every source is read before any destination is written, so swaps
+        (``{"a": "b", "b": "a"}``) and chains (``{"a": "b", "b": "c"}``) work.
+        A sub-tensordict that the renaming leaves empty is removed. Other empty
+        sub-tensordicts are kept.
+
+        A lazy stack renames the keys in each of its tensordicts, and removes a
+        sub-tensordict only if the renaming empties it in all of them. A
+        tensorclass returns the same class, its destinations must be fields,
+        and its fields are never removed.
+        :class:`~tensordict.PersistentTensorDict` and the stores raise
+        ``NotImplementedError``: call :meth:`~.to_tensordict` first.
+
+        To rename a single key in place, see :meth:`~.rename_key_`.
+
+        Args:
+            mapping (Mapping[NestedKey, NestedKey]): the old key of each entry
+                mapped to its new key. Both sides can be nested keys, so an entry
+                can move to another sub-tensordict and a whole sub-tensordict can
+                be renamed.
+
+        Keyword Args:
+            strict (bool, optional): if ``True``, a source missing from ``self``
+                raises ``KeyError``. If ``False``, it is skipped. Defaults to
+                ``True``.
+
+        Returns:
+            a new tensordict of the same type as ``self``, except that a
+            sub-tensordict view returns a :class:`~tensordict.TensorDict`, as
+            :meth:`exclude` does.
+
+        Raises:
+            KeyError: if ``strict=True`` and a source is missing, or if a key is
+                empty.
+            ValueError: if two sources have the same destination, if a source
+                lies inside another source or a destination inside another
+                destination, or if a destination is already present and is not
+                renamed away.
+            AttributeError: if ``self`` is a tensorclass and a destination is
+                not one of its fields.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
+            >>> out = td.rename_keys({"a": "b", "b": "a"})
+            >>> out["a"], td["a"]
+            (tensor(1.), tensor(0.))
+            >>> td = TensorDict(raw=TensorDict(p=torch.zeros(3), u=torch.ones(3)))
+            >>> out = td.rename_keys({("raw", "p"): "pressure", ("raw", "u"): "velocity"})
+            >>> sorted(out.keys(include_nested=True))  # "raw" was emptied and removed
+            ['pressure', 'velocity']
+            >>> out = td.rename_keys({"raw": "solution"})
+            >>> sorted(out.keys(include_nested=True, leaves_only=True))
+            [('solution', 'p'), ('solution', 'u')]
+            >>> td.rename_keys({("raw", "zz"): "z", ("raw", "p"): "p"}, strict=False)["p"]
+            tensor([0., 0., 0.])
+        """
+        return self._rename_keys(
+            _rename_keys_pairs(mapping), strict=strict, prune_root=True
+        )
+
+    def _rename_keys(
+        self,
+        pairs: list[tuple[tuple[str, ...], tuple[str, ...]]],
+        *,
+        strict: bool,
+        prune_root: bool,
+    ) -> Self:
+        """Returns a copy of ``self`` with the keys renamed: the storage part of :meth:`rename_keys`.
+
+        :meth:`rename_keys` has turned the mapping into ``pairs`` of tuple keys
+        and checked that they do not overlap. The hook copies the tree of
+        sub-tensordicts, shares every leaf, and moves the entries of the copy
+        with ``_rename_entries``. ``prune_root=False`` keeps the top-level
+        sub-tensordicts that the move empties (the fields of a tensorclass).
+        """
+        out = self._fast_apply(_keep, is_leaf=_is_leaf_nontensor)
+        _rename_entries([out], pairs, strict=strict, prune_root=prune_root)
+        return out
 
     @_lock_blocked
     def del_(self, key: NestedKey) -> Self:
@@ -9368,7 +9652,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is missing. Defaults to ``True``.
             reproduce_struct (bool, optional): if ``True``, all tensordict returned have
                 the same tree structure as ``self``, even if some sub-tensordicts
-                contain no leaves.
+                contain no leaves. Non-tensor entries are not copied: each
+                one goes to the output whose key set names it, or to the last
+                one, as with ``reproduce_struct=False``.
 
         .. note::
             ``None`` non-tensor values will be ignored and not returned.
@@ -9405,8 +9691,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         outs = []
         if inplace:
             keys_to_del = set()
+        non_tensor_keys = None
         for key_set in key_sets:
-            outs.append(self.empty(recurse=reproduce_struct))
+            out = self.empty(recurse=reproduce_struct)
+            if reproduce_struct:
+                # empty(recurse=True) keeps the non-tensor leaves: they belong
+                # to the output whose key set names them, or to the last one.
+                # Every output has the same ones: find them once.
+                if non_tensor_keys is None:
+                    non_tensor_keys = (
+                        list(out.keys(True, True, is_leaf=_is_leaf_nontensor))
+                        if out._has_non_tensor
+                        else []
+                    )
+                if non_tensor_keys:
+                    out = out.exclude(*non_tensor_keys)
+            outs.append(out)
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
             for key in key_set:

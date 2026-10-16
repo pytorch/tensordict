@@ -42,11 +42,13 @@ from tensordict.base import (
     _foreach_copy_compiled,
     _has_lazy_stack,
     _holds_its_tensors,
+    _in_dense_is_empty,
     _is_accepted_class,
     _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
     _load_metadata,
+    _members_hold_leaf,
     _NESTED_TENSORS_AS_LISTS,
     _raise_if_not_a_tensordict,
     _register_tensor_class,
@@ -58,6 +60,7 @@ from tensordict.base import (
     _set_tensordict_type,
     _UNSET,
     _warn_empty_names,
+    _warn_lazy_is_empty,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
     _wrap_extra_state,
@@ -186,6 +189,17 @@ def _mps_available() -> bool:
     if _MPS_AVAILABLE is None:
         _MPS_AVAILABLE = torch.backends.mps.is_available()
     return _MPS_AVAILABLE
+
+
+def _nested_members_hold_leaf(td: TensorDict) -> bool:
+    """Whether a nested collection of ``td``, which lists no leaf, holds one in the members of a lazy stack (#2807)."""
+    for item in td._tensordict.values():
+        if type(item) is TensorDict:
+            if _nested_members_hold_leaf(item):
+                return True
+        elif _members_hold_leaf([item]):
+            return True
+    return False
 
 
 class TensorDict(TensorDictBase):
@@ -767,6 +781,15 @@ class TensorDict(TensorDictBase):
                     return False
             else:
                 return False
+        # A nested lazy stack does not warn: this call warns once, as its own
+        # result is True (#2807).
+        if (
+            self._tensordict
+            and not is_compiling()
+            and _nested_members_hold_leaf(self)
+            and not _in_dense_is_empty()
+        ):
+            _warn_lazy_is_empty()
         return True
 
     # Functorch compatibility

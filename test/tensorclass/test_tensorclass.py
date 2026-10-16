@@ -1735,6 +1735,62 @@ class TestTensorClass:
         assert (data.td["td", "a"] == 0).all()
         assert data.td["td", "c"] is inner
 
+    def test_rename_keys(self):
+        @tensorclass
+        class Inner:
+            x: torch.Tensor
+            y: torch.Tensor = None
+
+        @tensorclass
+        class MyClass:
+            a: torch.Tensor
+            b: torch.Tensor
+            raw: TensorDict = None
+            inner: Inner = None
+            c: torch.Tensor = None
+
+        data = MyClass(
+            a=torch.zeros(3),
+            b=torch.ones(3),
+            raw=TensorDict(p=torch.full((3,), 2.0), batch_size=[3]),
+            inner=Inner(x=torch.full((3,), 3.0), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = data.rename_keys({"a": "b", "b": "a"})
+        assert type(out) is MyClass
+        assert out.a is data.b
+        assert out.b is data.a
+        assert data.a.sum() == 0
+        # a field renamed away reads as None
+        out = data.rename_keys({"a": "c"})
+        assert out.a is None
+        assert out.c is data.a
+        # fields and nested tensorclasses that the move empties are kept
+        out = data.rename_keys(
+            {("raw", "p"): "c", ("inner", "x"): "a", "a": "b", "b": ("raw", "q")}
+        )
+        assert out.c is data.raw["p"]
+        assert out.a is data.inner.x
+        assert out.b is data.a
+        assert out.raw["q"] is data.b
+        out = data.rename_keys({("raw", "p"): "c", ("inner", "x"): ("inner", "y")})
+        assert isinstance(out.raw, TensorDict)
+        assert out.raw.is_empty()
+        assert type(out.inner) is Inner
+        assert out.inner.x is None
+        assert out.inner.y is data.inner.x
+        assert data.raw["p"] is not None
+        assert data.inner.y is None
+        # a destination that is not a field
+        with pytest.raises(AttributeError, match="not fields of MyClass"):
+            data.rename_keys({"a": "z"})
+        # a tensorclass nested in a TensorDict
+        td = TensorDict(data=data, batch_size=[3])
+        out = td.rename_keys({("data", "raw", "p"): "p"})
+        assert type(out["data"]) is MyClass
+        assert out["data"].raw.is_empty()
+        assert out["p"] is data.raw["p"]
+
     def test_deleted_field_reads_as_none(self):
         # #2147: a deleted field reads as None, so hasattr() and
         # getattr(obj, name, default) work after a delete instead of raising
@@ -4452,6 +4508,34 @@ class TestTensorClass:
         assert data.get_at(("y", "foo"), slice(2, 3), "working") == "working"
         assert data.get_at("foo", slice(2, 3), "working") == "working"
 
+    def test_tensorclass_get_at_passes_get_kwargs(self):
+        # https://github.com/pytorch/tensordict/issues/2830
+        @tensorclass
+        class A:
+            X: torch.Tensor
+            k: Optional[Tensor] = None
+
+        a = A(X=torch.arange(6).view(3, 2), batch_size=[3])
+        td = TensorDict(X=torch.arange(6).view(3, 2), batch_size=[3])
+        expected = torch.tensor([0, 1])
+        assert (td.get_at("X", 0, as_list=True) == expected).all()
+        assert (a.get_at("X", 0, as_list=True) == expected).all()
+        assert (a.get_at("X", 0, default=None, as_list=True) == expected).all()
+        assert (a.get_at("X", index=0, as_list=True) == expected).all()
+        # the forms that worked before keep working
+        assert (a.get_at("X", 0) == expected).all()
+        assert (a.get_at("X", index=0) == expected).all()
+        assert (a.get_at("X", 0, None) == expected).all()
+        assert (a.get_at("X", 0, default=None) == expected).all()
+        assert a.get_at("k", 0) is None
+        assert a.get_at("k", 0, as_list=True) is None
+        assert a.get_at("foo", 0, "working") == "working"
+        assert a.get_at("foo", 0, default="working", as_list=True) == "working"
+        assert a.get_at("foo", 0) is None
+        assert a.get_at("foo", 0, as_list=True) is None
+        with pytest.raises(TypeError, match="index argument missing"):
+            a.get_at("X")
+
     def test_tensorclass_set_at_(self):
         @tensorclass
         class MyDataNest:
@@ -5661,6 +5745,128 @@ class TestNoCasting:
             a: int  # type is irrelevant
 
         assert isinstance(X(False).a, bool)
+
+
+class TestCastFilter:
+    @staticmethod
+    def _mesh(cls):
+        return cls(
+            points=torch.zeros(4, 3),
+            cells=torch.zeros(4, 3, dtype=torch.long),
+            point_data=TensorDict(
+                p=torch.zeros(4), zone=torch.zeros(4, dtype=torch.int32), batch_size=[4]
+            ),
+            mask=torch.zeros(4, dtype=torch.bool),
+            name="mesh",
+            batch_size=[4],
+        )
+
+    class Mesh(TensorClass, cast_filter=tensordict.is_inexact):
+        points: torch.Tensor
+        cells: torch.Tensor
+        point_data: TensorDict
+        mask: torch.Tensor
+        name: str
+
+    def _check_mesh(self, out, cls, dtype):
+        assert type(out) is cls
+        assert out.points.dtype == dtype
+        assert out.point_data["p"].dtype == dtype
+        assert out.cells.dtype == torch.long
+        assert out.point_data["zone"].dtype == torch.int32
+        assert out.mask.dtype == torch.bool
+        if out.batch_dims == 1:
+            assert out.name == "mesh"
+
+    @pytest.mark.parametrize(
+        "call,dtype",
+        [
+            (("bfloat16", (), {}), torch.bfloat16),
+            (("half", (), {}), torch.half),
+            (("double", (), {}), torch.double),
+            (("int", (), {}), torch.int),
+            (("float64", (), {}), torch.float64),
+            (("type", (torch.float64,), {}), torch.float64),
+            (("to", (torch.bfloat16,), {}), torch.bfloat16),
+            (("to", ("cpu", torch.float64), {"non_blocking": True}), torch.float64),
+            (("to", (), {"dtype": torch.float64}), torch.float64),
+        ],
+    )
+    def test_cast_filter_class_default(self, call, dtype):
+        # The Mesh case: floats cast, int cells and bool masks kept, the
+        # tensorclass type kept
+        mesh = self._mesh(self.Mesh)
+        name, args, kwargs = call
+        out = getattr(mesh, name)(*args, **kwargs)
+        self._check_mesh(out, self.Mesh, dtype)
+        # A lazy stack of tensorclasses takes the class default too
+        out = getattr(torch.stack([mesh, mesh]), name)(*args, **kwargs)
+        self._check_mesh(out, self.Mesh, dtype)
+        # cast_filter=None casts every leaf
+        out = getattr(mesh, name)(*args, cast_filter=None, **kwargs)
+        assert out.cells.dtype == out.mask.dtype == dtype
+
+    def test_cast_filter_override(self):
+        mesh = self._mesh(self.Mesh)
+        out = mesh.to(
+            torch.bfloat16,
+            cast_filter=lambda k, v: tensordict.is_inexact(v) and k[0] != "point_data",
+        )
+        assert out.points.dtype == torch.bfloat16
+        assert out.point_data["p"].dtype == torch.float32
+        assert out.cells.dtype == torch.long
+        with mesh.to(torch.float64) as mesh64:
+            assert mesh64.points.dtype == torch.float64
+            assert mesh64.cells.dtype == torch.long
+        assert mesh.points.dtype == torch.float32
+
+    def test_cast_filter_attrs(self):
+        # The class default does not stop to(attrs), whose attrs give each
+        # leaf its dtype
+        mesh = self._mesh(self.Mesh).exclude("name")
+        attrs = mesh.double(cast_filter=None).attrs(fields=("device", "dtype"))
+        out = mesh.to(attrs)
+        assert type(out) is self.Mesh
+        assert out.points.dtype == out.cells.dtype == torch.float64
+        assert out.point_data["zone"].dtype == torch.float64
+
+    def test_cast_filter_inheritance(self):
+        class Sub(self.Mesh):
+            pass
+
+        class Flags(self.Mesh["nocast"]):
+            pass
+
+        class Reset(self.Mesh, cast_filter=None):
+            pass
+
+        class Plain(TensorClass):
+            x: torch.Tensor
+
+        assert Sub._cast_filter is tensordict.is_inexact
+        assert Flags._cast_filter is tensordict.is_inexact
+        assert Reset._cast_filter is None
+        assert Plain._cast_filter is None
+        self._check_mesh(self._mesh(Sub).half(), Sub, torch.half)
+        assert self._mesh(Reset).half().cells.dtype == torch.half
+        plain = Plain(x=torch.zeros(3, dtype=torch.long))
+        assert plain.half().x.dtype == torch.half
+        assert plain.half(cast_filter=tensordict.is_inexact).x.dtype == torch.long
+
+    def test_cast_filter_decorator(self):
+        @tensorclass(cast_filter=tensordict.is_inexact)
+        class Mesh:
+            points: torch.Tensor
+            cells: torch.Tensor
+            point_data: TensorDict
+            mask: torch.Tensor
+            name: str
+
+        assert Mesh._cast_filter is tensordict.is_inexact
+        self._check_mesh(self._mesh(Mesh).bfloat16(), Mesh, torch.bfloat16)
+        assert self._mesh(Mesh).bfloat16(cast_filter=None).cells.dtype == (
+            torch.bfloat16
+        )
 
 
 class TestAutoCasting:

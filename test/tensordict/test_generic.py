@@ -49,10 +49,17 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
+from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
-from tensordict.functional import dense_stack_tds, merge_tensordicts, pad, pad_sequence
+from tensordict.functional import (
+    dense_stack_tds,
+    merge_tensordicts,
+    pad,
+    pad_sequence,
+    unpad_sequence,
+)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData, NonTensorStack
@@ -4163,11 +4170,87 @@ class TestGeneric:
     def test_is_empty_non_tensor_only(self):
         # a non-tensor counts as a leaf on a dense tensordict; the lazy stack
         # and the sub-tensordict, which use TensorDictBase.is_empty, do not
-        # count it
+        # count it, and the lazy stack warns that it counts it from 0.17
         td = TensorDict(x=NonTensorData("a", batch_size=[2]), batch_size=[2])
         assert not td.is_empty()
-        assert lazy_stack([td[0], td[1]]).is_empty()
+        with pytest.warns(FutureWarning, match="returning True only if every"):
+            assert lazy_stack([td[0], td[1]]).is_empty()
         assert td._get_sub_tensordict(0).is_empty()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda s: s,
+            lambda s: TensorDict(x=s, batch_size=[2]),
+            lambda s: TensorDict(x=s, y=s.clone(), batch_size=[2]),
+            lambda s: lazy_stack([s, s.clone()]),
+            lambda s: lazy_stack([TensorDict(sub=s[0]), TensorDict(sub=s[1])]),
+        ],
+        ids=["stack", "nested", "siblings", "stack_of_stacks", "nested_in_members"],
+    )
+    def test_is_empty_lazy_members_hold_leaves(self, make):
+        # gh-2807: a lazy stack lists only the leaves that its members share.
+        # is_empty() keeps returning True when they share none, and warns that
+        # it returns False from 0.17.
+        s = lazy_stack([TensorDict(a=torch.ones(())), TensorDict(b=torch.ones(()))])
+        td = make(s)
+        with pytest.warns(FutureWarning, match="returning True only if every") as w:
+            assert td.is_empty()
+        assert len(w) == 1
+        assert w[0].filename == __file__
+
+    def test_is_empty_lazy_wrappers(self):
+        @tensorclass
+        class TC:
+            x: TensorDict = None
+
+        class Typed(TypedTensorDict):
+            pass
+
+        s = lazy_stack([TensorDict(a=torch.ones(())), TensorDict(b=torch.ones(()))])
+        tc = lazy_stack([TC(x=s[0]), TC(x=s[1])])
+        with legacy_lazy_mode():
+            view = TensorDict(x=s, batch_size=[2]).unsqueeze(0)
+        assert isinstance(view, _CustomOpTensorDict)
+        for td in (tc, Typed.from_tensordict(s), view):
+            with pytest.warns(FutureWarning, match="returning True only if every"):
+                assert td.is_empty()
+
+    @pytest.mark.parametrize(
+        "make,expected",
+        [
+            (lambda: lazy_stack([TensorDict(), TensorDict()]), True),
+            (lambda: lazy_stack([TensorDict(x=TensorDict()), TensorDict()]), True),
+            (lambda: lazy_stack([TensorDict(a=torch.ones(()))] * 2), False),
+            (lambda: TensorDict(x=TensorDict()), True),
+            (lambda: TensorDict(a=torch.ones(())), False),
+            (lambda: NonTensorStack("a", "b"), False),
+            # the nested stack comes first, but the result is False today and
+            # from 0.17
+            (
+                lambda: TensorDict(
+                    x=lazy_stack([TensorDict(a=torch.ones(())), TensorDict()]),
+                    y=torch.ones(2),
+                    batch_size=[2],
+                ),
+                False,
+            ),
+        ],
+        ids=[
+            "empty",
+            "empty_members",
+            "shared",
+            "dense_empty",
+            "dense",
+            "nts",
+            "nested_then_leaf",
+        ],
+    )
+    def test_is_empty_no_lazy_warning(self, make, expected):
+        td = make()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert td.is_empty() is expected
 
     def test_items_values_sort_flat(self):
         td = TensorDict(b=torch.ones(()), a=torch.zeros(()))
@@ -6981,6 +7064,152 @@ class TestGeneric:
         else:
             assert "masks" not in padded_td.keys()
 
+    def test_pad_sequence_padding_side(self):
+        # https://github.com/pytorch/tensordict/issues/2808
+        d1 = TensorDict(
+            {"a": torch.ones(2, 3), ("b", "c"): torch.ones(2), "s": "x"}, [2]
+        )
+        d2 = TensorDict(
+            {"a": torch.full((4, 3), 2.0), ("b", "c"): torch.full((4,), 2.0)}, [4]
+        )
+        d2["s"] = "y"
+        right = pad_sequence([d1, d2], return_mask=True)
+        assert (
+            pad_sequence([d1, d2], return_mask=True, padding_side="right") == right
+        ).all()
+        left = pad_sequence([d1, d2], return_mask=True, padding_side="left")
+        assert left.batch_size == torch.Size([2, 4])
+        assert left["b", "c"].tolist() == [[0, 0, 1, 1], [2, 2, 2, 2]]
+        assert (left["a"][0, :2] == 0).all() and (left["a"][0, 2:] == 1).all()
+        assert left["masks", "a"].tolist() == [[False, False, True, True], [True] * 4]
+        assert left["masks", "b", "c"].tolist() == left["masks", "a"].tolist()
+        assert left.get("s").tolist() == [[None, None, "x", "x"], ["y"] * 4]
+        # pad dim after the batch dims
+        left = pad_sequence(
+            [TensorDict(a=torch.ones(2, n), batch_size=[2]) for n in (1, 3)],
+            pad_dim=1,
+            return_mask=True,
+            padding_side="left",
+        )
+        assert left.batch_size == torch.Size([2, 2])
+        assert left["a"][0].tolist() == [[0, 0, 1], [0, 0, 1]]
+        assert left["masks", "a"][0].tolist() == [[False, False, True]] * 2
+        with pytest.raises(ValueError, match="padding_side must be"):
+            pad_sequence([d1, d2], padding_side="top")
+
+    @staticmethod
+    def _assert_unpadded(samples, tds):
+        assert isinstance(samples, LazyStackedTensorDict)
+        assert samples.stack_dim == 0
+        assert len(samples.tensordicts) == len(tds)
+        expected = lazy_stack(tds)
+        assert set(samples.keys(True, True)) == set(expected.keys(True, True))
+        for sample, td in zip(samples.tensordicts, tds):
+            assert sample.batch_size == td.batch_size
+            for key in td.keys(True, True, is_leaf=is_leaf_nontensor):
+                value = td.get(key)
+                if is_non_tensor(value):
+                    assert sample.get(key).tolist() == value.tolist()
+                else:
+                    assert torch.equal(sample.get(key), value), key
+
+    @pytest.mark.parametrize("padding_side", ["right", "left"])
+    @pytest.mark.parametrize("pad_dim", [0, 1, -1])
+    def test_unpad_sequence(self, padding_side, pad_dim):
+        # https://github.com/pytorch/tensordict/issues/2808
+        if pad_dim == 0:
+            # the batch dim is padded: non-tensor entries are padded too
+            tds = [
+                TensorDict(
+                    {"a": torch.randn(n, 3), ("b", "c"): torch.randn(n), "s": "x"},
+                    [n],
+                )
+                for n in (2, 5, 3)
+            ]
+        elif pad_dim == 1:
+            tds = [
+                TensorDict(
+                    {
+                        "a": torch.randn(4, n, 3),
+                        ("b", "c"): torch.randn(4, n),
+                        "s": "x",
+                    },
+                    [4],
+                )
+                for n in (2, 5, 3)
+            ]
+        else:
+            tds = [
+                TensorDict(
+                    {"a": torch.randn(3, n), ("b", "c"): torch.randn(2, n), "s": "x"}
+                )
+                for n in (2, 5, 3)
+            ]
+        padded = pad_sequence(
+            tds, pad_dim=pad_dim, return_mask=True, padding_side=padding_side
+        )
+        samples = unpad_sequence(padded, pad_dim=pad_dim)
+        assert "masks" not in samples.keys()
+        self._assert_unpadded(samples, tds)
+        # the masks can be passed: everything in padded is unpadded
+        samples = unpad_sequence(
+            padded.exclude("masks"), padded["masks"], pad_dim=pad_dim
+        )
+        self._assert_unpadded(samples, tds)
+
+    def test_unpad_sequence_mask(self):
+        # https://github.com/pytorch/tensordict/issues/2808
+        tds = [
+            TensorDict({"a": torch.randn(n, 3), "b": torch.randn(n)}) for n in (2, 4)
+        ]
+        padded = pad_sequence(tds, return_mask="valid", padding_side="left")
+        with pytest.raises(ValueError, match="needs a mask"):
+            unpad_sequence(padded)
+        mask = padded["valid"]
+        padded = padded.exclude("valid")
+        self._assert_unpadded(unpad_sequence(padded, mask), tds)
+        # one tensor mask for every entry
+        self._assert_unpadded(unpad_sequence(padded, mask["b"]), tds)
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, mask["b"][0])
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, mask["b"][:1])
+        # a second dim that is not the padded length
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, mask["b"][:, 1:])
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, torch.cat([mask["b"], mask["b"]], -1))
+        # the same when the batch was padded
+        batch_padded = pad_sequence(
+            [TensorDict(a=torch.randn(n, 3), batch_size=[n]) for n in (2, 4)]
+        )
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(batch_padded, mask["b"][:, 1:])
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(batch_padded, torch.cat([mask["b"], mask["b"]], -1))
+        with pytest.raises(ValueError, match="batch dimension"):
+            unpad_sequence(padded[0], mask)
+        with pytest.raises(KeyError, match="'a'"):
+            unpad_sequence(padded, mask.exclude("a"))
+        # marked positions that are not one run per row
+        holes = torch.tensor([[True, False, True, False], [True] * 4])
+        with pytest.raises(ValueError, match="contiguous"):
+            unpad_sequence(padded, holes)
+        with pytest.raises(ValueError, match="contiguous"):
+            unpad_sequence(padded, TensorDict(a=holes, b=holes, batch_size=[2]))
+        # a lazy stack is not changed
+        stack = lazy_stack(list(padded.unbind(0)))
+        self._assert_unpadded(unpad_sequence(stack, mask), tds)
+        assert stack.tensordicts[0]["a"].shape == torch.Size([4, 3])
+
+    @pytest.mark.parametrize("batch_size", [[], [0]])
+    def test_unpad_sequence_empty(self, batch_size):
+        # https://github.com/pytorch/tensordict/issues/2808
+        # every sample has length 0 along pad_dim
+        tds = [TensorDict(a=torch.zeros(0, 3), batch_size=batch_size)] * 2
+        samples = unpad_sequence(pad_sequence(tds, return_mask=True))
+        self._assert_unpadded(samples, tds)
+
     @pytest.mark.parametrize("count_duplicates", [False, True])
     def test_param_count(self, count_duplicates):
         td = TensorDict(a=torch.randn(3), b=torch.randn(6))
@@ -7714,6 +7943,190 @@ class TestGeneric:
         td.rename_key_(("a", "b", "c"), ("a", "b"))
         assert td["a", "b"] == 0
 
+    @staticmethod
+    def _rename_keys_td():
+        return TensorDict(
+            a=torch.zeros(3),
+            b=torch.ones(3),
+            raw=TensorDict(
+                p=torch.full((3,), 2.0), q=torch.full((3,), 3.0), batch_size=[3]
+            ),
+            s=NonTensorData("hi", batch_size=[3]),
+            batch_size=[3],
+            names=["n"],
+        )
+
+    def test_rename_keys_swap_and_chain(self):
+        td = self._rename_keys_td()
+        keys = set(td.keys(True))
+        out = td.rename_keys({"a": "b", "b": "a"})
+        assert type(out) is TensorDict
+        assert out["a"] is td["b"]
+        assert out["b"] is td["a"]
+        # non-tensor data is shared, not copied
+        assert out.get("s") is td.get("s")
+        # a new tree of sub-tensordicts
+        assert out.get("raw") is not td.get("raw")
+        assert out["raw", "p"] is td["raw", "p"]
+        assert out.batch_size == td.batch_size
+        assert out.names == ["n"]
+        assert set(td.keys(True)) == keys
+        out = td.rename_keys({"a": "b", "b": "c"})
+        assert out["b"] is td["a"]
+        assert out["c"] is td["b"]
+        assert "a" not in out.keys()
+        assert set(td.keys(True)) == keys
+
+    def test_rename_keys_nested(self):
+        td = self._rename_keys_td()
+        # emptied sub-tensordicts are removed
+        out = td.rename_keys({("raw", "p"): "p", ("raw", "q"): "q"})
+        assert set(out.keys(True)) == {"a", "b", "p", "q", "s"}
+        # a leaf can move onto its parent once the parent is emptied
+        out = td.rename_keys({("raw", "p"): "raw", ("raw", "q"): "q"})
+        assert out["raw"] is td["raw", "p"]
+        # a whole sub-tensordict
+        out = td.rename_keys({"raw": ("x", "solution")})
+        assert set(out.keys(True, True, is_leaf=is_leaf_nontensor)) == {
+            "a",
+            "b",
+            "s",
+            ("x", "solution", "p"),
+            ("x", "solution", "q"),
+        }
+        # into the source's own sub-key
+        out = td.rename_keys({"a": ("a", "b")})
+        assert out["a", "b"] is td["a"]
+        # empty sub-tensordicts that the move did not empty are kept
+        td["empty"] = TensorDict(batch_size=[3])
+        td["raw", "e"] = TensorDict(batch_size=[3])
+        out = td.rename_keys({("raw", "p"): "p", ("raw", "q"): "q"})
+        assert set(out.keys(True)) == {
+            "a",
+            "b",
+            "p",
+            "q",
+            "s",
+            "empty",
+            "raw",
+            ("raw", "e"),
+        }
+
+    @pytest.mark.parametrize(
+        "mapping,error,match",
+        [
+            ({"a": "b"}, ValueError, "already present"),
+            ({("raw", "p"): "raw"}, ValueError, "already present"),
+            ({"a": ("b", "x")}, ValueError, "not a tensordict"),
+            ({"a": ("s", "x")}, ValueError, "not a tensordict"),
+            ({"a": "x", "b": "x"}, ValueError, "destination more than once"),
+            ({"a": "x", ("a",): "y"}, ValueError, "source more than once"),
+            ({"raw": "r", ("raw", "p"): "p"}, ValueError, "lie inside one another"),
+            ({"a": ("x", "y"), "b": "x"}, ValueError, "lie inside one another"),
+            ({"a": "a", "b": "a"}, ValueError, "destination more than once"),
+            ({"zz": "y"}, KeyError, "zz"),
+            ({"a": "a", "zz": "zz"}, KeyError, "zz"),
+            ({"a": ()}, KeyError, "NestedKeys"),
+            ({1: "x"}, TypeError, "string or a tuple"),
+        ],
+    )
+    def test_rename_keys_errors(self, mapping, error, match):
+        td = self._rename_keys_td()
+        keys = set(td.keys(True))
+        with pytest.raises(error, match=match):
+            td.rename_keys(mapping)
+        assert set(td.keys(True)) == keys
+
+    def test_rename_keys_strict(self):
+        td = self._rename_keys_td()
+        out = td.rename_keys({"zz": "y", ("raw", "p"): "p"}, strict=False)
+        assert "y" not in out.keys()
+        assert out["p"] is td["raw", "p"]
+        assert td.rename_keys({"a": "a"})["a"] is td["a"]
+
+    def test_rename_keys_docstring(self):
+        td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
+        out = td.rename_keys({"a": "b", "b": "a"})
+        assert out["a"] == 1 and td["a"] == 0
+        td = TensorDict(raw=TensorDict(p=torch.zeros(3), u=torch.ones(3)))
+        out = td.rename_keys({("raw", "p"): "pressure", ("raw", "u"): "velocity"})
+        assert sorted(out.keys(include_nested=True)) == ["pressure", "velocity"]
+        out = td.rename_keys({"raw": "solution"})
+        assert sorted(out.keys(include_nested=True, leaves_only=True)) == [
+            ("solution", "p"),
+            ("solution", "u"),
+        ]
+        out = td.rename_keys({("raw", "zz"): "z", ("raw", "p"): "p"}, strict=False)
+        assert (out["p"] == 0).all()
+
+    def test_rename_keys_locked(self):
+        td = self._rename_keys_td().lock_()
+        out = td.rename_keys({"a": "z"})
+        assert not out.is_locked
+        assert td.is_locked
+        assert "a" in td.keys()
+        assert out["z"] is td["a"]
+
+    def test_rename_keys_lazy_stack(self):
+        t1 = TensorDict(
+            a=torch.zeros(()), x=torch.zeros(()), raw=TensorDict(p=torch.zeros(()))
+        )
+        t2 = TensorDict(
+            a=torch.ones(()),
+            y=torch.ones(()),
+            raw=TensorDict(p=torch.zeros(()), q=torch.zeros(())),
+        )
+        ls = lazy_stack([t1, t2])
+        before = [set(td.keys(True)) for td in ls.tensordicts]
+        out = ls.rename_keys({"a": "b"})
+        assert isinstance(out, LazyStackedTensorDict)
+        assert out.tensordicts[0]["b"] is t1["a"]
+        assert out.tensordicts[1]["b"] is t2["a"]
+        # an exclusive key is missing in some members
+        with pytest.raises(KeyError, match="x"):
+            ls.rename_keys({"x": "z"})
+        out = ls.rename_keys({"x": "z"}, strict=False)
+        assert set(out.tensordicts[0].keys()) == {"a", "z", "raw"}
+        assert set(out.tensordicts[1].keys()) == {"a", "y", "raw"}
+        # raw is emptied in the first member only: it is kept
+        out = ls.rename_keys({("raw", "p"): "p"})
+        assert set(out.tensordicts[0].keys(True)) == {"a", "p", "x", "raw"}
+        assert set(out.tensordicts[1].keys(True)) == {
+            "a",
+            "p",
+            "y",
+            "raw",
+            ("raw", "q"),
+        }
+        # raw is emptied in every member: it is removed
+        out = ls.rename_keys({("raw", "p"): "p", ("raw", "q"): "q"}, strict=False)
+        assert set(out.tensordicts[0].keys(True)) == {"a", "p", "x"}
+        assert set(out.tensordicts[1].keys(True)) == {"a", "p", "q", "y"}
+        assert [set(td.keys(True)) for td in ls.tensordicts] == before
+
+    def test_rename_keys_params(self):
+        params = TensorDictParams(
+            TensorDict(
+                w=nn.Parameter(torch.zeros(2)),
+                sub=TensorDict(v=nn.Parameter(torch.zeros(2))),
+            )
+        )
+        out = params.rename_keys({"w": "w2", ("sub", "v"): "v"})
+        assert type(out) is TensorDictParams
+        assert set(out.keys(True)) == {"w2", "v"}
+        assert out.get("w2") is params.get("w")
+        assert isinstance(out.get("v"), nn.Parameter)
+        assert set(params.keys(True)) == {"w", "sub", ("sub", "v")}
+
+    def test_rename_keys_persistent(self, tmp_path):
+        td = PersistentTensorDict.from_dict(
+            TensorDict(a=torch.zeros(3), batch_size=[3]), tmp_path / "file.h5"
+        )
+        with pytest.raises(NotImplementedError, match="to_tensordict"):
+            td.rename_keys({"a": "b"})
+        assert set(td.keys()) == {"a"}
+        td.close()
+
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_memmap_like_no_prefix_new_files(self, tmpdir, num_threads):
         # Without a prefix, memmap_like must not reuse the files of a source
@@ -8251,6 +8664,77 @@ class TestGeneric:
         assert ("d", "f") in td1
         assert td is td3
         assert "d" not in td
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("reproduce_struct", [False, True])
+    def test_split_keys_non_tensor(self, reproduce_struct, lazy):
+        # A non-tensor entry goes only to the output whose key set names it,
+        # or to the last output, with or without reproduce_struct.
+        td = TensorDict(
+            a=torch.zeros(3),
+            b=torch.ones(3),
+            info=NonTensorData("run 7", batch_size=[3]),
+            n=TensorDict(
+                c=torch.zeros(3),
+                s=NonTensorData("label", batch_size=[3]),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(0))
+
+        def leaves(part):
+            return set(part.keys(True, True, is_leaf=is_leaf_nontensor))
+
+        td_a, td_b, rest = td.split_keys(
+            ["a"], ["b"], reproduce_struct=reproduce_struct
+        )
+        assert leaves(td_a) == {"a"}
+        assert leaves(td_b) == {"b"}
+        assert leaves(rest) == {"info", ("n", "c"), ("n", "s")}
+        assert rest[0]["info"] == "run 7"
+        td_a, td_info, rest = td.split_keys(
+            ["a"], ["info", ("n", "s")], reproduce_struct=reproduce_struct
+        )
+        assert leaves(td_a) == {"a"}
+        assert leaves(td_info) == {"info", ("n", "s")}
+        assert td_info[0]["n", "s"] == "label"
+        assert leaves(rest) == {"b", ("n", "c")}
+        if reproduce_struct:
+            # the sub-tensordicts are kept, even without leaves
+            assert "n" in td_a.keys()
+            assert td_a["n"].is_empty()
+        else:
+            assert "n" not in td_a.keys()
+
+    @pytest.mark.parametrize("reproduce_struct", [False, True])
+    def test_split_keys_tensorclass_non_tensor(self, reproduce_struct):
+        # A non-tensor tensorclass field goes only to the output whose key set
+        # names it, or to the last output: the other outputs hold None.
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: torch.Tensor
+            s: str
+
+        tc = MyClass(x=torch.zeros(3), y=torch.ones(3), s="hello", batch_size=[3])
+        parts = tc.split_keys(["x"], ["y"], reproduce_struct=reproduce_struct)
+        assert all(isinstance(part, MyClass) for part in parts)
+        assert [part.s for part in parts] == [None, None, "hello"]
+        parts = tc.split_keys(["x"], ["s"], reproduce_struct=reproduce_struct)
+        assert all(isinstance(part, MyClass) for part in parts)
+        assert [part.s for part in parts] == [None, "hello", None]
+        if not reproduce_struct:
+            # the nested tensorclass is only kept with reproduce_struct=True
+            return
+        td = TensorDict(a=torch.zeros(3), t=tc, batch_size=[3])
+        parts = td.split_keys(["a"], [("t", "x")], reproduce_struct=True)
+        assert all(isinstance(part["t"], MyClass) for part in parts)
+        assert [part["t"].s for part in parts] == [None, None, "hello"]
+        parts = td.split_keys(["a"], [("t", "s")], reproduce_struct=True)
+        assert all(isinstance(part["t"], MyClass) for part in parts)
+        assert [part["t"].s for part in parts] == [None, "hello", None]
 
     @pytest.mark.parametrize("sign", ["plus", "minus"])
     def test_split_uneven(self, sign):
@@ -9263,6 +9747,224 @@ class TestGeneric:
         assert out["b"].stride() == (3, 1)
         if args != ("meta",):
             assert (out == td).all()
+
+    @staticmethod
+    def _cast_filter_td():
+        return TensorDict(
+            x=torch.zeros(2, 3),
+            cells=torch.zeros(2, 3, dtype=torch.long),
+            mask=torch.zeros(2, dtype=torch.bool),
+            info=NonTensorData("info"),
+            point_data=TensorDict(
+                p=torch.zeros(2),
+                zone=torch.zeros(2, dtype=torch.int32),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+
+    @pytest.mark.parametrize(
+        "td_type", ["td", "locked", "lazy", "params", "sub_td", "unsqueezed"]
+    )
+    @pytest.mark.parametrize(
+        "call",
+        [
+            ("to", (torch.bfloat16,), {}),
+            ("to", ("cpu", torch.bfloat16), {}),
+            ("to", (), {"dtype": torch.bfloat16, "non_blocking": True}),
+            ("to", (torch.zeros((), dtype=torch.bfloat16),), {}),
+            ("bfloat16", (), {}),
+            ("type", (torch.bfloat16,), {}),
+        ],
+        ids=["to-dtype", "to-device-dtype", "to-kwargs", "to-tensor", "bf16", "type"],
+    )
+    def test_to_cast_filter(self, td_type, call):
+        # cast_filter selects the leaves the dtype cast applies to; it gets
+        # the key as a tuple of str and is never called on non-tensor data
+        td = self._cast_filter_td()
+        if td_type == "locked":
+            td = td.lock_()
+        elif td_type == "lazy":
+            td = lazy_stack(list(td.unbind(0)))
+        elif td_type == "params":
+            td = TensorDictParams(td.exclude("info"))
+        elif td_type == "sub_td":
+            td = td._get_sub_tensordict(slice(None))
+        elif td_type == "unsqueezed":
+            td = td.unsqueeze(0)
+        seen = []
+
+        def cast_filter(key, value):
+            assert isinstance(key, tuple) and all(isinstance(k, str) for k in key)
+            assert isinstance(value, torch.Tensor)
+            seen.append(key)
+            return tensordict.is_inexact(value)
+
+        name, args, kwargs = call
+        out = getattr(td, name)(*args, cast_filter=cast_filter, **kwargs)
+        assert set(seen) == {
+            ("x",),
+            ("cells",),
+            ("mask",),
+            ("point_data", "p"),
+            ("point_data", "zone"),
+        }
+        assert out["x"].dtype == torch.bfloat16
+        assert out["point_data", "p"].dtype == torch.bfloat16
+        assert out["cells"].dtype == torch.long
+        assert out["mask"].dtype == torch.bool
+        assert out["point_data", "zone"].dtype == torch.int32
+        assert (out == td.to(torch.bfloat16)).all()
+        if td_type not in ("params", "lazy", "sub_td", "unsqueezed"):
+            # The leaves left out are not copied
+            assert out["cells"] is td["cells"]
+            assert out.get_non_tensor("info") == "info"
+        if td_type == "locked" and name != "type":
+            # type() does not propagate the lock, with or without cast_filter
+            assert out.is_locked
+        elif td_type == "lazy":
+            assert isinstance(out, LazyStackedTensorDict)
+        elif td_type == "params" and name == "to":
+            assert isinstance(out, TensorDictParams)
+
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "bool",
+            "double",
+            "float",
+            "half",
+            "int",
+            "bfloat16",
+            "complex64",
+            "float16",
+            "float32",
+            "float64",
+            "int16",
+            "int32",
+            "int64",
+            "int8",
+            "uint8",
+        ],
+    )
+    def test_dtype_shorthand_cast_filter(self, method):
+        td = self._cast_filter_td()
+        dtype = getattr(td, method)()["x"].dtype
+        # A keyed predicate: leave point_data out
+        out = getattr(td, method)(
+            cast_filter=lambda k, v: tensordict.is_inexact(v) and k[0] != "point_data"
+        )
+        assert out["x"].dtype == dtype
+        assert out["point_data", "p"].dtype == torch.float32
+        assert out["cells"].dtype == torch.long
+        assert out["mask"].dtype == torch.bool
+        assert out["point_data", "zone"].dtype == torch.int32
+        # None casts every leaf, as without the keyword
+        out = getattr(td, method)(cast_filter=None)
+        assert out["cells"].dtype == out["mask"].dtype == dtype
+
+    def test_to_cast_filter_integer_target(self):
+        # An integer target does not raise: the filter does what it says
+        td = self._cast_filter_td()
+        out = td.to(torch.int64, cast_filter=tensordict.is_inexact)
+        assert out["x"].dtype == torch.int64
+        assert out["mask"].dtype == torch.bool
+        assert out["point_data", "zone"].dtype == torch.int32
+
+    @pytest.mark.parametrize("cast_filter", [None, tensordict.is_inexact])
+    def test_to_cast_filter_attrs(self, cast_filter):
+        # The attrs give each leaf its dtype: cast_filter does not apply
+        td = self._cast_filter_td().exclude("info")
+        attrs = td.double().attrs(fields=("device", "dtype"))
+        out = td.to(attrs, cast_filter=cast_filter)
+        assert (out == td.to(attrs)).all()
+        assert out["cells"].dtype == out["mask"].dtype == torch.float64
+
+    def test_to_cast_filter_device_and_memory_format(self):
+        # The device and memory format apply to every leaf, the dtype to the
+        # selected ones
+        td = TensorDict(
+            img=torch.randn(2, 3, 4, 5),
+            ids=torch.zeros(2, 3, 4, 5, dtype=torch.long),
+            batch_size=[2],
+        )
+        out = td.to(
+            torch.float64,
+            memory_format=torch.channels_last,
+            cast_filter=tensordict.is_inexact,
+        )
+        assert out["img"].dtype == torch.float64
+        assert out["ids"].dtype == torch.long
+        for value in out.values():
+            assert value.is_contiguous(memory_format=torch.channels_last)
+        out = td.to("meta", torch.float64, cast_filter=tensordict.is_inexact)
+        assert out.device == torch.device("meta")
+        assert out["ids"].device == torch.device("meta")
+        assert out["img"].dtype == torch.float64
+        assert out["ids"].dtype == torch.long
+        # Without a dtype, cast_filter is not called
+        out = td.to("meta", cast_filter=lambda k, v: pytest.fail("called"))
+        assert out["ids"].device == torch.device("meta")
+
+    def test_to_cast_filter_inplace_and_context_manager(self):
+        td = self._cast_filter_td()
+        out = td.to(torch.float64, cast_filter=tensordict.is_inexact, inplace=True)
+        assert out is td
+        assert td["x"].dtype == torch.float64
+        assert td["cells"].dtype == torch.long
+        td = self._cast_filter_td()
+        with td.to(torch.float64, cast_filter=tensordict.is_inexact) as td64:
+            assert td64["x"].dtype == torch.float64
+            assert td64["cells"].dtype == torch.long
+            td64["x"] += 1
+        assert td["x"].dtype == torch.float32
+        assert (td["x"] == 1).all()
+        assert td["cells"].dtype == torch.long
+
+    def test_to_cast_filter_lazy_stack_exclusive_keys(self):
+        # The keys are those of the members, without their index
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(()), n=TensorDict(b=torch.zeros(()))),
+                TensorDict(a=torch.zeros(()), c=torch.zeros(())),
+            ]
+        )
+        for locked in (False, True):
+            if locked:
+                td.lock_()
+            seen = []
+            out = td.to(
+                torch.float64,
+                cast_filter=lambda k, v, seen=seen: seen.append(k) or k != ("a",),
+            )
+            assert sorted(seen) == [("a",), ("a",), ("c",), ("n", "b")]
+            assert out.tensordicts[0]["a"].dtype == torch.float32
+            assert out.tensordicts[0]["n", "b"].dtype == torch.float64
+            assert out.tensordicts[1]["c"].dtype == torch.float64
+
+    def test_dtype_predicates(self):
+        tensors = {
+            torch.float32: (True, True, False, False),
+            torch.bfloat16: (True, True, False, False),
+            torch.complex64: (True, False, False, False),
+            torch.int64: (False, False, True, False),
+            torch.uint8: (False, False, True, False),
+            torch.bool: (False, False, False, True),
+        }
+        predicates = (
+            tensordict.is_inexact,
+            tensordict.is_floating,
+            tensordict.is_integer,
+            tensordict.is_bool,
+        )
+        for dtype, expected in tensors.items():
+            t = torch.zeros(2, dtype=dtype)
+            # Called as fn(value) and as fn(key, value)
+            assert tuple(p(t) for p in predicates) == expected
+            assert tuple(p(("a", "b"), t) for p in predicates) == expected
+        td = self._cast_filter_td()
+        floats = td.apply(lambda t: t if tensordict.is_floating(t) else None)
+        assert set(floats.keys(True, True)) == {"x", ("point_data", "p")}
 
     def test_to_memory_leak(self):
         """Test that the original tensordict is properly garbage collected when using to() method."""

@@ -87,6 +87,10 @@ __all__ = [
     "assert_close",
     "expand_as_right",
     "expand_right",
+    "is_bool",
+    "is_floating",
+    "is_inexact",
+    "is_integer",
     "is_non_tensor",
     "is_tensorclass",
     "isin",
@@ -1105,6 +1109,8 @@ def _parse_to(*args, **kwargs):
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
     inplace = kwargs.pop("inplace", False)
+    # _to reads cast_filter from the kwargs that to() received
+    kwargs.pop("cast_filter", None)
     if not is_compiling():
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
             *args, **kwargs
@@ -1902,13 +1908,17 @@ def _stacked_repr(shape, tensors) -> str | None:
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
 
-    is_lazy = isinstance(td, LazyStackedTensorDict)
+    # A TypedTensorDict reads its entries from the tensordict it wraps.
+    source = td
+    while type(source)._wrapped_attr is not None:
+        source = getattr(source, type(source)._wrapped_attr)
+    is_lazy = isinstance(source, LazyStackedTensorDict)
     strs = []
     if keys is None:
         keys = td.keys()
     for key in keys:
         # A lazy stack's tensor entries are printed from the members.
-        leaf = td._plain_leaf(key) if is_lazy else None
+        leaf = source._plain_leaf(key) if is_lazy else None
         if leaf is not None:
             shape = leaf[0]
             substr = _stacked_repr(*leaf)
@@ -1923,7 +1933,7 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
         else:
             # we know td is lazy stacked and the key is a leaf
             # so we can get the shape and escape the error
-            temp_td = td
+            temp_td = source
             from tensordict import (
                 is_tensor_collection,
                 LazyStackedTensorDict,
@@ -1967,6 +1977,193 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
         "\n" + ",\n".join(strs),
         4 * " ",
     )
+
+
+# set_printoptions(compact=True): the repr is built from metadata only (shapes,
+# dtypes and devices of the leaves), so that it reads no data, syncs no device
+# and stacks no leaf of a lazy stack. A container is a (prefix, entries) pair,
+# an entry a (key, token or container) pair.
+_COMPACT_WIDTH = 80
+
+
+def _compact_dtype(dtype: torch.dtype) -> str:
+    # f32, i64, u8, c64, bf16, bool, f8_e4m3fn
+    name = str(dtype).replace("torch.", "")
+    for long, short in (("float", "f"), ("uint", "u"), ("int", "i"), ("complex", "c")):
+        name = name.replace(long, short)
+    return name
+
+
+def _compact_leaf(td, key):
+    # Returns the shape after the batch dims, the dtype and the set of devices
+    # of a tensor entry. In a lazy stack, a dim that differs between members
+    # is -1 and the dtype is the promoted one, as the stacked tensor has.
+    from tensordict import LazyStackedTensorDict
+    from tensordict.persistent import PersistentTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    if isinstance(td, TypedTensorDict):
+        td = td._source
+    if isinstance(td, LazyStackedTensorDict):
+        metas = [_compact_leaf(sub, key) for sub in td.tensordicts]
+        shape, dtype, devices = metas[0]
+        shape, devices = list(shape), set(devices)
+        for other_shape, other_dtype, other_devices in metas[1:]:
+            if len(other_shape) != len(shape):
+                shape = [-1]
+            else:
+                shape = [s if s == o else -1 for s, o in zip(shape, other_shape)]
+            dtype = torch.promote_types(dtype, other_dtype)
+            devices |= other_devices
+        return shape, dtype, devices
+    if isinstance(td, PersistentTensorDict):
+        meta = td._get_metadata(key)
+        device = td.device if td.device is not None else torch.device("cpu")
+        return list(meta["shape"][td.batch_dims :]), meta["dtype"], {device}
+    tensor = td._get_str(key, None)
+    # an unbatched tensor does not share the batch dims: its full shape
+    shape = _shape(tensor) if _is_unbatched(tensor) else _shape(tensor)[td.batch_dims :]
+    return list(shape), tensor.dtype, {tensor.device}
+
+
+def _compact_entry(td, key):
+    from tensordict import LazyStackedTensorDict, NonTensorData, TensorDict
+    from tensordict.base import _is_tensor_collection
+    from tensordict.persistent import PersistentTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    # the entry of the first member decides what the entry of a lazy stack is
+    first = td
+    while isinstance(first, TypedTensorDict) or (
+        isinstance(first, LazyStackedTensorDict) and first.tensordicts
+    ):
+        if isinstance(first, TypedTensorDict):
+            first = first._source
+        else:
+            first = first.tensordicts[0]
+    if isinstance(first, PersistentTensorDict):
+        meta = first._get_metadata(key)
+        if meta.get("non_tensor"):
+            return "NonTensorStack" if "shape" in meta else "NonTensorData"
+        item = None if meta.get("array") else first._get_str(key, None)
+    else:
+        item = first._get_str(key, None)
+    if item is None or not _is_tensor_collection(type(item)):
+        shape, dtype, devices = _compact_leaf(td, key)
+        token = f"[{','.join(map(str, shape))}]"
+        if _REPR_OPTIONS["show_dtype"]:
+            token = _compact_dtype(dtype) + token
+        if td.device is None and devices != {torch.device("cpu")}:
+            token += "@" + ",".join(sorted(str(device) for device in devices))
+        return token
+    if isinstance(item, NonTensorData):
+        return type(item.data).__name__
+    if is_non_tensor(item):
+        return type(item).__name__
+    sub = item if first is td else td._get_str(key, None)
+    prefix = "" if type(item) is TensorDict else type(item).__name__
+    extra = sub.batch_size[td.batch_dims :]
+    if extra:
+        prefix += f"[{','.join(map(str, extra))}]"
+    return prefix, _compact_body(sub)
+
+
+def _compact_entries(td, keys) -> list:
+    entries = [(key, _compact_entry(td, key)) for key in keys]
+    sort_keys = _REPR_OPTIONS["sort_keys"]
+    if sort_keys == "alphabetical":
+        entries.sort(key=lambda entry: f"{entry[0]}: {_compact_flat(entry[1])}")
+    elif callable(sort_keys):
+        entries.sort(
+            key=lambda entry: sort_keys(f"{entry[0]}: {_compact_flat(entry[1])}")
+        )
+    return entries
+
+
+def _compact_body(td) -> list:
+    if not is_tensorclass(td):
+        return _compact_entries(td, td.keys())
+    entries = _compact_entries(td._tensordict, td._tensordict.keys())
+    # the fields that hold no tensor: by type name, as non-tensor entries
+    others = [
+        (key, "None" if value is None else type(value).__name__)
+        for key, value in td._non_tensordict.items()
+    ]
+    if not type(td)._is_non_tensor:
+        from tensordict.tensorclass import _none_fields
+
+        others += [(key, "None") for key in _none_fields(td)]
+    return entries + others
+
+
+def _compact_flat(node) -> str:
+    if isinstance(node, str):
+        return node
+    prefix, entries = node
+    return f"{prefix}{{{', '.join(f'{k}: {_compact_flat(v)}' for k, v in entries)}}}"
+
+
+def _compact_render(node, indent: str, used: int, tail: int) -> str:
+    # One line if it fits in _COMPACT_WIDTH columns, given the ``used``
+    # columns before it and the ``tail`` ones after it; otherwise one entry
+    # per line, each rendered by the same rule.
+    flat = _compact_flat(node)
+    if (
+        isinstance(node, str)
+        or not node[1]
+        or used + len(flat) + tail <= _COMPACT_WIDTH
+    ):
+        return flat
+    prefix, entries = node
+    pad = indent + 4 * " "
+    lines = []
+    for i, (key, value) in enumerate(entries):
+        value_tail = tail + 1 if i == len(entries) - 1 else 1
+        value = _compact_render(value, pad, len(pad) + len(key) + 2, value_tail)
+        lines.append(f"{pad}{key}: {value}")
+    return prefix + "{\n" + ",\n".join(lines) + "}"
+
+
+def _compact_repr(obj) -> str | None:
+    """Returns the repr of ``set_printoptions(compact=True)``, or ``None`` for a class that keeps its own."""
+    from tensordict import LazyStackedTensorDict, TensorDictBase
+
+    header = []
+    if is_tensorclass(obj):
+        expected = type(obj).__expected_keys__
+        if _REPR_OPTIONS["show_batch_size"] and "batch_size" not in expected:
+            header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
+        if _REPR_OPTIONS["show_device"] and "device" not in expected:
+            if obj.device is not None:
+                header.append(f"device={obj.device}")
+    else:
+        # The stores list their key names and a non-tensor stack its values:
+        # a class with its own _repr_parts keeps its repr.
+        if type(obj)._repr_parts not in (
+            TensorDictBase._repr_parts,
+            LazyStackedTensorDict._repr_parts,
+        ):
+            return None
+        if _REPR_OPTIONS["show_batch_size"]:
+            header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
+        if _REPR_OPTIONS["show_device"] and obj.device is not None:
+            header.append(f"device={obj.device}")
+    exclusive = []
+    if isinstance(obj, LazyStackedTensorDict):
+        header.append(f"stack_dim={obj.stack_dim}")
+        keys = set(obj.keys())
+        for i, member in enumerate(obj.tensordicts):
+            own = [key for key in member.keys() if key not in keys]
+            if own:
+                exclusive.append((str(i), ("", _compact_entries(member, own))))
+    head = f"{type(obj).__name__}(" + "".join(f"{h}, " for h in header) + "fields="
+    # on the last line of the fields come the exclusive fields, if any
+    tail = 1 + len(", exclusive_fields={") if exclusive else 1
+    out = head + _compact_render(("", _compact_body(obj)), "", len(head), tail)
+    if exclusive:
+        used = len(out.rsplit("\n", 1)[-1]) + len(", exclusive_fields=")
+        out += ", exclusive_fields=" + _compact_render(("", exclusive), "", used, 1)
+    return out + ")"
 
 
 def _check_keys(
@@ -2296,10 +2493,17 @@ def _get_shared_executor(num_threads: int) -> concurrent.futures.ThreadPoolExecu
         return executor
 
 
-# the workers don't survive a fork: drop the executors in the child so that
-# they are recreated on first use
+def _reset_shared_executors_after_fork() -> None:
+    # the workers don't survive a fork: drop the executors in the child so that
+    # they are recreated on first use. The lock is replaced too, as the child
+    # inherits it locked if another thread held it at the fork.
+    global _SHARED_EXECUTORS_LOCK
+    _SHARED_EXECUTORS_LOCK = threading.Lock()
+    _SHARED_EXECUTORS.clear()
+
+
 if hasattr(os, "register_at_fork"):  # not available on Windows, which cannot fork
-    os.register_at_fork(after_in_child=_SHARED_EXECUTORS.clear)
+    os.register_at_fork(after_in_child=_reset_shared_executors_after_fork)
 
 
 def _is_json_serializable(item):
@@ -2892,14 +3096,129 @@ def _make_dtype_promotion(func):
     dtype = getattr(torch, func.__name__)
 
     @wraps(func)
-    def new_func(self):
+    def new_func(self, *, cast_filter=None):
         def todtype(x):
             return x.to(dtype)
 
-        return self._fast_apply(todtype, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(todtype, propagate_lock=True)
+        return _cast_filtered(self, todtype, cast_filter, propagate_lock=True)
 
-    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
+    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``.
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
     return new_func
+
+
+def _cast_filtered(td, cast, cast_filter, **kwargs):
+    """Applies ``cast`` to the tensor leaves of ``td`` that ``cast_filter`` selects.
+
+    ``cast_filter`` gets the key of each leaf as a tuple of str, and the leaf.
+    The other leaves are kept as they are.
+    """
+
+    def cast_if(key, tensor):
+        if cast_filter(key if type(key) is tuple else (key,), tensor):
+            return cast(tensor)
+        return tensor
+
+    return td._fast_apply(cast_if, named=True, nested_keys=True, **kwargs)
+
+
+def is_inexact(*args) -> bool:
+    """Whether the last argument is a floating-point or complex tensor.
+
+    The predicate tests its last argument only, so it works both as
+    ``fn(value)``, for example inside a function given to
+    :meth:`~tensordict.TensorDictBase.apply`, and as ``fn(key, value)``, for
+    example as the ``cast_filter`` of :meth:`~tensordict.TensorDictBase.to`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is a floating-point or complex dtype.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, is_inexact
+        >>> is_inexact(torch.zeros(3)), is_inexact("a", torch.zeros(3, dtype=torch.long))
+        (True, False)
+        >>> td = TensorDict(x=torch.zeros(3), i=torch.zeros(3, dtype=torch.long))
+        >>> td_bf16 = td.bfloat16(cast_filter=is_inexact)
+        >>> td_bf16["x"].dtype, td_bf16["i"].dtype
+        (torch.bfloat16, torch.int64)
+    """
+    dtype = args[-1].dtype
+    return dtype.is_floating_point or dtype.is_complex
+
+
+def is_floating(*args) -> bool:
+    """Whether the last argument is a floating-point tensor.
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)`` and as ``fn(key, value)``: see :func:`~tensordict.is_inexact`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is a floating-point dtype.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import is_floating
+        >>> is_floating(torch.zeros(3)), is_floating(torch.zeros(3, dtype=torch.complex64))
+        (True, False)
+    """
+    return args[-1].dtype.is_floating_point
+
+
+def is_integer(*args) -> bool:
+    """Whether the last argument is an integer tensor (signed or unsigned, not bool).
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)`` and as ``fn(key, value)``: see :func:`~tensordict.is_inexact`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is neither floating-point, complex
+        nor ``torch.bool``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import is_integer
+        >>> is_integer(torch.zeros(3, dtype=torch.uint8)), is_integer(torch.zeros(3, dtype=torch.bool))
+        (True, False)
+    """
+    dtype = args[-1].dtype
+    return not (dtype.is_floating_point or dtype.is_complex or dtype is torch.bool)
+
+
+def is_bool(*args) -> bool:
+    """Whether the last argument is a boolean tensor.
+
+    The predicate tests its last argument only, so it can be passed as
+    ``fn(value)`` and as ``fn(key, value)``: see :func:`~tensordict.is_inexact`.
+
+    Args:
+        *args: the value to test is the last one. A key may come before it.
+
+    Returns:
+        ``True`` if the dtype of the value is ``torch.bool``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import is_bool
+        >>> is_bool(torch.zeros(3, dtype=torch.bool)), is_bool("mask", torch.zeros(3))
+        (True, False)
+    """
+    return args[-1].dtype is torch.bool
 
 
 def _unravel_key_to_tuple(key):

@@ -58,12 +58,14 @@ from tensordict.base import (
     _has_lazy_stack,
     _is_leaf_nontensor,
     _is_tensor_collection,
+    _keep,
     _KeyThroughLeafError,
     _NESTED_TENSORS_AS_LISTS,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
+    _rename_entries,
     _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
@@ -4352,6 +4354,19 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 tds.append(td)
         return tds
+
+    def _rename_keys(self, pairs, *, strict, prune_root):
+        """Renames the keys in each member of a copy of the stack.
+
+        With ``strict=True``, every member must hold every source. A
+        sub-tensordict is removed only if the move empties it in every member,
+        so that no member loses a key that the others keep.
+        """
+        out = self._fast_apply(_keep, is_leaf=_is_leaf_nontensor)
+        _rename_entries(
+            out._innermost_tensordicts(), pairs, strict=strict, prune_root=prune_root
+        )
+        return out
 
     # Override: renames in each member, once per member; the members check
     # their lock and the keys.
