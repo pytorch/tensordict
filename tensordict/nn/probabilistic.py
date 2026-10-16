@@ -175,6 +175,12 @@ class set_interaction_type(_DecoratorContextManager):
             If ``False``, the interaction type applies to the whole process.
             Defaults to ``False``.
 
+    .. note:: Threads. By default the interaction type is process-wide: a
+        ``with`` block in one thread also changes what the modules running in
+        other threads at that time use. Pass ``thread_local=True`` to keep a
+        block to its own thread. A thread started inside such a block reads
+        the process-wide value, not the block's.
+
     Examples:
         >>> import torch
         >>> from torch import distributions as d
@@ -305,7 +311,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     :func:`~tensordict.nn.probabilistic.interaction_type` if it is set (see
     :class:`~tensordict.nn.set_interaction_type`). Otherwise it uses
     ``default_interaction_type``. See :class:`~tensordict.nn.InteractionType`
-    for what each type reads from the distribution.
+    for what each type reads from the distribution. By default the
+    interaction type is process-wide, so a :class:`~tensordict.nn.set_interaction_type`
+    block in one thread also changes the value that modules running in other
+    threads use. Pass ``thread_local=True`` to keep the block to its own
+    thread.
 
     With ``return_log_prob=True`` and the ``RANDOM`` interaction type, the
     module draws and scores the value in one call if the distribution class
