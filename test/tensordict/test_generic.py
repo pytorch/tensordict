@@ -12007,6 +12007,231 @@ class TestGeneric:
         with pytest.raises(KeyError, match="zz"):
             sub.update_({"a": torch.ones(3), "zz": torch.ones(3)})
 
+    @staticmethod
+    def _flat_td(value, *keys, cls=TensorDict, **kwargs):
+        """A flat tensordict of batch size [3]: the i-th key holds ``value + i``."""
+        return cls(
+            {key: torch.full((3, 2), float(value + i)) for i, key in enumerate(keys)},
+            batch_size=[3],
+            **kwargs,
+        )
+
+    class _PlanTC(TensorClass):
+        a: torch.Tensor
+        b: torch.Tensor
+
+    # (dest, source) pairs for update_ and copy_: the first five take the one
+    # walk of _update_plan for two trees of TensorDicts, the others the
+    # general route (#2859).
+    _UPDATE__PLAN_CASES = {
+        "same keys": lambda flat: (flat(0, "a", "b"), flat(1, "a", "b")),
+        "other key order": lambda flat: (flat(0, "a", "b"), flat(1, "b", "a")),
+        "nested": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x", "y")).set("b", torch.zeros(3, 2)),
+            flat(1, "b").set("n", flat(1, "y", "x")).set("a", torch.ones(3, 2)),
+        ),
+        "nested twice": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x").set("m", flat(0, "z"))),
+            flat(1, "a").set("n", flat(1, "x").set("m", flat(1, "z"))),
+        ),
+        "nested empty": lambda flat: (
+            flat(0, "a").set("e", TensorDict(batch_size=[3])),
+            flat(1, "a").set("e", TensorDict(batch_size=[3])),
+        ),
+        "only empty nested": lambda flat: (
+            TensorDict(e=TensorDict(batch_size=[3]), batch_size=[3]),
+            TensorDict(e=TensorDict(batch_size=[3]), batch_size=[3]),
+        ),
+        "nested extra source key": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "x", "y")),
+        ),
+        "nested missing source key": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x", "y")),
+            flat(1, "a").set("n", flat(1, "x")),
+        ),
+        "nested other key": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "y")),
+        ),
+        "nested tensor source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", torch.ones(3, 2)),
+        ),
+        "nested tensor dest": lambda flat: (
+            flat(0, "a").set("n", torch.zeros(3, 2)),
+            flat(1, "a").set("n", flat(1, "x")),
+        ),
+        "nested named": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x", names=["t"])),
+            flat(1, "a").set("n", flat(1, "x")),
+        ),
+        "nested lazy stack source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", lazy_stack(list(flat(1, "x").unbind(0)))),
+        ),
+        "nested subclass source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "x", cls=TestGeneric._SlowPathTensorDict)),
+        ),
+        "nested non-tensor": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x").set_non_tensor("s", "x")),
+            flat(1, "a").set("n", flat(1, "x").set_non_tensor("s", "y")),
+        ),
+        "nested grad source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "x")).apply(lambda t: t.requires_grad_()),
+        ),
+        "extra source key": lambda flat: (flat(0, "a", "b"), flat(1, "a", "b", "c")),
+        "missing source key": lambda flat: (flat(0, "a", "b"), flat(1, "a")),
+        "one other key": lambda flat: (flat(0, "a", "b"), flat(1, "a", "c")),
+        "no common key": lambda flat: (flat(0, "a"), flat(1, "c")),
+        "empty": lambda flat: (flat(0), flat(1)),
+        "parameter source": lambda flat: (
+            flat(0, "a", "b"),
+            flat(1, "a").set("b", nn.Parameter(torch.full((3, 2), 2.0))),
+        ),
+        "grad source": lambda flat: (
+            flat(0, "a", "b"),
+            flat(1, "a", "b").apply(lambda t: t.requires_grad_()),
+        ),
+        "non-tensor source": lambda flat: (
+            flat(0, "a").set_non_tensor("s", "x"),
+            flat(1, "a").set_non_tensor("s", "y"),
+        ),
+        "double source": lambda flat: (flat(0, "a", "b"), flat(1, "a", "b").double()),
+        "bad shape source": lambda flat: (
+            flat(0, "a", "b"),
+            TensorDict(a=torch.ones(3, 5), b=torch.ones(3, 2), batch_size=[3]),
+        ),
+        "named dest": lambda flat: (
+            flat(0, "a", "b", names=["x"]),
+            flat(1, "a", "b"),
+        ),
+        "named source": lambda flat: (
+            flat(0, "a", "b"),
+            flat(1, "a", "b", names=["x"]),
+        ),
+        "locked dest": lambda flat: (flat(0, "a", "b").lock_(), flat(1, "a", "b")),
+        "subclass dest": lambda flat: (
+            flat(0, "a", "b", cls=TestGeneric._SlowPathTensorDict),
+            flat(1, "a", "b"),
+        ),
+        "subclass source": lambda flat: (
+            flat(0, "a", "b"),
+            flat(1, "a", "b", cls=TestGeneric._SlowPathTensorDict),
+        ),
+        "tensorclass source": lambda flat: (
+            flat(0, "a", "b"),
+            TestGeneric._PlanTC(
+                a=torch.ones(3, 2), b=torch.full((3, 2), 2.0), batch_size=[3]
+            ),
+        ),
+        "lazy stack source": lambda flat: (
+            flat(0, "a", "b"),
+            lazy_stack(list(flat(1, "a", "b").unbind(0))),
+        ),
+        "lazy stack dest": lambda flat: (
+            lazy_stack(list(flat(0, "a", "b").unbind(0))),
+            flat(1, "a", "b"),
+        ),
+        "params dest": lambda flat: (
+            TensorDictParams(flat(0, "a", "b"), no_convert=True),
+            flat(1, "a", "b"),
+        ),
+        "memmap dest": lambda flat: (flat(0, "a", "b").memmap_(), flat(1, "a", "b")),
+    }
+
+    @staticmethod
+    def _update__plan_outcome(case, op):
+        dest, source = TestGeneric._UPDATE__PLAN_CASES[case](TestGeneric._flat_td)
+        ptrs = {key: leaf.data_ptr() for key, leaf in dest.items(True, True)}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                if op == "row":
+                    dest[1].copy_(source[1])
+                    result = dest
+                else:
+                    result = getattr(dest, op)(source)
+            except Exception as err:
+                outcome = (type(err), str(err))
+            else:
+                outcome = result is dest
+        state = {
+            key: (
+                type(leaf).__name__,
+                leaf.tolist(),
+                leaf.requires_grad,
+                leaf.data_ptr() == ptrs[key],
+            )
+            if isinstance(leaf, torch.Tensor)
+            else (type(leaf).__name__, leaf.tolist())
+            for key, leaf in dest.items(True, True, is_leaf=is_leaf_nontensor)
+        }
+        return (
+            outcome,
+            state,
+            list(state),
+            dest.is_locked,
+            dest.names if dest._has_names() else None,
+            [(w.category, str(w.message)) for w in caught],
+        )
+
+    @pytest.mark.parametrize("op", ["update_", "copy_", "row"])
+    @pytest.mark.parametrize("case", list(_UPDATE__PLAN_CASES))
+    def test_update__plan_fast_path_matches_general(self, case, op, monkeypatch):
+        # _update_plan pairs the leaves of two flat TensorDicts in one walk:
+        # update_ and copy_ give the same results, errors and warnings as on
+        # the general route, which _is_dense_node gates (#2859).
+        fast = self._update__plan_outcome(case, op)
+        monkeypatch.setattr(TensorDict, "_is_dense_node", lambda self: False)
+        assert self._update__plan_outcome(case, op) == fast
+
+    def test_update__plan_flat_one_walk(self, monkeypatch):
+        # copy_ and update_ between two flat TensorDicts of tensors pair the
+        # leaves without listing them with _items_list (#2859).
+        store = TensorDict(
+            policy=torch.zeros(4, 3, 5), critic=torch.zeros(4, 3, 2), batch_size=[4, 3]
+        )
+        obs = TensorDict(critic=torch.ones(3, 2), policy=torch.full((3, 5), 2.0))
+        obs.batch_size = [3]
+
+        def items_list(*args, **kwargs):
+            raise AssertionError("_items_list was called")
+
+        monkeypatch.setattr(TensorDictBase, "_items_list", items_list)
+        store[1].copy_(obs)
+        store[2].update_(obs)
+        assert (store[1:3]["critic"] == 1).all() and (store[1:3]["policy"] == 2).all()
+        assert (store[0] == 0).all() and (store[3] == 0).all()
+
+    def test_update__plan_nested_one_walk(self, monkeypatch):
+        # copy_ and update_ between two trees of TensorDicts of tensors, such
+        # as TorchRL transitions with a "next" entry, pair the leaves without
+        # listing them with _items_list (#2859).
+        def transition(value):
+            return TensorDict(
+                obs=torch.full((3, 4), value),
+                next=TensorDict(
+                    obs=torch.full((3, 4), value + 1),
+                    reward=torch.full((3, 1), value + 2),
+                    batch_size=[3],
+                ),
+                batch_size=[3],
+            )
+
+        dest, source = transition(0.0), transition(10.0)
+
+        def items_list(*args, **kwargs):
+            raise AssertionError("_items_list was called")
+
+        monkeypatch.setattr(TensorDictBase, "_items_list", items_list)
+        dest.copy_(source)
+        assert (dest == transition(10.0)).all()
+        dest.update_(transition(20.0))
+        assert (dest == transition(20.0)).all()
+
     def test_sub_td_update_overwrites_in_place(self):
         # A sub-tensordict writes the entries it has into its source, in place,
         # and adds the others to the source

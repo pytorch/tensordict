@@ -773,6 +773,20 @@ def test_update_many_leaves(benchmark, n, as_dict, nested):
     benchmark(dest.update_, source.to_dict() if as_dict else source)
 
 
+@pytest.mark.parametrize("n", [64, 4096])
+def test_copy__row_flat(benchmark, n):
+    # rsl_rl's rollout storage write: storage[step].copy_(obs) (#2859)
+    obs = TensorDict(
+        {"policy": torch.randn(n, 48), "critic": torch.randn(n, 60)}, [n], device="cpu"
+    )
+    storage = TensorDict(
+        {key: torch.zeros(24, *val.shape) for key, val in obs.items()},
+        [24, n],
+        device="cpu",
+    )
+    benchmark(lambda: storage[3].copy_(obs))
+
+
 @pytest.mark.parametrize("n", [16, 256])
 @pytest.mark.parametrize("source_type", ["dict", "td", "kwargs"])
 @pytest.mark.parametrize("nested", [False, True])
