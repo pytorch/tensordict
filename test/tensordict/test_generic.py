@@ -79,6 +79,7 @@ from tensordict.utils import (
 )
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
+from torch.autograd import forward_ad
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._python_dispatch import TorchDispatchMode
 from torch.utils._pytree import tree_leaves
@@ -11614,6 +11615,12 @@ class TestGeneric:
         "sub-tensordict into a tensor": (["a", "c"], {"c": "td"}),
         "sub-tensordict into a tensor, unselected": (["a"], {"c": "td"}),
         "tensor into a sub-tensordict": (["a", "n"], {"n": (3,)}),
+        "TensorDictParams": (["a", "pr", "c"], {"pr": "params"}),
+        "TensorDictParams, no_grad": (["a", "pr"], {"pr": "params", "no_grad": 1}),
+        "locked": (["a", "n", "s", "c"], {"lock": True}),
+        "locked, a bad shape": (["a", "c"], {"c": (3, 5), "lock": True}),
+        "dim names": (["a", ("n", "x"), "c"], {"names": True}),
+        "forward AD": (["a", "b", "c"], {"b": "dual"}),
     }
 
     @pytest.mark.parametrize("case", list(_KEYS_UPDATE_CASES))
@@ -11627,6 +11634,9 @@ class TestGeneric:
         options = dict(options)
         share = options.pop("share", False)
         no_grad = options.pop("no_grad", False)
+        lock = options.pop("lock", False)
+        names = options.pop("names", False)
+        dual = "dual" in options.values()
         tc_cls = self._KeysUpdateTC
 
         def make(cls):
@@ -11641,8 +11651,15 @@ class TestGeneric:
             td["p"] = nn.Parameter(torch.zeros(3))
             td["tc"] = tc_cls(x=torch.zeros(3, 2), y=torch.zeros(3), batch_size=[3])
             td["lz"] = lazy_stack([TensorDict(x=torch.zeros(2)) for _ in range(3)])
+            td["pr"] = TensorDictParams(
+                TensorDict(w=nn.Parameter(torch.zeros(3)), batch_size=[3])
+            )
             if share:
                 td.share_memory_()
+            if names:
+                td.names = ["batch"]
+            if lock:
+                td.lock_()
             return td
 
         def entry(t, value):
@@ -11660,14 +11677,41 @@ class TestGeneric:
                 return TensorDict(x=t(3, 2), batch_size=[3])
             if value == "td":
                 return TensorDict(z=t(3), batch_size=[3])
+            if value == "params":
+                return TensorDict(w=t(3), batch_size=[3])
+            if value == "dual":
+                return forward_ad.make_dual(t(3), torch.full((3,), 2.0))
             return value
 
-        def call(td, t):
-            entries = {key: entry(t, value) for key, value in options.items()}
-            source = self._keys_update_source(t, **entries)
-            with torch.no_grad() if no_grad else contextlib.nullcontext():
-                return td.update_(source, keys_to_update=keys)
+        tangents = []
 
+        def call(td, t):
+            with contextlib.ExitStack() as stack:
+                if dual:
+                    stack.enter_context(forward_ad.dual_level())
+                entries = {key: entry(t, value) for key, value in options.items()}
+                source = self._keys_update_source(t, **entries)
+                if names:
+                    source.names = ["batch"]
+                if no_grad:
+                    stack.enter_context(torch.no_grad())
+                result = td.update_(source, keys_to_update=keys)
+                if dual:
+                    tangents.append(
+                        {
+                            key: forward_ad.unpack_dual(leaf).tangent.tolist()
+                            for key, leaf in td.items(True, True)
+                            if isinstance(leaf, torch.Tensor)
+                            and forward_ad.unpack_dual(leaf).tangent is not None
+                        }
+                    )
+                return result
+
+        if dual:
+            # the first make_dual warns, in torch: not in the outcomes
+            with warnings.catch_warnings(), forward_ad.dual_level():
+                warnings.simplefilter("ignore")
+                forward_ad.make_dual(torch.zeros(()), torch.zeros(()))
         made = []
 
         def outcome():
@@ -11675,13 +11719,14 @@ class TestGeneric:
                 made.append(make(cls))
                 return made[-1]
 
+            tangents.clear()
             result = self._update_outcome(TensorDict, tracked, call)
             grads = {
                 key: (leaf.requires_grad, type(leaf.grad_fn).__name__)
                 for key, leaf in made[-1].items(True, True)
                 if isinstance(leaf, torch.Tensor)
             }
-            return result, grads
+            return result, grads, list(tangents)
 
         fast = outcome()
         monkeypatch.setattr(

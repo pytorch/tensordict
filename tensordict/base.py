@@ -118,6 +118,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
+from torch.autograd import forward_ad
 from torch.compiler import allow_in_graph, is_compiling
 from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
@@ -5677,10 +5678,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_update is not None
             and type(self) is _TENSORDICT_TYPE
             and type(input_dict_or_td) is _TENSORDICT_TYPE
+            and forward_ad._current_level < 0
         ):
             # Fast route for exact TensorDicts: pair the selected tensors in
             # the order of the _apply_nest route below, and copy them with
-            # _foreach_copy_. The route below writes each other entry at its
+            # _foreach_copy_, which forward AD does not support (hence no
+            # dual level). The route below writes each other entry at its
             # place in the order. Where each key names an entry that is not a
             # tensordict, the walk has read the path of each key through
             # exact TensorDicts: _reads_copies_under is False.
@@ -5773,7 +5776,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 for end, name, source, dest, nested in entries:
                     if start < end:
                         _copy_leaves(
-                            dests[start:end], sources[start:end], non_blocking, True
+                            dests[start:end],
+                            sources[start:end],
+                            non_blocking,
+                            exact=True,
                         )
                         start = end
                     if not nested:
