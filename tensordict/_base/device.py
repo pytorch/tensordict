@@ -677,14 +677,15 @@ class _DeviceOps:
                 controlled via the ``num_threads`` argument.
 
                 .. note::
-                    Calling ``tensordict.pin_memory().to("cuda")`` will usually
-                    be much slower than ``tensordict.to("cuda", non_blocking_pin=True)`` as
-                    the pin_memory is called asynchronously in the second case.
-                    Multithreaded ``pin_memory`` will usually be beneficial if the tensors
-                    are large and numerous: when there are too few tensors to be sent,
-                    the overhead of spawning threads and collecting data outweighs the benefits
-                    of multithreading, and if the tensors are small the overhead of iterating
-                    over a long list is also prohibitively large.
+                    Each call starts and joins its pinning threads, which costs
+                    the same however little data there is. So
+                    ``non_blocking_pin=True`` pays off only for large tensordicts,
+                    with leaves of a MiB or more and tens of MiB in total. For
+                    smaller tensordicts, ``tensordict.to("cuda")`` is usually the
+                    fastest, and ``tensordict.pin_memory().to("cuda",
+                    non_blocking=True)`` is also faster than
+                    ``non_blocking_pin=True``. Where the crossover lies depends on
+                    the machine, so measure it on yours.
 
             num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
                 of threads to be used for ``pin_memory``. By default,
