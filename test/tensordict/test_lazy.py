@@ -29,6 +29,7 @@ from tensordict import (
     PersistentTensorDict,
     TensorClass,
     TensorDict,
+    TypedTensorDict,
     UnbatchedTensor,
 )
 from tensordict._indexing import _getitem_batch_size
@@ -5312,6 +5313,124 @@ class TestLazyStackedTensorDict:
         with pytest.raises(KeyError, match="The key a was not found"):
             td.update_(source)
         assert (members[0]["a"] == 1).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("kind", ["dense", "tensorclass", "typed", "h5"])
+    def test_update__broadcast_nested_lazy(self, stack_dim, kind, tmp_path):
+        # #2834: update_ and copy_ broadcast an entry that lacks the stack dim
+        # of a lazy stack that self holds, or has it with size 1, into each
+        # member, as into a dense tensordict, and raise before they write
+        # where it cannot broadcast
+        if kind == "h5" and not _has_h5py:
+            pytest.skip("h5py not found.")
+
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            x: torch.Tensor
+
+        files = []
+
+        def holder():
+            # a lazy stack of batch size [2, 3]
+            size = (2, 3)[1 - stack_dim]
+            members = []
+            for _ in range((2, 3)[stack_dim]):
+                member = TensorDict(x=torch.ones(size, 4), batch_size=[size])
+                if kind == "tensorclass":
+                    member = MC.from_tensordict(member)
+                elif kind == "h5":
+                    files.append(tmp_path / f"{len(files)}.h5")
+                    member = PersistentTensorDict.from_dict(member, filename=files[-1])
+                members.append(member)
+            n = lazy_stack(members, stack_dim)
+            if kind == "typed":
+                n = Typed.from_tensordict(n)
+            return TensorDict(a=torch.ones(2, 3), n=n, batch_size=[2, 3])
+
+        calls = (
+            lambda td, src: td.update_(src),
+            lambda td, src: td.update_(src, keys_to_update=[("n", "x")]),
+            lambda td, src: td.update_(src, keys_to_update=["n"]),
+            lambda td, src: td.copy_(src),
+        )
+        # n["x"] has shape [2, 3, 4]: the last shape has the stack dim, of size 1
+        shapes = [(), (4,), (3, 1), ((1, 3, 4), (2, 1, 4))[stack_dim]]
+        for call in calls:
+            for shape in shapes:
+                td = holder()
+                expected = td.to_tensordict()
+                source = TensorDict(
+                    a=torch.zeros(2, 3),
+                    n={"x": torch.arange(2.0, 2 + math.prod(shape)).reshape(shape)},
+                )
+                assert call(td, source) is td
+                call(expected, source)
+                assert (expected["n", "x"] != 1).all()
+                torch.testing.assert_close(td.to_tensordict(), expected)
+            td = holder()
+            source = TensorDict(a=torch.zeros(2, 3), n={"x": torch.zeros(5)})
+            with pytest.raises(RuntimeError, match="must match the size of tensor"):
+                call(td.to_tensordict(), source)
+            with pytest.raises(RuntimeError, match="must match the size of tensor"):
+                call(td, source)
+            assert (td.to_tensordict() == 1).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_update__broadcast_nested_lazy_unbatched(self, stack_dim):
+        # #2834: each member holds the whole of an unbatched leaf, which has
+        # no stack dim: update_ and copy_ broadcast the source into it
+        batch_size = [(2, 3)[stack_dim], (2, 3)[1 - stack_dim]]
+
+        def holder():
+            members = [
+                TensorDict(
+                    x=torch.ones(3, 4),
+                    u=UnbatchedTensor(torch.ones(7)),
+                    batch_size=[3],
+                )
+                for _ in range(2)
+            ]
+            n = lazy_stack(members, stack_dim)
+            return TensorDict(n=n, batch_size=batch_size), members
+
+        calls = (
+            lambda td, src: td.update_(src),
+            lambda td, src: td.update_(src, keys_to_update=[("n", "x"), ("n", "u")]),
+            lambda td, src: td.copy_(src),
+        )
+        for call in calls:
+            for u in (torch.zeros(7), torch.zeros(1), UnbatchedTensor(torch.zeros(7))):
+                td, members = holder()
+                # copy_ needs a source of the same batch size, which only
+                # holds u unbatched
+                copy = call is calls[2]
+                source = TensorDict(
+                    n={
+                        "x": torch.zeros(*batch_size, 4),
+                        "u": UnbatchedTensor(u) if copy else u,
+                    },
+                    batch_size=batch_size if copy else [],
+                )
+                assert call(td, source) is td
+                for member in members:
+                    assert (member["x"] == 0).all()
+                    assert (member["u"] == 0).all()
+            td, members = holder()
+            source = TensorDict(
+                n=TensorDict(
+                    x=torch.zeros(*batch_size, 4),
+                    u=UnbatchedTensor(torch.zeros(5)),
+                    batch_size=batch_size,
+                ),
+                batch_size=batch_size,
+            )
+            with pytest.raises(RuntimeError, match="must match the size of tensor"):
+                call(td, source)
+            for member in members:
+                assert (member["x"] == 1).all()
+                assert (member["u"] == 1).all()
 
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
