@@ -712,6 +712,18 @@ def test_setitem_non_tensor_rows(benchmark, big_non_tensor_td):
     benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=2, rounds=20)
 
 
+@pytest.mark.parametrize("index", ["tensor", "mask"])
+def test_getitem_non_tensor_rows(benchmark, index):
+    # 32 rows of a 256-row string entry, as verl selects a mini-batch
+    stack = NonTensorStack.from_list([f"x{i}" for i in range(256)])
+    rows = torch.randperm(256, generator=torch.Generator().manual_seed(0))[:32]
+    if index == "mask":
+        mask = torch.zeros(256, dtype=torch.bool)
+        mask[rows] = True
+        rows = mask
+    benchmark(stack.__getitem__, rows)
+
+
 def test_setitem(benchmark, td, c):
     def exec_setitem():
         tdc = td.clone()
