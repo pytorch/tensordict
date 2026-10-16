@@ -3601,9 +3601,15 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: flattens each member, so that each one keeps its own values
     # (an UnbatchedTensor included) and the result shares the leaves, as with
-    # a TensorDict (#2869).
+    # a TensorDict (#2869). A stack with a ``hook_out`` (or under vmap) reads
+    # its leaves through the hook, so it keeps the generic route.
     def _flatten_keys_outplace(self, separator, is_leaf):
-        if self._is_non_tensor or not self.tensordicts:
+        if (
+            self._is_non_tensor
+            or not self.tensordicts
+            or self._hook_out is not None
+            or self._is_vmapped
+        ):
             return super()._flatten_keys_outplace(separator, is_leaf)
         tensordicts = [
             td._flatten_keys_outplace(separator, is_leaf) for td in self.tensordicts
