@@ -20,9 +20,7 @@
  "memmap_td empty": [],
  "memmap_td filling": [],
  "memmap_td key_edits": [],
- "memmap_td keys": [
-  "list(td)"
- ],
+ "memmap_td keys": [],
  "memmap_td masking": [
   "masked_select(mask)"
  ],
@@ -33,13 +31,7 @@
   "state_dict()"
  ],
  "memmap_td setitem": [],
- "memmap_td shape": [
-  "chunk(2, 0)",
-  "split(2, 0)",
-  "split([1, 3], 0)",
-  "unbind(0)",
-  "unbind(1)"
- ],
+ "memmap_td shape": [],
  "memmap_td update": [],
  "nested_stacked_td apply": [],
  "nested_stacked_td empty": [],
