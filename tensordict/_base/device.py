@@ -23,6 +23,7 @@ from typing import Callable, overload
 import torch
 from tensordict._deprecation import deprecated
 from tensordict.base import (
+    _default_is_leaf,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _sync_cuda_transfer,
@@ -35,6 +36,7 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
+    _cast_filtered,
     _is_shared,
     _is_unbatched,
     _make_dtype_promotion,
@@ -630,7 +632,8 @@ class _DeviceOps:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
         When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original
-        dtype (including integer and boolean leaves).
+        dtype (including integer and boolean leaves), unless ``cast_filter`` selects the
+        leaves to cast.
 
         Args:
             device (torch.device, optional): the desired device of the tensordict.
@@ -671,6 +674,22 @@ class _DeviceOps:
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is done.
+
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves the dtype cast applies to.
+                ``key`` is the nested key of the leaf as a tuple of str, for
+                example ``("obs",)`` or ``("next", "done")``. Leaves for which
+                it returns ``False`` keep their dtype; a device or memory-format
+                change still applies to them. It is not called on non-tensor
+                data, nor when no dtype is given or when ``to`` gets an attrs
+                tensordict, whose leaves give each leaf its dtype. An
+                :class:`~tensordict.UnbatchedTensor` leaf is passed as is, not
+                as a :class:`torch.Tensor`. Helpers such as
+                :func:`~tensordict.is_inexact` can be passed directly. Defaults
+                to the ``cast_filter`` of a tensorclass that declares one, and to
+                casting every leaf otherwise; pass ``None`` to cast every leaf.
+                The dtype shorthands (:meth:`float`, :meth:`bfloat16`, ...) take
+                it too.
 
             non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
                 being sent to device. This will be done asynchronously but can be
@@ -729,6 +748,14 @@ class _DeviceOps:
             >>> data_int["a"]
             tensor(1, dtype=torch.int32)
 
+            Cast the floating-point leaves only:
+
+            >>> from tensordict import is_inexact
+            >>> data = TensorDict(x=torch.zeros(3), done=torch.zeros(3, dtype=torch.bool))
+            >>> data_bf16 = data.to(torch.bfloat16, cast_filter=is_inexact)
+            >>> data_bf16["x"].dtype, data_bf16["done"].dtype
+            (torch.bfloat16, torch.bool)
+
             The next lines need a CUDA device, so they are not run when the
             documentation is tested.
 
@@ -770,6 +797,8 @@ class _DeviceOps:
                 raise TypeError(
                     "to(attrs_td) does not accept additional positional arguments."
                 )
+            # The attrs give each leaf its dtype: cast_filter does not apply
+            kwargs.pop("cast_filter", None)
             return self._to_per_leaf(attrs_td, **kwargs)
 
         non_blocking = kwargs.pop("non_blocking", None)
@@ -814,8 +843,8 @@ class _DeviceOps:
 
         :meth:`to` has handled an attrs tensordict, taken ``non_blocking`` out
         of ``kwargs`` and parsed the other arguments; ``args`` and ``kwargs``
-        are the ones it received, without ``non_blocking``. It wraps the result
-        for use as a context manager.
+        are the ones it received, without ``non_blocking``; ``cast_filter`` is
+        read from ``kwargs``. It wraps the result for use as a context manager.
 
         Returns ``self`` when the device is already the right one and no dtype
         or memory format is given (the batch size is then set in place, as
@@ -876,7 +905,7 @@ class _DeviceOps:
 
         if convert_to_format is not None:
 
-            def to(tensor):
+            def to(tensor, dtype=dtype):
                 # As in nn.Module.to, the memory format applies to 4D and 5D tensors
                 if tensor.dim() in (4, 5):
                     return tensor.to(
@@ -891,7 +920,7 @@ class _DeviceOps:
 
         else:
 
-            def to(tensor):
+            def to(tensor, dtype=dtype):
                 return tensor.to(
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
@@ -908,15 +937,27 @@ class _DeviceOps:
         ):
             needs_d2h_sync = False
 
-            def to(tensor, _to=to):
+            def to(tensor, dtype=dtype, _to=to):
                 nonlocal needs_d2h_sync
                 if not tensor.is_cpu:
                     needs_d2h_sync = True
-                return _to(tensor)
+                return _to(tensor, dtype)
+
+        cast_filter = kwargs.get("cast_filter") if dtype is not None else None
+        named = cast_filter is not None
+        if named:
+
+            def to(key, tensor, _to=to):
+                # The leaves that cast_filter leaves out keep their dtype
+                if cast_filter(key if type(key) is tuple else (key,), tensor):
+                    return _to(tensor)
+                return _to(tensor, None)
 
         apply_kwargs = {}
         if device is not None or dtype is not None or convert_to_format is not None:
-            if non_blocking_pin and num_threads != 0:
+            # The pin_memory threads walk the members of lazy stacks with keys
+            # that hold the member index: cast_filter takes the sequential path
+            if non_blocking_pin and num_threads != 0 and not named:
                 if num_threads is None:
                     num_threads = max(1, torch.get_num_threads() // 2)
                 result = self._to_cuda_with_pin_mem(
@@ -930,19 +971,31 @@ class _DeviceOps:
                 apply_kwargs["checked"] = True
                 apply_kwargs["call_on_unbatched"] = True
                 if non_blocking_pin:
+                    if named:
 
-                    def to_pinmem(tensor, _to=to):
-                        return to(tensor.pin_memory())
+                        def to_pinmem(key, tensor, _to=to):
+                            return _to(key, tensor.pin_memory())
+
+                    else:
+
+                        def to_pinmem(tensor, _to=to):
+                            return to(tensor.pin_memory())
 
                     result = result._fast_apply(
-                        to_pinmem, propagate_lock=True, **apply_kwargs
+                        to_pinmem,
+                        propagate_lock=True,
+                        named=named,
+                        nested_keys=named,
+                        **apply_kwargs,
                     )
-                elif self.is_locked and batch_size is None:
+                elif self.is_locked and batch_size is None and not named:
                     # A locked tensordict caches its leaves, so the first walk
                     # is nearly free: keep the two-pass form, which is faster
                     # there than one walk that calls to() on each leaf. With a
                     # batch_size, _fast_apply renames the leaves of nested lazy
                     # stacks, which the keys of _items_list would then miss.
+                    # The keys of _items_list hold the member index of lazy
+                    # stacks, which cast_filter must not see.
                     keys, tensors = self._items_list(True, True)
                     tensors = [to(t) for t in tensors]
                     items = dict(zip(keys, tensors))
@@ -977,8 +1030,12 @@ class _DeviceOps:
 
                     result = self._fast_apply(
                         to,
-                        is_leaf=_NESTED_TENSORS_AS_LISTS,
+                        # _NESTED_TENSORS_AS_LISTS puts the member index of
+                        # lazy stacks in the keys, which cast_filter must not see
+                        is_leaf=_default_is_leaf if named else _NESTED_TENSORS_AS_LISTS,
                         propagate_lock=True,
+                        named=named,
+                        nested_keys=named,
                         **apply_kwargs,
                     )
                 if batch_size is not None and not inplace:
@@ -1028,58 +1085,100 @@ class _DeviceOps:
             device_module = _get_device_module(device_type)
             device_module.synchronize()
 
-    def double(self) -> Self:
-        r"""Casts all tensors to ``torch.double`` (``torch.float64``)."""
+    def double(self, *, cast_filter: Callable | None = None) -> Self:
+        r"""Casts all tensors to ``torch.double`` (``torch.float64``).
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
 
         def dble(x):
             return x.double()
 
-        return self._fast_apply(dble, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(dble, propagate_lock=True)
+        return _cast_filtered(self, dble, cast_filter, propagate_lock=True)
 
-    def float(self) -> Self:
-        r"""Casts all tensors to ``torch.float``."""
+    def float(self, *, cast_filter: Callable | None = None) -> Self:
+        r"""Casts all tensors to ``torch.float``.
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
 
         def tofloat(x):
             return x.float()
 
-        return self._fast_apply(tofloat, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(tofloat, propagate_lock=True)
+        return _cast_filtered(self, tofloat, cast_filter, propagate_lock=True)
 
-    def int(self) -> Self:
-        r"""Casts all tensors to ``torch.int``."""
+    def int(self, *, cast_filter: Callable | None = None) -> Self:
+        r"""Casts all tensors to ``torch.int``.
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
 
         def toint(x):
             return x.int()
 
-        return self._fast_apply(toint, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(toint, propagate_lock=True)
+        return _cast_filtered(self, toint, cast_filter, propagate_lock=True)
 
-    def bool(self) -> Self:
-        r"""Casts all tensors to ``torch.bool``."""
+    def bool(self, *, cast_filter: Callable | None = None) -> Self:
+        r"""Casts all tensors to ``torch.bool``.
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
 
         def tobool(x):
             return x.bool()
 
-        return self._fast_apply(tobool, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(tobool, propagate_lock=True)
+        return _cast_filtered(self, tobool, cast_filter, propagate_lock=True)
 
-    def half(self) -> Self:
-        r"""Casts all tensors to ``torch.half``."""
+    def half(self, *, cast_filter: Callable | None = None) -> Self:
+        r"""Casts all tensors to ``torch.half``.
+
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
+        """
 
         def tohalf(x):
             return x.half()
 
-        return self._fast_apply(tohalf, propagate_lock=True)
+        if cast_filter is None:
+            return self._fast_apply(tohalf, propagate_lock=True)
+        return _cast_filtered(self, tohalf, cast_filter, propagate_lock=True)
 
-    def type(self, dst_type: torch.dtype) -> Self:
+    def type(
+        self, dst_type: torch.dtype, *, cast_filter: Callable | None = None
+    ) -> Self:
         r"""Casts all tensors to :attr:`dst_type`.
 
         Args:
             dst_type (type or string): the desired type
 
+        Keyword Args:
+            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
+                that selects the tensor leaves to cast, as in :meth:`to`.
         """
 
         def totype(x):
             return x.type(dst_type)
 
-        return self._fast_apply(totype)
+        if cast_filter is None:
+            return self._fast_apply(totype)
+        return _cast_filtered(self, totype, cast_filter)
 
     @_make_dtype_promotion
     def bfloat16(self) -> Self: ...

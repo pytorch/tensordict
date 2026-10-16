@@ -5681,6 +5681,128 @@ class TestNoCasting:
         assert isinstance(X(False).a, bool)
 
 
+class TestCastFilter:
+    @staticmethod
+    def _mesh(cls):
+        return cls(
+            points=torch.zeros(4, 3),
+            cells=torch.zeros(4, 3, dtype=torch.long),
+            point_data=TensorDict(
+                p=torch.zeros(4), zone=torch.zeros(4, dtype=torch.int32), batch_size=[4]
+            ),
+            mask=torch.zeros(4, dtype=torch.bool),
+            name="mesh",
+            batch_size=[4],
+        )
+
+    class Mesh(TensorClass, cast_filter=tensordict.is_inexact):
+        points: torch.Tensor
+        cells: torch.Tensor
+        point_data: TensorDict
+        mask: torch.Tensor
+        name: str
+
+    def _check_mesh(self, out, cls, dtype):
+        assert type(out) is cls
+        assert out.points.dtype == dtype
+        assert out.point_data["p"].dtype == dtype
+        assert out.cells.dtype == torch.long
+        assert out.point_data["zone"].dtype == torch.int32
+        assert out.mask.dtype == torch.bool
+        if out.batch_dims == 1:
+            assert out.name == "mesh"
+
+    @pytest.mark.parametrize(
+        "call,dtype",
+        [
+            (("bfloat16", (), {}), torch.bfloat16),
+            (("half", (), {}), torch.half),
+            (("double", (), {}), torch.double),
+            (("int", (), {}), torch.int),
+            (("float64", (), {}), torch.float64),
+            (("type", (torch.float64,), {}), torch.float64),
+            (("to", (torch.bfloat16,), {}), torch.bfloat16),
+            (("to", ("cpu", torch.float64), {"non_blocking": True}), torch.float64),
+            (("to", (), {"dtype": torch.float64}), torch.float64),
+        ],
+    )
+    def test_cast_filter_class_default(self, call, dtype):
+        # The Mesh case: floats cast, int cells and bool masks kept, the
+        # tensorclass type kept
+        mesh = self._mesh(self.Mesh)
+        name, args, kwargs = call
+        out = getattr(mesh, name)(*args, **kwargs)
+        self._check_mesh(out, self.Mesh, dtype)
+        # A lazy stack of tensorclasses takes the class default too
+        out = getattr(torch.stack([mesh, mesh]), name)(*args, **kwargs)
+        self._check_mesh(out, self.Mesh, dtype)
+        # cast_filter=None casts every leaf
+        out = getattr(mesh, name)(*args, cast_filter=None, **kwargs)
+        assert out.cells.dtype == out.mask.dtype == dtype
+
+    def test_cast_filter_override(self):
+        mesh = self._mesh(self.Mesh)
+        out = mesh.to(
+            torch.bfloat16,
+            cast_filter=lambda k, v: tensordict.is_inexact(v) and k[0] != "point_data",
+        )
+        assert out.points.dtype == torch.bfloat16
+        assert out.point_data["p"].dtype == torch.float32
+        assert out.cells.dtype == torch.long
+        with mesh.to(torch.float64) as mesh64:
+            assert mesh64.points.dtype == torch.float64
+            assert mesh64.cells.dtype == torch.long
+        assert mesh.points.dtype == torch.float32
+
+    def test_cast_filter_attrs(self):
+        # The class default does not stop to(attrs), whose attrs give each
+        # leaf its dtype
+        mesh = self._mesh(self.Mesh).exclude("name")
+        attrs = mesh.double(cast_filter=None).attrs(fields=("device", "dtype"))
+        out = mesh.to(attrs)
+        assert type(out) is self.Mesh
+        assert out.points.dtype == out.cells.dtype == torch.float64
+        assert out.point_data["zone"].dtype == torch.float64
+
+    def test_cast_filter_inheritance(self):
+        class Sub(self.Mesh):
+            pass
+
+        class Flags(self.Mesh["nocast"]):
+            pass
+
+        class Reset(self.Mesh, cast_filter=None):
+            pass
+
+        class Plain(TensorClass):
+            x: torch.Tensor
+
+        assert Sub._cast_filter is tensordict.is_inexact
+        assert Flags._cast_filter is tensordict.is_inexact
+        assert Reset._cast_filter is None
+        assert Plain._cast_filter is None
+        self._check_mesh(self._mesh(Sub).half(), Sub, torch.half)
+        assert self._mesh(Reset).half().cells.dtype == torch.half
+        plain = Plain(x=torch.zeros(3, dtype=torch.long))
+        assert plain.half().x.dtype == torch.half
+        assert plain.half(cast_filter=tensordict.is_inexact).x.dtype == torch.long
+
+    def test_cast_filter_decorator(self):
+        @tensorclass(cast_filter=tensordict.is_inexact)
+        class Mesh:
+            points: torch.Tensor
+            cells: torch.Tensor
+            point_data: TensorDict
+            mask: torch.Tensor
+            name: str
+
+        assert Mesh._cast_filter is tensordict.is_inexact
+        self._check_mesh(self._mesh(Mesh).bfloat16(), Mesh, torch.bfloat16)
+        assert self._mesh(Mesh).bfloat16(cast_filter=None).cells.dtype == (
+            torch.bfloat16
+        )
+
+
 class TestAutoCasting:
     @tensorclass(autocast=True)
     class ClsAutoCast:

@@ -9748,6 +9748,224 @@ class TestGeneric:
         if args != ("meta",):
             assert (out == td).all()
 
+    @staticmethod
+    def _cast_filter_td():
+        return TensorDict(
+            x=torch.zeros(2, 3),
+            cells=torch.zeros(2, 3, dtype=torch.long),
+            mask=torch.zeros(2, dtype=torch.bool),
+            info=NonTensorData("info"),
+            point_data=TensorDict(
+                p=torch.zeros(2),
+                zone=torch.zeros(2, dtype=torch.int32),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+
+    @pytest.mark.parametrize(
+        "td_type", ["td", "locked", "lazy", "params", "sub_td", "unsqueezed"]
+    )
+    @pytest.mark.parametrize(
+        "call",
+        [
+            ("to", (torch.bfloat16,), {}),
+            ("to", ("cpu", torch.bfloat16), {}),
+            ("to", (), {"dtype": torch.bfloat16, "non_blocking": True}),
+            ("to", (torch.zeros((), dtype=torch.bfloat16),), {}),
+            ("bfloat16", (), {}),
+            ("type", (torch.bfloat16,), {}),
+        ],
+        ids=["to-dtype", "to-device-dtype", "to-kwargs", "to-tensor", "bf16", "type"],
+    )
+    def test_to_cast_filter(self, td_type, call):
+        # cast_filter selects the leaves the dtype cast applies to; it gets
+        # the key as a tuple of str and is never called on non-tensor data
+        td = self._cast_filter_td()
+        if td_type == "locked":
+            td = td.lock_()
+        elif td_type == "lazy":
+            td = lazy_stack(list(td.unbind(0)))
+        elif td_type == "params":
+            td = TensorDictParams(td.exclude("info"))
+        elif td_type == "sub_td":
+            td = td._get_sub_tensordict(slice(None))
+        elif td_type == "unsqueezed":
+            td = td.unsqueeze(0)
+        seen = []
+
+        def cast_filter(key, value):
+            assert isinstance(key, tuple) and all(isinstance(k, str) for k in key)
+            assert isinstance(value, torch.Tensor)
+            seen.append(key)
+            return tensordict.is_inexact(value)
+
+        name, args, kwargs = call
+        out = getattr(td, name)(*args, cast_filter=cast_filter, **kwargs)
+        assert set(seen) == {
+            ("x",),
+            ("cells",),
+            ("mask",),
+            ("point_data", "p"),
+            ("point_data", "zone"),
+        }
+        assert out["x"].dtype == torch.bfloat16
+        assert out["point_data", "p"].dtype == torch.bfloat16
+        assert out["cells"].dtype == torch.long
+        assert out["mask"].dtype == torch.bool
+        assert out["point_data", "zone"].dtype == torch.int32
+        assert (out == td.to(torch.bfloat16)).all()
+        if td_type not in ("params", "lazy", "sub_td", "unsqueezed"):
+            # The leaves left out are not copied
+            assert out["cells"] is td["cells"]
+            assert out.get_non_tensor("info") == "info"
+        if td_type == "locked" and name != "type":
+            # type() does not propagate the lock, with or without cast_filter
+            assert out.is_locked
+        elif td_type == "lazy":
+            assert isinstance(out, LazyStackedTensorDict)
+        elif td_type == "params" and name == "to":
+            assert isinstance(out, TensorDictParams)
+
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "bool",
+            "double",
+            "float",
+            "half",
+            "int",
+            "bfloat16",
+            "complex64",
+            "float16",
+            "float32",
+            "float64",
+            "int16",
+            "int32",
+            "int64",
+            "int8",
+            "uint8",
+        ],
+    )
+    def test_dtype_shorthand_cast_filter(self, method):
+        td = self._cast_filter_td()
+        dtype = getattr(td, method)()["x"].dtype
+        # A keyed predicate: leave point_data out
+        out = getattr(td, method)(
+            cast_filter=lambda k, v: tensordict.is_inexact(v) and k[0] != "point_data"
+        )
+        assert out["x"].dtype == dtype
+        assert out["point_data", "p"].dtype == torch.float32
+        assert out["cells"].dtype == torch.long
+        assert out["mask"].dtype == torch.bool
+        assert out["point_data", "zone"].dtype == torch.int32
+        # None casts every leaf, as without the keyword
+        out = getattr(td, method)(cast_filter=None)
+        assert out["cells"].dtype == out["mask"].dtype == dtype
+
+    def test_to_cast_filter_integer_target(self):
+        # An integer target does not raise: the filter does what it says
+        td = self._cast_filter_td()
+        out = td.to(torch.int64, cast_filter=tensordict.is_inexact)
+        assert out["x"].dtype == torch.int64
+        assert out["mask"].dtype == torch.bool
+        assert out["point_data", "zone"].dtype == torch.int32
+
+    @pytest.mark.parametrize("cast_filter", [None, tensordict.is_inexact])
+    def test_to_cast_filter_attrs(self, cast_filter):
+        # The attrs give each leaf its dtype: cast_filter does not apply
+        td = self._cast_filter_td().exclude("info")
+        attrs = td.double().attrs(fields=("device", "dtype"))
+        out = td.to(attrs, cast_filter=cast_filter)
+        assert (out == td.to(attrs)).all()
+        assert out["cells"].dtype == out["mask"].dtype == torch.float64
+
+    def test_to_cast_filter_device_and_memory_format(self):
+        # The device and memory format apply to every leaf, the dtype to the
+        # selected ones
+        td = TensorDict(
+            img=torch.randn(2, 3, 4, 5),
+            ids=torch.zeros(2, 3, 4, 5, dtype=torch.long),
+            batch_size=[2],
+        )
+        out = td.to(
+            torch.float64,
+            memory_format=torch.channels_last,
+            cast_filter=tensordict.is_inexact,
+        )
+        assert out["img"].dtype == torch.float64
+        assert out["ids"].dtype == torch.long
+        for value in out.values():
+            assert value.is_contiguous(memory_format=torch.channels_last)
+        out = td.to("meta", torch.float64, cast_filter=tensordict.is_inexact)
+        assert out.device == torch.device("meta")
+        assert out["ids"].device == torch.device("meta")
+        assert out["img"].dtype == torch.float64
+        assert out["ids"].dtype == torch.long
+        # Without a dtype, cast_filter is not called
+        out = td.to("meta", cast_filter=lambda k, v: pytest.fail("called"))
+        assert out["ids"].device == torch.device("meta")
+
+    def test_to_cast_filter_inplace_and_context_manager(self):
+        td = self._cast_filter_td()
+        out = td.to(torch.float64, cast_filter=tensordict.is_inexact, inplace=True)
+        assert out is td
+        assert td["x"].dtype == torch.float64
+        assert td["cells"].dtype == torch.long
+        td = self._cast_filter_td()
+        with td.to(torch.float64, cast_filter=tensordict.is_inexact) as td64:
+            assert td64["x"].dtype == torch.float64
+            assert td64["cells"].dtype == torch.long
+            td64["x"] += 1
+        assert td["x"].dtype == torch.float32
+        assert (td["x"] == 1).all()
+        assert td["cells"].dtype == torch.long
+
+    def test_to_cast_filter_lazy_stack_exclusive_keys(self):
+        # The keys are those of the members, without their index
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(()), n=TensorDict(b=torch.zeros(()))),
+                TensorDict(a=torch.zeros(()), c=torch.zeros(())),
+            ]
+        )
+        for locked in (False, True):
+            if locked:
+                td.lock_()
+            seen = []
+            out = td.to(
+                torch.float64,
+                cast_filter=lambda k, v, seen=seen: seen.append(k) or k != ("a",),
+            )
+            assert sorted(seen) == [("a",), ("a",), ("c",), ("n", "b")]
+            assert out.tensordicts[0]["a"].dtype == torch.float32
+            assert out.tensordicts[0]["n", "b"].dtype == torch.float64
+            assert out.tensordicts[1]["c"].dtype == torch.float64
+
+    def test_dtype_predicates(self):
+        tensors = {
+            torch.float32: (True, True, False, False),
+            torch.bfloat16: (True, True, False, False),
+            torch.complex64: (True, False, False, False),
+            torch.int64: (False, False, True, False),
+            torch.uint8: (False, False, True, False),
+            torch.bool: (False, False, False, True),
+        }
+        predicates = (
+            tensordict.is_inexact,
+            tensordict.is_floating,
+            tensordict.is_integer,
+            tensordict.is_bool,
+        )
+        for dtype, expected in tensors.items():
+            t = torch.zeros(2, dtype=dtype)
+            # Called as fn(value) and as fn(key, value)
+            assert tuple(p(t) for p in predicates) == expected
+            assert tuple(p(("a", "b"), t) for p in predicates) == expected
+        td = self._cast_filter_td()
+        floats = td.apply(lambda t: t if tensordict.is_floating(t) else None)
+        assert set(floats.keys(True, True)) == {"x", ("point_data", "p")}
+
     def test_to_memory_leak(self):
         """Test that the original tensordict is properly garbage collected when using to() method."""
         import gc
