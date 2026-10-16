@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev5897+geb60c4c72.d20261016)">
+<meta name="llm:version" content="main (0.15.0.dev5898+gf411bcdbb.d20261016)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5897+geb60c4c72.d20261016)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5898+gf411bcdbb.d20261016)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1649,7 +1649,10 @@ Changing values of the structured numpy array in-place will affect the content o
 <p class="admonition-title">Note</p>
 <p>This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory
 content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content
-of the TensorDict.</p>
+of the TensorDict.
+The exception is a field whose item size does not divide the size of a record, such as the <code class="docutils literal notranslate"><span class="pre">&quot;i8&quot;</span></code>
+field of a packed array of <code class="docutils literal notranslate"><span class="pre">&quot;i8&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;f4&quot;</span></code> fields (12 bytes per record): torch cannot view such a
+field, so it is copied.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2051,7 +2054,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_struct_array",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_struct_array",
        "url": "/reference/generated/tensordict.TensorDictBase.from_struct_array.html",
-       "articleBody": "TensorDictBase.from_struct_array# classmethod TensorDictBase.from_struct_array(struct_array: ndarray, *, auto_batch_size: bool = False, batch_dims: int | None = None, device: device | None = None, batch_size: Size | None = None) \u2192 Self# Converts a structured numpy array to a TensorDict. The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation). Changing values of the structured numpy array in-place will affect the content of the TensorDict. Note This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content of the TensorDict. Parameters: struct_array (np.ndarray) \u2013 The structured numpy array to be converted. Keyword Arguments: auto_batch_size (bool, optional) \u2013 If True, the batch size will be computed automatically. Defaults to False. batch_dims (int, optional) \u2013 If auto_batch_size is True, defines how many dimensions the output tensordict should have. Defaults to None (full batch-size at each level). device (device, optional) \u2013 The device on which the TensorDict will be created. Defaults to None. Note Changing the device (i.e., specifying any device other than None or \"cpu\") will transfer the data, resulting in a change to the memory location of the returned data. batch_size (Size, optional) \u2013 The batch size of the TensorDict. Defaults to None. Returns: A TensorDict representation of the input structured numpy array. Examples \u003e\u003e\u003e import numpy as np \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = np.array( ... [(\"Rex\", 9, 81.0), (\"Fido\", 3, 27.0)], ... dtype=[(\"name\", \"U10\"), (\"age\", \"i4\"), (\"weight\", \"f4\")], ... ) \u003e\u003e\u003e td = TensorDict.from_struct_array(x) \u003e\u003e\u003e x_recon = td.to_struct_array() \u003e\u003e\u003e assert (x_recon == x).all() \u003e\u003e\u003e assert x_recon.shape == x.shape \u003e\u003e\u003e # Try modifying x age field and check effect on td \u003e\u003e\u003e x[\"age\"] += 1 \u003e\u003e\u003e assert (td[\"age\"] == np.array([10, 4])).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.from_struct_array# classmethod TensorDictBase.from_struct_array(struct_array: ndarray, *, auto_batch_size: bool = False, batch_dims: int | None = None, device: device | None = None, batch_size: Size | None = None) \u2192 Self# Converts a structured numpy array to a TensorDict. The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation). Changing values of the structured numpy array in-place will affect the content of the TensorDict. Note This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content of the TensorDict. The exception is a field whose item size does not divide the size of a record, such as the \"i8\" field of a packed array of \"i8\" and \"f4\" fields (12 bytes per record): torch cannot view such a field, so it is copied. Parameters: struct_array (np.ndarray) \u2013 The structured numpy array to be converted. Keyword Arguments: auto_batch_size (bool, optional) \u2013 If True, the batch size will be computed automatically. Defaults to False. batch_dims (int, optional) \u2013 If auto_batch_size is True, defines how many dimensions the output tensordict should have. Defaults to None (full batch-size at each level). device (device, optional) \u2013 The device on which the TensorDict will be created. Defaults to None. Note Changing the device (i.e., specifying any device other than None or \"cpu\") will transfer the data, resulting in a change to the memory location of the returned data. batch_size (Size, optional) \u2013 The batch size of the TensorDict. Defaults to None. Returns: A TensorDict representation of the input structured numpy array. Examples \u003e\u003e\u003e import numpy as np \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = np.array( ... [(\"Rex\", 9, 81.0), (\"Fido\", 3, 27.0)], ... dtype=[(\"name\", \"U10\"), (\"age\", \"i4\"), (\"weight\", \"f4\")], ... ) \u003e\u003e\u003e td = TensorDict.from_struct_array(x) \u003e\u003e\u003e x_recon = td.to_struct_array() \u003e\u003e\u003e assert (x_recon == x).all() \u003e\u003e\u003e assert x_recon.shape == x.shape \u003e\u003e\u003e # Try modifying x age field and check effect on td \u003e\u003e\u003e x[\"age\"] += 1 \u003e\u003e\u003e assert (td[\"age\"] == np.array([10, 4])).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
