@@ -2181,12 +2181,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``td.exclude(<non-tensor keys>)[index]``, which shares the tensors of
         ``td``.
 
-        When ``td[index] = src`` brings a new non-tensor key, a
-        :class:`~tensordict.NonTensorData` (one value for the whole batch)
-        fills every row of ``td``, written or not, while a
-        :class:`~tensordict.NonTensorStack` (one value per row) leaves
-        ``None`` in the rows that ``index`` does not select (see
-        :ref:`non-tensor-data`).
+        On a dense :class:`~tensordict.TensorDict`, when ``td[index] = src``
+        brings a new non-tensor key, a :class:`~tensordict.NonTensorData`
+        (one value for the whole batch) fills every row of ``td``, written or
+        not, while a :class:`~tensordict.NonTensorStack` (one value per row)
+        leaves ``None`` in the rows that ``index`` does not select (see
+        :ref:`non-tensor-data`). A
+        :class:`~tensordict.LazyStackedTensorDict` adds the key only to the
+        members that ``index`` selects.
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):

@@ -187,9 +187,9 @@ If you write a different value into one element, the entry becomes a
     >>> type(td.get("genome")).__name__
     'NonTensorStack'
 
-When ``td[index] = src`` brings a non-tensor key that ``td`` does not have, a
-:class:`~tensordict.NonTensorData` in ``src`` (one value for the whole batch)
-fills every row of ``td``, written or not, while a
+When ``td[index] = src`` brings a non-tensor key that a dense ``td`` does not
+have, a :class:`~tensordict.NonTensorData` in ``src`` (one value for the whole
+batch) fills every row of ``td``, written or not, while a
 :class:`~tensordict.NonTensorStack` (one value for each row) leaves ``None`` in
 the rows that ``index`` does not select:
 

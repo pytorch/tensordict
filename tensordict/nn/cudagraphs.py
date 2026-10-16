@@ -156,8 +156,9 @@ class CudaGraphModule:
           ``UserWarning``. The check covers only the :class:`~tensordict.nn.ProbabilisticTensorDictModule` instances
           inside the wrapped :class:`~torch.nn.Module`: other code that branches on
           :func:`~tensordict.nn.probabilistic.interaction_type` (for example an exploration module) and wrapped
-          functions that are not modules are not checked, and replay the captured branch without a warning. Capture
-          one ``CudaGraphModule`` per interaction type whenever the output depends on it.
+          functions that are not modules are not checked; if the wrapped module holds no
+          :class:`~tensordict.nn.ProbabilisticTensorDictModule`, the replay repeats the captured branch without a
+          warning. Capture one ``CudaGraphModule`` per interaction type whenever the output depends on it.
 
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
