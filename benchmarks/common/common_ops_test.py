@@ -589,6 +589,7 @@ def test_clone_device(benchmark, td):
     "index",
     [
         "int",
+        "slice",
         "slice_int",
         "range",
         "tuple",
@@ -603,6 +604,8 @@ def test_clone_device(benchmark, td):
 def test_getitem(benchmark, td, c, index):
     if index == "int":
         index = 1
+    elif index == "slice":
+        index = slice(1, 3)
     elif index == "slice_int":
         index = (slice(None), 1)
     elif index == "range":

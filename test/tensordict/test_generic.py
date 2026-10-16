@@ -3676,6 +3676,42 @@ class TestGeneric:
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
         assert type(resulting_shape) is torch.Size
 
+    @pytest.mark.parametrize("shape", [[10], [10, 7], [0], [0, 3]], ids=str)
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            slice(None),
+            slice(2, 8),
+            slice(-3, None),
+            slice(None, -20),
+            slice(None, None, 3),
+            slice(8, 2),
+            slice(20, None),
+            slice(None, None, -1),
+            slice(None, None, 0),
+        ],
+        ids=str,
+    )
+    def test_getitem_batch_size_one_slice(self, shape, idx):
+        # The index (slice,) of td[a:b] takes a shortcut: the first dim has
+        # the length of range(size)[slice], as in the general path, which
+        # raises the same ValueError for a step of 0
+        shape = torch.Size(shape)
+
+        def outcome(fun):
+            try:
+                return fun()
+            except Exception as err:
+                return type(err), str(err)
+
+        expected = outcome(lambda: torch.Size([len(range(shape[0])[idx]), *shape[1:]]))
+        result = outcome(lambda: _getitem_batch_size(shape, (idx,)))
+        assert result == expected
+        assert outcome(lambda: _getitem_batch_size(shape, (idx, Ellipsis))) == expected
+        if idx.step is None or idx.step > 0:
+            assert result == torch.zeros(shape)[idx].shape
+            assert type(result) is torch.Size
+
     @pytest.mark.parametrize(
         "owner,name",
         [

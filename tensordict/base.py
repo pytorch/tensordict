@@ -2673,7 +2673,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # )
         if istuple and any(idx is Ellipsis for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
-        if len(index) <= self.batch_dims and all(
+        if len(index) <= len(self.batch_size) and all(
             isinstance(idx, slice) and idx == slice(None) for idx in index
         ):
             return self
