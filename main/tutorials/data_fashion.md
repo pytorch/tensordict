@@ -66,28 +66,29 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:12, 364kB/s]
- 1%| | 197k/26.4M [00:00<00:45, 577kB/s]
- 3%|▎ | 786k/26.4M [00:00<00:14, 1.81MB/s]
- 12%|█▏ | 3.21M/26.4M [00:00<00:03, 6.39MB/s]
- 37%|███▋ | 9.80M/26.4M [00:00<00:00, 20.5MB/s]
- 52%|█████▏ | 13.7M/26.4M [00:00<00:00, 22.8MB/s]
- 68%|██████▊ | 17.9M/26.4M [00:01<00:00, 25.6MB/s]
- 90%|████████▉ | 23.8M/26.4M [00:01<00:00, 33.9MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 20.6MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:09, 377kB/s]
+ 1%| | 164k/26.4M [00:00<00:53, 487kB/s]
+ 2%|▏ | 492k/26.4M [00:00<00:23, 1.12MB/s]
+ 7%|▋ | 1.80M/26.4M [00:00<00:06, 3.65MB/s]
+ 22%|██▏ | 5.77M/26.4M [00:00<00:01, 10.5MB/s]
+ 37%|███▋ | 9.83M/26.4M [00:01<00:01, 14.8MB/s]
+ 53%|█████▎ | 13.9M/26.4M [00:01<00:00, 17.7MB/s]
+ 69%|██████▊ | 18.1M/26.4M [00:01<00:00, 19.7MB/s]
+ 85%|████████▍ | 22.4M/26.4M [00:01<00:00, 21.1MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 15.8MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 328kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 339kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:11, 372kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:07, 590kB/s]
- 16%|█▋ | 721k/4.42M [00:00<00:02, 1.68MB/s]
- 63%|██████▎ | 2.79M/4.42M [00:00<00:00, 5.63MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 6.23MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:11, 375kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:07, 595kB/s]
+ 15%|█▍ | 655k/4.42M [00:00<00:02, 1.69MB/s]
+ 30%|██▉ | 1.31M/4.42M [00:00<00:01, 2.89MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 6.28MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 41.6MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 37.7MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -207,8 +208,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 1.99 s
-TensorDict DataLoader: 0.09 s
+torchvision DataLoader: 2.02 s
+TensorDict DataLoader: 0.10 s
 ```
 
 ## Model
@@ -370,7 +371,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 2.2525 s
+TensorDict training done! time: 2.2603 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -380,7 +381,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.6105 s
+Training done! time: 4.5720 s
 ```
 
 ## Conclusion
@@ -409,7 +410,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.414 seconds)
+**Total running time of the script:** (0 minutes 15.750 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
