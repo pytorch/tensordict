@@ -4281,6 +4281,29 @@ class TestGuardCount:
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
+    def test_contains_key_order_no_recompile(self):
+        # `key in td` guards on the key, not on the order of the keys (#2892)
+        def fn(td):
+            out = td["x"]
+            if "w" in td:
+                out = out * td["w"]
+            if ("n", "w") in td:
+                out = out + td["n", "w"]
+            if ("n", "m", "w") in td:
+                out = out + td["n", "m", "w"]
+            if "z" in td or ("n", "z") in td:
+                out = out - 1
+            return out
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for order in ["xwy", "wxy", "yxw", "xyw"]:
+            m = {k: torch.ones(3) for k in order}
+            n = {**m, "m": m}
+            td = TensorDict({**m, "n": n}, batch_size=[3])
+            torch.testing.assert_close(compiled(td), fn(td))
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
     def test_tc_getattr_no_recompile(self):
         class BigTC(TensorClass["nocast"]):
             a: torch.Tensor

@@ -236,6 +236,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_get_at_tuple(key, idx, default)` | `get_at` | read the entry at `idx` | file, store, lazy store, element, params |
 | `_del(key)` | `del_` | delete the entry at the tuple `key`; raise `KeyError` for a missing key and `ValueError` for a path through a tensor (for `()`, the file and the stores keep their own behaviour until 0.17) | every class but params and typed (sub forwards it) |
 | `_members_as_lists()` | `items`, `values` with `_NESTED_TENSORS_AS_LISTS` | return the members to walk one by one, or `None` | lazy |
+| `_contains_key(key)` | `key in td`, for a str key and an unravelled, non-empty tuple key | say whether `key` is in `keys(True, is_leaf=_is_leaf_nontensor)`, without reading the leaves | `TensorDict` (not its subclasses) |
 | `_contains_tensordict(item)` | `item in td`, when `item` is not a key | say whether `item` is in `self`; the default raises | lazy |
 | `_rename_key(old_key, new_key)` | `rename_key_` | move the entry | file, store, lazy store, element (raises) |
 | `_popped_value(value)` | `pop`, `popitem` | return a copy of a nested view that `del_` is about to delete | file, store |
