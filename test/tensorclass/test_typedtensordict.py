@@ -1376,6 +1376,36 @@ class TestFromTensordict:
         assert dest.zero_() is dest
         assert (source.to_tensordict() == 0).all()
 
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda td, src: td.copy_(src),
+            lambda td, src: td.update_(src),
+            lambda td, src: td.update_(src, keys_to_update=[("n", "x")]),
+            lambda td, src: td.update_(src, keys_to_update=["n"]),
+        ],
+        ids=["copy_", "update_", "update_leaf_key", "update_prefix_key"],
+    )
+    def test_from_tensordict_lazy_stack_held_as_dest(self, call):
+        # #2780: copy_ and update_ write the members of a TypedTensorDict over a
+        # lazy stack that a TensorDict holds
+        class Typed(TypedTensorDict):
+            x: Tensor
+
+        members = [TensorDict(x=torch.zeros(3)) for _ in range(2)]
+        dest = TensorDict(
+            a=torch.zeros(2),
+            n=Typed.from_tensordict(lazy_stack(members)),
+            batch_size=[2],
+        )
+        expected = dest.to_tensordict()
+        src = expected + 1
+        assert call(dest, src) is dest
+        call(expected, src)
+        torch.testing.assert_close(dest.to_tensordict(), expected)
+        for member in members:
+            assert (member["x"] == 1).all()
+
     @pytest.mark.parametrize("method", ["copy_", "update_"])
     def test_from_tensordict_lazy_stack_exclusive_keys_as_dest(self, method):
         # #2771: copy_ and update_ leave the keys that only some members hold,
