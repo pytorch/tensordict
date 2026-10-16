@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import enum
 import gc
 import importlib.util
 import inspect
@@ -8725,6 +8726,164 @@ class TestGeneric:
         assert ("d", "f") in td1
         assert td is td3
         assert "d" not in td
+
+    @staticmethod
+    def _split_keys_rollout():
+        return TensorDict(
+            observation=torch.randn(4, 3),
+            action=torch.randn(4, 2),
+            done=torch.zeros(4, 1, dtype=torch.bool),
+            step_count=torch.zeros(4, 1, dtype=torch.int64),
+            collector=TensorDict(traj_ids=torch.zeros(4, dtype=torch.int64)),
+            next=TensorDict(
+                observation=torch.randn(4, 3),
+                reward=torch.randn(4, 1),
+                done=torch.zeros(4, 1, dtype=torch.bool),
+            ),
+            info=NonTensorData("a string"),
+            batch_size=[4],
+        )
+
+    def test_split_keys_callable(self):
+        td = self._split_keys_rollout()
+        seen = []
+
+        def is_float(key, val):
+            seen.append(key)
+            assert isinstance(key, tuple)
+            assert isinstance(val, torch.Tensor)
+            return val.is_floating_point()
+
+        floats, rest = td.split_keys(is_float)
+        # tensor leaves only, keys always tuples
+        assert set(seen) == {
+            ("observation",),
+            ("action",),
+            ("done",),
+            ("step_count",),
+            ("collector", "traj_ids"),
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "done"),
+        }
+        assert set(floats.keys(True, True)) == {
+            "observation",
+            "action",
+            ("next", "observation"),
+            ("next", "reward"),
+        }
+        assert set(rest.keys(True, True)) == {
+            "done",
+            "step_count",
+            ("collector", "traj_ids"),
+            ("next", "done"),
+        }
+        assert rest["info"] == "a string"
+        assert "info" not in floats.keys()
+        assert floats["observation"].data_ptr() == td["observation"].data_ptr()
+        assert floats.batch_size == td.batch_size
+        assert "observation" in td
+
+    def test_split_keys_callable_first_match_wins(self):
+        td = self._split_keys_rollout()
+        nxt, done, floats, rest = td.split_keys(
+            lambda k, v: k[0] == "next",
+            lambda k, v: k[-1] == "done",
+            lambda k, v: v.is_floating_point(),
+        )
+        assert set(nxt.keys(True, True)) == {
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "done"),
+        }
+        assert set(done.keys(True, True)) == {"done"}
+        assert set(floats.keys(True, True)) == {"observation", "action"}
+        assert set(rest.keys(True, True)) == {
+            "step_count",
+            ("collector", "traj_ids"),
+        }
+        assert "info" in rest.keys()
+
+    def test_split_keys_callable_rank(self):
+        td = TensorDict(
+            s1=torch.randn(10),
+            s2=torch.randn(10),
+            v=torch.randn(10, 3),
+            m=torch.randn(10, 4, 4),
+            batch_size=[10],
+        )
+        nb = td.batch_dims
+        scalars, vectors, rest = td.split_keys(
+            lambda k, v: v.ndim == nb, lambda k, v: v.ndim == nb + 1
+        )
+        assert set(scalars.keys()) == {"s1", "s2"}
+        assert set(vectors.keys()) == {"v"}
+        assert set(rest.keys()) == {"m"}
+
+    @pytest.mark.parametrize("reproduce_struct", [False, True])
+    def test_split_keys_callable_mixed(self, reproduce_struct):
+        td = self._split_keys_rollout()
+        collector, bools, rest = td.split_keys(
+            ["collector"],
+            lambda k, v: v.dtype == torch.bool,
+            reproduce_struct=reproduce_struct,
+        )
+        assert set(collector.keys(True, True)) == {("collector", "traj_ids")}
+        assert set(bools.keys(True, True)) == {"done", ("next", "done")}
+        assert "collector" not in rest
+        assert "done" not in rest
+        assert ("next", "done") not in rest
+        assert ("next", "reward") in rest
+        if reproduce_struct:
+            assert "next" in collector.keys()
+            assert "collector" in bools.keys()
+        else:
+            assert "next" not in collector.keys()
+            assert "collector" not in bools.keys()
+
+    def test_split_keys_callable_inplace(self):
+        td = self._split_keys_rollout()
+        bools, rest = td.split_keys(lambda k, v: v.dtype == torch.bool, inplace=True)
+        assert rest is td
+        assert set(bools.keys(True, True)) == {"done", ("next", "done")}
+        assert "done" not in td
+        assert ("next", "done") not in td
+        assert ("next", "reward") in td
+
+    def test_split_keys_callable_lazy_stack(self):
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3, dtype=torch.long)),
+                TensorDict(a=torch.ones(3), b=torch.ones(3, dtype=torch.long)),
+            ]
+        )
+        floats, rest = td.split_keys(lambda k, v: v.is_floating_point())
+        assert isinstance(floats, LazyStackedTensorDict)
+        assert set(floats.keys()) == {"a"}
+        assert set(rest.keys()) == {"b"}
+        assert (floats["a"] == td["a"]).all()
+
+    def test_split_keys_callable_tensorclass(self):
+        class TC(TensorClass):
+            x: torch.Tensor
+            y: torch.Tensor
+
+        tc = TC(x=torch.zeros(3), y=torch.zeros(3, dtype=torch.long), batch_size=[3])
+        floats, rest = tc.split_keys(lambda k, v: v.is_floating_point())
+        assert isinstance(floats, TC)
+        assert isinstance(rest, TC)
+        assert floats.x is not None and floats.y is None
+        assert rest.x is None and rest.y is not None
+
+    def test_split_keys_enum_class(self):
+        # An Enum class is callable but also iterable: it is a list of keys.
+        class K(str, enum.Enum):
+            a = "a"
+
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3])
+        td_a, rest = td.split_keys(K)
+        assert set(td_a.keys()) == {"a"}
+        assert set(rest.keys()) == {"b"}
 
     @pytest.mark.parametrize("lazy", [False, True])
     @pytest.mark.parametrize("reproduce_struct", [False, True])

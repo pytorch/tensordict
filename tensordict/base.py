@@ -18,7 +18,7 @@ import os.path
 import sys
 import warnings
 import weakref
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from functools import wraps
 from pathlib import Path
@@ -9890,13 +9890,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         no set.
 
         Args:
-            key_sets (sequence of Dict[in_key, out_key] or list of keys): the various splits.
+            key_sets (sequence of keys, Dict[in_key, out_key] or callable): the
+                splits, applied in order. A list or dict selects keys (a dict
+                also renames them). A callable ``fn(key, value) -> bool``
+                selects every tensor leaf that no earlier set took and for
+                which ``fn`` returns ``True``. ``key`` is the leaf's nested key
+                as a tuple of str, for example ``("observation",)`` or
+                ``("next", "done")``, and ``value`` is the leaf as ``get``
+                returns it. ``fn`` is not called on sub-tensordicts or
+                non-tensor data: select a whole sub-tensordict with its key in
+                a list, and non-tensor entries stay in the last tensordict
+                unless a list names them. ``fn`` is called once per leaf,
+                outside any graph, so it should test metadata (key, dtype,
+                shape, device) rather than tensor values.
             inplace (bool, optional): if ``True``, the keys are removed from ``self``
-                in-place. Defaults to ``False``.
+                in-place. The leaves a callable selects are removed too.
+                Defaults to ``False``.
             default (Any, optional): the value to be returned when a key is missing.
                 If not specified and ``strict=True``, an exception is raised.
+                Applies to keys in lists and dicts only: a callable never
+                selects a missing key.
             strict (bool, optional): if ``True``, an exception is raised when a key
-                is missing. Defaults to ``True``.
+                is missing. Applies to keys in lists and dicts only.
+                Defaults to ``True``.
             reproduce_struct (bool, optional): if ``True``, all tensordict returned have
                 the same tree structure as ``self``, even if some sub-tensordicts
                 contain no leaves. Non-tensor entries are not copied: each
@@ -9924,6 +9940,31 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td_a, rest = td.split_keys(["a"], inplace=True)
             >>> rest is td, sorted(td.keys())
             (True, ['b', 'c', 'd'])
+            >>> # a callable selects leaves by key and value; the first match wins
+            >>> import torch
+            >>> td = TensorDict(
+            ...     s=torch.zeros(10),
+            ...     v=torch.zeros(10, 3),
+            ...     m=torch.zeros(10, 4, 4),
+            ...     nested=TensorDict(t=torch.zeros(10, 3), batch_size=[10]),
+            ...     batch_size=[10],
+            ... )
+            >>> nb = td.batch_dims
+            >>> scalars, vectors, rest = td.split_keys(
+            ...     lambda k, v: v.ndim == nb, lambda k, v: v.ndim == nb + 1
+            ... )
+            >>> sorted(scalars.keys(True, True), key=str)
+            ['s']
+            >>> sorted(vectors.keys(True, True), key=str)
+            [('nested', 't'), 'v']
+            >>> sorted(rest.keys(True, True), key=str)
+            ['m']
+            >>> # lists and callables mix: the nested key goes first
+            >>> nested, vectors, rest = td.split_keys(
+            ...     ["nested"], lambda k, v: v.ndim == nb + 1
+            ... )
+            >>> sorted(vectors.keys())
+            ['v']
         """
         from tensordict import PersistentTensorDict
 
@@ -9952,6 +9993,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if leaf_keys:
                     out = out.exclude(*leaf_keys)
             outs.append(out)
+            # A key set that is both callable and iterable (an Enum class, for
+            # example) is iterated, as it was before callables were accepted.
+            if callable(key_set) and not isinstance(key_set, Iterable):
+                key_set = [
+                    key
+                    for key, val in last_out.items(True, True)
+                    if key_set((key,) if isinstance(key, str) else key, val)
+                ]
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
             for key in key_set:
