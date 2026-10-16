@@ -1493,6 +1493,42 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     )
 
 
+def _all_leaf_keys(td: TensorDictBase) -> list:
+    """The keys of the leaves of ``td``, non-tensor ones included, as tuples.
+
+    Unlike ``keys(True, True, is_leaf=_is_leaf_nontensor)``, they include the
+    leaves that only some members of a lazy stack hold (#2803).
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    keys = {}
+    nodes = [((), td)]
+    while nodes:
+        prefix, td = nodes.pop()
+        if type(td) is TensorDict:
+            # the common case, read without the checks below
+            items = td._tensordict.items()
+        else:
+            # these hold their entries in the tensordict that they wrap
+            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
+                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+            if isinstance(td, LazyStackedTensorDict):
+                nodes.extend((prefix, member) for member in td.tensordicts)
+                continue
+            items = td.items()
+        for key, value in items:
+            cls = type(value)
+            if cls is TensorDict or (
+                _is_tensor_collection(cls) and not _is_non_tensor(cls)
+            ):
+                nodes.append(((*prefix, key), value))
+            else:
+                keys[(*prefix, key)] = None
+    return list(keys)
+
+
 def _has_unmatched_member_key(keys: list, source: dict) -> bool:
     """Whether a key of ``keys`` that ``source`` lacks may pass through a member of a lazy stack.
 
@@ -9407,21 +9443,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         outs = []
         if inplace:
             keys_to_del = set()
-        non_tensor_keys = None
+        leaf_keys = None
         for key_set in key_sets:
             out = self.empty(recurse=reproduce_struct)
             if reproduce_struct:
-                # empty(recurse=True) keeps the non-tensor leaves: they belong
-                # to the output whose key set names them, or to the last one.
-                # Every output has the same ones: find them once.
-                if non_tensor_keys is None:
-                    non_tensor_keys = (
-                        list(out.keys(True, True, is_leaf=_is_leaf_nontensor))
-                        if out._has_non_tensor
-                        else []
-                    )
-                if non_tensor_keys:
-                    out = out.exclude(*non_tensor_keys)
+                # empty(recurse=True) keeps the non-tensor leaves, and in a
+                # lazy stack inside a tensordict the tensors that only some
+                # members hold: they belong to the output whose key set names
+                # them, or to the last one. Every output has the same ones:
+                # find them once, in every member of a lazy stack (#2803).
+                if leaf_keys is None:
+                    leaf_keys = _all_leaf_keys(out)
+                if leaf_keys:
+                    out = out.exclude(*leaf_keys)
             outs.append(out)
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
