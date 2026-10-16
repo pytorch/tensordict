@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import weakref
 from collections import defaultdict
 from collections.abc import Mapping
 from numbers import Number
@@ -201,6 +202,41 @@ def _nested_members_hold_leaf(td: TensorDict) -> bool:
         elif _members_hold_leaf([item]):
             return True
     return False
+
+
+def _propagate_lock_dense(td, lock_parents_weakrefs):
+    """The eager steps of ``TensorDictBase._propagate_lock`` for an exact TensorDict.
+
+    Each node gets the same lock flag, parent weakrefs and locked schema as
+    the generic method gives it. The exact TensorDict entries are locked by
+    this function, the other tensor collections by their own
+    ``_propagate_lock``, in the order of the entries and with the same list
+    of parent weakrefs.
+    """
+    td._is_locked = True
+    td_dict = td.__dict__
+    if lock_parents_weakrefs is None:
+        lock_parents_weakrefs = [weakref.ref(td)]
+    else:
+        existing = td_dict.get("__lock_parents_weakrefs")
+        if existing:
+            lock_parents_weakrefs = [
+                ref
+                for ref in lock_parents_weakrefs
+                if not any(refref is ref for refref in existing)
+            ]
+            td_dict["__lock_parents_weakrefs"] = existing + lock_parents_weakrefs
+        else:
+            td_dict["__lock_parents_weakrefs"] = list(lock_parents_weakrefs)
+        lock_parents_weakrefs = lock_parents_weakrefs + [weakref.ref(td)]
+    entries = td._tensordict
+    td_dict["_locked_schema"] = _LockedSchema(keys=tuple(entries))
+    for value in entries.values():
+        cls = type(value)
+        if cls is TensorDict:
+            _propagate_lock_dense(value, lock_parents_weakrefs)
+        elif _is_tensor_collection(cls):
+            value._propagate_lock(lock_parents_weakrefs, is_compiling=False)
 
 
 class TensorDict(TensorDictBase):
@@ -2512,6 +2548,26 @@ class TensorDict(TensorDictBase):
         self.__dict__["_locked_schema"] = _LockedSchema(
             keys=tuple(self._tensordict),
         )
+
+    # Override: perf: an exact TensorDict tree locks in one recursion, without
+    # the lists and calls that the generic method makes for each node.
+    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
+        """Locks this tensordict and the tensor collections it holds.
+
+        ``lock_()`` calls it on an unlocked root, with no
+        ``lock_parents_weakrefs``; a locking parent calls it on each entry that
+        is a tensor collection, with the weakrefs of the parents above that
+        entry. It sets ``_is_locked`` and, out of compile, adds the new parents
+        to ``_lock_parents_weakrefs`` and builds ``_locked_schema``, then locks
+        the entries. It leaves the same state as
+        ``TensorDictBase._propagate_lock``, which compiled calls and subclasses
+        take. Returns ``None``.
+        """
+        if is_compiling or type(self) is not TensorDict:
+            return TensorDictBase._propagate_lock(
+                self, lock_parents_weakrefs, is_compiling=is_compiling
+            )
+        _propagate_lock_dense(self, lock_parents_weakrefs)
 
     def _clone(self, recurse: bool = True) -> Self:
         if recurse and self.device is not None:

@@ -18,12 +18,20 @@ import pytest
 import torch
 from tensordict import (
     get_defaults_to_none,
+    is_tensorclass,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     set_get_defaults_to_none,
+    tensorclass,
     TensorDict,
+    TensorDictBase,
 )
-from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
+from tensordict.base import (
+    _get_defaults_to_none,
+    _is_tensor_collection,
+    _set_get_defaults_to_none,
+)
 from tensordict.nn import TensorDictParams
 from tensordict.utils import _GENERIC_NESTED_ERR, _LOCK_ERROR
 from torch import nn
@@ -637,6 +645,183 @@ class TestLock:
         self.check_weakref_count(b._lock_parents_weakrefs, 2)
         self.check_weakref_count(c._lock_parents_weakrefs, 3)
         td.unlock_()
+
+    @staticmethod
+    def _lock_case(case):
+        """A tree to lock, and the objects that must stay alive with it."""
+
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        class SubTD(TensorDict):
+            pass
+
+        def leaf(*shape):
+            return torch.zeros(*shape, requires_grad=True)
+
+        if case == "nested":
+            return TensorDict(a=leaf(2), b={"c": leaf(2), "d": {"e": leaf(2)}}), []
+        if case == "names":
+            td = TensorDict(a=leaf(2, 3), b={"c": leaf(2, 3)}, batch_size=[2, 3])
+            return td.refine_names("x", "y"), []
+        if case == "non_tensor":
+            return (
+                TensorDict(
+                    a=leaf(2),
+                    s=NonTensorData("s", batch_size=[2]),
+                    st=NonTensorStack("a", "b"),
+                    sub={"z": NonTensorData(3)},
+                    batch_size=[2],
+                ),
+                [],
+            )
+        if case == "lazy_child":
+            stack = LazyStackedTensorDict(
+                TensorDict(x=leaf(3), n={"m": leaf(3)}, batch_size=[3]),
+                TensorDict(x=leaf(3), n={"m": leaf(3)}, batch_size=[3]),
+            )
+            return TensorDict(s=stack, y=leaf(2), batch_size=[2]), []
+        if case == "lazy_root":
+            return (
+                LazyStackedTensorDict(
+                    TensorDict(x=leaf(3), n={"m": leaf(3)}, batch_size=[3]),
+                    TensorDict(x=leaf(3), n={"m": leaf(3)}, batch_size=[3]),
+                ),
+                [],
+            )
+        if case == "tensorclass":
+            tc = TC(x=leaf(2, 3), batch_size=[2])
+            return TensorDict(tc=tc, n={"a": leaf(2)}, batch_size=[2]), []
+        if case == "params":
+            # The first TensorDictParams adds itself to the parents of the
+            # entries that follow it.
+            return (
+                TensorDict(
+                    p1=TensorDictParams(TensorDict(w=leaf(2), n={"b": leaf(2)})),
+                    mid={"x": leaf(2)},
+                    p2=TensorDictParams(TensorDict(w=leaf(2))),
+                ),
+                [],
+            )
+        if case == "subclass_child":
+            return TensorDict(a=leaf(2), s=SubTD(c=leaf(2), d={"e": leaf(2)})), []
+        if case == "subclass_root":
+            return SubTD(a=leaf(2), b={"c": leaf(2), "d": {"e": leaf(2)}}), []
+        if case == "shared_child":
+            child = TensorDict(z=leaf(2), n={"y": leaf(2)})
+            return TensorDict(a=child, b=child, d={"c": child}), []
+        if case == "two_roots":
+            # The shared entries hold a lock parent before the root locks.
+            child = TensorDict(z=leaf(2), n={"y": leaf(2)})
+            other = TensorDict(c=child, d={"c": child}).lock_()
+            return TensorDict(a=child, b={"c": child}), [other]
+        raise NotImplementedError(case)
+
+    @staticmethod
+    def _lock_state(td):
+        """The lock state of each tensor collection of a tree, by path."""
+        nodes = {}
+
+        def walk(node, path):
+            if id(node) in nodes:
+                return
+            nodes[id(node)] = (path, node)
+            if isinstance(node, LazyStackedTensorDict):
+                children = enumerate(node.tensordicts)
+            elif isinstance(node, TensorDictParams):
+                children = [("<params>", node._param_td)]
+            elif is_tensorclass(node):
+                children = [("<td>", node._tensordict)]
+            else:
+                children = node._tensordict.items()
+            for key, child in children:
+                if _is_tensor_collection(type(child)):
+                    walk(child, path + (str(key),))
+
+        walk(td, ())
+        state = []
+        for path, node in nodes.values():
+            node_dict = node.__dict__
+            parents = node_dict.get("__lock_parents_weakrefs")
+            if parents is not None:
+                parents = [
+                    "dead" if ref() is None else nodes.get(id(ref()), ("outside",))[0]
+                    for ref in parents
+                ]
+            state.append(
+                (
+                    path,
+                    type(node).__name__,
+                    node_dict.get("_is_locked"),
+                    node.is_locked,
+                    parents,
+                    node_dict.get("_locked_schema"),
+                    sorted(set(node_dict) - {"_cache"}),
+                )
+            )
+        return state
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "nested",
+            "names",
+            "non_tensor",
+            "lazy_child",
+            "lazy_root",
+            "tensorclass",
+            "params",
+            "subclass_child",
+            "subclass_root",
+            "shared_child",
+            "two_roots",
+        ],
+    )
+    def test_lock_state_matches_generic_path(self, case, monkeypatch):
+        # TensorDict locks a tree of exact TensorDicts in one recursion. Lock,
+        # unlock and .data must leave the state of the generic
+        # TensorDictBase._propagate_lock, which locks node by node.
+        def run():
+            td, keep_alive = self._lock_case(case)
+            states = [self._lock_state(td)]
+            for step in ("lock_", "lock_", "data", "unlock_", "lock_", "data"):
+                if step == "data":
+                    data = td.data
+                    states.append(self._lock_state(data))
+                    states.append(
+                        [
+                            (
+                                key,
+                                type(value).__name__,
+                                value.requires_grad,
+                                value.data_ptr() == td.get(key).data_ptr(),
+                            )
+                            for key, value in data.items(True, True)
+                            if isinstance(value, torch.Tensor)
+                        ]
+                    )
+                    continue
+                try:
+                    getattr(td, step)()
+                except RuntimeError as err:
+                    states.append((step, str(err).split(".")[0]))
+                states.append(self._lock_state(td))
+            del keep_alive
+            gc.collect()
+            try:
+                td.unlock_()
+            except RuntimeError as err:
+                states.append(("unlock_", str(err).split(".")[0]))
+            states.append(self._lock_state(td))
+            return states
+
+        dense = run()
+        monkeypatch.setattr(
+            TensorDict, "_propagate_lock", TensorDictBase._propagate_lock
+        )
+        generic = run()
+        assert dense == generic
 
     def test_nested_lock(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
