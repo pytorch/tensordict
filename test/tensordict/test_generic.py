@@ -11568,6 +11568,25 @@ class TestGeneric:
         assert td["b"] == "text"
 
     @pytest.mark.parametrize("method", ["update_", "copy_"])
+    def test_update__forward_ad(self, method):
+        # inside a dual level, update_ and copy_ copy each leaf with copy_,
+        # which keeps the tangents: _foreach_copy_ has no forward derivative
+        # (#2886)
+        fwAD = torch.autograd.forward_ad
+        with fwAD.dual_level():
+            with warnings.catch_warnings():
+                # make_dual loads its decompositions with torch.jit.script
+                # once, which warns that it is deprecated
+                warnings.simplefilter("ignore", FutureWarning)
+                warnings.simplefilter("ignore", DeprecationWarning)
+                p = fwAD.make_dual(torch.ones(3), torch.full((3,), 5.0))
+            td = TensorDict(a=torch.zeros(3), b=torch.zeros(3))
+            getattr(td, method)(TensorDict(a=p * 2, b=torch.ones(3)))
+            assert (fwAD.unpack_dual(td["a"]).tangent == 10).all()
+            assert fwAD.unpack_dual(td["b"]).tangent is None
+            assert (td["a"] == 2).all() and (td["b"] == 1).all()
+
+    @pytest.mark.parametrize("method", ["update_", "copy_"])
     @pytest.mark.parametrize("lazy", [False, True])
     def test_update__autograd(self, method, lazy):
         # update_ and copy_ record the graph of a copy_ of each leaf (#2863):

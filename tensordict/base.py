@@ -118,6 +118,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
+from torch.autograd import forward_ad
 from torch.compiler import allow_in_graph, is_compiling
 from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
@@ -2042,8 +2043,10 @@ def _copy_leaves(
     ``torch._foreach_copy_`` records no autograd graph, and marks every
     ``dest`` as requiring grad: where grad mode is on and a tensor requires
     grad, each pair is copied with ``copy_``, as on the other routes of
-    ``update_`` (#2863). A ``dest`` that is a leaf that requires grad is left
-    to ``_foreach_copy_``, which raises for it before it copies any pair.
+    ``update_`` (#2863). So is each pair inside a forward-AD dual level, as
+    ``_foreach_copy_`` has no forward derivative (#2886). A ``dest`` that is
+    a leaf that requires grad is left to ``_foreach_copy_``, which raises for
+    it before it copies any pair.
     """
     # _foreach_copy_compiled cannot run under a torch.func transform
     # (vmap), _foreach can. Same check as in _foreach, which explains it.
@@ -2058,6 +2061,12 @@ def _copy_leaves(
             dest.copy_(source, non_blocking=non_blocking)
     elif is_compiling():
         _foreach_copy_compiled(dests, sources, non_blocking=non_blocking)
+    elif forward_ad._current_level >= 0 and not any(
+        dest.requires_grad and dest.is_leaf for dest in dests
+    ):
+        # inside a dual level (after the compile test: no guard on it)
+        for dest, source in zip(dests, sources):
+            dest.copy_(source, non_blocking=non_blocking)
     elif _any_unbatched(dests) or _any_unbatched(sources):
         _foreach("copy_", dests, sources, non_blocking=non_blocking)
     else:
