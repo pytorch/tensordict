@@ -49,6 +49,7 @@ from tensordict.base import (
     TensorDictBase,
 )
 from tensordict.functional import (
+    collate,
     dense_stack_tds,
     make_tensordict,
     merge_tensordicts,
@@ -157,6 +158,8 @@ __all__ = [
     "pad",
     "pad_sequence",
     "unpad_sequence",
+    # Data loading
+    "collate",
     # Utility functions
     "is_tensor_collection",
     "is_non_tensor",

@@ -54,6 +54,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collec
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import (
+    collate,
     dense_stack_tds,
     merge_tensordicts,
     pad,
@@ -7063,6 +7064,66 @@ class TestGeneric:
             assert (padded_td["b", "c"][~padded_td[masks_key, "b", "c"]] == 0).all()
         else:
             assert "masks" not in padded_td.keys()
+
+    def test_collate_dataloader(self):
+        @tensorclass
+        class Sample:
+            x: torch.Tensor
+
+        def load(samples):
+            dl = torch.utils.data.DataLoader(  # noqa: TOR401
+                samples, batch_size=4, collate_fn=collate
+            )
+            return next(iter(dl))
+
+        # tensordicts with matching shapes stack densely
+        tds = [
+            TensorDict(a=torch.full((3,), i), nested=TensorDict(b=torch.zeros(2)))
+            for i in range(8)
+        ]
+        batch = load(tds)
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (4,)
+        assert batch["nested", "b"].shape == (4, 2)
+        assert (batch["a"][:, 0] == torch.arange(4)).all()
+        # tensorclasses keep their type
+        batch = load([Sample(x=torch.randn(3)) for _ in range(8)])
+        assert type(batch) is Sample
+        assert batch.x.shape == (4, 3)
+        batch = load([Sample(x=torch.randn(n + 1)) for n in range(8)])
+        assert isinstance(batch, Sample)
+        assert [x.shape for x in batch.get("x", as_list=True)] == [
+            (1,),
+            (2,),
+            (3,),
+            (4,),
+        ]
+        # ragged tensordicts stack lazily
+        batch = load([TensorDict(points=torch.randn(n + 1, 3)) for n in range(8)])
+        assert isinstance(batch, LazyStackedTensorDict)
+        assert [td["points"].shape for td in batch.tensordicts] == [
+            (1, 3),
+            (2, 3),
+            (3, 3),
+            (4, 3),
+        ]
+        # tuples, namedtuples and dicts recurse
+        td, label = load([(TensorDict(a=torch.randn(3)), i) for i in range(8)])
+        assert td.batch_size == (4,)
+        assert (label == torch.arange(4)).all()
+        Pair = namedtuple("Pair", ["td", "label"])
+        batch = load([Pair(TensorDict(a=torch.randn(3)), i) for i in range(8)])
+        assert type(batch) is Pair
+        assert batch.td.batch_size == (4,)
+        batch = load(
+            [{"td": TensorDict(a=torch.randn(3)), "x": torch.ones(2)} for _ in range(8)]
+        )
+        assert batch["td"].batch_size == (4,)
+        assert batch["x"].shape == (4, 2)
+        # anything that is not a non-empty list is returned as is
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        assert collate(td) is td
+        assert collate([]) == []
 
     def test_pad_sequence_padding_side(self):
         # https://github.com/pytorch/tensordict/issues/2808
