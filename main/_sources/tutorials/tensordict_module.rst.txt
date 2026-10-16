@@ -417,13 +417,13 @@ It times each version in eager mode, then compiled with
  .. code-block:: none
 
     Eager
-      Regular:      134.8 us
-      TDM:          146.9 us
-      Sequential:   197.7 us
+      Regular:      134.9 us
+      TDM:          148.2 us
+      Sequential:   198.6 us
     Compiled
-      Regular:      140.2 us
-      TDM:          151.6 us
-      Sequential:   159.2 us
+      Regular:      139.8 us
+      TDM:          151.5 us
+      Sequential:   157.9 us
 
 
 
@@ -613,7 +613,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.185 seconds)
+   **Total running time of the script:** (0 minutes 16.428 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_module.py:
