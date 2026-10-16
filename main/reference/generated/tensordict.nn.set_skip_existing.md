@@ -45,6 +45,14 @@ same thread enters stay in that thread too. Threads started inside
 the block see the process-wide mode. If `False`, the mode applies
 to the whole process. Defaults to `False`.
 
+Note
+
+Threads. By default the mode is process-wide: a `with` block
+in one thread also changes what [`skip_existing()`](tensordict.nn.skip_existing.html#tensordict.nn.skip_existing) returns in
+other threads at that time. Pass `thread_local=True` to keep a
+block to its own thread. A thread started inside such a block reads
+the process-wide value, not the block's.
+
 Examples
 
 ```

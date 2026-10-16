@@ -18,7 +18,11 @@ The value depends on the interaction type. The module uses
 [`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type) if it is set (see
 [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)). Otherwise it uses
 `default_interaction_type`. See [`InteractionType`](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType)
-for what each type reads from the distribution.
+for what each type reads from the distribution. By default the
+interaction type is process-wide, so a [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)
+block in one thread also changes the value that modules running in other
+threads use. Pass `thread_local=True` to keep the block to its own
+thread.
 
 With `return_log_prob=True` and the `RANDOM` interaction type, the
 module draws and scores the value in one call if the distribution class

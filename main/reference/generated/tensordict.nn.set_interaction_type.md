@@ -28,6 +28,14 @@ started inside the block see the process-wide interaction type.
 If `False`, the interaction type applies to the whole process.
 Defaults to `False`.
 
+Note
+
+Threads. By default the interaction type is process-wide: a
+`with` block in one thread also changes what the modules running in
+other threads at that time use. Pass `thread_local=True` to keep a
+block to its own thread. A thread started inside such a block reads
+the process-wide value, not the block's.
+
 Examples
 
 ```

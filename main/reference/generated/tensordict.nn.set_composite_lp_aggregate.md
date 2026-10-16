@@ -34,6 +34,17 @@ same thread enters stay in that thread too. Threads started inside
 the block see the process-wide mode. If `False`, the mode applies
 to the whole process. Defaults to `False`.
 
+Note
+
+Threads. The mode is process-wide by default, and is meant to
+be set once for the whole process, for example with `set()`
+before you build the modules: it decides the keys of the
+log-probabilities, which the threads that write them and the threads
+that read them must agree on. A `with` block in one thread also
+changes the value in other threads at that time, unless it passes
+`thread_local=True`. A thread started inside a `thread_local`
+block reads the process-wide value, not the block's.
+
 Example
 
 ```
