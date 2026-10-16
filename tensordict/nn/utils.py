@@ -406,9 +406,8 @@ class _set_skip_existing_None(set_skip_existing):
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
             # we use skip_existing to allow users to override the mode internally
             skip_mode = _skip_existing.get_mode()
-            compiling = is_compiling()
             if skip_mode:
-                if compiling:
+                if is_compiling():
                     raise RuntimeError(
                         "skip_existing is not compatible with torch.compile."
                     )
@@ -420,12 +419,13 @@ class _set_skip_existing_None(set_skip_existing):
                     and not any(key in out_keys for key in in_keys)
                 ):
                     return tensordict
-            if compiling:
-                return func(_self, tensordict, *args, **kwargs)
             try:
                 return func(_self, tensordict, *args, **kwargs)
             finally:
-                _skip_existing.set_mode(skip_mode)
+                # Writing back an unchanged mode does nothing: skip that call.
+                # A mode that func changed is not restored when compiling.
+                if _skip_existing.get_mode() is not skip_mode and not is_compiling():
+                    _skip_existing.set_mode(skip_mode)
 
         return wrapper
 

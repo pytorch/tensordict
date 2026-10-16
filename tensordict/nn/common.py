@@ -264,6 +264,19 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # A tensordict input is passed on as is whether or not dispatch is
+            # on: test for it first, so that ``module(td)`` skips the rest
+            if is_method:
+                if len(args) > 1 and is_tensor_collection(args[1]):
+                    # Read the source as below when dispatch is on, so that a
+                    # missing attribute raises and a lazy property resolves
+                    if isinstance(self.source, str) and _dispatch_td_nn_modules():
+                        getattr(args[0], self.source)
+                    return func(*args, **kwargs)
+            elif bound_self is not None and len(args) and is_tensor_collection(args[0]):
+                if isinstance(self.source, str) and _dispatch_td_nn_modules():
+                    getattr(bound_self, self.source)
+                return func(*args, **kwargs)
             if not _dispatch_td_nn_modules():
                 return func(*args, **kwargs)
             if is_method:
@@ -1201,7 +1214,9 @@ class TensorDictModule(TensorDictModuleBase):
             raise RuntimeError("There are more out_keys than tensors.")
         for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
-                tensordict_out.set(_out_key, TensorDict.from_any(_tensor))
+                if type(_tensor) is not Tensor:
+                    _tensor = TensorDict.from_any(_tensor)
+                tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 
     def _call_module(
@@ -1260,13 +1275,19 @@ class TensorDictModule(TensorDictModuleBase):
                 )
                 tensors = ()
             else:
+                # The in_keys setter unravels the keys: a str key needs no
+                # unravel call, and a list comprehension makes no generator
                 tensors = tuple(  # type: ignore[unreachable]
-                    tensordict._get_tuple_maybe_non_tensor(
-                        _unravel_key_to_tuple(in_key),
-                        default,
-                        **self._get_kwargs,
-                    )
-                    for in_key in self.in_keys
+                    [
+                        tensordict._get_tuple_maybe_non_tensor(
+                            (in_key,)
+                            if type(in_key) is str
+                            else _unravel_key_to_tuple(in_key),
+                            default,
+                            **self._get_kwargs,
+                        )
+                        for in_key in self.in_keys
+                    ]
                 )
             try:
                 tensors_out = self._call_module(tensors, **kwargs)
@@ -1286,8 +1307,12 @@ class TensorDictModule(TensorDictModuleBase):
                     ) from err
                 else:
                     raise err
-            if isinstance(tensors_out, (dict, TensorDictBase)) and all(
-                key in tensors_out for key in self.out_keys
+            # An exact Tensor or tuple skips the ABC check of TensorDictBase
+            if (
+                type(tensors_out) is not Tensor
+                and type(tensors_out) is not tuple
+                and isinstance(tensors_out, (dict, TensorDictBase))
+                and all(key in tensors_out for key in self.out_keys)
             ):
                 if isinstance(tensors_out, dict):
                     keys = unravel_key_list(list(tensors_out.keys()))
