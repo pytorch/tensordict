@@ -54,6 +54,7 @@ from tensordict.functional import (
     merge_tensordicts,
     pad,
     pad_sequence,
+    unpad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import (
@@ -80,8 +81,13 @@ from tensordict.utils import (
     assert_close,
     capture_non_tensor_stack,
     get_printoptions,
+    is_bool,
+    is_floating,
+    is_inexact,
+    is_integer,
     is_non_tensor,
     is_tensorclass,
+    KEY_SEPARATOR,
     lazy_legacy,
     list_to_stack,
     parse_tensor_dict_string,
@@ -109,6 +115,8 @@ __all__ = [
     "LazyStackedTensorDictStore",
     "NestedKey",
     "PackLayout",
+    # Constants
+    "KEY_SEPARATOR",
     # Factory functions
     "from_csv",
     "from_dict",
@@ -148,6 +156,7 @@ __all__ = [
     "merge_tensordicts",
     "pad",
     "pad_sequence",
+    "unpad_sequence",
     # Utility functions
     "is_tensor_collection",
     "is_non_tensor",
@@ -157,6 +166,11 @@ __all__ = [
     "unravel_key",
     "unravel_key_list",
     "parse_tensor_dict_string",
+    # Dtype predicates
+    "is_inexact",
+    "is_floating",
+    "is_integer",
+    "is_bool",
     # Configuration
     "default_is_leaf",
     "is_leaf_nontensor",
