@@ -271,6 +271,45 @@ class TestZarrNonTensor:
         assert ztd[1]["n"] == 1234
         ztd.close()
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            2,
+            -1,
+            slice(1, 5, 2),
+            [0, 3],
+            torch.tensor([4, 1]),
+            torch.tensor([True, False, True, False, False, True]),
+            (slice(1, 3),),
+        ],
+    )
+    def test_foreign_column_as_stack_reads_rows_at(self, tmp_path, idx, monkeypatch):
+        # an indexed read of a column read as rows builds only the indexed
+        # rows, with the result of indexing the whole column (#2814)
+        path = str(tmp_path / "s.zarr")
+        root = zarr.open_group(path, mode="w")
+        root.create_array("pos", shape=(6,), dtype="float32")[:] = 0
+        root.create_array("mission", shape=(6,), dtype=str)[:] = [
+            f"m{i}" for i in range(6)
+        ]
+        ztd = PersistentTensorDict.from_zarr(path, non_tensor_as_stack=True)
+        expected = ztd.get("mission")[idx]
+        num_rows = torch.zeros(6)[idx].numel()
+        from_list = NonTensorStack._from_list.__func__
+        sizes = []
+
+        def spy(cls, datalist, *args, **kwargs):
+            sizes.append(len(datalist))
+            return from_list(cls, datalist, *args, **kwargs)
+
+        monkeypatch.setattr(NonTensorStack, "_from_list", classmethod(spy))
+        for out in (ztd.get_at("mission", idx), ztd[idx].get("mission")):
+            assert type(out) is type(expected)
+            assert out.batch_size == expected.batch_size
+            assert out.tolist() == expected.tolist()
+        assert max(sizes, default=0) <= num_rows
+        ztd.close()
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrIndexing:

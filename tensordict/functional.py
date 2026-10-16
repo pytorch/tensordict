@@ -30,13 +30,16 @@ from tensordict.utils import (
     unravel_key,
 )
 from torch.compiler import is_compiling
+from torch.utils.data import default_collate
 
 __all__ = [
+    "collate",
     "dense_stack_tds",
     "make_tensordict",
     "merge_tensordicts",
     "pad",
     "pad_sequence",
+    "unpad_sequence",
 ]
 
 
@@ -523,12 +526,71 @@ def _pad_lazy_stack_inplace(
     return tensordict
 
 
+def collate(batch: Any) -> Any:
+    """Collates a list of samples into a batch, for :class:`~torch.utils.data.DataLoader`.
+
+    Pass it as ``collate_fn`` when the samples are tensordicts or
+    tensorclasses, or tuples or dicts that hold them, such as
+    ``(td, label)`` pairs. The default ``collate_fn`` of a ``DataLoader``
+    cannot read a tensordict (see :ref:`data-loading`).
+
+    The samples are collated by the type of the first one:
+
+    - tensordicts and tensorclasses go through
+      :meth:`~tensordict.LazyStackedTensorDict.maybe_dense_stack`: the batch
+      is a dense stack if the samples have the same keys and entry shapes,
+      and a :class:`~tensordict.LazyStackedTensorDict` otherwise. A
+      tensorclass keeps its type.
+    - tensors go through :func:`torch.stack`.
+    - mappings give a ``dict`` and tuples a tuple (a namedtuple keeps its
+      type), with each entry collated across the samples.
+    - anything else goes through :func:`torch.utils.data.default_collate`.
+
+    Args:
+        batch (list): the samples of one batch. Anything other than a
+            non-empty list is returned as is, for example the tensordict
+            that a batch sampler reads in one index operation.
+
+    Returns:
+        the collated batch.
+
+    Examples:
+        >>> import torch
+        >>> from torch.utils.data import DataLoader
+        >>> from tensordict import TensorDict, collate
+        >>> samples = [(TensorDict(x=torch.randn(3)), i) for i in range(10)]
+        >>> td, label = next(iter(DataLoader(samples, batch_size=4, collate_fn=collate)))
+        >>> td.batch_size, label
+        (torch.Size([4]), tensor([0, 1, 2, 3]))
+        >>> clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)]
+        >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate)))
+        >>> type(batch).__name__, batch.batch_size
+        ('LazyStackedTensorDict', torch.Size([4]))
+    """
+    if not isinstance(batch, list) or not batch:
+        return batch
+    first = batch[0]
+    if _is_tensor_collection(type(first)):
+        return LazyStackedTensorDict.maybe_dense_stack(batch)
+    if isinstance(first, torch.Tensor):
+        return torch.stack(batch)
+    if isinstance(first, Mapping):
+        return {key: collate([sample[key] for sample in batch]) for key in first}
+    if isinstance(first, tuple):
+        items = (collate(list(entries)) for entries in zip(*batch))
+        if hasattr(first, "_fields"):
+            return type(first)(*items)
+        return tuple(items)
+    return default_collate(batch)
+
+
 def pad_sequence(
     list_of_tensordicts: Sequence[T],
     pad_dim: int = 0,
     padding_value: float = 0.0,
     out: T | None = None,
     return_mask: bool | NestedKey = False,
+    padding_side: str = "right",
 ) -> T:
     """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
 
@@ -561,7 +623,14 @@ def pad_sequence(
             of size ``torch.Size([stack_len, *new_shape])``, where
             ``new_shape[pad_dim]`` is the largest size and the rest of
             ``new_shape`` matches the shape of the input entries. Not
-            available for tensorclass inputs.
+            available for tensorclass inputs. Use
+            :func:`~tensordict.unpad_sequence` to turn the result back into
+            the variable-length samples.
+        padding_side (str, optional): ``"right"`` puts the padding after the
+            data along ``pad_dim``, ``"left"`` puts it before, as
+            ``get(key, as_padded_tensor=True, padding_side=...)`` does on a
+            lazy stack. The masks mark the data positions on either side.
+            Defaults to ``"right"``.
 
     Returns:
         a :class:`~tensordict.TensorDict` (or the tensorclass of the inputs)
@@ -570,6 +639,7 @@ def pad_sequence(
     Raises:
         RuntimeError: if ``list_of_tensordicts`` is empty, or if the entry
             shapes differ in a dimension other than ``pad_dim``.
+        ValueError: if ``padding_side`` is neither ``"left"`` nor ``"right"``.
 
     Examples:
         >>> import torch
@@ -597,6 +667,10 @@ def pad_sequence(
     """
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
+    if padding_side not in ("left", "right"):
+        raise ValueError(
+            f"padding_side must be 'left' or 'right', got {padding_side!r}."
+        )
 
     if return_mask and is_tensorclass(list_of_tensordicts[0]):
         raise RuntimeError(
@@ -697,7 +771,11 @@ def pad_sequence(
                         _pad_non_tensor(
                             item,
                             [0, 0] * batch_pad_dim
-                            + [0, length - item.batch_size[batch_pad_dim]],
+                            + (
+                                [0, length - item.batch_size[batch_pad_dim]]
+                                if padding_side == "right"
+                                else [length - item.batch_size[batch_pad_dim], 0]
+                            ),
                         )
                         if item.batch_size[batch_pad_dim] < length
                         else item
@@ -717,12 +795,180 @@ def pad_sequence(
                     [d[key].transpose(0, pos_pad_dim) for d in list_of_dicts],
                     batch_first=True,
                     padding_value=padding_value if key not in mask_keys else False,
+                    padding_side=padding_side,
                 ).transpose(1, pos_pad_dim + 1),
                 inplace=True,
             )
         except Exception as err:
             raise RuntimeError(f"pad_sequence failed for key {key}") from err
     return out
+
+
+def unpad_sequence(
+    padded: TensorDictBase,
+    mask: TensorDictBase | torch.Tensor | None = None,
+    *,
+    pad_dim: int = 0,
+) -> LazyStackedTensorDict:
+    """Splits a padded batch back into its variable-length samples.
+
+    The inverse of :func:`~tensordict.pad_sequence` with
+    ``return_mask=True``: each row of ``padded`` keeps, in every entry, the
+    positions that the mask marks along ``pad_dim``. These must form one
+    contiguous run per row, as the masks of :func:`~tensordict.pad_sequence`
+    do. Left and right padding are both read from the mask. Non-tensor
+    entries are kept as they are, except when ``pad_dim`` is a batch
+    dimension: then they lose their pad slots too.
+
+    The lengths are read on the host (``.tolist()``), which synchronizes
+    with the device: this is meant for post-processing, not for compiled
+    hot paths.
+
+    Args:
+        padded (TensorDictBase): the padded batch, with the samples along its
+            first dimension.
+        mask (TensorDictBase or torch.Tensor, optional): the valid positions.
+            A tensordict holds one mask per entry, laid out as the masks of
+            :func:`~tensordict.pad_sequence`. A boolean tensor of shape
+            ``[len(padded), max_len]`` is used for every entry. If ``None``,
+            the masks are read from the ``"masks"`` entry of ``padded``, and
+            the result has no ``"masks"`` entry. When ``mask`` is given,
+            every entry of ``padded`` is unpadded. Defaults to ``None``.
+
+    Keyword Args:
+        pad_dim (int, optional): the ``pad_dim`` given to
+            :func:`~tensordict.pad_sequence`, counted from the first
+            dimension of each sample's entries. Defaults to ``0``.
+
+    Returns:
+        a :class:`~tensordict.LazyStackedTensorDict` that stacks the samples
+        along its first dimension. Each sample has the batch size of the
+        original sample, and its entries are views of ``padded``.
+
+    Raises:
+        ValueError: if ``padded`` has no batch dimension, if ``mask`` is
+            ``None`` and ``padded`` has no ``"masks"`` entry, if a tensor
+            mask does not have shape ``[len(padded), max_len]``, or if the
+            marked positions of a row are not contiguous.
+        KeyError: if a mask tensordict has no mask for an entry of
+            ``padded``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, pad_sequence, unpad_sequence
+        >>> list_td = [
+        ...     TensorDict({"a": torch.arange(3), "b": torch.zeros(3, 2)}, batch_size=[3]),
+        ...     TensorDict({"a": torch.arange(5), "b": torch.ones(5, 2)}, batch_size=[5]),
+        ... ]
+        >>> padded = pad_sequence(list_td, return_mask=True, padding_side="left")
+        >>> padded["a"]
+        tensor([[0, 0, 0, 1, 2],
+                [0, 1, 2, 3, 4]])
+        >>> samples = unpad_sequence(padded)
+        >>> samples[0]["a"]
+        tensor([0, 1, 2])
+        >>> [sample.batch_size for sample in samples.tensordicts]
+        [torch.Size([3]), torch.Size([5])]
+    """
+    if not padded.batch_dims:
+        raise ValueError(
+            "unpad_sequence needs the samples along the first batch dimension "
+            "of padded, which has none."
+        )
+    if mask is None:
+        if "masks" not in padded.keys():
+            raise ValueError(
+                "unpad_sequence needs a mask: pass mask=..., or pad with "
+                "pad_sequence(..., return_mask=True)."
+            )
+        mask = padded.get("masks")
+        padded = padded.exclude("masks")
+    elif isinstance(mask, torch.Tensor) and (
+        mask.ndim != 2 or mask.shape[0] != padded.batch_size[0]
+    ):
+        raise ValueError(
+            "A tensor mask must have shape [len(padded), max_len], got "
+            f"{tuple(mask.shape)}."
+        )
+    # Batch dims of each sample
+    batch_dims = padded.batch_dims - 1
+
+    def bounds(key, pos_pad_dim, max_len):
+        # The starts and lengths of the data along pad_dim, one per sample
+        if isinstance(mask, torch.Tensor):
+            if mask.shape[-1] != max_len:
+                raise ValueError(
+                    "A tensor mask must have shape [len(padded), max_len] = "
+                    f"[{mask.shape[0]}, {max_len}], got {tuple(mask.shape)}."
+                )
+            m = mask
+        else:
+            # The masks of pad_sequence hold the batch dims, and the padded
+            # dim after them if it is not a batch dim.
+            m = mask.get(key, None)
+            if m is None:
+                raise KeyError(f"The mask has no entry for key {key!r} of padded.")
+            m = m.movedim(min(pos_pad_dim, batch_dims) + 1, -1)
+            if m.ndim > 2:
+                m = m.flatten(1, -2).any(1)
+        if m.shape[-1] == 0:
+            # Every sample is empty along pad_dim
+            return [0] * m.shape[0], [0] * m.shape[0]
+        m = m.to(torch.uint8)
+        # First and last marked positions and their count, in one sync
+        starts, ends, lengths = torch.stack(
+            (m.argmax(-1), m.shape[-1] - 1 - m.flip(-1).argmax(-1), m.sum(-1))
+        ).tolist()
+        if any(
+            n and end - start + 1 != n for start, end, n in zip(starts, ends, lengths)
+        ):
+            raise ValueError(
+                f"The mask{'' if key is None else f' of key {key!r}'} marks "
+                "positions that are not "
+                "contiguous in some row: unpad_sequence keeps one contiguous "
+                "run per row."
+            )
+        return starts, lengths
+
+    pad_dims = {}
+    for key in padded.keys(True, True, is_leaf=_is_leaf_nontensor):
+        item = padded.get(key)
+        if is_non_tensor(item):
+            continue
+        pad_dims[key] = pad_dim if pad_dim >= 0 else item.ndim - 1 + pad_dim
+    if batch_dims > 0 and all(pos < batch_dims for pos in pad_dims.values()):
+        # The batch was padded too: slicing it unpads every entry
+        batch_pad_dim = next(iter(pad_dims.values()), pad_dim % batch_dims)
+        starts, lengths = bounds(
+            next(iter(pad_dims), None),
+            batch_pad_dim,
+            padded.batch_size[batch_pad_dim + 1],
+        )
+        samples = [
+            padded[i][(slice(None),) * batch_pad_dim + (slice(start, start + n),)]
+            for i, (start, n) in enumerate(zip(starts, lengths))
+        ]
+    else:
+        key_bounds = {
+            key: bounds(key, pos, padded.get(key).shape[pos + 1])
+            for key, pos in pad_dims.items()
+        }
+        samples = []
+        for i in range(padded.batch_size[0]):
+            sample = padded[i]
+            unpadded = {}
+            for key, (starts, lengths) in key_bounds.items():
+                item = sample.get(key)
+                pos_pad_dim = pad_dims[key]
+                if starts[i] != 0 or lengths[i] != item.shape[pos_pad_dim]:
+                    unpadded[key] = item.narrow(pos_pad_dim, starts[i], lengths[i])
+            if unpadded:
+                # A new tensordict: the members of a lazy stack stay as they are
+                sample = sample.exclude(*unpadded)
+                for key, item in unpadded.items():
+                    sample.set(key, item)
+            samples.append(sample)
+    return LazyStackedTensorDict(*samples, stack_dim=0)
 
 
 def merge_tensordicts(
