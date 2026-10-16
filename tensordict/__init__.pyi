@@ -54,6 +54,7 @@ from tensordict.functional import (
     merge_tensordicts,
     pad,
     pad_sequence,
+    unpad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import (
@@ -148,6 +149,7 @@ __all__ = [
     "merge_tensordicts",
     "pad",
     "pad_sequence",
+    "unpad_sequence",
     # Utility functions
     "is_tensor_collection",
     "is_non_tensor",
