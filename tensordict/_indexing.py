@@ -371,20 +371,21 @@ def _getitem_batch_size(batch_size, index):
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
-    elif (
-        index
-        and type(index[0]) is int
-        and type(index[-1]) is int
-        and len(index) <= len(batch_size)
-    ):
-        # A tuple of ints in range removes the dims that it indexes. Its first
-        # and last elements are read first, so that the other tuples, such as
-        # (int, slice) or the (tensor,) of td[tensor], skip the loop.
-        for size, element in zip(batch_size, index):
-            if type(element) is not int or not -size <= element < size:
-                break
-        else:
-            return torch.Size(batch_size[len(index) :])
+    elif index:
+        first = type(index[0])
+        if first is int and type(index[-1]) is int and len(index) <= len(batch_size):
+            # A tuple of ints in range removes the dims that it indexes. Its
+            # first and last elements are read first, so that the other tuples,
+            # such as (int, slice) or the (tensor,) of td[tensor], skip the loop.
+            for size, element in zip(batch_size, index):
+                if type(element) is not int or not -size <= element < size:
+                    break
+            else:
+                return torch.Size(batch_size[len(index) :])
+        elif first is slice and len(index) == 1 and batch_size:
+            # td[a:b], which __getitem__ passes as (slice,): _read_index reads
+            # it as one slice of the first dim
+            return torch.Size([_slice_length(index[0], batch_size[0]), *batch_size[1:]])
     dims, advanced, position, rest = _read_index(index, len(batch_size), batch_size)
     out = [
         1 if dim is None else _slice_length(element, batch_size[dim])

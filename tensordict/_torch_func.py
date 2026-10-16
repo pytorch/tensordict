@@ -17,6 +17,7 @@ from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
+    _TD_HANDLED_FUNCTIONS,
     NO_DEFAULT,
     TensorDictBase,
 )
@@ -44,7 +45,8 @@ from torch.nn.parameter import (
 )
 from torch.utils._pytree import tree_leaves
 
-TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
+# the dict that TensorDictBase.__torch_function__ reads
+TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = _TD_HANDLED_FUNCTIONS
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 T = TypeVar("T", bound="TensorDictBase")
 

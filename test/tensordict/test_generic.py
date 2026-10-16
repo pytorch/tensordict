@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dis
 import enum
 import gc
 import importlib.util
@@ -52,7 +53,7 @@ from tensordict import (
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
-from tensordict._torch_func import _stack as stack_td
+from tensordict._torch_func import _stack as stack_td, TD_HANDLED_FUNCTIONS
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import (
     _pad_preflight,
@@ -3782,6 +3783,74 @@ class TestGeneric:
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
         assert type(resulting_shape) is torch.Size
+
+    @pytest.mark.parametrize("shape", [[10], [10, 7], [0], [0, 3]], ids=str)
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            slice(None),
+            slice(2, 8),
+            slice(-3, None),
+            slice(None, -20),
+            slice(None, None, 3),
+            slice(8, 2),
+            slice(20, None),
+            slice(None, None, -1),
+            slice(None, None, 0),
+        ],
+        ids=str,
+    )
+    def test_getitem_batch_size_one_slice(self, shape, idx):
+        # The index (slice,) of td[a:b] takes a shortcut: the first dim has
+        # the length of range(size)[slice], as in the general path, which
+        # raises the same ValueError for a step of 0
+        shape = torch.Size(shape)
+
+        def outcome(fun):
+            try:
+                return fun()
+            except Exception as err:
+                return type(err), str(err)
+
+        expected = outcome(lambda: torch.Size([len(range(shape[0])[idx]), *shape[1:]]))
+        result = outcome(lambda: _getitem_batch_size(shape, (idx,)))
+        assert result == expected
+        assert outcome(lambda: _getitem_batch_size(shape, (idx, Ellipsis))) == expected
+        if idx.step is None or idx.step > 0:
+            assert result == torch.zeros(shape)[idx].shape
+            assert type(result) is torch.Size
+
+    @pytest.mark.parametrize(
+        "owner,name",
+        [
+            (TensorDictBase, "_apply_nest"),
+            (TensorDictBase, "_index_tensordict"),
+            (TensorDictBase, "__torch_function__"),
+            (TensorDictBase, "_convert_to_tensordict"),
+            (TensorDictBase, "_compare"),
+            (TensorDictBase, "all"),
+            (TensorDictBase, "any"),
+            (TensorDictBase, "_cast_reduction"),
+            (tensordict._td, "_clone_value"),
+        ],
+        ids=lambda x: getattr(x, "__name__", x),
+    )
+    def test_hot_path_has_no_function_level_import(self, owner, name):
+        # These run on every call, or for every node of a tree: they read the
+        # tensordict classes and tables from module globals, since a
+        # function-level import costs about 100 ns each time it runs
+        imported = [
+            instruction.argval
+            for instruction in dis.get_instructions(getattr(owner, name))
+            if instruction.opname == "IMPORT_NAME"
+        ]
+        assert not [module for module in imported if module.startswith("tensordict")]
+
+    def test_torch_function_table(self):
+        # TensorDictBase.__torch_function__ reads the table that _torch_func
+        # fills
+        assert tensordict_base._TD_HANDLED_FUNCTIONS is TD_HANDLED_FUNCTIONS
+        assert torch.stack in TD_HANDLED_FUNCTIONS
 
     @pytest.mark.parametrize("idx", [(10, 0), (0, -8), (0, 7), (0, 0, 0, 0, 0)])
     def test_getitem_batch_size_int_tuple_error(self, idx):

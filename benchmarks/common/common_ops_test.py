@@ -612,6 +612,7 @@ def test_clone_device(benchmark, td):
     "index",
     [
         "int",
+        "slice",
         "slice_int",
         "range",
         "tuple",
@@ -626,6 +627,8 @@ def test_clone_device(benchmark, td):
 def test_getitem(benchmark, td, c, index):
     if index == "int":
         index = 1
+    elif index == "slice":
+        index = slice(1, 3)
     elif index == "slice_int":
         index = (slice(None), 1)
     elif index == "range":
@@ -1239,6 +1242,25 @@ def test_pointwise_nested(benchmark, op):
         "neg": lambda td: -td,
         "mul_scalar": lambda td: td * 2.0,
         "add": lambda td: td + td,
+    }[op]
+    benchmark(fn, td)
+
+
+@pytest.mark.parametrize(
+    "op", ["reshape", "view_flatten", "unsqueeze", "unbind", "clone", "eq_all"]
+)
+def test_shape_ops_nested(benchmark, op):
+    td = TensorDict(
+        {"a": torch.randn(8, 3), "b": torch.randn(8), "n": {"c": torch.randn(8, 4)}},
+        [8],
+    )
+    fn = {
+        "reshape": lambda td: td.reshape(2, 4),
+        "view_flatten": lambda td: td.view(2, 4).flatten(0, 1),
+        "unsqueeze": lambda td: td.unsqueeze(0),
+        "unbind": lambda td: td.unbind(0),
+        "clone": lambda td: td.clone(),
+        "eq_all": lambda td: (td == td).all(),
     }[op]
     benchmark(fn, td)
 

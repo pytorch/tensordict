@@ -25,6 +25,7 @@ from copy import copy
 from typing import Any, List, Literal, Sequence, Type, TYPE_CHECKING
 
 import numpy as np
+import tensordict.base as _td_base
 import torch
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
@@ -1557,7 +1558,7 @@ class _Conversion:
     def _convert_to_tensordict(
         self, dict_value: dict[str, Any], non_blocking: bool | None = None
     ) -> Self:
-        from tensordict._td import TensorDict
+        TensorDict = _td_base._TENSORDICT_TYPE
 
         return TensorDict(
             dict_value,

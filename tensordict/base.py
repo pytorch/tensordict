@@ -1002,6 +1002,22 @@ def _set_tensordict_type(cls):
     _TENSORDICT_TYPE = cls
 
 
+# _SubTensorDict, which _td.py sets once it defines the class: _apply_nest
+# reads it without a function-level import on every call.
+_SUBTENSORDICT_TYPE = None
+
+
+def _set_subtensordict_type(cls):
+    global _SUBTENSORDICT_TYPE
+    _SUBTENSORDICT_TYPE = cls
+
+
+# The torch functions that TensorDictBase.__torch_function__ handles, which
+# _torch_func.py registers (as its TD_HANDLED_FUNCTIONS, the same dict):
+# __torch_function__ reads it without a function-level import on every call.
+_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
+
+
 def _register_tensor_class(cls):
     global _ACCEPTED_CLASSES
     _ACCEPTED_CLASSES = set(_ACCEPTED_CLASSES)
@@ -2719,7 +2735,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # )
         if istuple and any(idx is Ellipsis for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
-        if len(index) <= self.batch_dims and all(
+        if len(index) <= len(self.batch_size) and all(
             isinstance(idx, slice) and idx == slice(None) for idx in index
         ):
             return self
@@ -2908,11 +2924,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
-        from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-
         if kwargs is None:
             kwargs = {}
-        if func not in TD_HANDLED_FUNCTIONS or not all(
+        if func not in _TD_HANDLED_FUNCTIONS or not all(
             issubclass(t, (Tensor, TensorDictBase)) or _is_tensorclass(t) for t in types
         ):
             from torch._ops import HigherOrderOperator
@@ -2921,7 +2935,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 with torch._C.DisableTorchFunctionSubclass():
                     return func(*args, **kwargs)
             return NotImplemented
-        return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        return _TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     def auto_batch_size_(
         self, batch_dims: int | None = None, keep_compliant_size: bool = False
@@ -7967,8 +7981,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         call_on_unbatched: bool = False,
         **constructor_kwargs,
     ) -> Self | None:
-        from tensordict._td import _SubTensorDict
-
         if inplace:
             result = self
             is_locked = result.is_locked
@@ -8011,7 +8023,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         any_set = False
         if is_leaf is None:
             is_leaf = _default_is_leaf
-        is_sub_td = isinstance(self, _SubTensorDict)
+        is_sub_td = isinstance(self, _SUBTENSORDICT_TYPE)
 
         for key, item in self.items():
             if (
@@ -8053,8 +8065,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 # For other ops (data ops like zero_, and to() with a
                 # batch_size, which passes call_on_unbatched=True), apply the
                 # function normally.
-                unbatched_new_batch = batch_size is not None and _is_unbatched(item)
-                if unbatched_new_batch and not call_on_unbatched:
+                if (
+                    batch_size is not None
+                    and not call_on_unbatched
+                    and _is_unbatched(item)
+                ):
                     item_trsf = _unbatched_with_batch_size(item, batch_size)
                 else:
                     _others = [
@@ -8069,7 +8084,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             item_trsf = fn(key, item, *_others)
                     else:
                         item_trsf = fn(item, *_others)
-                    if unbatched_new_batch and _is_unbatched(item_trsf):
+                    if (
+                        call_on_unbatched
+                        and batch_size is not None
+                        and _is_unbatched(item)
+                        and _is_unbatched(item_trsf)
+                    ):
                         item_trsf = _unbatched_with_batch_size(item_trsf, batch_size)
             if item_trsf is not None:
                 if not any_set:
@@ -10440,8 +10460,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         new_batch_size: torch.Size | None = None,
         names: List[str] | None = None,
     ) -> Self:
-        from tensordict._td import TensorDict
-
+        TensorDict = _TENSORDICT_TYPE
         batch_size = self.batch_size
         batch_dims = len(batch_size)
 

@@ -17,6 +17,7 @@ import sys
 import warnings
 from typing import Callable, Iterable, Literal, overload, Tuple
 
+import tensordict.base as _td_base
 import torch
 from tensordict._deprecation import warn_deprecated
 from tensordict._nestedkey import NestedKey
@@ -102,7 +103,7 @@ class _Reductions:
                 shape.
 
         """
-        from tensordict._td import TensorDict
+        TensorDict = _td_base._TENSORDICT_TYPE
 
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
@@ -130,7 +131,7 @@ class _Reductions:
                 the tensordict shape.
 
         """
-        from tensordict._td import TensorDict
+        TensorDict = _td_base._TENSORDICT_TYPE
 
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
@@ -2008,7 +2009,7 @@ class _Reductions:
         batch_size=None,
         **kwargs,
     ):
-        from tensordict._td import TensorDict
+        TensorDict = _td_base._TENSORDICT_TYPE
 
         if (
             isinstance(dim, tuple)
