@@ -11567,6 +11567,128 @@ class TestGeneric:
         call(td, None)
         assert td["b"] == "text"
 
+    @tensorclass
+    class _KeysUpdateTC:
+        x: torch.Tensor
+        y: torch.Tensor
+
+    @staticmethod
+    def _keys_update_source(t, **entries):
+        """A source for the tensordicts of test_update__keys_fast_path_matches_general."""
+        source = TensorDict(
+            a=t(3, 4),
+            n=TensorDict(x=t(3, 2), y=t(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        source.set_non_tensor("s", "source")
+        source["c"] = t(3, 2)
+        for key, value in entries.items():
+            if isinstance(value, str) or value is None:
+                source.set_non_tensor(key, value)
+            else:
+                source[key] = value
+        return source
+
+    _KEYS_UPDATE_CASES = {
+        "tensors": (["a", ("n", "x"), "c"], {}),
+        "sub-tensordict key": (["n", "c"], {}),
+        "overlapping keys": (["n", ("n", "y"), "a", "a"], {}),
+        "invalid key selects all": ([("a", 0)], {}),
+        "keys the source lacks": (["a", "nope", ("n", "z")], {}),
+        "non-tensor between tensors": (["a", "s", "c"], {}),
+        "non-tensor, then a missing key": (["a", "s", "zz", "c"], {"zz": (3,)}),
+        "non-tensor, then a bad shape": (["a", "s", "c"], {"c": (3, 5)}),
+        "non-tensor into a tensor": (["a", "c"], {"c": "text"}),
+        "tensor into a non-tensor": (["a", "s", "c"], {"s": (3,)}),
+        "non-tensor, shared dest": (["a", "s", "c"], {"s": None, "share": True}),
+        "requires grad between tensors": (["a", "c", "b"], {"b": "grad"}),
+        "requires grad, no_grad": (["a", "b", "c"], {"b": "grad", "no_grad": 1}),
+        "parameter dest": (["a", "p", "c"], {"p": "param"}),
+        "parameter dest, no_grad": (["a", "p"], {"p": "param", "no_grad": 1}),
+        "tensorclass": (["a", "tc", "c"], {"tc": "tc"}),
+        "tensorclass leaf key": ([("tc", "y"), "c"], {"tc": "tc"}),
+        "tensorclass unselected": (["a", "c"], {"tc": "tc"}),
+        "lazy stack in the source": (["a", "n", "c"], {"n": "lazy"}),
+        "lazy stack in self, unselected": (["a", "c"], {"lz": "lazy dest"}),
+        "lazy stack in self, selected": (["a", ("lz", "x")], {"lz": "lazy dest"}),
+        "sub-tensordict into a tensor": (["a", "c"], {"c": "td"}),
+        "sub-tensordict into a tensor, unselected": (["a"], {"c": "td"}),
+        "tensor into a sub-tensordict": (["a", "n"], {"n": (3,)}),
+    }
+
+    @pytest.mark.parametrize("case", list(_KEYS_UPDATE_CASES))
+    def test_update__keys_fast_path_matches_general(self, case, monkeypatch):
+        # update_(keys_to_update=...) between exact TensorDicts copies the
+        # selected tensors with _foreach_copy_ and writes each other entry
+        # (non-tensors, tensors that require grad, Parameters, tensorclasses,
+        # lazy stacks) at its place in the order, as the _apply_nest route
+        # does: same result, errors, warnings and autograd graph.
+        keys, options = self._KEYS_UPDATE_CASES[case]
+        options = dict(options)
+        share = options.pop("share", False)
+        no_grad = options.pop("no_grad", False)
+        tc_cls = self._KeysUpdateTC
+
+        def make(cls):
+            td = cls(
+                a=torch.zeros(3, 4),
+                n=TensorDict(x=torch.zeros(3, 2), y=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+            td.set_non_tensor("s", "dest")
+            td["c"] = torch.zeros(3, 2)
+            td["b"] = torch.zeros(3)
+            td["p"] = nn.Parameter(torch.zeros(3))
+            td["tc"] = tc_cls(x=torch.zeros(3, 2), y=torch.zeros(3), batch_size=[3])
+            td["lz"] = lazy_stack([TensorDict(x=torch.zeros(2)) for _ in range(3)])
+            if share:
+                td.share_memory_()
+            return td
+
+        def entry(t, value):
+            if isinstance(value, tuple):
+                return t(*value)
+            if value == "grad":
+                return t(3).requires_grad_() * 2
+            if value == "param":
+                return t(3)
+            if value == "tc":
+                return tc_cls(x=t(3, 2), y=t(3), batch_size=[3])
+            if value == "lazy":
+                return lazy_stack([TensorDict(x=t(2), y=t()) for _ in range(3)])
+            if value == "lazy dest":
+                return TensorDict(x=t(3, 2), batch_size=[3])
+            if value == "td":
+                return TensorDict(z=t(3), batch_size=[3])
+            return value
+
+        def call(td, t):
+            entries = {key: entry(t, value) for key, value in options.items()}
+            source = self._keys_update_source(t, **entries)
+            with torch.no_grad() if no_grad else contextlib.nullcontext():
+                return td.update_(source, keys_to_update=keys)
+
+        made = []
+
+        def outcome():
+            def tracked(cls):
+                made.append(make(cls))
+                return made[-1]
+
+            result = self._update_outcome(TensorDict, tracked, call)
+            grads = {
+                key: (leaf.requires_grad, type(leaf.grad_fn).__name__)
+                for key, leaf in made[-1].items(True, True)
+                if isinstance(leaf, torch.Tensor)
+            }
+            return result, grads
+
+        fast = outcome()
+        monkeypatch.setattr(
+            tensordict_base, "_keys_update_pairs", lambda *args, **kwargs: -1
+        )
+        assert outcome() == fast
+
     def test_update__intersection_ignores_unknown(self):
         # Without keys_to_update, update_ writes the keys of the source that
         # self has and ignores the others, as long as one key matches.

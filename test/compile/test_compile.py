@@ -1591,6 +1591,35 @@ class TestTD:
         assert inplace_c(result, other) is result
         assert_close(result, expected)
 
+    def test_update__keys_to_update(self, mode):
+        # update_(keys_to_update=...) traces when it copies the selected
+        # tensors with _foreach_copy_ and writes a tensor that requires grad
+        # and a nested tensorclass on their own, and backpropagates as eager
+        def update_(td, other):
+            td.update_(other, keys_to_update=["a", ("n", "x"), "b", "tc"])
+            return td["b"].sum() + td["a"].sum()
+
+        def make():
+            x = torch.ones(4, requires_grad=True)
+            td = TensorDict(
+                a=torch.zeros(4, 3),
+                n=TensorDict(x=torch.zeros(4, 2), y=torch.zeros(4)),
+                b=torch.zeros(4),
+                tc=MyClass(a=None, b=torch.zeros(4), batch_size=[4]),
+                batch_size=[4],
+            )
+            other = td.apply(lambda t: t + 1)
+            other["b"] = x * 2
+            return x, td, other
+
+        x, td, other = make()
+        update_(td, other).backward()
+        update_c = torch.compile(update_, fullgraph=True, mode=mode)
+        x_c, td_c, other_c = make()
+        update_c(td_c, other_c).backward()
+        assert_close(td_c, td)
+        torch.testing.assert_close(x_c.grad, x.grad)
+
     @pytest.mark.parametrize("lazy", [False, True])
     def test_detach_no_grad(self, lazy, mode):
         # detach_() traces when no leaf requires grad: Dynamo cannot trace

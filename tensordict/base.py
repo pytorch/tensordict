@@ -2026,17 +2026,95 @@ def _has_typed_tensordict(td: TensorDictBase) -> bool:
     )
 
 
+def _keys_update_pairs(
+    source: TensorDictBase,
+    dest: TensorDictBase | None,
+    prefix: tuple,
+    selected: bool,
+    wanted: set,
+    grad: bool,
+    dests: list[Tensor],
+    sources: list[Tensor],
+    entries: list[tuple],
+) -> int:
+    """Pairs the tensors that ``update_(keys_to_update=...)`` copies from the exact ``TensorDict`` ``source`` into ``dest``.
+
+    Walks ``source`` in the order of the ``_apply_nest`` route of
+    :meth:`~TensorDictBase._update_`, and selects an entry as it does: an
+    entry is selected if its key, or the key of a tensordict that holds it,
+    is in ``wanted``, a set of key tuples. ``dest`` is an exact
+    ``TensorDict``, or ``None`` where it lacks the node. Appends each selected
+    exact tensor and the exact tensor of ``dest`` at its key to ``sources``
+    and ``dests``, unless ``grad`` is set and one of them requires grad:
+    ``_foreach_copy_`` records no autograd graph. Each other selected leaf,
+    and each nested tensordict that is not an exact ``TensorDict`` on both
+    sides, goes in ``entries`` as ``(len(dests), key, source, dest, nested)``,
+    for the ``_apply_nest`` route to write with the same call, at its place
+    in the order. Writes nothing. Returns the number of keys of ``wanted``
+    that name an entry of ``dest`` that is not a tensordict, read through
+    exact ``TensorDict`` nodes, or ``-1`` where a selected leaf, or a nested
+    tensordict that is not an exact ``TensorDict``, has no destination: the
+    general route then writes the whole update and raises as it does.
+    """
+    tensordict_type = _TENSORDICT_TYPE
+    dest_entries = None if dest is None else dest._tensordict
+    named = 0
+    for key, value in source._tensordict.items():
+        cls = type(value)
+        name = (*prefix, key)
+        is_named = name in wanted
+        is_selected = selected or is_named
+        if cls is Tensor or (cls is not tensordict_type and _is_leaf_nontensor(cls)):
+            if not is_selected:
+                continue
+            other = None if dest_entries is None else dest_entries.get(key)
+            if (
+                type(other) is Tensor
+                and cls is Tensor
+                and not (grad and (value.requires_grad or other.requires_grad))
+            ):
+                dests.append(other)
+                sources.append(value)
+                named += is_named
+                continue
+            if other is None:
+                return -1
+            entries.append((len(dests), name, value, other, False))
+            named += is_named and _is_leaf_nontensor(type(other))
+            continue
+        other = None if dest_entries is None else dest_entries.get(key)
+        if cls is tensordict_type and (other is None or type(other) is cls):
+            nested = _keys_update_pairs(
+                value, other, name, is_selected, wanted, grad, dests, sources, entries
+            )
+            if nested < 0:
+                return -1
+            named += nested
+        elif other is None:
+            return -1
+        else:
+            entries.append((len(dests), name, value, other, True))
+    return named
+
+
 def _copy_leaves(
-    dests: list[Tensor], sources: list[Tensor], non_blocking: bool
+    dests: list[Tensor], sources: list[Tensor], non_blocking: bool, exact: bool = False
 ) -> None:
-    """Copies each tensor of ``sources`` into the tensor of ``dests`` at the same position, as ``update_`` does."""
+    """Copies each tensor of ``sources`` into the tensor of ``dests`` at the same position, as ``update_`` does.
+
+    ``exact`` tells that every tensor is an exact ``Tensor``: none is
+    unbatched. A single pair is then copied with ``copy_``.
+    """
+    if exact and len(dests) == 1:
+        # one copy_ costs less than the checks below and a _foreach_copy_
+        dests[0].copy_(sources[0], non_blocking=non_blocking)
     # _foreach_copy_compiled cannot run under a torch.func transform
     # (vmap), _foreach can. Same check as in _foreach, which explains it.
-    if torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
+    elif torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
         _foreach("copy_", dests, sources, non_blocking=non_blocking)
     elif is_compiling():
         _foreach_copy_compiled(dests, sources, non_blocking=non_blocking)
-    elif _any_unbatched(dests) or _any_unbatched(sources):
+    elif not exact and (_any_unbatched(dests) or _any_unbatched(sources)):
         _foreach("copy_", dests, sources, non_blocking=non_blocking)
     else:
         # what _foreach does for copy_ outside of a torch.func
@@ -5594,7 +5672,44 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        if keys_to_update is not None and _reads_copies_under(self, keys_to_update):
+        entries = None
+        if (
+            keys_to_update is not None
+            and type(self) is _TENSORDICT_TYPE
+            and type(input_dict_or_td) is _TENSORDICT_TYPE
+        ):
+            # Fast route for exact TensorDicts: pair the selected tensors in
+            # the order of the _apply_nest route below, and copy them with
+            # _foreach_copy_. The route below writes each other entry at its
+            # place in the order. Where each key names an entry that is not a
+            # tensordict, the walk has read the path of each key through
+            # exact TensorDicts: _reads_copies_under is False.
+            wanted = set(keys_to_update)
+            dests, sources, entries = [], [], []
+            named = _keys_update_pairs(
+                input_dict_or_td,
+                self,
+                (),
+                () in wanted,
+                wanted,
+                torch.is_grad_enabled(),
+                dests,
+                sources,
+                entries,
+            )
+            if named < 0 or (
+                named != len(wanted) and _reads_copies_under(self, keys_to_update)
+            ):
+                entries = None
+            elif not entries:
+                if dests:
+                    _copy_leaves(dests, sources, non_blocking, exact=True)
+                return self
+        if (
+            keys_to_update is not None
+            and entries is None
+            and _reads_copies_under(self, keys_to_update)
+        ):
             # the _apply_nest route below would write into the copies that a
             # nested lazy stack or file reads: write the listed entries on the
             # route without keys_to_update instead, which writes the stored
@@ -5650,6 +5765,42 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         dest.copy_(source, non_blocking=non_blocking)
                         if written is not None and isinstance(dest, Tensor):
                             written.append((name, dest))
+
+            if entries is not None:
+                # the fast route: self is an exact TensorDict, which reads
+                # no copies (written is None)
+                start = 0
+                for end, name, source, dest, nested in entries:
+                    if start < end:
+                        _copy_leaves(
+                            dests[start:end], sources[start:end], non_blocking, True
+                        )
+                        start = end
+                    if not nested:
+                        inplace_update(name, source, dest)
+                    else:
+                        # as TensorDict._apply_nest calls it on a nested node
+                        source._apply_nest(
+                            inplace_update,
+                            dest,
+                            inplace=False,
+                            batch_size=None,
+                            device=NO_DEFAULT,
+                            checked=False,
+                            named=True,
+                            nested_keys=True,
+                            default=None,
+                            prefix=name,
+                            filter_empty=True,
+                            is_leaf=_is_leaf_nontensor,
+                            out=None,
+                            call_on_unbatched=False,
+                        )
+                if start < len(dests):
+                    _copy_leaves(dests[start:], sources[start:], non_blocking, True)
+                if skipped:
+                    _warn_update_skipped(skipped)
+                return self
 
         else:
             # Fastest route using _foreach_copy_

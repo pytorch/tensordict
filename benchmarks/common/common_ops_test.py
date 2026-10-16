@@ -772,6 +772,24 @@ def test_update_many_leaves(benchmark, n, as_dict, nested):
     benchmark(dest.update_, source.to_dict() if as_dict else source)
 
 
+@pytest.mark.parametrize("selected", ["tensors", "nested", "non-tensor"])
+def test_update__keys_to_update(benchmark, selected):
+    # the step write of TorchRL's SerialEnv and ParallelEnv
+    source = TensorDict(
+        {f"obs{i}": torch.ones(4, 8) for i in range(6)},
+        batch_size=[4],
+    )
+    source["nested"] = TensorDict(x=torch.ones(4, 2), y=torch.ones(4))
+    source.set_non_tensor("info", "text")
+    dest = source.clone()
+    keys = [f"obs{i}" for i in range(6)]
+    if selected == "nested":
+        keys += [("nested", "x"), "nested"]
+    elif selected == "non-tensor":
+        keys.append("info")
+    benchmark(dest.update_, source, keys_to_update=keys)
+
+
 @pytest.mark.parametrize("n", [16, 256])
 @pytest.mark.parametrize("source_type", ["dict", "td", "kwargs"])
 @pytest.mark.parametrize("nested", [False, True])
