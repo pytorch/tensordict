@@ -414,6 +414,7 @@
 - [assert_close](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.assert_close.md)
 - [capture_non_tensor_stack](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.capture_non_tensor_stack.md)
 - [cat](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.cat.md)
+- [collate](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.collate.md)
 - [default_is_leaf](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.default_is_leaf.md)
 - [dense_stack_tds](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.dense_stack_tds.md)
 - [from_any](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_any.md)

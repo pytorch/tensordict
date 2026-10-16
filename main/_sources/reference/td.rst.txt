@@ -320,6 +320,7 @@ dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
     pad
     pad_sequence
     unpad_sequence
+    collate
 
 .. _api-methods-device:
 
