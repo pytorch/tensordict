@@ -1732,12 +1732,13 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
             return None
     if not isinstance(source, Tensor):
         return None
-    # the shape of the leaf that the stacks read, as a dense tensordict holds it
-    shape = list(td.shape)
-    for dim, size, _ in reversed(members):
-        shape.insert(dim, size)
-    for dim, size, index in members:
+    for i, (dim, size, index) in enumerate(members):
         if source.ndim <= dim or source.shape[dim] != size:
+            # the shape of the leaf that this stack reads, as a dense
+            # tensordict holds it
+            shape = list(td.shape)
+            for inner_dim, inner_size, _ in reversed(members[i:]):
+                shape.insert(inner_dim, inner_size)
             try:
                 source = source.expand(shape)
             except RuntimeError:
@@ -1745,7 +1746,6 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
                 source.new_empty(shape, device="meta").copy_(source.to("meta"))
                 raise
         source = source.select(dim, index)
-        del shape[dim]
     return source
 
 
