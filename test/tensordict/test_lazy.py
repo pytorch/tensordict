@@ -29,6 +29,7 @@ from tensordict import (
     PersistentTensorDict,
     TensorClass,
     TensorDict,
+    TypedTensorDict,
     UnbatchedTensor,
 )
 from tensordict._indexing import _getitem_batch_size
@@ -4144,7 +4145,9 @@ class TestLazyStackedTensorDict:
         assert empty.split([], 0) == ()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
-    @pytest.mark.parametrize("nesting", ["stack", "stack of stacks", "in a td"])
+    @pytest.mark.parametrize(
+        "nesting", ["stack", "stack of stacks", "in a td", "typed", "typed in a td"]
+    )
     @pytest.mark.parametrize("inplace", [False, True])
     @pytest.mark.parametrize("reproduce_struct", [False, True])
     def test_split_keys_exclusive_entries(
@@ -4153,6 +4156,12 @@ class TestLazyStackedTensorDict:
         # An entry that only some members hold goes to the part that holds it
         # in those members, the last one, and is not copied into the other
         # parts with reproduce_struct=True (#2803)
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+            b: torch.Tensor
+
+        prefix = ("s",) if nesting.endswith("in a td") else ()
+
         def make():
             members = [
                 TensorDict(
@@ -4169,7 +4178,9 @@ class TestLazyStackedTensorDict:
             td = lazy_stack(members, stack_dim)
             if nesting == "stack of stacks":
                 td = lazy_stack([td, td.clone()], stack_dim)
-            elif nesting == "in a td":
+            if nesting.startswith("typed"):
+                td = Typed.from_tensordict(td)
+            if prefix:
                 td = TensorDict(s=td, batch_size=td.batch_size)
             return td
 
@@ -4184,7 +4195,6 @@ class TestLazyStackedTensorDict:
 
         def split(*key_sets, **kwargs):
             td = make()
-            prefix = ("s",) if nesting == "in a td" else ()
             key_sets = [[(*prefix, *key) for key in keys] for keys in key_sets]
             parts = td.split_keys(
                 *key_sets,
@@ -4194,7 +4204,11 @@ class TestLazyStackedTensorDict:
             )
             if inplace:
                 assert parts[-1] is td
-            if nesting == "in a td":
+            if nesting == "typed":
+                assert all(type(part) is Typed for part in parts)
+            elif nesting == "typed in a td":
+                assert type(parts[-1]["s"]) is Typed
+            if prefix:
                 # a part without leaves may have no "s"
                 parts = [part.get("s", part) for part in parts]
             return [leaves(part) for part in parts]
@@ -4239,7 +4253,6 @@ class TestLazyStackedTensorDict:
             warnings.simplefilter("error", FutureWarning)
             split([("a",)], [("nope",)], strict=False)
         # a renamed exclusive entry stays in its lazy stack
-        prefix = ("s",) if nesting == "in a td" else ()
         parts = make().split_keys({(*prefix, "extra"): (*prefix, "e")})
         parts = [part.get("s", part) if prefix else part for part in parts]
         assert leaves(parts[0]) == expected([set(), {("e",)}])[0]
@@ -4252,6 +4265,14 @@ class TestLazyStackedTensorDict:
             [{("a",)}, {("a",)}], [set(), {("extra",)}]
         )
         if prefix:
+            # main's error for a key that no member holds
+            for keys, missed in (
+                ([("s", "nope")], "nope"),
+                ([("s", "extra"), ("s", "nope")], "extra"),
+            ):
+                with pytest.raises(KeyError) as err:
+                    make().split_keys(keys)
+                assert err.value.args[0].startswith(f"key \"('s', '{missed}')\"")
             with pytest.raises(KeyError, match="outside that stack"):
                 make().split_keys({("s", "extra"): "e"})
             # an entry moved out of the stack is in no other part
@@ -4265,6 +4286,7 @@ class TestLazyStackedTensorDict:
             assert leaves(parts[1]["s"]) == [set(), {("extra",)}]
             assert leaves(parts[2]["s"]) == [common, common | {("t",), ("n", "x")}]
 
+        if nesting == "in a td":
             # a lazy stack in a tensorclass is split in the same way
             class MC(TensorClass):
                 a: torch.Tensor

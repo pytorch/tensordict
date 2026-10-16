@@ -1645,17 +1645,27 @@ def _warn_get_kwargs(
     warnings.warn(message, FutureWarning, stacklevel=stacklevel)
 
 
+def _unwrap(td: TensorDictBase) -> TensorDictBase:
+    """The tensordict that ``td`` holds its entries in: the one that a tensorclass or a TypedTensorDict wraps, else ``td``."""
+    while True:
+        if _is_tensorclass(type(td)):
+            td = td._tensordict
+        elif getattr(type(td), "_wrapped_attr", None) is not None:
+            # a TypedTensorDict
+            td = getattr(td, type(td)._wrapped_attr)
+        else:
+            return td
+
+
 def _has_lazy_stack(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a lazy stack, which ``_apply_nest`` splits.
 
     No data of a file or a store is read: they cannot hold a lazy stack.
     """
     from tensordict._lazy import LazyStackedTensorDict
-    from tensordict.typedtensordict import TypedTensorDict
 
     # these apply their functions through the tensordict that they wrap
-    while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
-        td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+    td = _unwrap(td)
     if isinstance(td, LazyStackedTensorDict):
         return True
     if td._reads_return_copies:
@@ -1675,7 +1685,6 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
-    from tensordict.typedtensordict import TypedTensorDict
 
     keys = {}
     nodes = [((), td)]
@@ -1686,8 +1695,7 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
             items = td._tensordict.items()
         else:
             # these hold their entries in the tensordict that they wrap
-            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
-                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+            td = _unwrap(td)
             if isinstance(td, LazyStackedTensorDict):
                 nodes.extend((prefix, member) for member in td.tensordicts)
                 continue
@@ -1705,20 +1713,22 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
 
 def _lazy_on_path(td: TensorDictBase, key: tuple) -> bool:
     """Whether ``td`` or a tensordict that ``key`` runs through in it is lazy, as a lazy stack is: a cheap test before ``_held_by_member``."""
+    if type(td)._wrapped_attr is not None:
+        td = _unwrap(td)
     for name in key[:-1]:
-        if getattr(td, "_lazy", False):
+        if td._lazy:
             return True
         td = td._get_str(name, None)
         if not _is_tensor_collection(type(td)) or _is_non_tensor(type(td)):
             return False
-    return getattr(td, "_lazy", False)
+        td = _unwrap(td)
+    return td._lazy
 
 
 def _held_by_member(td: TensorDictBase, key: tuple) -> bool:
     """Whether ``td`` holds ``key``, in some member of each lazy stack that ``key`` runs through."""
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
-    from tensordict.typedtensordict import TypedTensorDict
 
     # each node is a tensordict that holds key[:i], and the next name
     nodes = [(0, td)]
@@ -1732,9 +1742,7 @@ def _held_by_member(td: TensorDictBase, key: tuple) -> bool:
         elif not _is_tensor_collection(type(td)) or _is_non_tensor(type(td)):
             continue
         else:
-            # these hold their entries in the tensordict that they wrap
-            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
-                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+            td = _unwrap(td)
             if isinstance(td, LazyStackedTensorDict):
                 nodes.extend((i, member) for member in td.tensordicts)
                 continue
@@ -1753,16 +1761,20 @@ def _split_keys_by_member(
     names it, in those members. ``key_sets`` are dicts of key tuples.
     """
     from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
 
-    if _is_tensorclass(type(td)):
-        # split the tensordict that it wraps, as td.split_keys does
-        parts = _split_keys_by_member(
-            td._tensordict, key_sets, inplace, reproduce_struct
-        )
-        parts = [
-            td._from_tensordict(part, dict(td._non_tensordict), safe=False)
-            for part in parts
-        ]
+    if _is_tensorclass(type(td)) or isinstance(td, TypedTensorDict):
+        # split the tensordict that it wraps and wrap the parts, as
+        # td.split_keys does
+        inner = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+        parts = _split_keys_by_member(inner, key_sets, inplace, reproduce_struct)
+        if isinstance(td, TypedTensorDict):
+            parts = [type(td)._wrap_td(part) for part in parts]
+        else:
+            parts = [
+                td._from_tensordict(part, dict(td._non_tensordict), safe=False)
+                for part in parts
+            ]
         if inplace:
             parts[-1] = td
         return parts
@@ -10084,8 +10096,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ]
                     for k in (k for ks in key_sets for k in ks):
                         if not _held_by_member(self, k):
-                            # raises if no member holds k
-                            self.get(k, NO_DEFAULT)
+                            # no member holds k: the KeyError of pop
+                            raise
                     return tuple(
                         _split_keys_by_member(self, key_sets, inplace, reproduce_struct)
                     )
