@@ -4,9 +4,7 @@
  "idx_td filling": [],
  "idx_td key_edits": [],
  "idx_td keys": [],
- "idx_td masking": [
-  "masked_select(mask)"
- ],
+ "idx_td masking": [],
  "idx_td pointwise": [],
  "idx_td reductions": [],
  "idx_td select": [],
@@ -57,9 +55,7 @@
  "nested_stacked_td serialization": [
   "state_dict()"
  ],
- "nested_stacked_td setitem": [
-  "td[mask] = 0"
- ],
+ "nested_stacked_td setitem": [],
  "nested_stacked_td shape": [],
  "nested_stacked_td update": [],
  "nested_td apply": [],
@@ -69,9 +65,7 @@
  ],
  "nested_td key_edits": [],
  "nested_td keys": [],
- "nested_td masking": [
-  "masked_select(mask)"
- ],
+ "nested_td masking": [],
  "nested_td pointwise": [],
  "nested_td reductions": [],
  "nested_td select": [],
@@ -88,9 +82,7 @@
  ],
  "nested_tensorclass key_edits": [],
  "nested_tensorclass keys": [],
- "nested_tensorclass masking": [
-  "masked_select(mask)"
- ],
+ "nested_tensorclass masking": [],
  "nested_tensorclass pointwise": [],
  "nested_tensorclass reductions": [],
  "nested_tensorclass select": [],
@@ -109,9 +101,7 @@
  ],
  "nested_typed_td key_edits": [],
  "nested_typed_td keys": [],
- "nested_typed_td masking": [
-  "masked_select(mask)"
- ],
+ "nested_typed_td masking": [],
  "nested_typed_td pointwise": [],
  "nested_typed_td reductions": [],
  "nested_typed_td select": [],
@@ -128,18 +118,14 @@
  ],
  "stacked_td key_edits": [],
  "stacked_td keys": [],
- "stacked_td masking": [
-  "masked_select(mask)"
- ],
+ "stacked_td masking": [],
  "stacked_td pointwise": [],
  "stacked_td reductions": [],
  "stacked_td select": [],
  "stacked_td serialization": [
   "state_dict()"
  ],
- "stacked_td setitem": [
-  "td[mask] = 0"
- ],
+ "stacked_td setitem": [],
  "stacked_td shape": [],
  "stacked_td update": [],
  "sub_td apply": [],
@@ -147,9 +133,7 @@
  "sub_td filling": [],
  "sub_td key_edits": [],
  "sub_td keys": [],
- "sub_td masking": [
-  "masked_select(mask)"
- ],
+ "sub_td masking": [],
  "sub_td pointwise": [],
  "sub_td reductions": [],
  "sub_td select": [],
@@ -164,9 +148,7 @@
  "sub_td2 filling": [],
  "sub_td2 key_edits": [],
  "sub_td2 keys": [],
- "sub_td2 masking": [
-  "masked_select(mask)"
- ],
+ "sub_td2 masking": [],
  "sub_td2 pointwise": [],
  "sub_td2 reductions": [],
  "sub_td2 select": [],
@@ -183,9 +165,7 @@
  ],
  "td key_edits": [],
  "td keys": [],
- "td masking": [
-  "masked_select(mask)"
- ],
+ "td masking": [],
  "td pointwise": [],
  "td reductions": [],
  "td select": [],
@@ -202,9 +182,7 @@
  ],
  "td_params key_edits": [],
  "td_params keys": [],
- "td_params masking": [
-  "masked_select(mask)"
- ],
+ "td_params masking": [],
  "td_params pointwise": [],
  "td_params reductions": [],
  "td_params select": [
@@ -241,9 +219,7 @@
  ],
  "td_reset_bs key_edits": [],
  "td_reset_bs keys": [],
- "td_reset_bs masking": [
-  "masked_select(mask)"
- ],
+ "td_reset_bs masking": [],
  "td_reset_bs pointwise": [],
  "td_reset_bs reductions": [],
  "td_reset_bs select": [],
@@ -260,9 +236,7 @@
  ],
  "td_with_non_tensor key_edits": [],
  "td_with_non_tensor keys": [],
- "td_with_non_tensor masking": [
-  "masked_select(mask)"
- ],
+ "td_with_non_tensor masking": [],
  "td_with_non_tensor pointwise": [],
  "td_with_non_tensor reductions": [],
  "td_with_non_tensor select": [],
@@ -281,16 +255,16 @@
  ],
  "td_with_non_tensor_and_metadata key_edits": [],
  "td_with_non_tensor_and_metadata keys": [],
- "td_with_non_tensor_and_metadata masking": [
-  "masked_select(mask)"
- ],
+ "td_with_non_tensor_and_metadata masking": [],
  "td_with_non_tensor_and_metadata pointwise": [],
  "td_with_non_tensor_and_metadata reductions": [],
  "td_with_non_tensor_and_metadata select": [],
  "td_with_non_tensor_and_metadata serialization": [
   "state_dict()"
  ],
- "td_with_non_tensor_and_metadata setitem": [],
+ "td_with_non_tensor_and_metadata setitem": [
+  "td[mask] = 0"
+ ],
  "td_with_non_tensor_and_metadata shape": [],
  "td_with_non_tensor_and_metadata update": [],
  "td_with_unbatched apply": [],
@@ -340,18 +314,14 @@
  ],
  "typed_lazy key_edits": [],
  "typed_lazy keys": [],
- "typed_lazy masking": [
-  "masked_select(mask)"
- ],
+ "typed_lazy masking": [],
  "typed_lazy pointwise": [],
  "typed_lazy reductions": [],
  "typed_lazy select": [],
  "typed_lazy serialization": [
   "state_dict()"
  ],
- "typed_lazy setitem": [
-  "td[mask] = 0"
- ],
+ "typed_lazy setitem": [],
  "typed_lazy shape": [],
  "typed_lazy update": [],
  "typed_td apply": [],
@@ -361,9 +331,7 @@
  ],
  "typed_td key_edits": [],
  "typed_td keys": [],
- "typed_td masking": [
-  "masked_select(mask)"
- ],
+ "typed_td masking": [],
  "typed_td pointwise": [],
  "typed_td reductions": [],
  "typed_td select": [],

@@ -3287,6 +3287,26 @@ class TestMetaData:
         assert isinstance(foo, NonTensorStack)
         assert foo.batch_size == (2,)
 
+    @pytest.mark.parametrize(
+        "index",
+        [0, slice(0, 2), torch.tensor([True, False, True, False])],
+        ids=["int", "slice", "mask"],
+    )
+    def test_setitem_number_leaves_metadata(self, index):
+        # A number written at an index goes into the tensors, and a MetaData,
+        # which has no value per element, stays as it is (#2794)
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        td["meta"] = MetaData("cfg")
+        expected = torch.zeros(4)
+        expected[index] = 1
+        with warnings.catch_warnings():
+            # the warning of the cast into the non-tensor entries
+            warnings.simplefilter("ignore", FutureWarning)
+            td[index] = 1
+        assert (td["a"] == expected).all()
+        assert isinstance(td.get("meta"), MetaData)
+        assert td["meta"] == "cfg"
+
     def test_auto_batch_size_scalar_metadata(self):
         # Regression test for #1696: a scalar MetaData entry must not
         # constrain auto_batch_size_ to an empty batch size.

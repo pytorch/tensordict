@@ -541,7 +541,9 @@ def _set_item(
                     names=tensor._maybe_names(),
                     device=tensor.device,
                 )
-        if tensor.stack_dim != 0:
+        # a MetaData is no stack: its __setitem__ leaves it unchanged for a
+        # number or a tensor
+        if isinstance(tensor, NonTensorStack) and tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
         return tensor

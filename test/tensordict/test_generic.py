@@ -3555,6 +3555,42 @@ class TestGeneric:
         assert (td["Grades", "Math"] == torch.Tensor([88.5, 85.0, 95.0])).all()
         assert (td.to_struct_array() == students).all()
 
+    def test_from_struct_array_packed(self):
+        # 12 bytes per record: torch cannot view the "i8" field, which is
+        # copied, while the "f4" field still shares the array's memory
+        x = np.array([(1, 4.0), (2, 5.0), (3, 6.0)], dtype=[("a", "i8"), ("b", "f4")])
+        td = TensorDict.from_struct_array(x)
+        assert td.batch_size == (3,)
+        assert td["a"].dtype == torch.int64
+        assert (td["a"] == torch.tensor([1, 2, 3])).all()
+        assert (td["b"] == torch.tensor([4.0, 5.0, 6.0])).all()
+        x["b"] += 1
+        assert (td["b"] == torch.tensor([5.0, 6.0, 7.0])).all()
+        # to_struct_array writes packed records of int64 and float32 leaves
+        td = TensorDict(
+            a=torch.tensor([1, 2, 3]), b=torch.tensor([4.0, 5.0, 6.0]), batch_size=[3]
+        )
+        assert (TensorDict.from_struct_array(td.to_struct_array()) == td).all()
+
+    @pytest.mark.parametrize(
+        "array",
+        [
+            np.arange(6)[::-1],
+            np.arange(12.0).reshape(6, 2)[::-1, ::-1],
+            np.zeros(6, dtype=[("a", "f4"), ("b", "i8")])["b"],
+        ],
+        ids=["negative_stride", "negative_strides_2d", "packed_field"],
+    )
+    def test_numpy_array_unviewable_strides(self, array):
+        # torch cannot share the memory of these arrays, so they are copied
+        expected = torch.as_tensor(array.copy())
+        td = TensorDict(a=array, batch_size=[6])
+        assert (td["a"] == expected).all()
+        td.set("b", array)
+        assert (td["b"] == expected).all()
+        td["c"] = array
+        assert (td["c"] == expected).all()
+
     @pytest.mark.parametrize(
         "idx",
         [
