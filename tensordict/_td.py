@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import weakref
 from collections import defaultdict
 from collections.abc import Mapping
 from numbers import Number
@@ -211,6 +212,41 @@ def _clone_value(value, recurse: bool):
         return value._clone(recurse=False)
     else:
         return value
+
+
+def _propagate_lock_dense(td, lock_parents_weakrefs):
+    """The eager steps of ``TensorDictBase._propagate_lock`` for an exact TensorDict.
+
+    Each node gets the same lock flag, parent weakrefs and locked schema as
+    the generic method gives it. The exact TensorDict entries are locked by
+    this function, the other tensor collections by their own
+    ``_propagate_lock``, in the order of the entries and with the same list
+    of parent weakrefs.
+    """
+    td._is_locked = True
+    td_dict = td.__dict__
+    if lock_parents_weakrefs is None:
+        lock_parents_weakrefs = [weakref.ref(td)]
+    else:
+        existing = td_dict.get("__lock_parents_weakrefs")
+        if existing:
+            lock_parents_weakrefs = [
+                ref
+                for ref in lock_parents_weakrefs
+                if not any(refref is ref for refref in existing)
+            ]
+            td_dict["__lock_parents_weakrefs"] = existing + lock_parents_weakrefs
+        else:
+            td_dict["__lock_parents_weakrefs"] = list(lock_parents_weakrefs)
+        lock_parents_weakrefs = lock_parents_weakrefs + [weakref.ref(td)]
+    entries = td._tensordict
+    td_dict["_locked_schema"] = _LockedSchema(keys=tuple(entries))
+    for value in entries.values():
+        cls = type(value)
+        if cls is TensorDict:
+            _propagate_lock_dense(value, lock_parents_weakrefs)
+        elif _is_tensor_collection(cls):
+            value._propagate_lock(lock_parents_weakrefs, is_compiling=False)
 
 
 class TensorDict(TensorDictBase):
@@ -524,19 +560,39 @@ class TensorDict(TensorDictBase):
         # An exact TensorDict without dim names: _dense_apply rebuilds it.
         return type(self) is TensorDict and self._td_dim_names is None
 
-    def _dense_apply(self, fn, named, nested_keys, prefix, filter_empty, is_leaf):
+    def _dense_apply(
+        self,
+        fn,
+        named,
+        nested_keys,
+        prefix,
+        filter_empty,
+        is_leaf,
+        device=NO_DEFAULT,
+        call_on_unbatched=False,
+    ):
         # What _apply_nest returns for a node that passes _is_dense_node, with
-        # checked=True and no others, out, inplace, batch size, device or
-        # names: each node gets the batch size and device of its source node.
-        # Entries other than tensors and such nodes take the steps of
-        # _apply_nest for one entry.
-        result = self._new_unsafe(batch_size=self._batch_size, device=self._device)
+        # checked=True and no others, out, inplace, batch size or names: each
+        # node gets the batch size of its source node, and the given device
+        # or, without one, the device of its source node. Entries other than
+        # tensors and such nodes take the steps of _apply_nest for one entry.
+        result = self._new_unsafe(
+            batch_size=self._batch_size,
+            device=self._device if device is NO_DEFAULT else device,
+        )
         _tensordict = result._tensordict
         for key, item in self._tensordict.items():
             cls = type(item)
             if cls is TensorDict and item._td_dim_names is None:
                 item_trsf = item._dense_apply(
-                    fn, named, nested_keys, prefix + (key,), filter_empty, is_leaf
+                    fn,
+                    named,
+                    nested_keys,
+                    prefix + (key,),
+                    filter_empty,
+                    is_leaf,
+                    device,
+                    call_on_unbatched,
                 )
             elif cls is not Tensor and not is_leaf(cls):
                 # the call _apply_nest makes for a nested collection
@@ -544,7 +600,7 @@ class TensorDict(TensorDictBase):
                     fn,
                     inplace=False,
                     batch_size=None,
-                    device=NO_DEFAULT,
+                    device=device,
                     checked=True,
                     named=named,
                     nested_keys=nested_keys,
@@ -553,7 +609,7 @@ class TensorDict(TensorDictBase):
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
                     out=None,
-                    call_on_unbatched=False,
+                    call_on_unbatched=call_on_unbatched,
                 )
             elif named:
                 if nested_keys:
@@ -2529,6 +2585,26 @@ class TensorDict(TensorDictBase):
             keys=tuple(self._tensordict),
         )
 
+    # Override: perf: an exact TensorDict tree locks in one recursion, without
+    # the lists and calls that the generic method makes for each node.
+    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
+        """Locks this tensordict and the tensor collections it holds.
+
+        ``lock_()`` calls it on an unlocked root, with no
+        ``lock_parents_weakrefs``; a locking parent calls it on each entry that
+        is a tensor collection, with the weakrefs of the parents above that
+        entry. It sets ``_is_locked`` and, out of compile, adds the new parents
+        to ``_lock_parents_weakrefs`` and builds ``_locked_schema``, then locks
+        the entries. It leaves the same state as
+        ``TensorDictBase._propagate_lock``, which compiled calls and subclasses
+        take. Returns ``None``.
+        """
+        if is_compiling or type(self) is not TensorDict:
+            return TensorDictBase._propagate_lock(
+                self, lock_parents_weakrefs, is_compiling=is_compiling
+            )
+        _propagate_lock_dense(self, lock_parents_weakrefs)
+
     def _clone(self, recurse: bool = True) -> Self:
         if recurse and self.device is not None:
             return self._clone_recurse()
@@ -3921,7 +3997,7 @@ class _TensorDictKeysView:
                 cls = type(value)
             if _is_tensor_collection(cls):
                 # Don't recurse into non-tensor or pass-through values
-                if not is_non_tensor(cls) and not _pass_through(value):
+                if not _pass_through(value):
                     yield from self._iter_helper(value, prefix=full_key)
             if not leaves_only or is_leaf(cls):
                 yield key if prefix is None else full_key
@@ -3954,7 +4030,7 @@ class _TensorDictKeysView:
                 value = value[0]
                 cls = type(value)
             if _is_tensor_collection(cls):
-                if not is_non_tensor(cls) and not _pass_through(value):
+                if not _pass_through(value):
                     self._nested_key_list(value, full_key, result)
             if not leaves_only or is_leaf(cls):
                 result.append(key if prefix is None else full_key)

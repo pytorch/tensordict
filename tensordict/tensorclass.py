@@ -52,7 +52,7 @@ import numpy as np
 import torch
 from tensordict import base as _td_base
 from tensordict._deprecation import deprecated, warn_deprecated
-from tensordict._lazy import LazyStackedTensorDict
+from tensordict._lazy import _GATHER, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
@@ -124,6 +124,31 @@ __all__ = [
 
 def _identity(cls):
     return cls
+
+
+_PYTREE_SCALAR_LEAVES = (str, int, float, bool, bytes, type(None))
+
+
+def _copy_pytree_containers(value):
+    """Return ``tree_map(_identity, value)``: new dicts, lists and tuples, the same leaves.
+
+    Copies the containers of the exact types ``dict``, ``list`` and ``tuple``
+    itself, which is faster than ``tree_map``, returns other pytree leaves
+    (such as tensors and arrays) as they are, and hands any other value to
+    ``tree_map``.
+    """
+    cls = type(value)
+    if cls in _PYTREE_SCALAR_LEAVES:
+        return value
+    if cls is dict:
+        return {k: _copy_pytree_containers(v) for k, v in value.items()}
+    if cls is list:
+        return [_copy_pytree_containers(v) for v in value]
+    if cls is tuple:
+        return tuple(_copy_pytree_containers(v) for v in value)
+    if tree_is_leaf(value):
+        return value
+    return tree_map(_identity, value)
 
 
 try:
@@ -6330,21 +6355,40 @@ class NonTensorDataBase(TensorClass):
 
     def _clone(self, recurse: bool = True):
         non_tensordict = self._non_tensordict
-        if not recurse and all(map(tree_is_leaf, non_tensordict.values())):
+        td = self._tensordict
+        if (
+            not recurse
+            and not is_compiling()
+            and type(self) is NonTensorData
+            and type(td) is TensorDict
+            and not td._tensordict
+            and non_tensordict.keys() == NonTensorData.__expected_keys__
+            and NonTensorData.__eq__ is not _eq
+        ):
+            # The result of TensorClass._clone, built directly: with these
+            # keys, _from_tensordict's checks pass and __post_init__ (which
+            # has patched __eq__ already) does nothing.
+            result = NonTensorData.__new__(NonTensorData)
+            result.__dict__["_tensordict"] = td._clone(recurse=False)
+            result.__dict__["_non_tensordict"] = {
+                key: _copy_pytree_containers(value)
+                for key, value in non_tensordict.items()
+            }
+        elif not recurse and all(map(tree_is_leaf, non_tensordict.values())):
             # TensorClass._clone would copy the values with tree_map, which
             # returns pytree leaves unchanged: skip it.
             result = self._from_tensordict(
-                self._tensordict._clone(recurse=False),
+                td._clone(recurse=False),
                 dict(non_tensordict),
                 safe=False,
             )
         else:
             result = TensorClass._clone(self, recurse)
-        if not recurse and self._tensordict._is_shared:
+        if not recurse and td._is_shared:
             # The shallow copy holds the same shared wrapper: mark it shared so
             # that reads unwrap the value and in-place updates write through it.
             result._tensordict._is_shared = True
-        elif not recurse and self._tensordict._is_memmap:
+        elif not recurse and td._is_memmap:
             # memmap_(share_non_tensor=True) wraps the value, and the copy is
             # not memory-mapped: give it the value.
             result._non_tensordict["data"] = self.data
@@ -7676,6 +7720,24 @@ class NonTensorStack(LazyStackedTensorDict):
 
     # Override: an advanced index copies the entries, as it does for tensors.
     def __getitem__(self, index: IndexType) -> NonTensorStack | NonTensorDataBase | Any:
+        cls = type(index)
+        if cls is not int and cls is not slice:
+            # perf: a 1-D index tensor, array or list (or a 1-tuple of one,
+            # as a TensorDict passes it) builds the copied stack in one go.
+            # Ints and slices only pay the first type test.
+            if cls is tuple and len(index) == 1:
+                cls = type(index[0])
+                element = index[0]
+            else:
+                element = index
+            if (
+                cls is list
+                or (cls is Tensor or cls is np.ndarray)
+                and element.ndim == 1
+            ):
+                result = self._getitem_copies(index)
+                if result is not None:
+                    return result
         result = super().__getitem__(index)
         if not isinstance(result, NonTensorStack):
             return result
@@ -7692,6 +7754,57 @@ class NonTensorStack(LazyStackedTensorDict):
         # in-place assignment on the result rewrites the source and every
         # alias at once.
         return result.clone(recurse=False)
+
+    def _getitem_copies(self, index: IndexType) -> NonTensorStack | None:
+        """``self[index]`` for an advanced index of the stack dim only, or ``None``.
+
+        Contract: returns what :meth:`__getitem__` returns, or ``None`` when
+        the result could differ, so that :meth:`__getitem__` takes its general
+        path. The general path stacks the selected entries, then clones that
+        stack, which builds a second stack. When the index selects whole
+        entries along one dim, and the entries are ``NonTensorData`` and
+        ``NonTensorStack`` instances, this builds the clone at once from
+        clones of the selected entries. The index errors are those of the
+        general path, which reads the index in the same way.
+        """
+        tensordicts = self.tensordicts
+        if (
+            type(self) is not NonTensorStack
+            or self.stack_dim != 0
+            or not tensordicts
+            # e.g. a stack of MetaData, which stacks in another way
+            or type(tensordicts[0]) not in (NonTensorData, NonTensorStack)
+            # equal values would stack as one NonTensorData
+            or capture_non_tensor_stack()
+            or is_compiling()
+        ):
+            return None
+        split = self._split_index(index)
+        if split.kind != _GATHER or split.block or len(split.shape) != 1:
+            return None
+        if not split.parts:
+            # an empty selection (the shape is (0,)), as the general path
+            # builds it
+            result = self._empty_getitem_result(index, split.dim)
+            if isinstance(result, NonTensorStack):
+                return result.clone(recurse=False)
+            return result
+        items = [None] * split.shape[0]
+        for member, _, positions in split.parts:
+            td = tensordicts[member]
+            if type(td) not in (NonTensorData, NonTensorStack):
+                return None
+            for position in positions:
+                items[position] = td
+        try:
+            result = NonTensorStack(*[td._clone(recurse=False) for td in items])
+        except Exception:
+            # the general path raises its own error
+            return None
+        # as clone(recurse=False) does
+        if result._is_shared or result._is_memmap:
+            result.lock_()
+        return result
 
     # Override: a NonTensorStack is a value: what it takes is wrapped in a
     # NonTensorData (a list in a NonTensorStack), and a memory-mapped stack is
