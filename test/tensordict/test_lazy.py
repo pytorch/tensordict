@@ -4143,6 +4143,85 @@ class TestLazyStackedTensorDict:
             assert piece.batch_size == torch.Size([0, 3])
         assert empty.split([], 0) == ()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("nesting", ["stack", "stack of stacks", "in a td"])
+    @pytest.mark.parametrize("inplace", [False, True])
+    @pytest.mark.parametrize("reproduce_struct", [False, True])
+    def test_split_keys_exclusive_entries(
+        self, stack_dim, nesting, inplace, reproduce_struct
+    ):
+        # An entry that only some members hold goes to the part that holds it
+        # in those members, the last one, and is not copied into the other
+        # parts with reproduce_struct=True (#2803)
+        def make():
+            members = [
+                TensorDict(
+                    a=torch.zeros(2),
+                    b=torch.ones(2),
+                    n=TensorDict(c=torch.zeros(2), batch_size=[2]),
+                    batch_size=[2],
+                )
+                for _ in range(2)
+            ]
+            members[1]["extra"] = NonTensorData("q", batch_size=[2])
+            members[1]["t"] = torch.ones(2)
+            members[1]["n", "x"] = NonTensorData("r", batch_size=[2])
+            td = lazy_stack(members, stack_dim)
+            if nesting == "stack of stacks":
+                td = lazy_stack([td, td.clone()], stack_dim)
+            elif nesting == "in a td":
+                td = TensorDict(s=td, batch_size=td.batch_size)
+            return td
+
+        def leaves(td, depth=2 if nesting == "stack of stacks" else 1):
+            # the leaves of each member: a part may be dense
+            if depth:
+                return [leaves(member, depth - 1) for member in td.unbind(stack_dim)]
+            return {
+                key if isinstance(key, tuple) else (key,)
+                for key in td.keys(True, True, is_leaf=is_leaf_nontensor)
+            }
+
+        def split(*key_sets, **kwargs):
+            td = make()
+            prefix = ("s",) if nesting == "in a td" else ()
+            key_sets = [[(*prefix, *key) for key in keys] for keys in key_sets]
+            parts = td.split_keys(
+                *key_sets,
+                inplace=inplace,
+                reproduce_struct=reproduce_struct,
+                **kwargs,
+            )
+            if inplace:
+                assert parts[-1] is td
+            if nesting == "in a td":
+                # a part without leaves may have no "s"
+                parts = [part.get("s", part) for part in parts]
+            return [leaves(part) for part in parts]
+
+        def expected(*parts):
+            if nesting == "stack of stacks":
+                return [[part, part] for part in parts]
+            return list(parts)
+
+        common = {("b",), ("n", "c")}
+        exclusive = {("extra",), ("t",), ("n", "x")}
+        assert split([("a",)]) == expected(
+            [{("a",)}, {("a",)}], [common, common | exclusive]
+        )
+        assert split([("a",)], [("b",)]) == expected(
+            [{("a",)}, {("a",)}],
+            [{("b",)}, {("b",)}],
+            [{("n", "c")}, {("n", "c"), ("extra",), ("t",), ("n", "x")}],
+        )
+        # As on main, a key set that names an exclusive entry raises, and with
+        # strict=False the entry stays in the last part
+        with pytest.raises(KeyError):
+            split([("a",)], [("extra",)])
+        assert split([("a",)], [("extra",)], strict=False) == expected(
+            [{("a",)}, {("a",)}], [set(), set()], [common, common | exclusive]
+        )
+
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim
         for stack_dim, dim in ((0, 1), (0, -1), (1, 0)):
