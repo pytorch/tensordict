@@ -197,8 +197,7 @@
  "td_params pointwise": [],
  "td_params reductions": [],
  "td_params select": [
-  "clone()",
-  "clone(recurse=False)"
+  "clone()"
  ],
  "td_params serialization": [
   "state_dict()",
