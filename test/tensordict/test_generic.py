@@ -4063,18 +4063,21 @@ class TestGeneric:
         else:
             expected_err = write(expected, moved)
         assert write(store, value) == expected_err
+        # a leaf that cannot be moved raises before anything is written
+        assert describe(store) == describe(expected)
         if expected_err is not None:
             assert case in ("locked_new_key", "other_device_leaf")
             return
-        assert describe(store) == describe(expected)
 
-        if case == "dense" and device == "cpu":
-            # the leaves are on the device of store: no copy of value is made
+        if case in ("dense", "other_device_leaf") and device == "cpu":
+            # the leaves are on the device of store: no copy of value is made.
+            # A leaf on another device is moved with a copy of value, which
+            # syncs once for all the leaves
             with mock.patch.object(
                 TensorDict, "_to", autospec=True, side_effect=TensorDict._to
             ) as to:
                 store[idx] = value
-            assert not to.called
+            assert to.called == (case == "other_device_leaf")
 
     @pytest.mark.parametrize("write", ["update_at_", "sub_update_at_", "sub_set_at_"])
     def test_update_at_tensorclass_value(self, write):

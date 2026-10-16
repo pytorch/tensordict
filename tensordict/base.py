@@ -539,6 +539,29 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
+def _moves_without_sync(td: TensorDictBase, device: torch.device) -> bool:
+    """Returns whether the entries of the ``TensorDict`` ``td`` can be moved to ``device`` one at a time.
+
+    That is the case when each tensor of ``td`` and of its nested ``TensorDict``
+    instances is on ``device`` already, or on the CPU for a CUDA ``device``: such
+    a copy is non-blocking and needs no sync. Any other copy is left to
+    ``td.to(device)``, which syncs once for all the leaves and raises before
+    anything is written; so are the other nested collections. Non-tensor data
+    holds no tensor.
+    """
+    cuda = device.type == "cuda"
+    for item in td._tensordict.values():
+        if isinstance(item, Tensor):
+            if item.device != device and not (cuda and item.device.type == "cpu"):
+                return False
+        elif type(item) is type(td):
+            if not _moves_without_sync(item, device):
+                return False
+        elif not is_non_tensor(item):
+            return False
+    return True
+
+
 def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     """Returns whether some of ``td`` and the tensordicts in ``others`` are lazy stacks and some are not.
 
@@ -2781,7 +2804,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             elif value.device != self.device:
                 from tensordict._td import TensorDict
 
-                if value.device is None and type(value) is TensorDict:
+                if (
+                    value.device is None
+                    and type(value) is TensorDict
+                    and _moves_without_sync(value, self.device)
+                ):
                     # the leaves of a value without a device are often on
                     # self.device already: move the others as they are
                     # written, rather than a copy of the whole tree first
@@ -2813,8 +2840,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ):
                     # a nested TensorDict written at an existing key moves its
                     # own entries, by the rule above
-                    if type(item) is not type(value) or value_key not in keys:
-                        item = item.to(move_to)
+                    if type(item) is not TensorDict or value_key not in keys:
+                        # non-blocking, as value.to(move_to) would copy it
+                        item = item.to(move_to, non_blocking=move_to.type == "cuda")
                 if value_key in keys:
                     self._set_at_str(
                         value_key, item, index, validated=True, non_blocking=False
