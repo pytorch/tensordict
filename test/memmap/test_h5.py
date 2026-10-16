@@ -308,6 +308,23 @@ class TestH5Serialization:
         assert max(sizes, default=0) <= num_rows
         h5td.close()
 
+    def test_h5_foreign_column_as_stack_locked_get_at_cached(self, tmp_path):
+        # a locked td indexes the cached stack of the whole column, so
+        # repeated reads return its members (#2814)
+        with h5py.File(tmp_path / "file.h5", "w") as f:
+            f["pos"] = np.zeros(6, dtype=np.float32)
+            strings = [f"mission {i}" for i in range(6)]
+            f.create_dataset("mission", data=strings, dtype=h5py.string_dtype())
+        h5td = PersistentTensorDict.from_h5(
+            tmp_path / "file.h5", non_tensor_as_stack=True
+        )
+        h5td.lock_()
+        out = h5td.get_at("mission", 1)
+        assert out is h5td.get_at("mission", 1)
+        assert out.tolist() == h5td.get("mission")[1].tolist()
+        h5td.unlock_()
+        h5td.close()
+
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
         td = TensorDict({"a": torch.zeros(3), ("b", "c"): torch.zeros(3)}, [3])

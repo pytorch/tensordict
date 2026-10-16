@@ -1505,9 +1505,11 @@ class PersistentTensorDict(
         if self._backend.is_array(array):
             if not self._backend.is_non_tensor(array):
                 return self._read_array_at(array, idx)
-            out = self._read_non_tensor_rows_at(key, array, idx)
-            if out is not None:
-                return out
+            # a locked td indexes the stack that _get_str caches instead
+            if not self.is_locked:
+                out = self._read_non_tensor_rows_at(key, array, idx)
+                if out is not None:
+                    return out
         return super()._get_at_str(key, idx, default, **kwargs)
 
     _get_at_tuple = _get_at_str
