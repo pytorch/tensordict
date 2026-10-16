@@ -8886,17 +8886,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             array = array.numpy()
             castable = array.dtype.kind in ("c", "i", "f", "b", "u")
         if castable:
-            # torch cannot share the memory of a read-only array, nor of one
-            # whose strides are negative or not a multiple of the item size
-            # (e.g. a field of a packed structured array): copy these.
-            if hasattr(array, "flags") and (
-                not array.flags.writeable
-                or any(
-                    stride < 0 or stride % array.itemsize
-                    for stride in getattr(array, "strides", ())
-                )
-            ):
+            # torch cannot share the memory of a read-only array: copy it.
+            if hasattr(array, "flags") and not array.flags.writeable:
                 array = array.copy()
+            try:
+                return torch.as_tensor(array, device=self.device)
+            except ValueError:
+                if not isinstance(array, np.ndarray):
+                    raise
+            # torch cannot view an array whose strides are negative or not a
+            # multiple of the item size (e.g. a field of a packed structured
+            # array), or whose byte order is not native: copy it to a native,
+            # C-contiguous array. Any other error is raised again here.
+            array = array.astype(array.dtype.newbyteorder("="), order="C")
             return torch.as_tensor(array, device=self.device)
         else:
             from tensordict.tensorclass import NonTensorData

@@ -3572,24 +3572,69 @@ class TestGeneric:
         )
         assert (TensorDict.from_struct_array(td.to_struct_array()) == td).all()
 
+    def test_from_struct_array_big_endian(self):
+        # torch cannot view big-endian fields, which are copied
+        x = np.array([(1.5, 2), (3.5, 4)], dtype=[("x", ">f8"), ("y", ">i4")])
+        td = TensorDict.from_struct_array(x)
+        assert td.batch_size == (2,)
+        assert td["x"].dtype == torch.float64
+        assert td["y"].dtype == torch.int32
+        assert (td["x"] == torch.tensor([1.5, 3.5], dtype=torch.float64)).all()
+        assert (td["y"] == torch.tensor([2, 4], dtype=torch.int32)).all()
+
     @pytest.mark.parametrize(
         "array",
         [
             np.arange(6)[::-1],
             np.arange(12.0).reshape(6, 2)[::-1, ::-1],
             np.zeros(6, dtype=[("a", "f4"), ("b", "i8")])["b"],
+            # NumPy calls these slices contiguous, but torch cannot view them
+            np.zeros(3, dtype=[("a", "i8"), ("b", "i4")])["a"][:1],
+            np.zeros(3, dtype=[("a", "i8"), ("b", "i4")])["a"][:0],
+            np.arange(6, dtype=">i4"),
+            np.arange(12.0, dtype=">f8").reshape(6, 2),
+            np.array(3, dtype=">i8"),
         ],
-        ids=["negative_stride", "negative_strides_2d", "packed_field"],
+        ids=[
+            "negative_stride",
+            "negative_strides_2d",
+            "packed_field",
+            "packed_field_size_1",
+            "packed_field_size_0",
+            "big_endian",
+            "big_endian_2d",
+            "big_endian_0d",
+        ],
     )
-    def test_numpy_array_unviewable_strides(self, array):
+    def test_numpy_array_unviewable(self, array):
         # torch cannot share the memory of these arrays, so they are copied
-        expected = torch.as_tensor(array.copy())
-        td = TensorDict(a=array, batch_size=[6])
+        expected = torch.from_numpy(array.astype(array.dtype.newbyteorder("=")))
+        td = TensorDict(a=array, batch_size=array.shape[:1])
+        assert td["a"].dtype == expected.dtype
         assert (td["a"] == expected).all()
         td.set("b", array)
         assert (td["b"] == expected).all()
         td["c"] = array
         assert (td["c"] == expected).all()
+
+    @pytest.mark.parametrize(
+        "array",
+        [
+            np.arange(6),
+            np.arange(12.0).reshape(6, 2).T,
+            np.arange(12, dtype="<i4")[::2],
+            np.zeros(6, dtype=[("a", "f4"), ("b", "i4")])["b"],
+            np.zeros(6, dtype=bool),
+        ],
+        ids=["1d", "transposed", "step", "struct_field", "bool"],
+    )
+    def test_numpy_array_shares_memory(self, array):
+        # torch can view these arrays, so the tensordict shares their memory
+        td = TensorDict(a=array, batch_size=array.shape[:1])
+        td.set("b", array)
+        td["c"] = array
+        for key in ("a", "b", "c"):
+            assert np.shares_memory(td[key].numpy(), array)
 
     @pytest.mark.parametrize(
         "idx",
