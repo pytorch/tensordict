@@ -91,6 +91,7 @@ from tensordict.utils import (
     is_integer,
     is_non_tensor,
     is_tensorclass,
+    KEY_SEPARATOR,
     lazy_legacy,
     list_to_stack,
     parse_tensor_dict_string,
@@ -130,6 +131,8 @@ __all__ = [
     "LazyStackedTensorDictStore",
     "NestedKey",
     "PackLayout",
+    # Constants
+    "KEY_SEPARATOR",
     # Factory functions
     "from_csv",
     "from_dict",

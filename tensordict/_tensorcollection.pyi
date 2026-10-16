@@ -51,6 +51,7 @@ from tensordict.utils import (
     DeviceType as DeviceType,
     implement_for as implement_for,
     IndexType as IndexType,
+    KEY_SEPARATOR as KEY_SEPARATOR,
     lazy_legacy as lazy_legacy,
     set_lazy_legacy as set_lazy_legacy,
     TensorDictFuture as TensorDictFuture,
@@ -1112,6 +1113,7 @@ class TensorCollection:
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
@@ -1128,6 +1130,7 @@ class TensorCollection:
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
@@ -1476,11 +1479,13 @@ class TensorCollection:
     def contiguous(self) -> Self: ...
     def flatten_keys(
         self,
-        separator: str = ".",
+        separator: str = KEY_SEPARATOR,
         inplace: bool = False,
         is_leaf: Callable[[type], bool] | None = None,
     ) -> Self: ...
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self: ...
+    def unflatten_keys(
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
+    ) -> Self: ...
     def tensor_split(
         self,
         indices_or_sections: int | list[int] | tuple[int, ...] | torch.Tensor,

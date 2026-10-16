@@ -56,6 +56,7 @@ from tensordict.utils import (
     IndexType,
     is_batchedtensor,
     is_non_tensor,
+    KEY_SEPARATOR,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling
@@ -725,6 +726,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -740,6 +742,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -1121,12 +1124,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
-        self, separator: str = ".", inplace: bool = False
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
     ) -> TensorDictBase: ...
 
     @_unlock_and_set(inplace=True)
     def unflatten_keys(
-        self, separator: str = ".", inplace: bool = False
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
     ) -> TensorDictBase: ...
 
     @_unlock_and_set(inplace=True)
