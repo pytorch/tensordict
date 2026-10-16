@@ -18,6 +18,7 @@ from tensordict import (
     set_printoptions,
     tensorclass,
     TensorDict,
+    TypedTensorDict,
 )
 from tensordict._torch_func import _stack as stack_td
 
@@ -812,6 +813,357 @@ class TestSetPrintoptions:
             assert opts["show_shape"] is True
             assert opts["show_batch_size"] is True
         assert get_printoptions() == before
+
+
+@tensorclass
+class Mesh:
+    points: torch.Tensor
+    cells: torch.Tensor
+
+
+class _TypedMesh(TypedTensorDict):
+    points: torch.Tensor
+    cells: torch.Tensor
+
+
+def _mesh_sample():
+    return TensorDict(
+        points=torch.zeros(1000, 3),
+        cells=torch.zeros(1000, 4, dtype=torch.long),
+        data=TensorDict(
+            pressure=torch.zeros(1000),
+            mask=torch.zeros(1000, dtype=torch.bool),
+            batch_size=[1000],
+        ),
+        batch_size=[1000],
+        device="cpu",
+    )
+
+
+def _mesh():
+    return Mesh(
+        points=torch.zeros(1000, 3),
+        cells=torch.zeros(1000, 4, dtype=torch.long),
+        batch_size=[1000],
+        device="cpu",
+    )
+
+
+class TestCompactRepr:
+    """Tests for ``set_printoptions(compact=True)``."""
+
+    def test_compact_default_off(self):
+        assert get_printoptions()["compact"] is False
+        td = _mesh_sample()
+        assert repr(td).startswith("TensorDict(\n    fields={")
+
+    def test_compact_sample(self):
+        with set_printoptions(compact=True):
+            r = repr(_mesh_sample())
+        assert r == (
+            "TensorDict(batch_size=[1000], device=cpu, fields={\n"
+            "    cells: i64[4],\n"
+            "    data: {mask: bool[], pressure: f32[]},\n"
+            "    points: f32[3]})"
+        )
+
+    def test_compact_lazy_stack(self):
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict(points=torch.zeros(10, 3), label=torch.tensor(0)),
+                TensorDict(points=torch.zeros(12, 3), label=torch.tensor(1)),
+            ]
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={\n"
+            "    label: i64[],\n"
+            "    points: f32[-1,3]})"
+        )
+
+    def test_compact_lazy_stack_promotes_dtype(self):
+        # as the stacked tensor, which the default repr shows
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict(x=torch.zeros(3)),
+                TensorDict(x=torch.zeros(3, dtype=torch.float64)),
+            ]
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert (
+            r
+            == "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={x: f64[3]})"
+        )
+
+    def test_compact_lazy_stack_exclusive_fields(self):
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.zeros(())),
+                TensorDict(a=torch.zeros(3), c=TensorDict(d=torch.zeros(2))),
+            ]
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={\n"
+            "    a: f32[3]}, exclusive_fields={0: {b: f32[]}, 1: {c: {d: f32[2]}}})"
+        )
+
+    def test_compact_lazy_stack_calls_no_stack(self, monkeypatch):
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict(
+                    x=torch.zeros(10, 10),
+                    sub=TensorDict(y=torch.zeros(10, 3), batch_size=[10]),
+                    mesh=Mesh(
+                        points=torch.zeros(10, 3),
+                        cells=torch.zeros(10, 4, dtype=torch.long),
+                        batch_size=[10],
+                    ),
+                    name="a",
+                    batch_size=[10],
+                )
+                for _ in range(4)
+            ]
+        )
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(*args, **kwargs):
+            calls.append(args)
+            return stack(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "stack", counting_stack)
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert not calls
+        assert r == (
+            "LazyStackedTensorDict(batch_size=[4,10], stack_dim=0, fields={\n"
+            "    mesh: Mesh{cells: i64[4], points: f32[3]},\n"
+            "    name: str,\n"
+            "    sub: {y: f32[3]},\n"
+            "    x: f32[10]})"
+        )
+        # the default repr stacks the leaves
+        repr(td)
+        assert calls
+
+    @pytest.mark.parametrize("ragged", [False, True])
+    def test_compact_typed_lazy_stack_calls_no_stack(self, monkeypatch, ragged):
+        # a TypedTensorDict over a lazy stack reads the metadata of its members
+        td = _TypedMesh.from_tensordict(
+            LazyStackedTensorDict.lazy_stack(
+                [
+                    TensorDict(
+                        points=torch.zeros(3 + ragged * i),
+                        cells=torch.zeros(4, dtype=torch.long),
+                    )
+                    for i in range(2)
+                ]
+            )
+        )
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(*args, **kwargs):
+            calls.append(args)
+            return stack(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "stack", counting_stack)
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert not calls
+        points = "f32[-1]" if ragged else "f32[3]"
+        assert r == (
+            f"_TypedMesh(batch_size=[2], fields={{cells: i64[4], points: {points}}})"
+        )
+
+    def test_compact_non_tensor(self):
+        td = _mesh_sample()
+        td["name"] = "mesh-A"
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "TensorDict(batch_size=[1000], device=cpu, fields={\n"
+            "    cells: i64[4],\n"
+            "    data: {mask: bool[], pressure: f32[]},\n"
+            "    name: str,\n"
+            "    points: f32[3]})"
+        )
+
+    def test_compact_tensorclass(self):
+        with set_printoptions(compact=True):
+            r = repr(_mesh())
+        assert r == (
+            "Mesh(batch_size=[1000], device=cpu, fields={cells: i64[4], points: f32[3]})"
+        )
+
+    def test_compact_nested_tensorclass(self):
+        td = TensorDict(
+            mesh=_mesh(), pressure=torch.zeros(1000), batch_size=[1000], device="cpu"
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "TensorDict(batch_size=[1000], device=cpu, fields={\n"
+            "    mesh: Mesh{cells: i64[4], points: f32[3]},\n"
+            "    pressure: f32[]})"
+        )
+
+    def test_compact_image_batch(self):
+        td = TensorDict(
+            image=torch.zeros(32, 3, 64, 64),
+            label=torch.zeros(32, dtype=torch.long),
+            batch_size=[32],
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert (
+            r
+            == "TensorDict(batch_size=[32], fields={image: f32[3,64,64], label: i64[]})"
+        )
+
+    def test_compact_2d_batch(self):
+        td = TensorDict(
+            action=torch.zeros(8, 100, 6),
+            done=torch.zeros(8, 100, 1, dtype=torch.bool),
+            obs=torch.zeros(8, 100, 17),
+            next=TensorDict(obs=torch.zeros(8, 100, 17), reward=torch.zeros(8, 100, 1)),
+            batch_size=[8, 100],
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "TensorDict(batch_size=[8,100], fields={\n"
+            "    action: f32[6],\n"
+            "    done: bool[1],\n"
+            "    next: {obs: f32[17], reward: f32[1]},\n"
+            "    obs: f32[17]})"
+        )
+
+    def test_compact_nested_extra_batch_dims(self):
+        td = TensorDict(
+            sub=TensorDict(y=torch.zeros(1000, 5, 3), batch_size=[1000, 5]),
+            x=torch.zeros(1000, 2),
+            batch_size=[1000],
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert (
+            r
+            == "TensorDict(batch_size=[1000], fields={sub: [5]{y: f32[3]}, x: f32[2]})"
+        )
+
+    def test_compact_mixed_devices(self):
+        # with device=None, a leaf that is not on the CPU shows its device
+        td = TensorDict(
+            points=torch.zeros(1000, 3, device="meta"),
+            cells=torch.zeros(1000, 4, dtype=torch.long),
+            batch_size=[1000],
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "TensorDict(batch_size=[1000], fields={cells: i64[4], points: f32[3]@meta})"
+        )
+
+    def test_compact_width(self):
+        # one line while it fits in 80 columns, otherwise one entry per line
+        td = TensorDict({key: torch.zeros(2, 3) for key in "abc"}, batch_size=[2])
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert "\n" not in r
+        assert len(r) <= 80
+        keys = ["a", "b", "c", "d", "e", "f"]
+        td = TensorDict({key * 8: torch.zeros(2, 3) for key in keys}, batch_size=[2])
+        with set_printoptions(compact=True):
+            r = repr(td)
+        lines = r.split("\n")
+        assert len(lines) == len(keys) + 1
+        assert all(len(line) <= 80 for line in lines)
+        assert lines[1] == "    aaaaaaaa: f32[3],"
+        # a nested entry that does not fit is broken in the same way
+        td = TensorDict(
+            sub=TensorDict(
+                {key * 12: torch.zeros(2, 3) for key in keys}, batch_size=[2]
+            ),
+            batch_size=[2],
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        lines = r.split("\n")
+        assert lines[1] == "    sub: {"
+        assert lines[2] == "        aaaaaaaaaaaa: f32[3],"
+        assert lines[-1] == "        ffffffffffff: f32[3]}})"
+
+    def test_compact_width_exclusive_fields(self):
+        # the fields part leaves room for the exclusive_fields that follow it
+        for n in (1, 30, 40):
+            td = LazyStackedTensorDict.lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), x=torch.zeros(1)),
+                    TensorDict(a=torch.zeros(3), **{"y" * n: torch.zeros(1)}),
+                ]
+            )
+            with set_printoptions(compact=True):
+                r = repr(td)
+            assert all(len(line) <= 80 for line in r.split("\n")), r
+
+    def test_compact_shape_only(self):
+        td = TensorDict(
+            image=torch.zeros(32, 3, 64, 64),
+            label=torch.zeros(32, dtype=torch.long),
+            batch_size=[32],
+            device="cpu",
+        )
+        with set_printoptions(compact=True, show_dtype=False):
+            r = repr(td)
+        assert r == (
+            "TensorDict(batch_size=[32], device=cpu, fields={image: [3,64,64], label: []})"
+        )
+        with set_printoptions(compact=True, verbose=False, show_batch_size=False):
+            r = repr(td)
+        assert r == "TensorDict(fields={image: [3,64,64], label: []})"
+
+    def test_compact_ignores_entry_options(self):
+        # plain would read the values: compact mode ignores it
+        td = TensorDict(a=torch.ones(10, 2), batch_size=[10])
+        with set_printoptions(
+            compact=True, plain=True, show_grad=True, show_storage_size=True
+        ):
+            r = repr(td)
+        assert r == "TensorDict(batch_size=[10], fields={a: f32[2]})"
+
+    def test_compact_sort_keys(self):
+        td = TensorDict(c=torch.zeros(2), a=torch.zeros(2), b=torch.zeros(2))
+        with set_printoptions(compact=True, sort_keys="insertion"):
+            r = repr(td)
+        assert (
+            r == "TensorDict(batch_size=[], fields={c: f32[2], a: f32[2], b: f32[2]})"
+        )
+
+    def test_compact_non_tensor_stack_keeps_repr(self):
+        from tensordict import NonTensorStack
+
+        stack = NonTensorStack("a", "b")
+        expected = repr(stack)
+        with set_printoptions(compact=True):
+            assert repr(stack) == expected
+
+    def test_compact_dtype_codes(self):
+        td = TensorDict(
+            a=torch.zeros(1, dtype=torch.bfloat16),
+            b=torch.zeros(1, dtype=torch.uint8),
+            c=torch.zeros(1, dtype=torch.complex64),
+            d=torch.zeros(1, dtype=torch.float16),
+        )
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert r == (
+            "TensorDict(batch_size=[], fields={a: bf16[1], b: u8[1], c: c64[1], d: f16[1]})"
+        )
 
 
 if __name__ == "__main__":

@@ -68,6 +68,7 @@ from tensordict.utils import (
     _cache_while_locked,
     _canonicalize_tensor,
     _CloudpickleWrapper,
+    _compact_repr,
     _convert_list_to_stack,
     _copy_cached_result,
     _erase_cache_first,
@@ -1999,6 +2000,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def __repr__(self) -> str:
         try:
+            if _REPR_OPTIONS["compact"]:
+                compact = _compact_repr(self)
+                if compact is not None:
+                    return compact
             string = ",\n".join(self._repr_parts())
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
