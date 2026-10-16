@@ -1484,8 +1484,12 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
     ``key`` is listed by ``_NESTED_TENSORS_AS_LISTS``, as ``("n", "0", "x")``
     for the entry ``"x"`` of member ``0`` of the lazy stack ``td["n"]``.
     ``source`` has no such keys: its tensor at ``("n", "x")`` is read at the
-    index of the member along the stack dim (#2775). ``None`` where
-    ``source`` lacks the entry or the size of the stack dim differs.
+    index of the member along the stack dim (#2775). A tensor that lacks the
+    stack dim, or has it with another size, is broadcast to the stacked leaf
+    as ``copy_`` would, and raises as that ``copy_`` does where it cannot
+    (#2834). Each member holds the whole of an unbatched leaf, so such a
+    tensor is broadcast to the leaf of the member. ``None`` where ``source``
+    lacks the entry.
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict.typedtensordict import TypedTensorDict
@@ -1509,9 +1513,23 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
             return None
     if not isinstance(source, Tensor):
         return None
-    for dim, size, index in members:
+    for i, (dim, size, index) in enumerate(members):
         if source.ndim <= dim or source.shape[dim] != size:
-            return None
+            # the shape of the leaf that this stack reads, as a dense
+            # tensordict holds it; an unbatched leaf has no stack dim
+            shape = list(td.shape)
+            unbatched = _is_unbatched(td)
+            if not unbatched:
+                for inner_dim, inner_size, _ in reversed(members[i:]):
+                    shape.insert(inner_dim, inner_size)
+            try:
+                source = source.expand(shape)
+            except RuntimeError:
+                # raise as copy_ into a dense leaf of that shape does
+                source.new_empty(shape, device="meta").copy_(source.to("meta"))
+                raise
+            if unbatched:
+                return source
         source = source.select(dim, index)
     return source
 
