@@ -83,8 +83,11 @@ mkdir -p "$JUNIT_DIR"
 python -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
 test_status=0
 # Run the tests in TD_TEST_WORKERS pytest-xdist workers (4 unless the job sets
-# it), except two files that run on their own afterwards.
-python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" \
+# it), except two files that run on their own afterwards. With worksteal, an
+# idle worker takes tests from the queue of a busy one: the default scheduler
+# gives each worker a block of consecutive tests at the start, so a run of slow
+# tests, such as those of TestContainersCompile, would stay on one worker.
+python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist worksteal \
     --ignore test/distributed/test_distributed.py \
     --ignore test/utils/test_setup.py \
     --instafail -v --durations 20 --timeout 120 \

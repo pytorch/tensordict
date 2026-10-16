@@ -11811,16 +11811,16 @@ _SYNC_COUNTER = 0
 
 
 @pytest.fixture
-def _path_td_sync():
+def _path_td_sync(monkeypatch):
     def _sync_td(self):
         global _SYNC_COUNTER
         _SYNC_COUNTER += 1
         super(TensorDict, self)._sync_all()
 
-    _sync_all = TensorDict._sync_all
-    TensorDict._sync_all = _sync_td
-    yield
-    TensorDict._sync_all = _sync_all
+    # monkeypatch deletes the attribute on teardown, so TensorDict inherits
+    # _sync_all again. Assigning the old value back would leave an override
+    # in TensorDict.__dict__, which TestOneImplementation then reports.
+    monkeypatch.setattr(TensorDict, "_sync_all", _sync_td)
 
 
 if __name__ == "__main__":
