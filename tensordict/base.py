@@ -80,6 +80,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _KEY_ERROR,
+    _LIBRARY_DIRS,
     _lock_blocked,
     _LOCK_ERROR,
     _lock_warn,
@@ -98,6 +99,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _user_stacklevel,
     _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
@@ -1561,6 +1563,38 @@ def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
         # a list of strings, for instance, is stored as non-tensor data
         return not is_tensor_collection(td._validate_value(value, check_shape=False))
     return True
+
+
+def _members_hold_leaf(members: list[TensorDictBase]) -> bool:
+    """Whether a member of a lazy stack holds a leaf, counting non-tensor data and the members of the lazy stacks it holds (#2807)."""
+    for member in members:
+        for _ in member.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR):
+            return True
+    return False
+
+
+def _in_dense_is_empty() -> bool:
+    """Whether the calling ``is_empty()`` runs for a ``TensorDict.is_empty`` call, which warns once, if its own result is ``True`` (#2807)."""
+    frame = sys._getframe(2)
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        if (
+            frame.f_code.co_name == "is_empty"
+            and frame.f_globals.get("__name__") == "tensordict._td"
+        ):
+            return True
+        frame = frame.f_back
+    return False
+
+
+def _warn_lazy_is_empty() -> None:
+    """Warns that ``is_empty()`` returns ``True`` for a lazy stack whose members hold leaves, until 0.17 (#2807)."""
+    warnings.warn(
+        "is_empty() returns True for a lazy stack that lists no leaf, while "
+        "some of its members hold leaves. Starting with TensorDict 0.17, the "
+        "default will change to returning True only if every member is empty.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
 
 
 def _warn_get_kwargs(
@@ -5691,7 +5725,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def is_empty(self) -> bool:
         """Returns ``True`` if the tensordict has no leaf.
 
-        Empty sub-tensordicts do not count as leaves.
+        Empty sub-tensordicts do not count as leaves. A lazy stack counts only
+        the tensors that all its members share: it returns ``True`` when they
+        share none, and warns when some member holds a leaf. Starting with
+        TensorDict 0.17, the default will change to returning ``True`` only if
+        every member is empty.
 
         Examples:
             >>> import torch
@@ -5708,6 +5746,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return not list(self.keys(True, True))
         for _ in self.keys(True, True):
             return False
+        members = self._members_as_lists()
+        if (
+            members is not None
+            and _members_hold_leaf(members)
+            and not _in_dense_is_empty()
+        ):
+            _warn_lazy_is_empty()
         return True
 
     # Dict features: setdefault, items, values, keys, ...
