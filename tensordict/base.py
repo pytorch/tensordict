@@ -1705,8 +1705,10 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
     ``key`` is listed by ``_NESTED_TENSORS_AS_LISTS``, as ``("n", "0", "x")``
     for the entry ``"x"`` of member ``0`` of the lazy stack ``td["n"]``.
     ``source`` has no such keys: its tensor at ``("n", "x")`` is read at the
-    index of the member along the stack dim (#2775). ``None`` where
-    ``source`` lacks the entry or the size of the stack dim differs.
+    index of the member along the stack dim (#2775). A tensor that lacks the
+    stack dim, or has it with another size, broadcasts as ``copy_`` into the
+    stacked leaf broadcasts it, and raises as that ``copy_`` does where it
+    cannot (#2834). ``None`` where ``source`` lacks the entry.
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict.typedtensordict import TypedTensorDict
@@ -1730,10 +1732,20 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
             return None
     if not isinstance(source, Tensor):
         return None
+    # the shape of the leaf that the stacks read, as a dense tensordict holds it
+    shape = list(td.shape)
+    for dim, size, _ in reversed(members):
+        shape.insert(dim, size)
     for dim, size, index in members:
         if source.ndim <= dim or source.shape[dim] != size:
-            return None
+            try:
+                source = source.expand(shape)
+            except RuntimeError:
+                # raise as copy_ into a dense leaf of that shape does
+                source.new_empty(shape, device="meta").copy_(source.to("meta"))
+                raise
         source = source.select(dim, index)
+        del shape[dim]
     return source
 
 
