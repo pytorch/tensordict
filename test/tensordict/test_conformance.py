@@ -21,6 +21,14 @@ Each test compares its failing cases with that list: a failure that is not
 listed is a regression, and a listed case that passes must be removed from the
 list. Run with ``TENSORDICT_UPDATE_KNOWN_FAILURES=1`` to rewrite the list.
 
+:class:`TestContainersCompile` runs the same operations through
+``torch.compile(fullgraph=True, dynamic=True)`` and compares each result with
+the eager result on the same type. Its known failures
+are in ``conformance_compile_known_failures.json``. They change with the torch
+version, so these tests run only with ``TENSORDICT_COMPILE_CONFORMANCE=1``,
+which the CI job with the newest stable torch sets. Rewrite that list with the
+torch of that job.
+
 :class:`TestOneImplementation` checks that the subclasses of
 ``TensorDictBase`` override its public methods only where
 :data:`_ALLOWED_OVERRIDES` gives a reason, and that the private methods they
@@ -46,8 +54,15 @@ from tensordict.utils import is_non_tensor
 _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
     "conformance_known_failures.json"
 )
-_KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
+_COMPILE_KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
+    "conformance_compile_known_failures.json"
+)
+_KNOWN_FAILURES = {
+    path: json.loads(path.read_text())
+    for path in (_KNOWN_FAILURES_FILE, _COMPILE_KNOWN_FAILURES_FILE)
+}
 _UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
+_COMPILE_CONFORMANCE = bool(os.environ.get("TENSORDICT_COMPILE_CONFORMANCE"))
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:A destination should be provided when cloning a PersistentTensorDict"
@@ -114,6 +129,13 @@ _OPS = {
         "del_(('a', 'x'))": _inplace(lambda td: td.del_(("a", "x"))),
         "rename_key_('a', 'z')": _inplace(lambda td: td.rename_key_("a", "z")),
         "rename_key_('a', ())": _inplace(lambda td: td.rename_key_("a", ())),
+        "rename_keys({'a': 'b', 'b': 'a'})": lambda td: td.rename_keys(
+            {"a": "b", "b": "a"}
+        ),
+        "rename_keys({'a': ('n', 'x'), 'missing': 'z'}, strict=False)": lambda td: (
+            td.rename_keys({"a": ("n", "x"), "missing": "z"}, strict=False)
+        ),
+        "rename_keys({'a': 'b'})": lambda td: td.rename_keys({"a": "b"}),
         "flatten_keys()": lambda td: td.flatten_keys(),
         "flatten_keys(inplace=True)": _inplace(
             lambda td: td.flatten_keys(inplace=True)
@@ -466,16 +488,17 @@ def _compare(make, op):
     return None if difference is None else difference[:160]
 
 
-def _check_known_failures(key, failures):
-    """Compare ``failures`` ({case: reason}) with the known failures of ``key``."""
+def _check_known_failures(key, failures, path=_KNOWN_FAILURES_FILE, hint=None):
+    """Compare ``failures`` ({case: reason}) with the known failures of ``key`` in ``path``.
+
+    ``hint`` ends the message of a failure.
+    """
     if _UPDATE_KNOWN_FAILURES:
-        known = json.loads(_KNOWN_FAILURES_FILE.read_text())
+        known = json.loads(path.read_text())
         known[key] = sorted(failures)
-        _KNOWN_FAILURES_FILE.write_text(
-            json.dumps(dict(sorted(known.items())), indent=1) + "\n"
-        )
+        path.write_text(json.dumps(dict(sorted(known.items())), indent=1) + "\n")
         return
-    known = set(_KNOWN_FAILURES.get(key, ()))
+    known = set(_KNOWN_FAILURES[path].get(key, ()))
     new = {case: reason for case, reason in failures.items() if case not in known}
     fixed = sorted(known.difference(failures))
     message = []
@@ -487,9 +510,10 @@ def _check_known_failures(key, failures):
     if fixed:
         message.append(
             f"{len(fixed)} known failures pass now; remove them from "
-            f"{_KNOWN_FAILURES_FILE.name} under {key!r}:\n"
-            + "\n".join(f"  {case}" for case in fixed)
+            f"{path.name} under {key!r}:\n" + "\n".join(f"  {case}" for case in fixed)
         )
+    if message and hint:
+        message.append(hint)
     assert not message, "\n".join(message)
 
 
@@ -506,6 +530,83 @@ class TestContainersMatchDense:
             if difference is not None:
                 failures[case] = difference
         _check_known_failures(f"{td_name} {group}", failures)
+
+
+# The types and operations that TestContainersCompile leaves out, with the reason.
+_NOT_COMPILED_CONTAINERS = {
+    "td_h5": "Dynamo does not trace the h5py calls that read and write the file",
+    "permute_td": "legacy lazy view, removed in 0.17",
+    "squeezed_td": "legacy lazy view, removed in 0.17",
+    "unsqueezed_td": "legacy lazy view, removed in 0.17",
+}
+_NOT_COMPILED_OPS = {
+    "any()": "returns a Python bool, so it needs the values of the tensors",
+    "pickle": "Dynamo does not trace pickle",
+    "share_memory_()": "Dynamo does not trace Tensor.share_memory_",
+}
+_COMPILE_CONTAINERS = [
+    name for name in _CONTAINERS if name not in _NOT_COMPILED_CONTAINERS
+]
+_COMPILE_HINT = (
+    "The known failures under torch.compile change with the torch version "
+    f"(this is torch {torch.__version__}). If the torch of the CI job that runs "
+    "them changed, rewrite them with TENSORDICT_UPDATE_KNOWN_FAILURES=1 "
+    "TENSORDICT_COMPILE_CONFORMANCE=1 under that torch."
+)
+
+
+def _compare_compiled(make, op):
+    """Run ``op`` compiled and in eager mode on new tensordicts of ``make``; describe a difference.
+
+    ``op`` compiles with the default backend, and with ``dynamic=True``, which
+    traces the sizes as symbols, as Dynamo does once a size changes between
+    calls.
+    """
+    # The compiled lambda below has the same code for every case: without a
+    # reset, its recompilations would reach Dynamo's limit, an error with
+    # fullgraph=True.
+    torch._dynamo.reset()
+    torch.manual_seed(0)
+    expected, eager_error = _run(op, make("cpu"))
+    # The lambda makes Dynamo trace the operations that are builtins, such as len.
+    compiled = torch.compile(lambda td: op(td), fullgraph=True, dynamic=True)
+    torch.manual_seed(0)
+    result, error = _run(compiled, make("cpu"))
+    if eager_error is not None:
+        # With fullgraph=True, Dynamo raises its own error for an exception
+        # that leaves the compiled function.
+        return None if error is not None else f"returns, eager {_describe(eager_error)}"
+    if error is not None:
+        return _describe(error)
+    difference = _difference(result, expected)
+    return None if difference is None else difference[:160]
+
+
+@pytest.mark.skipif(
+    not _COMPILE_CONFORMANCE,
+    reason="the known failures under torch.compile depend on the torch version; "
+    "set TENSORDICT_COMPILE_CONFORMANCE=1 to run them",
+)
+class TestContainersCompile:
+    """Each operation compiles with fullgraph=True on every tensordict type, and gives its eager result."""
+
+    @pytest.mark.parametrize("group", list(_OPS))
+    @pytest.mark.parametrize("td_name", _COMPILE_CONTAINERS)
+    def test_ops(self, td_name, group):
+        make = getattr(TestTensorDictsBase, td_name)
+        failures = {}
+        for case, op in _OPS[group].items():
+            if case in _NOT_COMPILED_OPS:
+                continue
+            difference = _compare_compiled(make, op)
+            if difference is not None:
+                failures[case] = difference
+        _check_known_failures(
+            f"{td_name} {group}",
+            failures,
+            _COMPILE_KNOWN_FAILURES_FILE,
+            hint=_COMPILE_HINT,
+        )
 
 
 # The modules that define subclasses of TensorDictBase, besides tensordict.

@@ -18,7 +18,7 @@ import os.path
 import sys
 import warnings
 import weakref
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from functools import wraps
 from pathlib import Path
@@ -68,6 +68,7 @@ from tensordict.utils import (
     _cache_while_locked,
     _canonicalize_tensor,
     _CloudpickleWrapper,
+    _compact_repr,
     _convert_list_to_stack,
     _copy_cached_result,
     _erase_cache_first,
@@ -79,6 +80,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _is_unbatched,
     _KEY_ERROR,
+    _LIBRARY_DIRS,
     _lock_blocked,
     _LOCK_ERROR,
     _lock_warn,
@@ -97,6 +99,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _user_stacklevel,
     _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
@@ -107,6 +110,7 @@ from tensordict.utils import (
     is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
+    KEY_SEPARATOR,
     list_to_stack,
     set_capture_non_tensor_stack,
     unravel_key,
@@ -363,6 +367,129 @@ def _is_inside(key: NestedKey, other: NestedKey) -> bool:
     key = (key,) if isinstance(key, str) else key
     other = (other,) if isinstance(other, str) else other
     return len(key) > len(other) and key[: len(other)] == other
+
+
+def _rename_keys_pairs(
+    mapping: Mapping[NestedKey, NestedKey],
+) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
+    """The pairs of tuple keys of :meth:`~TensorDictBase.rename_keys`, after the checks that read no data."""
+    pairs = []
+    for src, dst in mapping.items():
+        pair = []
+        for key in (src, dst):
+            if not isinstance(key, (str, tuple)):
+                raise TypeError(
+                    f"Expected a key to be a string or a tuple of strings but found {type(key)}"
+                )
+            key_tuple = _unravel_key_to_tuple(key)
+            if not key_tuple:
+                raise KeyError(_GENERIC_NESTED_ERR.format(key))
+            pair.append(key_tuple)
+        pairs.append(tuple(pair))
+    for side, keys in (
+        ("source", [src for src, _ in pairs]),
+        ("destination", [dst for _, dst in pairs]),
+    ):
+        for i, key in enumerate(keys):
+            for other in keys[:i]:
+                if key == other:
+                    raise ValueError(f"The key {key} is a {side} more than once.")
+                if _is_inside(key, other) or _is_inside(other, key):
+                    raise ValueError(
+                        f"The {side}s {other} and {key} lie inside one another, so "
+                        "the result would depend on the order of the mapping."
+                    )
+    return pairs
+
+
+def _keep(value):
+    return value
+
+
+def _rename_entries(
+    tds: list[TensorDictBase],
+    pairs: list[tuple[tuple[str, ...], tuple[str, ...]]],
+    *,
+    strict: bool,
+    prune_root: bool,
+) -> None:
+    """Moves the entries of ``pairs`` in each tensordict of ``tds``: the end of :meth:`~TensorDictBase.rename_keys`.
+
+    ``tds`` are private copies, so a call that raises halfway changes nothing
+    the user holds. Every source is read before any is deleted, and the
+    collisions are checked after the deletions, so swaps and chains work. A
+    sub-tensordict that the move empties is deleted only if it is empty in
+    every tensordict of ``tds``, and never when it is a field of a
+    tensorclass (``prune_root=False`` for the fields of the root).
+    """
+    moves = []
+    for td in tds:
+        keys = td.keys(include_nested=True)
+        present = []
+        for src, dst in pairs:
+            if src not in keys:
+                if strict:
+                    raise KeyError(
+                        _KEY_ERROR.format(
+                            src[0] if len(src) == 1 else src,
+                            type(td).__name__,
+                            sorted(keys, key=str),
+                        )
+                    )
+                continue
+            if src != dst:
+                present.append((src, dst))
+        moves.append(present)
+    values = [
+        [td._get_tuple(src, NO_DEFAULT) for src, _ in present]
+        for td, present in zip(tds, moves)
+    ]
+    for td, present in zip(tds, moves):
+        for src, _ in present:
+            td.del_(src)
+    parents = {
+        src[:i]
+        for present in moves
+        for src, _ in present
+        for i in range(1 if prune_root else 2, len(src))
+    }
+    for parent in sorted(parents, key=len, reverse=True):
+        holders = []
+        for td in tds:
+            group = td._get_tuple(parent, None)
+            if group is None:
+                continue
+            container = td._get_tuple(parent[:-1], None) if len(parent) > 1 else td
+            if (
+                _is_tensorclass(type(container))
+                or not isinstance(group, TensorDictBase)
+                or group._has_exclusive_keys
+                or list(group.keys())
+            ):
+                holders = None
+                break
+            holders.append(td)
+        for td in holders or ():
+            td.del_(parent)
+    for td, present in zip(tds, moves):
+        keys = td.keys(include_nested=True)
+        for _, dst in present:
+            if dst in keys:
+                raise ValueError(
+                    f"The destination {dst} is already present and is not renamed away."
+                )
+            for i in range(1, len(dst)):
+                value = td._get_tuple(dst[:i], None)
+                if value is None:
+                    break
+                if _is_leaf_nontensor(type(value)):
+                    raise ValueError(
+                        f"The destination {dst} runs through the entry {dst[:i]}, "
+                        "which is not a tensordict."
+                    )
+    for td, present, vals in zip(tds, moves, values):
+        for (_, dst), value in zip(present, vals):
+            td._set_tuple(dst, value, inplace=False, validated=True, non_blocking=False)
 
 
 def _holds_its_tensors(td: TensorDictBase) -> bool:
@@ -1106,7 +1233,11 @@ def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
 
 
 def _check_member_as_lists(td: TensorDictBase, is_leaf) -> None:
-    """Raises if an in-place method walks the copies that the member ``td`` reads (#2592)."""
+    """Raises if an in-place method walks the copies that ``td`` reads (#2592).
+
+    ``td`` is a member of a lazy stack, or a tensordict that reads copies,
+    such as a file, which a tensordict holds (#2775).
+    """
     if td._reads_return_copies and is_leaf is _NESTED_TENSORS_AS_LISTS:
         _raise_if_inplace_call()
 
@@ -1435,6 +1566,38 @@ def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
     return True
 
 
+def _members_hold_leaf(members: list[TensorDictBase]) -> bool:
+    """Whether a member of a lazy stack holds a leaf, counting non-tensor data and the members of the lazy stacks it holds (#2807)."""
+    for member in members:
+        for _ in member.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR):
+            return True
+    return False
+
+
+def _in_dense_is_empty() -> bool:
+    """Whether the calling ``is_empty()`` runs for a ``TensorDict.is_empty`` call, which warns once, if its own result is ``True`` (#2807)."""
+    frame = sys._getframe(2)
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        if (
+            frame.f_code.co_name == "is_empty"
+            and frame.f_globals.get("__name__") == "tensordict._td"
+        ):
+            return True
+        frame = frame.f_back
+    return False
+
+
+def _warn_lazy_is_empty() -> None:
+    """Warns that ``is_empty()`` returns ``True`` for a lazy stack whose members hold leaves, until 0.17 (#2807)."""
+    warnings.warn(
+        "is_empty() returns True for a lazy stack that lists no leaf, while "
+        "some of its members hold leaves. Starting with TensorDict 0.17, the "
+        "default will change to returning True only if every member is empty.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -1489,6 +1652,147 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     )
 
 
+def _all_leaf_keys(td: TensorDictBase) -> list:
+    """The keys of the leaves of ``td``, non-tensor ones included, as tuples.
+
+    Unlike ``keys(True, True, is_leaf=_is_leaf_nontensor)``, they include the
+    leaves that only some members of a lazy stack hold (#2803).
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    keys = {}
+    nodes = [((), td)]
+    while nodes:
+        prefix, td = nodes.pop()
+        if type(td) is TensorDict:
+            # the common case, read without the checks below
+            items = td._tensordict.items()
+        else:
+            # these hold their entries in the tensordict that they wrap
+            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
+                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+            if isinstance(td, LazyStackedTensorDict):
+                nodes.extend((prefix, member) for member in td.tensordicts)
+                continue
+            items = td.items()
+        for key, value in items:
+            cls = type(value)
+            if cls is TensorDict or (
+                _is_tensor_collection(cls) and not _is_non_tensor(cls)
+            ):
+                nodes.append(((*prefix, key), value))
+            else:
+                keys[(*prefix, key)] = None
+    return list(keys)
+
+
+def _has_unmatched_member_key(keys: list, source: dict) -> bool:
+    """Whether a key of ``keys`` that ``source`` lacks may pass through a member of a lazy stack.
+
+    Such a key has a member index, as ``("n", "0", "x")`` (#2775).
+    """
+    for key in keys:
+        if type(key) is tuple and key not in source and any(map(str.isdigit, key)):
+            return True
+    return False
+
+
+def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> Any:
+    """The tensor of ``source`` for the key of ``td`` that passes through members of lazy stacks, or ``None``.
+
+    ``key`` is listed by ``_NESTED_TENSORS_AS_LISTS``, as ``("n", "0", "x")``
+    for the entry ``"x"`` of member ``0`` of the lazy stack ``td["n"]``.
+    ``source`` has no such keys: its tensor at ``("n", "x")`` is read at the
+    index of the member along the stack dim (#2775). ``None`` where
+    ``source`` lacks the entry or the size of the stack dim differs.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    members = []
+    for part in key:
+        if _is_tensorclass(type(td)):
+            # a lazy stack of tensorclasses is a tensorclass over the stack
+            td = td._tensordict
+        if isinstance(td, TypedTensorDict):
+            # a TypedTensorDict over a lazy stack lists the leaves of its members
+            td = td._source
+        if isinstance(td, LazyStackedTensorDict):
+            members.append((td.stack_dim, len(td.tensordicts), int(part)))
+            td = td.tensordicts[int(part)]
+            continue
+        if not _is_tensor_collection(type(source)):
+            return None
+        td, source = td._get_str(part, None), source._get_str(part, None)
+        if td is None:
+            return None
+    if not isinstance(source, Tensor):
+        return None
+    for dim, size, index in members:
+        if source.ndim <= dim or source.shape[dim] != size:
+            return None
+        source = source.select(dim, index)
+    return source
+
+
+def _reads_copies_under(td: TensorDictBase, keys: list) -> bool:
+    """Whether a key of ``keys`` passes through or names a nested tensordict of ``td`` whose leaves are read as copies.
+
+    Such as a lazy stack, which stacks the leaves of its members, or an h5
+    file (#2780). Only the entries on the path of each key are read, and the
+    tree under a key that names a tensordict.
+    """
+    tensordict_type = _TENSORDICT_TYPE
+    # the entries that keys name: the leaves under them are written too
+    named = []
+    for key in keys:
+        node = td
+        for part in key:
+            if type(node) is tensordict_type:
+                node = node._tensordict.get(part)
+                continue
+            if node is not td:
+                # td itself writes back the copies that it reads
+                copies = _entry_reads_copies(node)
+                if copies:
+                    return True
+                if copies is None:
+                    break
+            node = node._get_str(part, None)
+        else:
+            if type(node) is not Tensor:
+                named.append(node)
+    while named:
+        node = named.pop()
+        if type(node) is not tensordict_type:
+            copies = _entry_reads_copies(node)
+            if copies:
+                return True
+            if copies is None:
+                continue
+        for value in node.values():
+            if type(value) is not Tensor:
+                named.append(value)
+    return False
+
+
+def _entry_reads_copies(value: Any) -> bool | None:
+    """Whether the tensordict ``value`` reads its leaves as copies, or ``None`` for an entry that is not a tensordict.
+
+    Called by ``_reads_copies_under``.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+
+    cls = type(value)
+    if not _is_tensor_collection(cls) or _is_non_tensor(cls):
+        return None
+    while _is_tensorclass(type(value)):
+        value = value._tensordict
+    return isinstance(value, LazyStackedTensorDict) or value._reads_return_copies
+
+
 def _has_typed_tensordict(td: TensorDictBase) -> bool:
     """Whether ``td`` or one of its nested tensordicts is a ``TypedTensorDict``, which lists the leaves of the members of a lazy source.
 
@@ -1506,6 +1810,39 @@ def _has_typed_tensordict(td: TensorDictBase) -> bool:
         _has_typed_tensordict(value)
         for value in td.values()
         if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
+def _copy_leaves(
+    dests: list[Tensor], sources: list[Tensor], non_blocking: bool
+) -> None:
+    """Copies each tensor of ``sources`` into the tensor of ``dests`` at the same position, as ``update_`` does."""
+    # _foreach_copy_compiled cannot run under a torch.func transform
+    # (vmap), _foreach can. Same check as in _foreach, which explains it.
+    if torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
+        _foreach("copy_", dests, sources, non_blocking=non_blocking)
+    elif is_compiling():
+        _foreach_copy_compiled(dests, sources, non_blocking=non_blocking)
+    elif _any_unbatched(dests) or _any_unbatched(sources):
+        _foreach("copy_", dests, sources, non_blocking=non_blocking)
+    else:
+        # what _foreach does for copy_ outside of a torch.func
+        # transform and without unbatched tensors, without its
+        # overhead (about 2 µs, as much as the copy of 2 leaves)
+        torch._foreach_copy_(dests, sources, non_blocking=non_blocking)
+
+
+def _warn_update_skipped(skipped: list) -> None:
+    """Warns that ``update_`` skipped the non-tensor entries under the keys ``skipped``."""
+    # point to the first frame outside tensordict: the user's call
+    frame, stacklevel = sys._getframe(1), 2
+    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
+        frame, stacklevel = frame.f_back, stacklevel + 1
+    warnings.warn(
+        f"update_() skipped the non-tensor entries {skipped} of the source: "
+        "the shared or memory-mapped destination cannot store their values.",
+        UserWarning,
+        stacklevel=stacklevel,
     )
 
 
@@ -1535,17 +1872,24 @@ def _raise_if_inplace_call() -> None:
     """Raises ``_NestedReadsCopies`` if an in-place method changes the leaves being listed.
 
     Called by a lazy stack whose members read copies, such as h5 files, when
-    a tensordict that holds it lists its leaves (#2592). The in-place method
-    would change copies: ``_write_back_inplace`` catches the error and runs
-    the method again through ``_inplace_on_nested_copies``. The frames are
-    only searched here, so that the in-place methods of the tensordicts that
-    hold no such stack pay nothing.
+    a tensordict that holds it lists its leaves (#2592), and by a tensordict
+    that reads copies, such as a file, which a tensordict holds (#2775). The
+    in-place method would change copies: ``_write_back_inplace`` catches the
+    error and runs the method again through ``_inplace_on_nested_copies``, as
+    ``TensorDictBase._update_`` does. The frames are only searched here, so
+    that the in-place methods of the tensordicts that hold no such stack pay
+    nothing.
     """
     if getattr(_ON_COPIES_CALL, "running", False):
         return
     frame = sys._getframe(1)
     while frame is not None:
-        if frame.f_code is _WRITE_BACK_INPLACE_CODE:
+        code = frame.f_code
+        if (
+            code is _WRITE_BACK_INPLACE_CODE
+            or code is _UPDATE_INPLACE_CODE
+            or code is _UPDATE_PLAN_CODE
+        ):
             raise _NestedReadsCopies
         frame = frame.f_back
 
@@ -1947,6 +2291,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def __repr__(self) -> str:
         try:
+            if _REPR_OPTIONS["compact"]:
+                compact = _compact_repr(self)
+                if compact is not None:
+                    return compact
             string = ",\n".join(self._repr_parts())
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
@@ -2128,6 +2476,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         does for a number. To leave them unchanged now, write into
         ``td.exclude(<non-tensor keys>)[index]``, which shares the tensors of
         ``td``.
+
+        On a dense :class:`~tensordict.TensorDict`, when ``td[index] = src``
+        brings a new non-tensor key, a :class:`~tensordict.NonTensorData`
+        (one value for the whole batch) fills every row of ``td``, written or
+        not, while a :class:`~tensordict.NonTensorStack` (one value per row)
+        leaves ``None`` in the rows that ``index`` does not select (see
+        :ref:`non-tensor-data`). A
+        :class:`~tensordict.LazyStackedTensorDict` adds the key only to the
+        members that ``index`` selects.
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
@@ -4006,11 +4363,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def filter_empty_(self):
         """Filters out all empty tensordicts in-place."""
-        for key, val in reversed(
-            list(self.items(True, is_leaf=_NESTED_TENSORS_AS_LISTS, sort=True))
-        ):
-            if _is_tensor_collection(type(val)) and val.is_empty():
-                del self[key]
+
+        # A lazy stack filters each member, and a sub-tensordict is filtered
+        # before it is checked: a nested key that names a member, such as
+        # ("0", "a"), cannot be deleted from the stack (#2796). A lazy stack
+        # is empty if all its members are: is_empty() only sees the keys that
+        # all members share.
+        def filter_td(td) -> bool:
+            # Filters td in place and returns whether it is then empty.
+            members = td._members_as_lists()
+            if members is not None:
+                return all([filter_td(member) for member in members])
+            kept = False
+            for key, val in list(td.items()):
+                cls = type(val)
+                if not _is_tensor_collection(cls):
+                    continue
+                if is_non_tensor(cls) or _pass_through(val):
+                    if val.is_empty():
+                        del td[key]
+                elif filter_td(val._tensordict if _is_tensorclass(cls) else val):
+                    del td[key]
+                else:
+                    kept = True
+            return not kept and td.is_empty()
+
+        filter_td(self)
         return self
 
     def _contains_str(self, key: str) -> bool:
@@ -5003,6 +5381,28 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
+        if keys_to_update is not None and _reads_copies_under(self, keys_to_update):
+            # the _apply_nest route below would write into the copies that a
+            # nested lazy stack or file reads: write the listed entries on the
+            # route without keys_to_update instead, which writes the stored
+            # data (#2780). A listed entry that self lacks raises KeyError, as
+            # on the _apply_nest route, but before anything is written.
+            try:
+                input_dict_or_td = input_dict_or_td.select(
+                    *keys_to_update, strict=False
+                )
+            except NotImplementedError:
+                # a file cannot select its entries
+                input_dict_or_td = input_dict_or_td.to_tensordict().select(
+                    *keys_to_update, strict=False
+                )
+            dest_keys = self.keys(True, True, is_leaf=_is_leaf_nontensor)
+            for key in input_dict_or_td.keys(True, True, is_leaf=_is_leaf_nontensor):
+                if key not in dest_keys:
+                    raise KeyError(
+                        f"The key {_unravel_key_to_tuple(key)} was not found in the dest tensordict."
+                    )
+            keys_to_update = None
         # The tensor leaves of self that the copy_ calls of _apply_nest below
         # change, to write back where they are copies of the stored data. A
         # lazy stack in the input splits self into its elements: those leaves
@@ -5040,89 +5440,44 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         else:
             # Fastest route using _foreach_copy_
-            keys, vals = self._items_list(True, True)
-            source = dict(zip(*input_dict_or_td._items_list(True, True)))
-            new_keys = [key for key in keys if key in source]
-            if (
-                (new_keys or _has_typed_tensordict(input_dict_or_td))
-                and len(new_keys) < min(len(keys), len(source))
-                and _has_lazy_stack(input_dict_or_td)
-            ):
-                # a nested lazy stack lists the leaves of each member, under
-                # keys that self lacks, which leaves keys of self unmatched,
-                # and a TypedTensorDict over a lazy stack, also a nested one,
-                # lists all its leaves so (#2772): read those keys stacked
-                # instead (#2768)
-                for key in keys:
-                    if key not in source:
-                        val = input_dict_or_td._get_tuple(
-                            _unravel_key_to_tuple(key), None
-                        )
-                        if isinstance(val, Tensor):
-                            source[key] = val
-                new_keys = [key for key in keys if key in source]
-            other_val = [source[key] for key in new_keys]
-            if len(new_keys):
-                if len(other_val) != len(vals):
-                    vals = dict(zip(keys, vals))
-                    vals = [vals[k] for k in new_keys]
-                # _foreach_copy_compiled cannot run under a torch.func transform
-                # (vmap), _foreach can. Same check as in _foreach, which explains it.
-                if torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
-                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
-                elif is_compiling():
-                    _foreach_copy_compiled(vals, other_val, non_blocking=non_blocking)
-                elif _any_unbatched(vals) or _any_unbatched(other_val):
-                    _foreach("copy_", vals, other_val, non_blocking=non_blocking)
-                else:
-                    # what _foreach does for copy_ outside of a torch.func
-                    # transform and without unbatched tensors, without its
-                    # overhead (about 2 µs, as much as the copy of 2 leaves)
-                    torch._foreach_copy_(vals, other_val, non_blocking=non_blocking)
-                if self._reads_return_copies:
-                    self._write_back(new_keys, vals, "update_")
-                if not input_dict_or_td._has_non_tensor:
-                    return self
-                from tensordict import NonTensorStack
+            try:
+                plan = self._update_plan(input_dict_or_td, non_blocking=non_blocking)
+            except _NestedReadsCopies:
+                # a nested tensordict reads copies, such as an h5 file: update
+                # a copy of self in which it is a copy of its leaves, written
+                # back as by the in-place methods (#2775)
+                return _on_copies(
+                    self._inplace_on_nested_copies,
+                    TensorDictBase._update_,
+                    input_dict_or_td,
+                    clone=clone,
+                    non_blocking=non_blocking,
+                    keys_to_update=keys_to_update,
+                )
+            if plan is not None:
+                vals, other_val, finish = plan
+                _copy_leaves(vals, other_val, non_blocking)
+                if finish is not None:
+                    finish()
+                return self
+            if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
+                written = []
 
-                # _items_list leaves out the non-tensor leaves: copy them below.
-                # Like the tensor leaves above, keys missing in self are skipped.
-                # copy_ raises for a NonTensorStack into a NonTensorData:
-                # these leaves are skipped too.
-                def inplace_update(name, source, dest):
-                    if (
-                        _is_non_tensor(type(source))
-                        and _is_non_tensor(type(dest))
-                        and (
-                            not isinstance(source, NonTensorStack)
-                            or isinstance(dest, NonTensorStack)
-                        )
-                    ):
-                        source = _stored_value(source, dest)
-                        if source is None:
-                            skipped.append(name)
-                        else:
-                            dest.copy_(source, non_blocking=non_blocking)
-
-            else:
-                if self._reads_return_copies and not _has_lazy_stack(input_dict_or_td):
-                    written = []
-
-                def inplace_update(name, source, dest):
+            def inplace_update(name, source, dest):
+                if source is None:
+                    return None
+                if dest is None:
+                    raise KeyError(
+                        f"The key {name} was not found in the dest tensordict."
+                    )
+                if not isinstance(dest, Tensor):
+                    source = _stored_value(source, dest)
                     if source is None:
+                        skipped.append(name)
                         return None
-                    if dest is None:
-                        raise KeyError(
-                            f"The key {name} was not found in the dest tensordict."
-                        )
-                    if not isinstance(dest, Tensor):
-                        source = _stored_value(source, dest)
-                        if source is None:
-                            skipped.append(name)
-                            return None
-                    dest.copy_(source, non_blocking=non_blocking)
-                    if written is not None and isinstance(dest, Tensor):
-                        written.append((name, dest))
+                dest.copy_(source, non_blocking=non_blocking)
+                if written is not None and isinstance(dest, Tensor):
+                    written.append((name, dest))
 
             named = True
 
@@ -5138,19 +5493,112 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if written:
             self._write_back(*zip(*written), "update_")
         if skipped:
-            # point to the first frame outside tensordict: the user's call
-            frame, stacklevel = sys._getframe(1), 2
-            while frame is not None and frame.f_code.co_filename.startswith(
-                _PACKAGE_DIR
-            ):
-                frame, stacklevel = frame.f_back, stacklevel + 1
-            warnings.warn(
-                f"update_() skipped the non-tensor entries {skipped} of the source: "
-                "the shared or memory-mapped destination cannot store their values.",
-                UserWarning,
-                stacklevel=stacklevel,
-            )
+            _warn_update_skipped(skipped)
         return self
+
+    def _update_plan(
+        self, input_dict_or_td: TensorDictBase, *, non_blocking: bool
+    ) -> tuple[list[Tensor], list[Tensor], Callable[[], None] | None] | None:
+        """Pairs the tensor leaves that the fast route of :meth:`_update_` copies, and writes nothing.
+
+        Returns ``(dests, sources, finish)``: the update copies each tensor of
+        ``sources`` into the leaf of ``self`` at the same position in
+        ``dests``, then calls ``finish`` unless it is ``None``. ``finish``
+        writes the leaves back where ``self`` reads copies, and copies the
+        non-tensor leaves. Returns ``None`` where no tensor leaf of
+        ``input_dict_or_td``, a tensor collection, matches one of ``self``,
+        and raises ``_NestedReadsCopies`` as ``_items_list`` does. A lazy
+        stack overrides it with the plans of its members, which it checks
+        before it writes any member (#2776).
+        """
+        keys, vals = self._items_list(True, True)
+        source = dict(zip(*input_dict_or_td._items_list(True, True)))
+        new_keys = [key for key in keys if key in source]
+        unmatched = len(new_keys) < min(len(keys), len(source))
+        if (
+            unmatched
+            and (new_keys or _has_typed_tensordict(input_dict_or_td))
+            and _has_lazy_stack(input_dict_or_td)
+        ):
+            # a nested lazy stack lists the leaves of each member, under
+            # keys that self lacks, which leaves keys of self unmatched,
+            # and a TypedTensorDict over a lazy stack, also a nested one,
+            # lists all its leaves so (#2772): read those keys stacked
+            # instead (#2768)
+            for key in keys:
+                if key not in source:
+                    val = input_dict_or_td._get_tuple(_unravel_key_to_tuple(key), None)
+                    if isinstance(val, Tensor):
+                        source[key] = val
+            new_keys = [key for key in keys if key in source]
+        elif (
+            unmatched
+            # the dense tensordicts skip the walk of _has_lazy_stack
+            and _has_unmatched_member_key(keys, source)
+            and _has_lazy_stack(self)
+        ):
+            # a lazy stack of self lists the leaves of each member, under
+            # keys that the input lacks: read those keys at the index of
+            # each member instead (#2775)
+            for key in keys:
+                if key not in source:
+                    val = _read_at_members(
+                        self, input_dict_or_td, _unravel_key_to_tuple(key)
+                    )
+                    if val is not None:
+                        source[key] = val
+            new_keys = [key for key in keys if key in source]
+        other_val = [source[key] for key in new_keys]
+        if not new_keys:
+            return None
+        if len(other_val) != len(vals):
+            vals = dict(zip(keys, vals))
+            vals = [vals[k] for k in new_keys]
+        has_non_tensor = input_dict_or_td._has_non_tensor
+        if not self._reads_return_copies and not has_non_tensor:
+            return vals, other_val, None
+
+        def finish():
+            if self._reads_return_copies:
+                self._write_back(new_keys, vals, "update_")
+            if not has_non_tensor:
+                return
+            from tensordict import NonTensorStack
+
+            # _items_list leaves out the non-tensor leaves: copy them here.
+            # Like the tensor leaves, keys missing in self are skipped.
+            # copy_ raises for a NonTensorStack into a NonTensorData:
+            # these leaves are skipped too.
+            skipped = []
+
+            def inplace_update(name, source, dest):
+                if (
+                    _is_non_tensor(type(source))
+                    and _is_non_tensor(type(dest))
+                    and (
+                        not isinstance(source, NonTensorStack)
+                        or isinstance(dest, NonTensorStack)
+                    )
+                ):
+                    source = _stored_value(source, dest)
+                    if source is None:
+                        skipped.append(name)
+                    else:
+                        dest.copy_(source, non_blocking=non_blocking)
+
+            input_dict_or_td._apply_nest(
+                inplace_update,
+                self,
+                nested_keys=True,
+                default=None,
+                filter_empty=True,
+                named=True,
+                is_leaf=_is_leaf_nontensor,
+            )
+            if skipped:
+                _warn_update_skipped(skipped)
+
+        return vals, other_val, finish
 
     @_update_at_aliases
     def update_at_(
@@ -5459,7 +5907,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def is_empty(self) -> bool:
         """Returns ``True`` if the tensordict has no leaf.
 
-        Empty sub-tensordicts do not count as leaves.
+        Empty sub-tensordicts do not count as leaves. A lazy stack counts only
+        the tensors that all its members share: it returns ``True`` when they
+        share none, and warns when some member holds a leaf. Starting with
+        TensorDict 0.17, the default will change to returning ``True`` only if
+        every member is empty.
 
         Examples:
             >>> import torch
@@ -5476,6 +5928,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return not list(self.keys(True, True))
         for _ in self.keys(True, True):
             return False
+        members = self._members_as_lists()
+        if (
+            members is not None
+            and _members_hold_leaf(members)
+            and not _in_dense_is_empty()
+        ):
+            _warn_lazy_is_empty()
         return True
 
     # Dict features: setdefault, items, values, keys, ...
@@ -5579,6 +6038,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         else:
                             yield (str(i), *key), val
                 return
+            # a file nested in a tensordict, also in a member of a lazy stack
+            _check_member_as_lists(self, is_leaf)
         if sort:
 
             def keyfunc(item):
@@ -5726,6 +6187,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         sort=sort,
                     )
                 return
+            # a file nested in a tensordict, also in a member of a lazy stack
+            _check_member_as_lists(self, is_leaf)
         if sort:
             for _, value in self.items(include_nested, leaves_only, is_leaf, sort=sort):
                 yield value
@@ -5790,11 +6253,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self
 
     def _inplace_on_nested_copies(self, method: Callable, *args, **kwargs) -> Self:
-        """Runs the in-place ``method`` where a nested lazy stack reads copies, and writes them back.
+        """Runs the in-place ``method`` where a nested tensordict reads copies, and writes them back.
 
-        Called by the in-place methods when a lazy stack that ``self`` holds
-        raises ``_NestedReadsCopies``. ``TensorDict`` overrides it. Here the
-        method runs on ``self``, which leaves the copies unchanged.
+        Called by the in-place methods when a tensordict that ``self`` holds
+        raises ``_NestedReadsCopies``: a lazy stack whose members read
+        copies, or a file. ``TensorDict`` and ``LazyStackedTensorDict``
+        override it. Here the method runs on ``self``, which leaves the
+        copies unchanged.
         """
         return method(self, *args, **kwargs)
 
@@ -6297,6 +6762,96 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # eg: td.rename_(("0", "1", "2"), ("0", "1")), then ("0", "1", "2") should not be deleted
             self.del_(old_key)
 
+    def rename_keys(
+        self, mapping: Mapping[NestedKey, NestedKey], *, strict: bool = True
+    ) -> Self:
+        """Returns a tensordict with several keys renamed at once.
+
+        ``self`` is not modified. The result has a new tree of sub-tensordicts and
+        shares every leaf with ``self``, tensors and non-tensor data alike. Its
+        batch size, device and dim names are those of ``self``, and it is not
+        locked.
+
+        Every source is read before any destination is written, so swaps
+        (``{"a": "b", "b": "a"}``) and chains (``{"a": "b", "b": "c"}``) work.
+        A sub-tensordict that the renaming leaves empty is removed. Other empty
+        sub-tensordicts are kept.
+
+        A lazy stack renames the keys in each of its tensordicts, and removes a
+        sub-tensordict only if the renaming empties it in all of them. A
+        tensorclass returns the same class, its destinations must be fields,
+        and its fields are never removed.
+        :class:`~tensordict.PersistentTensorDict` and the stores raise
+        ``NotImplementedError``: call :meth:`~.to_tensordict` first.
+
+        To rename a single key in place, see :meth:`~.rename_key_`.
+
+        Args:
+            mapping (Mapping[NestedKey, NestedKey]): the old key of each entry
+                mapped to its new key. Both sides can be nested keys, so an entry
+                can move to another sub-tensordict and a whole sub-tensordict can
+                be renamed.
+
+        Keyword Args:
+            strict (bool, optional): if ``True``, a source missing from ``self``
+                raises ``KeyError``. If ``False``, it is skipped. Defaults to
+                ``True``.
+
+        Returns:
+            a new tensordict of the same type as ``self``, except that a
+            sub-tensordict view returns a :class:`~tensordict.TensorDict`, as
+            :meth:`exclude` does.
+
+        Raises:
+            KeyError: if ``strict=True`` and a source is missing, or if a key is
+                empty.
+            ValueError: if two sources have the same destination, if a source
+                lies inside another source or a destination inside another
+                destination, or if a destination is already present and is not
+                renamed away.
+            AttributeError: if ``self`` is a tensorclass and a destination is
+                not one of its fields.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(()), b=torch.ones(()))
+            >>> out = td.rename_keys({"a": "b", "b": "a"})
+            >>> out["a"], td["a"]
+            (tensor(1.), tensor(0.))
+            >>> td = TensorDict(raw=TensorDict(p=torch.zeros(3), u=torch.ones(3)))
+            >>> out = td.rename_keys({("raw", "p"): "pressure", ("raw", "u"): "velocity"})
+            >>> sorted(out.keys(include_nested=True))  # "raw" was emptied and removed
+            ['pressure', 'velocity']
+            >>> out = td.rename_keys({"raw": "solution"})
+            >>> sorted(out.keys(include_nested=True, leaves_only=True))
+            [('solution', 'p'), ('solution', 'u')]
+            >>> td.rename_keys({("raw", "zz"): "z", ("raw", "p"): "p"}, strict=False)["p"]
+            tensor([0., 0., 0.])
+        """
+        return self._rename_keys(
+            _rename_keys_pairs(mapping), strict=strict, prune_root=True
+        )
+
+    def _rename_keys(
+        self,
+        pairs: list[tuple[tuple[str, ...], tuple[str, ...]]],
+        *,
+        strict: bool,
+        prune_root: bool,
+    ) -> Self:
+        """Returns a copy of ``self`` with the keys renamed: the storage part of :meth:`rename_keys`.
+
+        :meth:`rename_keys` has turned the mapping into ``pairs`` of tuple keys
+        and checked that they do not overlap. The hook copies the tree of
+        sub-tensordicts, shares every leaf, and moves the entries of the copy
+        with ``_rename_entries``. ``prune_root=False`` keeps the top-level
+        sub-tensordicts that the move empties (the fields of a tensorclass).
+        """
+        out = self._fast_apply(_keep, is_leaf=_is_leaf_nontensor)
+        _rename_entries([out], pairs, strict=strict, prune_root=prune_root)
+        return out
+
     @_lock_blocked
     def del_(self, key: NestedKey) -> Self:
         """Deletes a key of the tensordict.
@@ -6382,6 +6937,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> Self | None:
@@ -6447,6 +7003,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
+            is_leaf (Callable[[type], bool], optional): called with the type of
+                each entry; ``fn`` is called on the entries for which it returns
+                ``True``, and ``apply`` goes into the others. Defaults to ``None``,
+                which uses :func:`~tensordict.default_is_leaf`: ``fn`` is called
+                on tensors, and ``apply`` goes into tensordicts, tensorclasses
+                and non-tensor data (which is kept unchanged). Pass
+                :func:`~tensordict.is_leaf_nontensor` to call ``fn`` on non-tensor
+                data too:
+
+                    >>> from tensordict import is_leaf_nontensor
+                    >>> td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+                    >>> seen = []
+                    >>> _ = td.apply(lambda x: seen.append(type(x).__name__))
+                    >>> seen
+                    ['Tensor']
+                    >>> seen = []
+                    >>> _ = td.apply(lambda x: seen.append(type(x).__name__), is_leaf=is_leaf_nontensor)
+                    >>> seen
+                    ['Tensor', 'NonTensorData']
 
             out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
                 creating a new tensordict:
@@ -6534,6 +7110,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default=default,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            is_leaf=is_leaf,
             out=out,
             **constructor_kwargs,
         )
@@ -6554,6 +7131,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> Self | None:
@@ -6620,6 +7198,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
+            is_leaf (Callable[[type], bool], optional): called with the type of
+                each entry; ``fn`` is called on the entries for which it returns
+                ``True``, and ``named_apply`` goes into the others. Defaults to ``None``,
+                which uses :func:`~tensordict.default_is_leaf`: ``fn`` is called
+                on tensors, and ``named_apply`` goes into tensordicts, tensorclasses
+                and non-tensor data (which is kept unchanged). Pass
+                :func:`~tensordict.is_leaf_nontensor` to call ``fn`` on non-tensor
+                data too:
+
+                    >>> from tensordict import is_leaf_nontensor
+                    >>> td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+                    >>> seen = []
+                    >>> _ = td.named_apply(lambda name, x: seen.append(type(x).__name__))
+                    >>> seen
+                    ['Tensor']
+                    >>> seen = []
+                    >>> _ = td.named_apply(lambda name, x: seen.append(type(x).__name__), is_leaf=is_leaf_nontensor)
+                    >>> seen
+                    ['Tensor', 'NonTensorData']
 
             out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
                 creating a new tensordict:
@@ -6741,6 +7339,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             nested_keys=nested_keys,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            out=out,
+            is_leaf=is_leaf,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
@@ -8850,10 +9450,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     [0., 0., 0., 0.]])
         """
         if self._masking_on_dense_copy:
-            td_copy = self.to_tensordict()
-        else:
-            td_copy = self.clone()
-        return td_copy.masked_fill_(mask, value)
+            return self.to_tensordict().masked_fill_(mask, value)
+        return self._masked_fill(mask, value)
+
+    def _masked_fill(self, mask: Tensor, value: float | bool) -> Self:
+        """Storage-specific part of :meth:`masked_fill`, called when ``_masking_on_dense_copy`` is False.
+
+        Takes the arguments of :meth:`masked_fill` as they are and returns a
+        filled copy, leaving ``self`` untouched. The base fills a clone in
+        place. :class:`~tensordict.LazyStackedTensorDict` splits ``mask``
+        along the stack dim, runs :meth:`masked_fill` on each member and
+        stacks the results lazily.
+        """
+        result = self._clone(recurse=True)
+        result._masked_fill_(mask, value)
+        return result
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         self._batch_size = new_size
@@ -8952,7 +9563,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @_cache_while_locked  # noqa: B019
     def flatten_keys(
         self,
-        separator: str = ".",
+        separator: str = KEY_SEPARATOR,
         inplace: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> Self:
@@ -9134,7 +9745,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @_as_context_manager()
     @_copy_cached_result
     @_cache_while_locked  # noqa: B019
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
+    def unflatten_keys(
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
+    ) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
 
         The TensorDict type will be lost and the result will be a simple TensorDict instance.
@@ -9268,7 +9881,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is missing. Defaults to ``True``.
             reproduce_struct (bool, optional): if ``True``, all tensordict returned have
                 the same tree structure as ``self``, even if some sub-tensordicts
-                contain no leaves.
+                contain no leaves. Non-tensor entries are not copied: each
+                one goes to the output whose key set names it, or to the last
+                one, as with ``reproduce_struct=False``.
 
         .. note::
             ``None`` non-tensor values will be ignored and not returned.
@@ -9305,8 +9920,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         outs = []
         if inplace:
             keys_to_del = set()
+        leaf_keys = None
         for key_set in key_sets:
-            outs.append(self.empty(recurse=reproduce_struct))
+            out = self.empty(recurse=reproduce_struct)
+            if reproduce_struct:
+                # empty(recurse=True) keeps the non-tensor leaves, and in a
+                # lazy stack inside a tensordict the tensors that only some
+                # members hold: they belong to the output whose key set names
+                # them, or to the last one. Every output has the same ones:
+                # find them once, in every member of a lazy stack (#2803).
+                if leaf_keys is None:
+                    leaf_keys = _all_leaf_keys(out)
+                if leaf_keys:
+                    out = out.exclude(*leaf_keys)
+            outs.append(out)
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
             for key in key_set:
@@ -10091,6 +10718,11 @@ _ACCEPTED_CLASSES = (
     Tensor,
     TensorDictBase,
 )
+
+# the frame of update_, which _raise_if_inplace_call looks for too
+_UPDATE_INPLACE_CODE = TensorDictBase._update_.__code__
+# the frame of the plan of update_ for a member of a lazy stack (#2776)
+_UPDATE_PLAN_CODE = TensorDictBase._update_plan.__code__
 
 
 from tensordict._base.factories import (  # noqa: F401

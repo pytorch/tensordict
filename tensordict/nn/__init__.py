@@ -22,6 +22,7 @@ from tensordict.nn.distributions import (
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.params import TensorDictParams
 from tensordict.nn.probabilistic import (
+    interaction_type,
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -60,6 +61,7 @@ __all__ = [
     "ProbabilisticTensorDictModule",
     "ProbabilisticTensorDictSequential",
     "InteractionType",
+    "interaction_type",
     "set_interaction_type",
     # Distributions
     "AddStateIndependentNormalScale",
