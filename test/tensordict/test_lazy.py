@@ -5642,6 +5642,18 @@ class TestLazyStackedTensorDict:
         lazy.update_({"u": torch.arange(8.0).view(2, 4)})
         for member, row in zip(members, torch.arange(8.0).view(2, 4)):
             assert (member["u"] == row).all()
+        # a leaf whose first dim is the size of the stack: a dict source is
+        # split along that dim, along any stack dim, as on main
+        members = [
+            TensorDict(
+                a=torch.zeros(3), u=UnbatchedTensor(torch.zeros(2)), batch_size=[3]
+            )
+            for _ in range(2)
+        ]
+        lazy = lazy_stack(members, stack_dim)
+        lazy.update_({"u": torch.arange(2.0)})
+        for i, member in enumerate(members):
+            assert (member["u"] == i).all()
 
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
