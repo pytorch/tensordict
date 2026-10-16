@@ -69,7 +69,11 @@ class _NoSetNonTensor:
 
 
 class _NoSelectExclude:
-    """``select`` and ``exclude`` for a backend whose reads copy the stored data."""
+    """``select``, ``exclude`` and ``rename_keys`` for a backend whose reads copy the stored data.
+
+    A shallow copy of such a backend shares its file or server, so renaming the
+    keys of a copy would rename them in the storage.
+    """
 
     def _select(self, *keys, inplace=False, strict=True, set_shared=True):
         raise NotImplementedError(
@@ -80,6 +84,13 @@ class _NoSelectExclude:
     def _exclude(self, *keys, inplace=False, set_shared=True):
         raise NotImplementedError(
             f"Cannot call exclude on a {type(self).__name__}. "
+            "Call to_tensordict() first."
+        )
+
+    def _rename_keys(self, pairs, *, strict, prune_root):
+        """Raises ``NotImplementedError``: see the class docstring."""
+        raise NotImplementedError(
+            f"Cannot call rename_keys on a {type(self).__name__}. "
             "Call to_tensordict() first."
         )
 
