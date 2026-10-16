@@ -26,6 +26,7 @@ from tensordict import (
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     MetaData,
     NonTensorData,
     NonTensorStack,
@@ -548,15 +549,80 @@ class TestTD:
 
     @pytest.mark.parametrize("device", [None, "cpu"])
     def test_td_index_bool_mask(self, mode, device):
-        # the masked size depends on the data, so this graph-breaks
         def add_one(td, mask):
             return td[mask] + 1
 
-        add_one_c = torch.compile(add_one, mode=mode)
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(3)}}, [3], device=device)
         result = add_one_c(data, torch.tensor([True, False, True]))
         assert result.shape == torch.Size([2])
         assert (result["a", "b"] == torch.tensor([1, 3])).all()
+
+    @pytest.mark.parametrize("dynamic", [False, True])
+    @pytest.mark.parametrize(
+        "name", ["td[mask]", "td[mask[:, 0], 0]", "td.masked_select(mask)"]
+    )
+    def test_td_select_rows_bool_mask(self, mode, name, dynamic):
+        # The batch size and the leaves count the mask the same way, so that
+        # they share one size (#2785)
+        fn = {
+            "td[mask]": lambda td, mask: td[mask],
+            "td[mask[:, 0], 0]": lambda td, mask: td[mask[:, 0], 0],
+            "td.masked_select(mask)": lambda td, mask: td.masked_select(mask),
+        }[name]
+        td = TensorDict(
+            a=torch.randn(4, 3, 5), b=TensorDict(c=torch.randn(4, 3)), batch_size=[4, 3]
+        )
+        mask = torch.tensor(
+            [[True, False, True], [False, True, True], [True, True, False], [0, 0, 1]],
+            dtype=torch.bool,
+        )
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode, dynamic=dynamic)
+        result = fn_c(td, mask)
+        expected = fn(td, mask)
+        assert result.batch_size == expected.batch_size
+        assert (result == expected).all()
+
+    @pytest.mark.parametrize("dynamic", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("value", [1, torch.tensor(2.0)], ids=["int", "tensor"])
+    @pytest.mark.parametrize("mask_dims", [1, 2])
+    @pytest.mark.parametrize("exclusive", [False, True])
+    def test_lazy_stack_write_rows_bool_mask(
+        self, mode, dynamic, stack_dim, value, mask_dims, exclusive
+    ):
+        # Each member takes its slice of the mask (#2785)
+        def fill(td, mask):
+            td[mask] = value
+            return td
+
+        def make():
+            tds = [
+                TensorDict(a=torch.zeros(4, 5), b={"c": torch.zeros(4)}, batch_size=[4])
+                for _ in range(4)
+            ]
+            if exclusive:
+                # Eager writes only the keys that every member has
+                tds[1]["x"] = torch.zeros(4, 2)
+            return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+
+        if exclusive:
+            # The stack cannot be indexed in one graph here
+            fill_c = torch.compile(fill, mode=mode, dynamic=dynamic)
+        else:
+            fill_c = torch.compile(fill, fullgraph=True, mode=mode, dynamic=dynamic)
+
+        mask = torch.tensor(
+            [[True, False, True, True], [0, 1, 1, 0], [1, 1, 0, 0], [0, 0, 0, 1]],
+            dtype=torch.bool,
+        )
+        if mask_dims == 1:
+            mask = mask[:, 0]
+        result = fill_c(make(), mask)
+        expected = fill(make(), mask)
+        assert expected["a"].sum() > 0
+        for r, e in zip(result.tensordicts, expected.tensordicts):
+            assert (r == e).all()
 
     def test_stack(self, mode):
         def stack_tds(td0, td1):
@@ -730,6 +796,61 @@ class TestTD:
         unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    @staticmethod
+    def _unbind_split(td, op):
+        if op == "unbind":
+            return td.unbind(0)
+        if op == "iter":
+            return list(td)
+        if op == "chunk":
+            return td.chunk(2, 0)
+        return td.split(2, 0)
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    def test_unbind_split_shared(self, op, mode):
+        # A shared tensordict can be unbound, iterated, chunked and split in
+        # a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4]).share_memory_()
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert r.batch_size == e.batch_size
+            assert r.is_shared() == e.is_shared()
+            assert (r == e).all()
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    @pytest.mark.parametrize("container", ["td", "tc"])
+    def test_unbind_split_memmap(self, op, container, mode, tmpdir):
+        # A memory-mapped tensordict or tensorclass can be unbound, iterated,
+        # chunked and split in a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        if container == "td":
+            data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4])
+        else:
+            data = MyClass(
+                a=MyClass(a=None, b=torch.arange(4.0), batch_size=[4]), batch_size=[4]
+            )
+        data.memmap_(tmpdir)
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert type(r) is type(e)
+            assert r.batch_size == e.batch_size
+            assert r.is_memmap()
+            assert (r == e).all()
+            # Dynamo cannot build a MemoryMappedTensor, so compiled code
+            # returns plain tensors over the same file, as compiled indexing
+            # does.
+            assert type(r.get(("a", "b"))) is torch.Tensor
+            assert isinstance(e.get(("a", "b")), MemoryMappedTensor)
+        # Writes through a result reach the file.
+        result[0].get(("a", "b")).add_(10)
+        assert data.get(("a", "b"))[0] == 10
+        assert type(data).load_memmap(tmpdir).get(("a", "b"))[0] == 10
 
     def test_split_across_batch_sizes(self, mode):
         # From the second batch size on, the batch size is dynamic: the split
@@ -1442,6 +1563,21 @@ class TestTD:
         result = td.clone()
         assert inplace_c(result, other) is result
         assert_close(result, expected)
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_detach_no_grad(self, lazy, mode):
+        # detach_() traces when no leaf requires grad: Dynamo cannot trace
+        # Tensor.detach_() on a graph input, so those leaves are skipped (#2792)
+        def detach_(td):
+            return td.detach_()
+
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        if lazy:
+            td = LazyStackedTensorDict(*[t.clone() for t in td.unbind(0)], stack_dim=0)
+        expected = td.clone()
+        detach_c = torch.compile(detach_, fullgraph=True, mode=mode)
+        assert detach_c(td) is td
+        assert_close(td, expected)
 
     @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
     def test_tree_map_empty_nested_first(self, after_empty, mode):
@@ -2708,6 +2844,55 @@ class TestNN:
             assert result.device == expected.device
             assert result.names == expected.names == ["x"]
             assert_close(result, expected)
+
+    @pytest.mark.parametrize("op", ["clone", "init", "unsqueeze"])
+    def test_tdparams_new(self, mode, op):
+        # Building a new TensorDictParams in the compiled region (gh-2791).
+        def fn(params):
+            if op == "clone":
+                return params.clone(recurse=False)
+            if op == "init":
+                return TensorDictParams(params)
+            return params._legacy_unsqueeze(0)
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4])
+        )
+        expected = fn(params)
+        result = fn_c(params)
+        assert type(result) is type(expected) is TensorDictParams
+        assert result.batch_size == expected.batch_size
+        for named in ("named_parameters", "named_buffers"):
+            result_named = dict(getattr(result, named)())
+            expected_named = dict(getattr(expected, named)())
+            assert result_named.keys() == expected_named.keys()
+            for key, value in result_named.items():
+                assert type(value) is type(expected_named[key])
+        assert_close(result, expected)
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_tdparams_update(self, mode, lock):
+        # update() on a TensorDictParams passed into the compiled region
+        # (gh-2791), with an unlocked or a locked content.
+        def update(params, other):
+            params.update(other)
+            return params
+
+        update_c = torch.compile(update, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4]),
+            lock=lock,
+        )
+        other = TensorDictParams(
+            TensorDict(a=torch.zeros(4, 3), b={"d": torch.ones(4)}, batch_size=[4])
+        )
+        result = update_c(params, other)
+        assert result is params
+        assert params._param_td.is_locked is lock
+        assert params["a"] is other["a"]
+        assert params["b", "d"] is other["b", "d"]
+        assert dict(params.named_parameters()).keys() == {"a", "b.c", "b.d"}
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])

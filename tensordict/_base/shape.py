@@ -46,6 +46,7 @@ from tensordict.utils import (
     _warn_dim_past_batch_dims,
     _warn_lazy_shape_args,
     _zip_strict,
+    is_compiling,
     is_non_tensor,
     lazy_legacy,
     unravel_key_list,
@@ -3192,7 +3193,12 @@ class _ShapeOps:
             mask_expand = mask_expand.squeeze(-1)
             if mndim == mask_expand.ndimension():  # no more squeeze
                 break
-        dim = int(mask.sum().item())
+        if is_compiling():
+            # count the mask as the leaves do, so that they share one symbol
+            # (see _advanced_shape)
+            dim = mask_expand.nonzero().shape[0]
+        else:
+            dim = int(mask.sum().item())
         other_dim = self.shape[mask.ndim :]
         batch_size = torch.Size([dim, *other_dim])
         if inplace:

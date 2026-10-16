@@ -2315,6 +2315,9 @@ class _Conversion:
         .. note:: This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory
             content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content
             of the TensorDict.
+            The exception is a field whose item size does not divide the size of a record, such as the ``"i8"``
+            field of a packed array of ``"i8"`` and ``"f4"`` fields (12 bytes per record): torch cannot view such a
+            field, so it is copied.
 
         Args:
             struct_array (np.ndarray): The structured numpy array to be converted.
