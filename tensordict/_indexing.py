@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from torch.compiler import is_compiling
 
 # The kinds of index elements, see _read_element
 _INT = 0
@@ -493,7 +494,11 @@ def _block_names(names, advanced):
 def _advanced_shape(kind, element):
     """The shape that an advanced index contributes to the advanced block."""
     if kind == _MASK:
-        # int() graph-breaks on the data-dependent size under compile
+        if is_compiling():
+            # Each leaf counts the mask with nonzero, whose size fake tensors
+            # cache on the mask: counting it the same way gives the batch size
+            # and the leaves one symbol, where sum() would give another
+            return (element.nonzero().shape[0],)
         return (int(element.sum()),)
     if kind == _BOOL:
         return (int(element),)
