@@ -6988,14 +6988,15 @@ class TestGeneric:
             assert "masks" not in padded_td.keys()
 
     def test_collate_dataloader(self):
-        from torch.utils.data import DataLoader
-
         @tensorclass
         class Sample:
             x: torch.Tensor
 
         def load(samples):
-            return next(iter(DataLoader(samples, batch_size=4, collate_fn=collate)))
+            dl = torch.utils.data.DataLoader(  # noqa: TOR401
+                samples, batch_size=4, collate_fn=collate
+            )
+            return next(iter(dl))
 
         # tensordicts with matching shapes stack densely
         tds = [
