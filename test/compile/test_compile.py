@@ -1351,6 +1351,21 @@ class TestTD:
         assert inplace_c(result, other) is result
         assert_close(result, expected)
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_detach_no_grad(self, lazy, mode):
+        # detach_() traces when no leaf requires grad: Dynamo cannot trace
+        # Tensor.detach_() on a graph input, so those leaves are skipped (#2792)
+        def detach_(td):
+            return td.detach_()
+
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        if lazy:
+            td = LazyStackedTensorDict(*[t.clone() for t in td.unbind(0)], stack_dim=0)
+        expected = td.clone()
+        detach_c = torch.compile(detach_, fullgraph=True, mode=mode)
+        assert detach_c(td) is td
+        assert_close(td, expected)
+
     @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
     def test_tree_map_empty_nested_first(self, after_empty, mode):
         # The batch size of the result is not read from the empty nested td,
