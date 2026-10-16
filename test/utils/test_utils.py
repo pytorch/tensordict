@@ -1233,6 +1233,38 @@ def test_get_shared_executor():
     assert executor.submit(lambda: 2).result() == 2
 
 
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="os.fork is not available")
+def test_get_shared_executor_after_fork_with_lock_held():
+    # A process forked while a thread holds the executors lock must still be
+    # able to get a shared executor. The fork happens in a fresh interpreter,
+    # and the child is killed by SIGALRM if it hangs.
+    code = (
+        "import os, signal, threading\n"
+        "import tensordict.utils as tu\n"
+        "held, release = threading.Event(), threading.Event()\n"
+        "def hold():\n"
+        "    with tu._SHARED_EXECUTORS_LOCK:\n"
+        "        held.set()\n"
+        "        release.wait()\n"
+        "thread = threading.Thread(target=hold)\n"
+        "thread.start()\n"
+        "held.wait()\n"
+        "pid = os.fork()\n"
+        "if pid == 0:\n"
+        "    signal.alarm(10)\n"
+        "    ok = tu._get_shared_executor(2).submit(lambda: 1).result() == 1\n"
+        "    os._exit(0 if ok else 1)\n"
+        "release.set()\n"
+        "thread.join()\n"
+        "_, status = os.waitpid(pid, 0)\n"
+        "assert os.waitstatus_to_exitcode(status) == 0, status\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize(
     "level,expected_level,shows_debug",
     [
