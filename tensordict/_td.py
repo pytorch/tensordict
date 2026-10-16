@@ -1285,7 +1285,7 @@ class TensorDict(TensorDictBase):
     @_lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         item = self._tensordict.popitem()
-        if "_consolidated" in self.__dict__:
+        if hasattr(self, "_consolidated"):
             self._mark_consolidated_stale()
         return item
 
@@ -1318,7 +1318,7 @@ class TensorDict(TensorDictBase):
                     break
             else:
                 self._tensordict.update(source)
-                if "_consolidated" in self.__dict__:
+                if hasattr(self, "_consolidated"):
                     self._mark_consolidated_stale()
                 return True
             if type(key) is str and (type(value) is TensorDict or type(value) is dict):
@@ -1341,7 +1341,7 @@ class TensorDict(TensorDictBase):
         batch_dims = len(batch_size)
         device = self._device
         entries = self._tensordict
-        consolidated = "_consolidated" in self.__dict__
+        consolidated = hasattr(self, "_consolidated")
         # New keys for the general path are collected in `pending` and
         # written with one _update_entries call, made before the next write
         # of any other kind and at the end. The general path writes the keys
@@ -1441,49 +1441,55 @@ class TensorDict(TensorDictBase):
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
-        if not validated and type(value) is Tensor and type(self) is TensorDict:
-            batch_size = self._batch_size
-            device = self._device
-            # len(): `not` on a torch.Size makes Dynamo specialize its sizes
-            validated = (
-                not len(batch_size)
-                or (
-                    not value.is_nested and value.shape[: len(batch_size)] == batch_size
-                )
-            ) and (device is None or value.device == device)
-        elif (
-            not validated
-            and type(value) is TensorDict
-            and type(self) is TensorDict
-            and not self._batch_size
-            and not is_compiling()
-        ):
-            # A plain TensorDict stored in a TensorDict without batch dims:
-            # the validator could only move it to self's device (there is no
-            # batch size or names to match).
-            device = self._device
-            validated = device is None or value._device == device
-        original = None
         if not validated:
-            original = value
-            value = self._validate_value(
-                value, check_shape=True, non_blocking=non_blocking, key=key
-            )
+            if type(value) is Tensor and type(self) is TensorDict:
+                batch_size = self._batch_size
+                device = self._device
+                # len(): `not` on a torch.Size makes Dynamo specialize its sizes
+                validated = (
+                    not len(batch_size)
+                    or (
+                        not value.is_nested
+                        and value.shape[: len(batch_size)] == batch_size
+                    )
+                ) and (device is None or value.device == device)
+            elif (
+                type(value) is TensorDict
+                and type(self) is TensorDict
+                and not self._batch_size
+                and not is_compiling()
+            ):
+                # A plain TensorDict stored in a TensorDict without batch dims:
+                # the validator could only move it to self's device (there is no
+                # batch size or names to match).
+                device = self._device
+                validated = device is None or value._device == device
+            if not validated:
+                original = value
+                value = self._validate_value(
+                    value, check_shape=True, non_blocking=non_blocking, key=key
+                )
+                # a scalar is converted to a tensor: check the type only when it
+                # replaces a NonTensorData entry, not a NonTensorStack, and the
+                # write below goes through (not in place, not locked)
+                if (
+                    not inplace
+                    and original is not value
+                    and not self._batch_size
+                    and not (self._is_locked and not ignore_lock)
+                ):
+                    dest = self._tensordict.get(key)
+                    if (
+                        is_non_tensor(dest)
+                        and is_tensorclass(dest)
+                        and isinstance(original, _SCALAR_TYPES)
+                    ):
+                        _warn_scalar_over_non_tensor(key, original)
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
-            # a scalar is converted to a tensor: check the type only when it
-            # replaces a NonTensorData entry, not a NonTensorStack
-            if original is not None and original is not value and not self._batch_size:
-                dest = self._tensordict.get(key)
-                if (
-                    is_non_tensor(dest)
-                    and is_tensorclass(dest)
-                    and isinstance(original, _SCALAR_TYPES)
-                ):
-                    _warn_scalar_over_non_tensor(key, original)
             self._tensordict[key] = value
-            if "_consolidated" in self.__dict__:
+            if hasattr(self, "_consolidated"):
                 # An unpickled consolidated copy is not locked
                 self._mark_consolidated_stale()
         else:
@@ -1508,7 +1514,7 @@ class TensorDict(TensorDictBase):
                                 == value.data.untyped_storage().data_ptr()
                             ):
                                 raise
-                        if "_consolidated" in self.__dict__ and is_non_tensor(dest):
+                        if hasattr(self, "_consolidated") and is_non_tensor(dest):
                             # A non-tensor value is not in the consolidated storage
                             self._mark_consolidated_stale()
             except KeyError as err:
@@ -1814,7 +1820,7 @@ class TensorDict(TensorDictBase):
         key = _unravel_key_to_tuple(key)
         if len(key) == 1:
             del self._tensordict[key[0]]
-            if "_consolidated" in self.__dict__:
+            if hasattr(self, "_consolidated"):
                 self._mark_consolidated_stale()
             return self
         self._del(key)
@@ -1823,7 +1829,7 @@ class TensorDict(TensorDictBase):
     def _del(self, key: tuple[str, ...]) -> None:
         if len(key) == 1:
             del self._tensordict[key[0]]
-            if "_consolidated" in self.__dict__:
+            if hasattr(self, "_consolidated"):
                 self._mark_consolidated_stale()
         elif not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
@@ -2737,7 +2743,7 @@ class TensorDict(TensorDictBase):
         )
         if inplace:
             self._tensordict = result._tensordict
-            if "_consolidated" in self.__dict__:
+            if hasattr(self, "_consolidated"):
                 self._mark_consolidated_stale()
             return self
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
@@ -2788,7 +2794,7 @@ class TensorDict(TensorDictBase):
                     if not inplace:
                         _tensordict[key] = val
         if inplace:
-            if "_consolidated" in self.__dict__:
+            if hasattr(self, "_consolidated"):
                 self._mark_consolidated_stale()
             return self
         result = self._new_unsafe(
