@@ -46,9 +46,7 @@
  "nested_stacked_td filling": [
   "detach_()"
  ],
- "nested_stacked_td key_edits": [
-  "get(('a', 'x'), None)"
- ],
+ "nested_stacked_td key_edits": [],
  "nested_stacked_td keys": [],
  "nested_stacked_td masking": [
   "masked_select(mask)"
@@ -62,9 +60,7 @@
  "nested_stacked_td setitem": [
   "td[mask] = 0"
  ],
- "nested_stacked_td shape": [
-  "permute(3, 2, 1, 0)"
- ],
+ "nested_stacked_td shape": [],
  "nested_stacked_td update": [],
  "nested_td apply": [],
  "nested_td empty": [],
@@ -130,9 +126,7 @@
  "stacked_td filling": [
   "detach_()"
  ],
- "stacked_td key_edits": [
-  "get(('a', 'x'), None)"
- ],
+ "stacked_td key_edits": [],
  "stacked_td keys": [],
  "stacked_td masking": [
   "masked_select(mask)"
@@ -146,9 +140,7 @@
  "stacked_td setitem": [
   "td[mask] = 0"
  ],
- "stacked_td shape": [
-  "permute(3, 2, 1, 0)"
- ],
+ "stacked_td shape": [],
  "stacked_td update": [],
  "sub_td apply": [],
  "sub_td empty": [],
@@ -349,9 +341,7 @@
  "typed_lazy filling": [
   "detach_()"
  ],
- "typed_lazy key_edits": [
-  "get(('a', 'x'), None)"
- ],
+ "typed_lazy key_edits": [],
  "typed_lazy keys": [],
  "typed_lazy masking": [
   "masked_select(mask)"
@@ -365,9 +355,7 @@
  "typed_lazy setitem": [
   "td[mask] = 0"
  ],
- "typed_lazy shape": [
-  "permute(3, 2, 1, 0)"
- ],
+ "typed_lazy shape": [],
  "typed_lazy update": [],
  "typed_td apply": [],
  "typed_td empty": [],
