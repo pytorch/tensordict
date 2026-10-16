@@ -23,6 +23,7 @@ from typing import Callable, List, overload, Sequence, TYPE_CHECKING
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
+from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -1729,7 +1730,7 @@ class _ShapeOps:
         for split, bsz in _zip_strict(splits, batch_sizes):
             for key, value in split.items():
                 if _is_unbatched(value):
-                    split[key] = value._with_batch_size(bsz)
+                    split[key] = _unbatched_with_batch_size(value, bsz)
         device = self.device
         is_shared = self._is_shared
         is_memmap = self._is_memmap
@@ -3215,7 +3216,7 @@ class _ShapeOps:
             return self
         for key, value in self.items():
             if _is_unbatched(value):
-                d[key] = value._with_batch_size(batch_size)
+                d[key] = _unbatched_with_batch_size(value, batch_size)
             else:
                 d[key] = value[mask_expand]
         return TensorDict(device=self.device, source=d, batch_size=batch_size)

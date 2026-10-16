@@ -60,6 +60,7 @@ from tensordict._indexing import (
 )
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
+from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
@@ -3331,7 +3332,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 for td in tds:
                     td._set_str(
                         key,
-                        val._with_batch_size(batch_size),
+                        _unbatched_with_batch_size(val, batch_size),
                         validated=True,
                         inplace=False,
                         non_blocking=False,
@@ -7456,7 +7457,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 # function normally.
                 unbatched_new_batch = batch_size is not None and _is_unbatched(item)
                 if unbatched_new_batch and not call_on_unbatched:
-                    item_trsf = item._with_batch_size(batch_size)
+                    item_trsf = _unbatched_with_batch_size(item, batch_size)
                 else:
                     _others = [
                         _other._get_str(key, default=default) for _other in others
@@ -7471,7 +7472,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     else:
                         item_trsf = fn(item, *_others)
                     if unbatched_new_batch and _is_unbatched(item_trsf):
-                        item_trsf = item_trsf._with_batch_size(batch_size)
+                        item_trsf = _unbatched_with_batch_size(item_trsf, batch_size)
             if item_trsf is not None:
                 if not any_set:
                     if result is None:
@@ -7637,7 +7638,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if new_batch_size is not None and leaf.batch_size != new_batch_size:
                     self._set_str(
                         key,
-                        leaf._with_batch_size(new_batch_size),
+                        _unbatched_with_batch_size(leaf, new_batch_size),
                         validated=True,
                         inplace=False,
                     )
@@ -8471,7 +8472,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     _device_recorder.record_transfer(device)
                 value = value.to(device, non_blocking=non_blocking)
             if value.batch_size != self.batch_size:
-                value = value._with_batch_size(self.batch_size)
+                value = _unbatched_with_batch_size(value, self.batch_size)
             return value
         batch_size = self.batch_size
         # A tensor collection's shape is its batch size
@@ -8542,7 +8543,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             value = value.to(device, non_blocking=non_blocking)
         if _is_unbatched(value):
             if value.batch_size != self.batch_size:
-                value = value._with_batch_size(self.batch_size)
+                value = _unbatched_with_batch_size(value, self.batch_size)
             return value
         return value
 
@@ -8577,7 +8578,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             is_tc = _is_tensor_collection(cls)
         if _is_unbatched(value):
             if value.batch_size != self.batch_size:
-                value = value._with_batch_size(self.batch_size)
+                value = _unbatched_with_batch_size(value, self.batch_size)
             return value
 
         batch_size = self.batch_size
@@ -8641,7 +8642,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ) from err
         if _is_unbatched(value):
             if value.batch_size != self.batch_size:
-                value = value._with_batch_size(self.batch_size)
+                value = _unbatched_with_batch_size(value, self.batch_size)
             return value
         return value
 
@@ -9761,7 +9762,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         source = {}
         for key, item in self.items():
             if _is_unbatched(item):
-                source[key] = item._with_batch_size(batch_size)
+                source[key] = _unbatched_with_batch_size(item, batch_size)
             elif isinstance(item, TensorDict):
                 # this is the simplest case, we can pre-compute the batch size easily
                 new_batch_size = batch_size + item.batch_size[batch_dims:]
