@@ -1040,6 +1040,24 @@ class TestTD:
         assert (result_c["a"] == 1).all()
         assert set(data.keys(True)) == {"a", "b", "raw", ("raw", "p")}
 
+    def test_rename_keys_params(self, mode):
+        # TensorDictParams.rename_keys returns a TensorDict, which compiles
+        def rename_keys(params):
+            return params.rename_keys({"a": "b", "b": "a"}).rename_keys(
+                {"missing": "c"}, strict=False
+            )
+
+        rename_keys_c = torch.compile(rename_keys, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        )
+        result = rename_keys(params)
+        result_c = rename_keys_c(params)
+        assert type(result_c) is type(result) is TensorDict
+        assert (result_c == result).all()
+        assert (result_c["a"] == 1).all()
+        assert result_c["a"] is params["b"]
+
     def test_exclude(self, mode):
         def exclude_keys(td: TensorDict):
             return td.exclude("b")
@@ -1054,6 +1072,27 @@ class TestTD:
         result_c = exclude_keys_c(data)
         assert "a" in result_c.keys()
         assert "b" not in result_c.keys()
+
+    def test_split_keys_callable(self, mode):
+        def split(td: TensorDict):
+            floats, rest = td.split_keys(lambda k, v: v.is_floating_point())
+            return floats + 1, rest
+
+        split_c = torch.compile(split, fullgraph=True, mode=mode)
+
+        for batch in (3, 5):
+            data = TensorDict(
+                a=torch.zeros(batch),
+                b=torch.zeros(batch, dtype=torch.long),
+                nested=TensorDict(c=torch.zeros(batch, 2), batch_size=[batch]),
+                batch_size=[batch],
+            )
+            floats, rest = split(data)
+            floats_c, rest_c = split_c(data)
+            assert set(floats_c.keys(True, True)) == {"a", ("nested", "c")}
+            assert set(rest_c.keys(True, True)) == {"b"}
+            assert (floats_c == floats).all()
+            assert (rest_c == rest).all()
 
     def test_all_any(self, mode):
         def call_all(td: TensorDict):
