@@ -540,6 +540,38 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
+def _pair_dense_leaves(
+    dests: dict, sources: dict, vals: list, other_vals: list
+) -> bool:
+    """Pairs the leaves of two trees of exact ``TensorDict`` nodes that have the same keys.
+
+    ``dests`` and ``sources`` are the ``_tensordict`` dicts of two such nodes.
+    Their tensors are appended to ``vals`` and ``other_vals``, depth first in
+    the key order of ``dests``: the order of ``_items_list(True, True)``.
+    Returns ``False`` at the first key that ``sources`` lacks, or whose entries
+    are not both plain tensors or both exact ``TensorDict`` nodes, and when the
+    nodes have different numbers of keys: the caller then takes the general
+    route of ``_update_plan``.
+    """
+    if len(dests) != len(sources):
+        return False
+    for key, val in dests.items():
+        other = sources.get(key)
+        cls = type(val)
+        if cls is Tensor:
+            if type(other) is not Tensor:
+                return False
+            vals.append(val)
+            other_vals.append(other)
+        elif not (
+            cls is _TENSORDICT_TYPE
+            and type(other) is cls
+            and _pair_dense_leaves(val._tensordict, other._tensordict, vals, other_vals)
+        ):
+            return False
+    return True
+
+
 def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     """Returns whether some of ``td`` and the tensordicts in ``others`` are lazy stacks and some are not.
 
@@ -1124,11 +1156,7 @@ def _flatten_keys_leaves(
         cls = type(val)
         if is_leaf(cls):
             result.append(((key,), val))
-        elif (
-            _is_tensor_collection(cls)
-            and not is_non_tensor(cls)
-            and not _pass_through(val)
-        ):
+        elif _is_tensor_collection(cls) and not _pass_through(val):
             result.extend(
                 ((key, *subkey), subval)
                 for subkey, subval in _flatten_keys_leaves(val, is_leaf)
@@ -1208,6 +1236,11 @@ _IS_LEAF_WITHOUT_NODES = (
     _is_leaf_nontensor,
     _is_non_tensor,
 )
+
+
+def _leaf_data(leaf):
+    """The ``data`` of a leaf: the function that ``TensorDictBase.data`` applies."""
+    return leaf.data
 
 
 # Set while an in-place method runs on a tensordict whose file is opened
@@ -1544,9 +1577,7 @@ def _add_empty_leaves(td: TensorDictBase, prefix: tuple | None, leaves: dict) ->
             leaves[full_key] = None
             continue
         if cls is TensorDict or (
-            _is_tensor_collection(cls)
-            and not is_non_tensor(cls)
-            and not _pass_through(value)
+            _is_tensor_collection(cls) and not _pass_through(value)
         ):
             _add_empty_leaves(value, (key,) if prefix is None else full_key, leaves)
         elif _default_is_leaf(cls):
@@ -2098,6 +2129,14 @@ def _keys_update_pairs(
     return named
 
 
+def _any_requires_grad(tensors: list[Tensor]) -> bool:
+    # A loop is faster than any() over a generator for short lists.
+    for tensor in tensors:
+        if tensor.requires_grad:
+            return True
+    return False
+
+
 def _copy_leaves(
     dests: list[Tensor], sources: list[Tensor], non_blocking: bool, exact: bool = False
 ) -> None:
@@ -2105,6 +2144,14 @@ def _copy_leaves(
 
     ``exact`` tells that every tensor is an exact ``Tensor``: none is
     unbatched. A single pair is then copied with ``copy_``.
+
+    ``torch._foreach_copy_`` records no autograd graph, and marks every
+    ``dest`` as requiring grad: where grad mode is on and a tensor requires
+    grad, each pair is copied with ``copy_``, as on the other routes of
+    ``update_`` (#2863). So is each pair inside a forward-AD dual level, as
+    ``_foreach_copy_`` has no forward derivative (#2886). A ``dest`` that is
+    a leaf that requires grad is left to ``_foreach_copy_``, or to ``copy_``
+    for a single exact pair: both raise for it before they copy anything.
     """
     if exact and len(dests) == 1:
         # one copy_ costs less than the checks below and a _foreach_copy_
@@ -2113,8 +2160,21 @@ def _copy_leaves(
     # (vmap), _foreach can. Same check as in _foreach, which explains it.
     elif torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
         _foreach("copy_", dests, sources, non_blocking=non_blocking)
+    elif (
+        torch.is_grad_enabled()
+        and (_any_requires_grad(dests) or _any_requires_grad(sources))
+        and not any(dest.requires_grad and dest.is_leaf for dest in dests)
+    ):
+        for dest, source in zip(dests, sources):
+            dest.copy_(source, non_blocking=non_blocking)
     elif is_compiling():
         _foreach_copy_compiled(dests, sources, non_blocking=non_blocking)
+    elif forward_ad._current_level >= 0 and not any(
+        dest.requires_grad and dest.is_leaf for dest in dests
+    ):
+        # inside a dual level (after the compile test: no guard on it)
+        for dest, source in zip(dests, sources):
+            dest.copy_(source, non_blocking=non_blocking)
     elif not exact and (_any_unbatched(dests) or _any_unbatched(sources)):
         _foreach("copy_", dests, sources, non_blocking=non_blocking)
     else:
@@ -4671,7 +4731,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 cls = type(val)
                 if not _is_tensor_collection(cls):
                     continue
-                if is_non_tensor(cls) or _pass_through(val):
+                if _pass_through(val):
                     if val.is_empty():
                         del td[key]
                 elif filter_td(val._tensordict if _is_tensorclass(cls) else val):
@@ -5883,6 +5943,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         stack overrides it with the plans of its members, which it checks
         before it writes any member (#2776).
         """
+        if type(input_dict_or_td) is type(self) and self._is_dense_node():
+            # two trees of exact TensorDicts with the same keys and only plain
+            # tensor leaves: pair the leaves in the order of _items_list below,
+            # in one walk. Any other entry takes the general route (#2859).
+            dests = self._tensordict
+            sources = input_dict_or_td._tensordict
+            if dests and len(dests) == len(sources):
+                vals = []
+                other_val = []
+                for key, val in dests.items():
+                    other = sources.get(key)
+                    cls = type(val)
+                    if cls is Tensor:
+                        if type(other) is not Tensor:
+                            break
+                        vals.append(val)
+                        other_val.append(other)
+                    elif not (
+                        cls is _TENSORDICT_TYPE
+                        and type(other) is cls
+                        and _pair_dense_leaves(
+                            val._tensordict, other._tensordict, vals, other_val
+                        )
+                    ):
+                        break
+                else:
+                    if vals:
+                        return vals, other_val, None
         keys, vals = self._items_list(True, True)
         source = dict(zip(*input_dict_or_td._items_list(True, True)))
         new_keys = [key for key in keys if key in source]
@@ -6438,7 +6526,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         yield k, val
                     if _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
-                        if not is_non_tensor(cls) and not _pass_through(val):
+                        if not _pass_through(val):
                             # _unravel_key_to_tuple((k, _key)), with less work:
                             # no call for a str _key, and a tuple _key is spliced
                             # in, so that a flat key takes the fast path instead
@@ -6577,7 +6665,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         yield val
                     if include_nested and _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
-                        if not is_non_tensor(cls) and not _pass_through(val):
+                        if not _pass_through(val):
                             yield from val.values(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
@@ -6784,19 +6872,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _data(self):
-        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        data = [val.data for val in vals]
-        items = dict(zip(keys, data))
-
-        def get(name, val):
-            return items.get(name, val)
-
         return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            propagate_lock=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            _leaf_data, propagate_lock=True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
 
     def _data_setter(self, value: Self):
@@ -8228,9 +8305,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             and batch_size is None
             and checked
             and not call_on_nested
-            and not constructor_kwargs
+            # to() passes call_on_unbatched, which _dense_apply takes
+            and (
+                not constructor_kwargs
+                or list(constructor_kwargs) == ["call_on_unbatched"]
+            )
             and not is_compiling()
-            and device is NO_DEFAULT
             and names is NO_DEFAULT
             and (
                 is_leaf is None
@@ -8248,6 +8328,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 (),
                 filter_empty,
                 _default_is_leaf if is_leaf is None else is_leaf,
+                device,
+                constructor_kwargs.get("call_on_unbatched", False),
             )
             if propagate_lock and self.is_locked and result is not None:
                 result.lock_()
@@ -10611,7 +10693,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.unlock_()
 
     def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        """Registers the parent tensordict that handles the lock."""
+        """Locks this tensordict and the tensor collections it holds, and registers the parents that hold the lock.
+
+        ``lock_()`` calls it on an unlocked root, with no
+        ``lock_parents_weakrefs``; each node calls it on its sub-tensordicts
+        with the weakrefs of the parents above them. The hook sets
+        ``_is_locked`` and, out of compile, adds the parents it does not hold
+        yet to ``_lock_parents_weakrefs`` (which ``unlock_`` checks) and builds
+        the locked schema. Returns ``None``.
+        """
         self._is_locked = True
         if lock_parents_weakrefs is not None:
             existing = self._lock_parents_weakrefs

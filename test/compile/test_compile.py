@@ -1620,6 +1620,21 @@ class TestTD:
         assert_close(td_c, td)
         torch.testing.assert_close(x_c.grad, x.grad)
 
+    @pytest.mark.parametrize("method", ["update_", "copy_"])
+    def test_update__autograd(self, method, mode):
+        # update_ and copy_ from a source that requires grad trace the copy_
+        # of each leaf, which has a derivative, unlike _foreach_copy_ (#2863)
+        def update_(td, x):
+            getattr(td, method)(TensorDict(a=x * 2, b=torch.ones(3)))
+            return td["a"].sum()
+
+        update_c = torch.compile(update_, fullgraph=True, mode=mode)
+        x = torch.randn(3, requires_grad=True)
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3))
+        update_c(td, x).backward()
+        assert (x.grad == 2).all()
+        assert not td["b"].requires_grad
+
     @pytest.mark.parametrize("lazy", [False, True])
     def test_detach_no_grad(self, lazy, mode):
         # detach_() traces when no leaf requires grad: Dynamo cannot trace

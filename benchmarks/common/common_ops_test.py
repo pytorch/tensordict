@@ -10,9 +10,11 @@ import itertools
 import pytest
 import torch
 from tensordict import (
+    is_non_tensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorStack,
+    pad,
     TensorDict,
 )
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
@@ -481,6 +483,22 @@ def test_stacked_getitem(benchmark):
     benchmark(lambda: td[key])
 
 
+def test_shallow_nested_getitemleaf(benchmark):
+    # td["next", "obs"]: each tensor leaf read checks for non-tensor data.
+    td = TensorDict({"next": {"obs": torch.zeros(3)}})
+    benchmark(lambda: td["next", "obs"])
+
+
+@pytest.mark.parametrize("value", ["tensor", "parameter", "tensordict"])
+def test_is_non_tensor(benchmark, value):
+    data = {
+        "tensor": torch.zeros(3),
+        "parameter": torch.nn.Parameter(torch.zeros(3)),
+        "tensordict": TensorDict(),
+    }[value]
+    benchmark(is_non_tensor, data)
+
+
 def test_lock_nested(benchmark):
     benchmark.pedantic(
         lambda td: list(td.lock_()),
@@ -519,6 +537,11 @@ def test_unlock_stack_nested(benchmark):
         rounds=1000,
         iterations=1,
     )
+
+
+def test_data_nested_locked(benchmark):
+    td = big_nested_td_locked()[0][0]
+    benchmark(lambda: td.data)
 
 
 def test_flatten_speed(benchmark):
@@ -706,6 +729,18 @@ def test_setitem_non_tensor_rows(benchmark, big_non_tensor_td):
     benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=2, rounds=20)
 
 
+@pytest.mark.parametrize("index", ["tensor", "mask"])
+def test_getitem_non_tensor_rows(benchmark, index):
+    # 32 rows of a 256-row string entry, as verl selects a mini-batch
+    stack = NonTensorStack.from_list([f"x{i}" for i in range(256)])
+    rows = torch.randperm(256, generator=torch.Generator().manual_seed(0))[:32]
+    if index == "mask":
+        mask = torch.zeros(256, dtype=torch.bool)
+        mask[rows] = True
+        rows = mask
+    benchmark(stack.__getitem__, rows)
+
+
 def test_setitem(benchmark, td, c):
     def exec_setitem():
         tdc = td.clone()
@@ -788,6 +823,20 @@ def test_update__keys_to_update(benchmark, selected):
     elif selected == "non-tensor":
         keys.append("info")
     benchmark(dest.update_, source, keys_to_update=keys)
+
+
+@pytest.mark.parametrize("n", [64, 4096])
+def test_copy__row_flat(benchmark, n):
+    # rsl_rl's rollout storage write: storage[step].copy_(obs) (#2859)
+    obs = TensorDict(
+        {"policy": torch.randn(n, 48), "critic": torch.randn(n, 60)}, [n], device="cpu"
+    )
+    storage = TensorDict(
+        {key: torch.zeros(24, *val.shape) for key, val in obs.items()},
+        [24, n],
+        device="cpu",
+    )
+    benchmark(lambda: storage[3].copy_(obs))
 
 
 @pytest.mark.parametrize("n", [16, 256])
@@ -1006,6 +1055,17 @@ def test_to_same_device(benchmark):
     benchmark(td.to, "cpu")
 
 
+def test_to_dtype_nested(benchmark):
+    # A device-less mesh-like tree cast to double, as PhysicsNeMo's Mesh.to
+    td = TensorDict(
+        points=torch.randn(64, 3),
+        cells=torch.randn(32, 3),
+        point_data=TensorDict(t=torch.randn(64)),
+        cell_data=TensorDict(p=torch.randn(32)),
+    )
+    benchmark(td.to, torch.float64)
+
+
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to(benchmark, td):
     benchmark(td.to, "cuda:0")
@@ -1122,6 +1182,24 @@ def test_stack_nested(benchmark):
     benchmark(torch.stack, [td] * 4, 0)
 
 
+def test_stack_rollout_steps(benchmark):
+    # a rollout stacks one flat tensordict per step
+    n = 64
+    tds = [
+        TensorDict(
+            obs=torch.randn(n, 48),
+            done=torch.zeros(n, dtype=torch.bool),
+            value=torch.randn(n),
+            action=torch.randn(n, 12),
+            logprob=torch.randn(n),
+            reward=torch.randn(n),
+            batch_size=[n],
+        )
+        for _ in range(24)
+    ]
+    benchmark(torch.stack, tds, 0)
+
+
 def test_cat_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(torch.cat, [td] * 4, 0)
@@ -1147,6 +1225,26 @@ def test_pack_nested(benchmark, op):
 def test_apply_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(td.apply, lambda x: x)
+
+
+@pytest.mark.parametrize("safe", [True, False])
+def test_pad_nested(benchmark, safe):
+    # a TorchRL transition, padded to a common length as split_trajectories does
+    td = TensorDict(
+        {
+            "observation": torch.randn(48, 17),
+            "action": torch.randn(48, 6),
+            "done": torch.zeros(48, 1, dtype=torch.bool),
+            "collector": {"traj_ids": torch.zeros(48, dtype=torch.long)},
+            "next": {
+                "observation": torch.randn(48, 17),
+                "reward": torch.randn(48, 1),
+                "done": torch.zeros(48, 1, dtype=torch.bool),
+            },
+        },
+        [48],
+    )
+    benchmark(pad, td, [0, 16], safe=safe)
 
 
 @pytest.mark.parametrize("op", ["neg", "mul_scalar", "add"])
