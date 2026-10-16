@@ -1908,13 +1908,17 @@ def _stacked_repr(shape, tensors) -> str | None:
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
 
-    is_lazy = isinstance(td, LazyStackedTensorDict)
+    # A TypedTensorDict reads its entries from the tensordict it wraps.
+    source = td
+    while type(source)._wrapped_attr is not None:
+        source = getattr(source, type(source)._wrapped_attr)
+    is_lazy = isinstance(source, LazyStackedTensorDict)
     strs = []
     if keys is None:
         keys = td.keys()
     for key in keys:
         # A lazy stack's tensor entries are printed from the members.
-        leaf = td._plain_leaf(key) if is_lazy else None
+        leaf = source._plain_leaf(key) if is_lazy else None
         if leaf is not None:
             shape = leaf[0]
             substr = _stacked_repr(*leaf)
@@ -1929,7 +1933,7 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
         else:
             # we know td is lazy stacked and the key is a leaf
             # so we can get the shape and escape the error
-            temp_td = td
+            temp_td = source
             from tensordict import (
                 is_tensor_collection,
                 LazyStackedTensorDict,
