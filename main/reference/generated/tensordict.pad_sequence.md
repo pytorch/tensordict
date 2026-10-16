@@ -1,6 +1,6 @@
 # pad_sequence
 
-tensordict.pad_sequence(*list_of_tensordicts: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[T]*, *pad_dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) = 0.0*, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *return_mask: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) = False*) → T
+tensordict.pad_sequence(*list_of_tensordicts: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[T]*, *pad_dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) = 0.0*, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *return_mask: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) = False*, *padding_side: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'right'*) → T
 
 Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
 
@@ -34,7 +34,14 @@ tensordict. Each of its entries is the mask of the valid values,
 of size `torch.Size([stack_len, *new_shape])`, where
 `new_shape[pad_dim]` is the largest size and the rest of
 `new_shape` matches the shape of the input entries. Not
-available for tensorclass inputs.
+available for tensorclass inputs. Use
+[`unpad_sequence()`](tensordict.unpad_sequence.html#tensordict.unpad_sequence) to turn the result back into
+the variable-length samples.
+- **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - `"right"` puts the padding after the
+data along `pad_dim`, `"left"` puts it before, as
+`get(key, as_padded_tensor=True, padding_side=...)` does on a
+lazy stack. The masks mark the data positions on either side.
+Defaults to `"right"`.
 
 Returns:
 
@@ -43,8 +50,9 @@ with batch size `[len(list_of_tensordicts), *batch_size]`.
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `list_of_tensordicts` is empty, or if the entry
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `list_of_tensordicts` is empty, or if the entry
  shapes differ in a dimension other than `pad_dim`.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `padding_side` is neither `"left"` nor `"right"`.
 
 Examples
 

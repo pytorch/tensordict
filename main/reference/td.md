@@ -266,6 +266,7 @@ Functions
 | [`dense_stack_tds`](generated/tensordict.dense_stack_tds.html#tensordict.dense_stack_tds)(td_list[, dim]) | Stacks a list of tensordicts, or the tensordicts of a lazy stack, densely if possible. |
 | [`pad`](generated/tensordict.pad.html#tensordict.pad)(tensordict, pad_size[, value, inplace, safe]) | Pads all tensors in a tensordict along the batch dimensions with a constant value. |
 | [`pad_sequence`](generated/tensordict.pad_sequence.html#tensordict.pad_sequence)(list_of_tensordicts[, pad_dim, ...]) | Pads a list of tensordicts in order for them to be stacked together in a contiguous format. |
+| [`unpad_sequence`](generated/tensordict.unpad_sequence.html#tensordict.unpad_sequence)(padded[, mask, pad_dim]) | Splits a padded batch back into its variable-length samples. |
 
 ### Device, dtype, and memory
 
@@ -300,13 +301,13 @@ Dtype
 
 | [`TensorDictBase.dtype`](generated/tensordict.TensorDictBase.dtype.html#tensordict.TensorDictBase.dtype) | Returns the dtype of the leaves, or `None` if the leaves have different dtypes. |
 | --- | --- |
-| [`TensorDictBase.type`](generated/tensordict.TensorDictBase.type.html#tensordict.TensorDictBase.type)(dst_type) | Casts all tensors to `dst_type`. |
+| [`TensorDictBase.type`](generated/tensordict.TensorDictBase.type.html#tensordict.TensorDictBase.type)(dst_type, *[, cast_filter]) | Casts all tensors to `dst_type`. |
 | [`TensorDictBase.is_floating_point`](generated/tensordict.TensorDictBase.is_floating_point.html#tensordict.TensorDictBase.is_floating_point)() | Checks if all tensors in the tensordict are floating point. |
-| [`TensorDictBase.bool`](generated/tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)() | Casts all tensors to `torch.bool`. |
-| [`TensorDictBase.half`](generated/tensordict.TensorDictBase.half.html#tensordict.TensorDictBase.half)() | Casts all tensors to `torch.half`. |
-| [`TensorDictBase.float`](generated/tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float)() | Casts all tensors to `torch.float`. |
-| [`TensorDictBase.double`](generated/tensordict.TensorDictBase.double.html#tensordict.TensorDictBase.double)() | Casts all tensors to `torch.double` (`torch.float64`). |
-| [`TensorDictBase.int`](generated/tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)() | Casts all tensors to `torch.int`. |
+| [`TensorDictBase.bool`](generated/tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)(*[, cast_filter]) | Casts all tensors to `torch.bool`. |
+| [`TensorDictBase.half`](generated/tensordict.TensorDictBase.half.html#tensordict.TensorDictBase.half)(*[, cast_filter]) | Casts all tensors to `torch.half`. |
+| [`TensorDictBase.float`](generated/tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float)(*[, cast_filter]) | Casts all tensors to `torch.float`. |
+| [`TensorDictBase.double`](generated/tensordict.TensorDictBase.double.html#tensordict.TensorDictBase.double)(*[, cast_filter]) | Casts all tensors to `torch.double` (`torch.float64`). |
+| [`TensorDictBase.int`](generated/tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)(*[, cast_filter]) | Casts all tensors to `torch.int`. |
 | [`TensorDictBase.bfloat16`](generated/tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16)() | Casts all tensors to `torch.bfloat16`. |
 | [`TensorDictBase.float16`](generated/tensordict.TensorDictBase.float16.html#tensordict.TensorDictBase.float16)() | Casts all tensors to `torch.float16`. |
 | [`TensorDictBase.float32`](generated/tensordict.TensorDictBase.float32.html#tensordict.TensorDictBase.float32)() | Casts all tensors to `torch.float32`. |
@@ -327,10 +328,19 @@ Dtype
 | [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)() | Casts all tensors to `torch.quint8`. |
 | [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)() | Casts all tensors to `torch.quint4x2`. |
 
+`to` and the dtype shorthands take a `cast_filter` predicate
+`fn(key, value) -> bool` that selects the leaves to cast. The predicates
+below test the dtype of their last argument, so they serve as a
+`cast_filter` and as a test in [`apply()`](generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply).
+
 Functions
 
 | [`from_consolidated`](generated/tensordict.from_consolidated.html#tensordict.from_consolidated)(filename) | Reconstructs a tensordict from a consolidated file. |
 | --- | --- |
+| [`is_inexact`](generated/tensordict.is_inexact.html#tensordict.is_inexact)(*args) | Whether the last argument is a floating-point or complex tensor. |
+| [`is_floating`](generated/tensordict.is_floating.html#tensordict.is_floating)(*args) | Whether the last argument is a floating-point tensor. |
+| [`is_integer`](generated/tensordict.is_integer.html#tensordict.is_integer)(*args) | Whether the last argument is an integer tensor (signed or unsigned, not bool). |
+| [`is_bool`](generated/tensordict.is_bool.html#tensordict.is_bool)(*args) | Whether the last argument is a boolean tensor. |
 
 ### Pointwise math
 

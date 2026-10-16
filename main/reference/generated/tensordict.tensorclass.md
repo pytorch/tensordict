@@ -1,6 +1,6 @@
 # tensorclass
 
-tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *skip_post_init_on_rebuild: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
+tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *skip_post_init_on_rebuild: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
 
 A decorator that turns a class with annotated fields into a tensorclass.
 
@@ -45,6 +45,16 @@ new instance from the data of an existing one, as in indexing,
 `False`: `__post_init__` also runs on these rebuilds, except
 on the shells that `empty()` builds. On a lazy stack it runs on
 each stacked instance.
+- **cast_filter** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - the default `cast_filter` of
+[`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) and of the dtype shorthands
+(`float()`, `bfloat16()`, ...) on the instances of the class: a
+predicate `fn(key, value) -> bool` that selects the tensor leaves
+a dtype cast applies to, `key` being the nested key as a tuple of
+str. A `cast_filter` passed to the call overrides it, and
+`cast_filter=None` there casts every leaf. Subclasses inherit it.
+It applies to calls on the tensorclass itself, not when the
+tensorclass is a value of another tensordict or tensorclass that
+is cast. Defaults to `None`: every leaf is cast.
 
 Returns:
 
@@ -143,4 +153,19 @@ A tensorclass instance can be a field of another tensorclass:
 >>> r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3))
 >>> r.clone().offsets # not checked again
 tensor([0, 2, 3])
+```
+
+`cast_filter` keeps the integer and boolean fields out of dtype casts:
+
+```
+>>> from tensordict import is_inexact
+>>> @tensorclass(cast_filter=is_inexact)
+... class Mesh:
+... points: torch.Tensor
+... cells: torch.Tensor
+>>> mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long))
+>>> mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype
+(torch.bfloat16, torch.int64)
+>>> mesh.bfloat16(cast_filter=None).cells.dtype # cast every leaf
+torch.bfloat16
 ```

@@ -5,7 +5,8 @@ TensorDictBase.to(**args*, ***kwargs*) → Self
 Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
 When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original
-dtype (including integer and boolean leaves).
+dtype (including integer and boolean leaves), unless `cast_filter` selects the
+leaves to cast.
 
 Parameters:
 
@@ -51,6 +52,21 @@ Since [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBas
 a dtype, the dtype is gathered from the example leaves.
 If there are more than one dtype, then no dtype
 casting is done.
+- **cast_filter** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - a predicate `fn(key, value) -> bool`
+that selects the tensor leaves the dtype cast applies to.
+`key` is the nested key of the leaf as a tuple of str, for
+example `("obs",)` or `("next", "done")`. Leaves for which
+it returns `False` keep their dtype; a device or memory-format
+change still applies to them. It is not called on non-tensor
+data, nor when no dtype is given or when `to` gets an attrs
+tensordict, whose leaves give each leaf its dtype. An
+[`UnbatchedTensor`](tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) leaf is passed as is, not
+as a [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor). Helpers such as
+[`is_inexact()`](tensordict.is_inexact.html#tensordict.is_inexact) can be passed directly. Defaults
+to the `cast_filter` of a tensorclass that declares one, and to
+casting every leaf otherwise; pass `None` to cast every leaf.
+The dtype shorthands ([`float()`](tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float), [`bfloat16()`](tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16), ...) take
+it too.
 - **non_blocking_pin** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - 
 
 if `True`, the tensors are pinned before
@@ -114,6 +130,16 @@ Examples
 >>> data_int = data.to(torch.int) # casts to int
 >>> data_int["a"]
 tensor(1, dtype=torch.int32)
+```
+
+Cast the floating-point leaves only:
+
+```
+>>> from tensordict import is_inexact
+>>> data = TensorDict(x=torch.zeros(3), done=torch.zeros(3, dtype=torch.bool))
+>>> data_bf16 = data.to(torch.bfloat16, cast_filter=is_inexact)
+>>> data_bf16["x"].dtype, data_bf16["done"].dtype
+(torch.bfloat16, torch.bool)
 ```
 
 The next lines need a CUDA device, so they are not run when the

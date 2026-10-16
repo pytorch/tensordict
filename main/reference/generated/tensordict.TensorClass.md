@@ -185,6 +185,25 @@ checked
 `autocast`, `nocast` and `tensor_only` are exclusive: combining two
 of them raises a `TypeError`.
 
+A class keyword that is not a flag, `cast_filter`, sets the default
+`cast_filter` of [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) and of the dtype
+shorthands (`float()`, `bfloat16()`, ...): a predicate
+`fn(key, value) -> bool` that selects the tensor leaves a dtype cast
+applies to. A `cast_filter` passed to the call overrides it, and
+`cast_filter=None` there casts every leaf. Subclasses inherit it. It
+applies to calls on the tensorclass itself, not when the tensorclass is a
+value of another tensordict or tensorclass that is cast.
+
+```
+>>> from tensordict import is_inexact
+>>> class Mesh(TensorClass, cast_filter=is_inexact):
+... points: torch.Tensor
+... cells: torch.Tensor
+>>> mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long))
+>>> mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype
+(torch.bfloat16, torch.int64)
+```
+
 Subclassing
 
 A class with flags is a regular class. You can subclass it and add

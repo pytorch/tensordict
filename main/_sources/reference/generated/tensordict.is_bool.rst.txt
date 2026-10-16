@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+is_bool
+=======
+
+.. autofunction:: is_bool
+
+.. minigallery:: tensordict.is_bool
+    :add-heading: Tutorials that use ``is_bool``

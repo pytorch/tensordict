@@ -297,6 +297,17 @@ tensor([[ True, True, False],
  [ True, False, False]])
 ```
 
+Pass `padding_side="left"` to put the padding before the data instead.
+[`unpad_sequence()`](../reference/generated/tensordict.unpad_sequence.html#tensordict.unpad_sequence) goes back: it reads the masks and returns
+a lazy stack of the samples, each with its own length:
+
+```
+>>> from tensordict import unpad_sequence
+>>> samples = unpad_sequence(padded)
+>>> [sample["signal"].shape for sample in samples.tensordicts]
+[torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])]
+```
+
 `pad_sequence` raises a `RuntimeError` for 0-dim entries ("Cannot pad
 scalars"). Give such entries one dimension, or stack them separately.
 
