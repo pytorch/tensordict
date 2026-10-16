@@ -1703,6 +1703,17 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
     return list(keys)
 
 
+def _lazy_on_path(td: TensorDictBase, key: tuple) -> bool:
+    """Whether ``td`` or a tensordict that ``key`` runs through in it is lazy, as a lazy stack is: a cheap test before ``_held_keys``."""
+    for name in key[:-1]:
+        if getattr(td, "_lazy", False):
+            return True
+        td = td._get_str(name, None)
+        if not _is_tensor_collection(type(td)) or _is_non_tensor(type(td)):
+            return False
+    return getattr(td, "_lazy", False)
+
+
 def _held_keys(td: TensorDictBase) -> set:
     """The keys of ``td`` that a member of a lazy stack in it may hold, as tuples: its leaves and the tensordicts above them."""
     return {key[:i] for key in _all_leaf_keys(td) for i in range(1, len(key) + 1)}
@@ -9997,7 +10008,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if inplace:
             keys_to_del = set()
         leaf_keys = None
-        warn = None
+        warn = True
         for key_set in key_sets:
             out = self.empty(recurse=reproduce_struct)
             if reproduce_struct:
@@ -10036,14 +10047,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     return tuple(
                         _split_keys_by_member(self, key_sets, inplace, reproduce_struct)
                     )
-                if val is default and not strict and warn is not False:
+                if (
+                    val is default
+                    and not strict
+                    and warn
+                    and _lazy_on_path(self, _unravel_key_to_tuple(key))
+                    and _unravel_key_to_tuple(key) in _held_keys(self)
+                ):
                     # once per call, for a key that only some members of a
                     # lazy stack hold (#2827)
-                    if warn is None:
-                        warn = _has_lazy_stack(self)
-                    if warn and _unravel_key_to_tuple(key) in _held_keys(self):
-                        warn = False
-                        _warn_split_keys_kept_in_last()
+                    warn = False
+                    _warn_split_keys_kept_in_last()
                 if val is not None:
                     outs[-1].set(key_set[key], val)
                 if inplace:
