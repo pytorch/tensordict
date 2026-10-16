@@ -56,6 +56,7 @@ from tensordict.utils import (
     IndexType,
     is_batchedtensor,
     is_non_tensor,
+    KEY_SEPARATOR,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling
@@ -738,6 +739,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -753,6 +755,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -1064,6 +1067,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def _select(self, *args, **kwargs): ...
 
+    # Override: renames in _param_td, so that the result is a TensorDictParams.
+    @_carry_over
+    def _rename_keys(self, pairs, *, strict, prune_root):
+        """Renames the keys of a copy of _param_td and wraps it."""
+
     # Override: shares the parameters of _param_td in place.
     @_fallback
     def _share_memory_(self): ...
@@ -1129,12 +1137,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
-        self, separator: str = ".", inplace: bool = False
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
     ) -> TensorDictBase: ...
 
     @_unlock_and_set(inplace=True)
     def unflatten_keys(
-        self, separator: str = ".", inplace: bool = False
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
     ) -> TensorDictBase: ...
 
     @_unlock_and_set(inplace=True)

@@ -207,6 +207,12 @@ class set_skip_existing(_DecoratorContextManager):
             the block see the process-wide mode. If ``False``, the mode applies
             to the whole process. Defaults to ``False``.
 
+    .. note:: Threads. By default the mode is process-wide: a ``with`` block
+        in one thread also changes what :func:`~.skip_existing` returns in
+        other threads at that time. Pass ``thread_local=True`` to keep a
+        block to its own thread. A thread started inside such a block reads
+        the process-wide value, not the block's.
+
     Examples:
         >>> import torch
         >>> from tensordict.nn import set_skip_existing, skip_existing
@@ -561,6 +567,15 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
             same thread enters stay in that thread too. Threads started inside
             the block see the process-wide mode. If ``False``, the mode applies
             to the whole process. Defaults to ``False``.
+
+    .. note:: Threads. The mode is process-wide by default, and is meant to
+        be set once for the whole process, for example with :meth:`set`
+        before you build the modules: it decides the keys of the
+        log-probabilities, which the threads that write them and the threads
+        that read them must agree on. A ``with`` block in one thread also
+        changes the value in other threads at that time, unless it passes
+        ``thread_local=True``. A thread started inside a ``thread_local``
+        block reads the process-wide value, not the block's.
 
     Example:
         >>> import torch

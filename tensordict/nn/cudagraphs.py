@@ -153,7 +153,12 @@ class CudaGraphModule:
         - The replay repeats the branch that each :class:`~tensordict.nn.ProbabilisticTensorDictModule` took at
           capture: a graph captured under ``set_interaction_type("random")`` keeps sampling under
           ``set_interaction_type("deterministic")``. The first replay under another interaction type emits a
-          ``UserWarning``. Capture one ``CudaGraphModule`` per interaction type.
+          ``UserWarning``. The check covers only the :class:`~tensordict.nn.ProbabilisticTensorDictModule` instances
+          inside the wrapped :class:`~torch.nn.Module`: other code that branches on
+          :func:`~tensordict.nn.probabilistic.interaction_type` (for example an exploration module) and wrapped
+          functions that are not modules are not checked; if the wrapped module holds no
+          :class:`~tensordict.nn.ProbabilisticTensorDictModule`, the replay repeats the captured branch without a
+          warning. Capture one ``CudaGraphModule`` per interaction type whenever the output depends on it.
 
     .. warning::
         ``CudaGraphModule`` is not an :class:`~torch.nn.Module` by design, to discourage gathering parameters
