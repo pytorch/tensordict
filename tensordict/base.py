@@ -110,6 +110,7 @@ from tensordict.utils import (
     is_batchedtensor,
     is_non_tensor,
     is_tensorclass,
+    KEY_SEPARATOR,
     list_to_stack,
     set_capture_non_tensor_stack,
     unravel_key,
@@ -9561,7 +9562,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @_cache_while_locked  # noqa: B019
     def flatten_keys(
         self,
-        separator: str = ".",
+        separator: str = KEY_SEPARATOR,
         inplace: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> Self:
@@ -9743,7 +9744,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     @_as_context_manager()
     @_copy_cached_result
     @_cache_while_locked  # noqa: B019
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> Self:
+    def unflatten_keys(
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
+    ) -> Self:
         """Converts a flat tensordict into a nested one, recursively.
 
         The TensorDict type will be lost and the result will be a simple TensorDict instance.
