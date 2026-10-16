@@ -95,6 +95,7 @@ __all__ = [
     "remove_duplicates",
     "unravel_key",
     "unravel_key_list",
+    "unravel_key_to_tuple",
     # Configuration
     "capture_non_tensor_stack",
     "get_printoptions",
@@ -2909,8 +2910,30 @@ def _make_dtype_promotion(func):
     return new_func
 
 
-def _unravel_key_to_tuple(key):
-    """Return ``key`` as a flat tuple of str, or ``()`` if it is not a key."""
+def unravel_key_to_tuple(key: NestedKey) -> tuple[str, ...]:
+    """Unravel a nested key into a flat tuple of str.
+
+    Unlike :func:`~tensordict.unravel_key`, a str key gives a one-element
+    tuple, and an invalid key gives ``()`` instead of raising.
+
+    Args:
+        key (NestedKey): the key to unravel.
+
+    Returns:
+        a flat tuple of str, or ``()`` if ``key`` is not a valid nested key.
+
+    Examples:
+        >>> from tensordict import unravel_key_to_tuple
+        >>> unravel_key_to_tuple("a")
+        ('a',)
+        >>> unravel_key_to_tuple(("a", ("b", ("c",))))
+        ('a', 'b', 'c')
+        >>> unravel_key_to_tuple(("a", 1))
+        ()
+        >>> unravel_key_to_tuple(1)
+        ()
+
+    """
     if isinstance(key, str):
         return (key,)
     if not isinstance(key, tuple):
@@ -2933,6 +2956,10 @@ def _unravel_key_to_tuple(key):
         ):
             return ()
     return tuple(result)
+
+
+# The name TorchRL and other callers import.
+_unravel_key_to_tuple = unravel_key_to_tuple
 
 
 def _append_key_parts(key: tuple, result: list) -> bool:

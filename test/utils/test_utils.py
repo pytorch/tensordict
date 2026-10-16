@@ -36,8 +36,10 @@ from tensordict import (
     UnbatchedTensor,
     unravel_key,
     unravel_key_list,
+    unravel_key_to_tuple,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
+from tensordict._tensorcollection import TensorCollection
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -470,12 +472,33 @@ def test_unravel_keys():
 @pytest.mark.parametrize("key,expected", _VALID_KEYS)
 def test_unravel_key_to_tuple(key, expected):
     expected = (expected,) if isinstance(expected, str) else expected
-    assert _unravel_key_to_tuple(key) == expected
+    assert unravel_key_to_tuple(key) == expected
 
 
 @pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS + _NON_TUPLE_INVALID_KEYS)
 def test_unravel_key_to_tuple_invalid(key):
-    assert _unravel_key_to_tuple(key) == ()
+    assert unravel_key_to_tuple(key) == ()
+
+
+def test_unravel_key_to_tuple_public():
+    assert "unravel_key_to_tuple" in tensordict.__all__
+    assert tensordict.unravel_key_to_tuple is tensordict.utils.unravel_key_to_tuple
+    # The private name keeps working for current callers.
+    assert _unravel_key_to_tuple is unravel_key_to_tuple
+
+
+def test_TensorCollection_public():
+    assert "TensorCollection" in tensordict.__all__
+    assert tensordict.TensorCollection is TensorCollection
+
+    class Data(tensordict.TensorClass):
+        x: torch.Tensor
+
+    td = TensorDict(x=torch.zeros(3), batch_size=[3])
+    assert isinstance(td, tensordict.TensorCollection)
+    assert isinstance(lazy_stack([td, td]), tensordict.TensorCollection)
+    assert isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection)
+    assert not isinstance(torch.zeros(3), tensordict.TensorCollection)
 
 
 def _reference_unravel_key_to_tuple(key):
@@ -601,8 +624,9 @@ def test_C_module_is_deprecated():
         import tensordict._C as _C
     # The message names only public replacements.
     (message,) = [str(r.message) for r in w if "tensordict._C" in str(r.message)]
-    assert "Use tensordict.unravel_key (also for unravel_keys) and" in message
-    assert "tensordict.unravel_key_list." in message
+    assert "Use tensordict.unravel_key (also for unravel_keys)," in message
+    assert "tensordict.unravel_key_list and" in message
+    assert "tensordict.unravel_key_to_tuple (for _unravel_key_to_tuple)" in message
     assert "from tensordict.utils" not in message
     assert _C.unravel_key is unravel_key
     assert _C.unravel_key_list is unravel_key_list

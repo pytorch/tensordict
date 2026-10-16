@@ -125,6 +125,12 @@ def get_device():
 
 
 class TestInteractionType:
+    def test_public_interaction_type(self):
+        assert "interaction_type" in tensordict.nn.__all__
+        assert tensordict.nn.interaction_type is interaction_type
+        with set_interaction_type("mode"):
+            assert tensordict.nn.interaction_type() == InteractionType.MODE
+
     def test_base(self):
         with set_interaction_type("DETERMINISTIC"):
             assert interaction_type() == InteractionType.DETERMINISTIC

@@ -29,6 +29,7 @@ from tensordict._td import (
     stack,
     TensorDict,
 )
+from tensordict._tensorcollection import TensorCollection
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.base import (
     _default_is_leaf as default_is_leaf,
@@ -91,6 +92,7 @@ from tensordict.utils import (
     set_printoptions,
     unravel_key,
     unravel_key_list,
+    unravel_key_to_tuple,
 )
 
 __version__: str | None
@@ -99,6 +101,7 @@ __all__ = [
     # Core classes
     "TensorDict",
     "TensorDictBase",
+    "TensorCollection",
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
@@ -156,6 +159,7 @@ __all__ = [
     "assert_allclose_td",
     "unravel_key",
     "unravel_key_list",
+    "unravel_key_to_tuple",
     "parse_tensor_dict_string",
     # Configuration
     "default_is_leaf",
