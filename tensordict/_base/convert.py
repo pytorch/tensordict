@@ -539,6 +539,15 @@ class _Conversion:
             recover the original types.
 
         .. note::
+            A module ``state_dict()`` round-trips through ``from_pytree``, and its
+            :meth:`~.memmap` output loads with ``load_memmap(path, allow_pickle=False)``.
+            The state dicts of an optimizer and of a learning-rate scheduler hold
+            ``None``, ``str`` values and Python numbers, which ``from_pytree`` rejects
+            (``None`` and ``str``) or returns as tensors (numbers): save them with
+            ``torch.save(sd, path)`` and load them with ``torch.load(path, weights_only=True)``,
+            which round-trips them exactly without unpickling arbitrary objects.
+
+        .. note::
             The list fields of a named tuple, and some of its dict and tuple
             fields, are converted with :meth:`~.from_any` and do not
             round-trip through :meth:`~.to_pytree`:

@@ -55,6 +55,7 @@ from tensordict.utils import (
     expand_right,
     IndexType,
     is_non_tensor,
+    KEY_SEPARATOR,
     NestedKey,
     unravel_key,
 )
@@ -1921,7 +1922,11 @@ class PersistentTensorDict(
         )
         dest._is_memmap = True
         for key, value in self._items_metadata():
-            if not value.get("array"):
+            # an h5 enum has a torch dtype in the metadata but reads as a
+            # non-tensor
+            if not value.get("array") or self._backend.is_non_tensor(
+                self._get_array(key)
+            ):
                 value = self._get_str(key, default=NO_DEFAULT)
                 dest._set_str(
                     key,
@@ -2078,7 +2083,7 @@ class PersistentTensorDict(
     @_as_context_manager()
     def flatten_keys(
         self,
-        separator: str = ".",
+        separator: str = KEY_SEPARATOR,
         inplace: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
@@ -2105,7 +2110,9 @@ class PersistentTensorDict(
     # keeps while locked: a locked file would keep a copy of its data, and
     # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
-    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+    def unflatten_keys(
+        self, separator: str = KEY_SEPARATOR, inplace: bool = False
+    ) -> T:
         if inplace:
             raise ValueError(
                 "Cannot call unflatten_keys in_place with a PersistentTensorDict."
