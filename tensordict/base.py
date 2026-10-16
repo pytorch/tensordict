@@ -9871,6 +9871,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return self._flatten_keys_outplace(separator=separator, is_leaf=is_leaf)
 
     def _flatten_keys_outplace(self, separator, is_leaf):
+        """Returns a new tensordict with the leaves of ``self`` under flat keys.
+
+        :meth:`flatten_keys` calls it without ``inplace``, after it has checked
+        that a lazy stack has no exclusive keys. ``is_leaf`` may be ``None``.
+        The hook raises a ``KeyError`` when two keys collide once flattened.
+        """
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
         if is_leaf in _IS_LEAF_WITHOUT_NODES:
