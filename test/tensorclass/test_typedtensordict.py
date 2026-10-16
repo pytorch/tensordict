@@ -1385,26 +1385,33 @@ class TestFromTensordict:
 
         batch = [3] if stack_dim else []
 
-        def member(extra):
-            inner = [TensorDict(x=torch.ones(3), batch_size=batch) for _ in range(2)]
+        def member(extra, value=1.0):
+            inner = [
+                TensorDict(x=torch.full((3,), value), batch_size=batch)
+                for _ in range(2)
+            ]
             if extra:
-                inner[0]["e"] = torch.ones(3)
+                inner[0]["e"] = torch.full((3,), value)
             n = lazy_stack(inner, stack_dim)
             if depth == 2:
                 n = TensorDict(m=n, batch_size=batch)
-            return TensorDict(a=torch.ones(3), n=n, batch_size=batch)
+            return TensorDict(a=torch.full((3,), value), n=n, batch_size=batch)
 
         tds = [member(True), member(False)]
         state = Nested.from_tensordict(lazy_stack(tds))
-        other = state.to_tensordict().apply(lambda x: torch.full_like(x, 3.0))
+        dense = state.to_tensordict().apply(lambda x: torch.full_like(x, 3.0))
+        # an input that holds e too
+        held = Nested.from_tensordict(
+            lazy_stack([member(True, 3.0), member(False, 3.0)])
+        )
         args = {
             "add_": (1.0,),
             "mul_": (2.0,),
             "zero_": (),
-            "lerp_": (other, 0.5),
+            "lerp_": (dense, 0.5),
             "clamp_min_": (3.0,),
-            "copy_": (other,),
-            "update_": (other,),
+            "copy_": (held,),
+            "update_": (held,),
         }[op]
         assert getattr(state, op)(*args) is state
         expected = {"zero_": 0.0, "copy_": 3.0, "update_": 3.0, "clamp_min_": 3.0}
@@ -1414,11 +1421,59 @@ class TestFromTensordict:
             assert (td["a"] == expected).all()
             assert (td[inner + ("x",)] == expected).all()
         assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
-        # a call that raises writes nothing
-        with pytest.raises(KeyError):
-            state.add_(other.exclude(inner + ("x",)))
+        if op == "update_":
+            # a dense input reaches the leaves of the inner stack too
+            assert state.update_(dense.apply(lambda x: x + 1)) is state
+            for td in tds:
+                assert (td[inner + ("x",)] == 4).all()
+            assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
+        if op == "add_":
+            # a call that raises writes nothing
+            with pytest.raises(KeyError):
+                state.add_(dense.exclude(inner + ("x",)))
+            for td in tds:
+                assert (td["a"] == expected).all()
+
+    @pytest.mark.parametrize("op", ["add_", "zero_", "update_", "copy_"])
+    def test_from_tensordict_lazy_stack_held_exclusive_keys_batch_sizes_differ(
+        self, op
+    ):
+        # #2759: the members hold tensordicts of other batch sizes, so their
+        # shared leaves cannot be read: the source changes them, as on main
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        def members(value):
+            inner = [
+                TensorDict(x=torch.full((3, 2), value), batch_size=[3])
+                for _ in range(2)
+            ]
+            inner[0]["e"] = torch.full((3, 2), value)
+            return [
+                TensorDict(
+                    a=torch.full((3,), value),
+                    n=TensorDict(x=torch.full((3, 2, 2), value), batch_size=[3]),
+                    batch_size=[3],
+                ),
+                TensorDict(
+                    a=torch.full((3,), value), n=lazy_stack(inner, 1), batch_size=[3]
+                ),
+            ]
+
+        tds = members(1.0)
+        state = Nested.from_tensordict(lazy_stack(tds))
+        args = {
+            "add_": (2.0,),
+            "zero_": (),
+            "update_": (lazy_stack(members(3.0)),),
+            "copy_": (lazy_stack(members(3.0)),),
+        }[op]
+        assert getattr(state, op)(*args) is state
+        expected = 0.0 if op == "zero_" else 3.0
         for td in tds:
             assert (td["a"] == expected).all()
+            assert (td["n", "x"] == expected).all()
 
     @pytest.mark.parametrize("op", ["add_", "zero_", "mul_", "copy_"])
     def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace(self, op):
