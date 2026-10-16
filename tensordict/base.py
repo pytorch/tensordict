@@ -1706,9 +1706,11 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
     for the entry ``"x"`` of member ``0`` of the lazy stack ``td["n"]``.
     ``source`` has no such keys: its tensor at ``("n", "x")`` is read at the
     index of the member along the stack dim (#2775). A tensor that lacks the
-    stack dim, or has it with another size, broadcasts as ``copy_`` into the
-    stacked leaf broadcasts it, and raises as that ``copy_`` does where it
-    cannot (#2834). ``None`` where ``source`` lacks the entry.
+    stack dim, or has it with another size, is broadcast to the stacked leaf
+    as ``copy_`` would, and raises as that ``copy_`` does where it cannot
+    (#2834). Each member holds the whole of an unbatched leaf, so such a
+    tensor is broadcast to the leaf of the member. ``None`` where ``source``
+    lacks the entry.
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict.typedtensordict import TypedTensorDict
@@ -1735,16 +1737,20 @@ def _read_at_members(td: TensorDictBase, source: TensorDictBase, key: tuple) -> 
     for i, (dim, size, index) in enumerate(members):
         if source.ndim <= dim or source.shape[dim] != size:
             # the shape of the leaf that this stack reads, as a dense
-            # tensordict holds it
+            # tensordict holds it; an unbatched leaf has no stack dim
             shape = list(td.shape)
-            for inner_dim, inner_size, _ in reversed(members[i:]):
-                shape.insert(inner_dim, inner_size)
+            unbatched = _is_unbatched(td)
+            if not unbatched:
+                for inner_dim, inner_size, _ in reversed(members[i:]):
+                    shape.insert(inner_dim, inner_size)
             try:
                 source = source.expand(shape)
             except RuntimeError:
                 # raise as copy_ into a dense leaf of that shape does
                 source.new_empty(shape, device="meta").copy_(source.to("meta"))
                 raise
+            if unbatched:
+                return source
         source = source.select(dim, index)
     return source
 
