@@ -5678,15 +5678,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_update is not None
             and type(self) is _TENSORDICT_TYPE
             and type(input_dict_or_td) is _TENSORDICT_TYPE
+            and not is_compiling()
             and forward_ad._current_level < 0
         ):
-            # Fast route for exact TensorDicts: pair the selected tensors in
-            # the order of the _apply_nest route below, and copy them with
-            # _foreach_copy_, which forward AD does not support (hence no
-            # dual level). The route below writes each other entry at its
-            # place in the order. Where each key names an entry that is not a
-            # tensordict, the walk has read the path of each key through
-            # exact TensorDicts: _reads_copies_under is False.
+            # Fast route for exact TensorDicts, in eager mode (compiled code
+            # keeps the graphs and guards of the route below): pair the
+            # selected tensors in the order of the _apply_nest route below,
+            # and copy them with _foreach_copy_, which forward AD does not
+            # support (hence no dual level). The route below writes each
+            # other entry at its place in the order. Where each key names an
+            # entry that is not a tensordict, the walk has read the path of
+            # each key through exact TensorDicts: _reads_copies_under is False.
             wanted = set(keys_to_update)
             dests, sources, entries = [], [], []
             named = _keys_update_pairs(
