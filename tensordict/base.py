@@ -1156,11 +1156,7 @@ def _flatten_keys_leaves(
         cls = type(val)
         if is_leaf(cls):
             result.append(((key,), val))
-        elif (
-            _is_tensor_collection(cls)
-            and not is_non_tensor(cls)
-            and not _pass_through(val)
-        ):
+        elif _is_tensor_collection(cls) and not _pass_through(val):
             result.extend(
                 ((key, *subkey), subval)
                 for subkey, subval in _flatten_keys_leaves(val, is_leaf)
@@ -1581,9 +1577,7 @@ def _add_empty_leaves(td: TensorDictBase, prefix: tuple | None, leaves: dict) ->
             leaves[full_key] = None
             continue
         if cls is TensorDict or (
-            _is_tensor_collection(cls)
-            and not is_non_tensor(cls)
-            and not _pass_through(value)
+            _is_tensor_collection(cls) and not _pass_through(value)
         ):
             _add_empty_leaves(value, (key,) if prefix is None else full_key, leaves)
         elif _default_is_leaf(cls):
@@ -4660,7 +4654,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 cls = type(val)
                 if not _is_tensor_collection(cls):
                     continue
-                if is_non_tensor(cls) or _pass_through(val):
+                if _pass_through(val):
                     if val.is_empty():
                         del td[key]
                 elif filter_td(val._tensordict if _is_tensorclass(cls) else val):
@@ -6375,7 +6369,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         yield k, val
                     if _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
-                        if not is_non_tensor(cls) and not _pass_through(val):
+                        if not _pass_through(val):
                             # _unravel_key_to_tuple((k, _key)), with less work:
                             # no call for a str _key, and a tuple _key is spliced
                             # in, so that a flat key takes the fast path instead
@@ -6514,7 +6508,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         yield val
                     if include_nested and _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
-                        if not is_non_tensor(cls) and not _pass_through(val):
+                        if not _pass_through(val):
                             yield from val.values(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
