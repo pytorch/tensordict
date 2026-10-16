@@ -2860,6 +2860,48 @@ class TestLazyStackedTensorDict:
             assert (td["a"] == value).all()
             assert (td["u"] == value).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_set_unbatched(self, stack_dim):
+        # #2864: the stack dim does not apply to an unbatched value, so each
+        # member holds the whole of it, as unbind of a tensordict gives it
+        members = [
+            TensorDict(a=torch.zeros(2), n={"b": torch.zeros(2)}, batch_size=[2])
+            for _ in range(3)
+        ]
+        lazy = lazy_stack(members, stack_dim)
+        u = UnbatchedTensor(torch.zeros(5))
+        lazy.set("u", u)
+        lazy["v"] = u
+        lazy["n", "u"] = u
+        lazy.set(("m", "u"), u)
+        for key in ("u", "v", ("n", "u"), ("m", "u")):
+            for member in members:
+                value = member.get(key)
+                assert isinstance(value, UnbatchedTensor)
+                assert value.data_ptr() == u.data_ptr()
+            with warnings.catch_warnings():
+                # the members share the storage
+                warnings.simplefilter("error")
+                value = lazy.get(key)
+            assert isinstance(value, UnbatchedTensor)
+            assert value.batch_size == lazy.batch_size
+        lazy.set_("u", UnbatchedTensor(torch.ones(5)))
+        assert (u == 1).all()
+
+        def check_flatten(td):
+            flat = td.flatten_keys()
+            assert isinstance(flat.get("n.u"), UnbatchedTensor)
+            assert set(flat.keys()) == {"a", "n.b", "n.u", "u", "v", "m.u"}
+            out = flat.unflatten_keys()
+            assert isinstance(out.get(("n", "u")), UnbatchedTensor)
+            assert (out == td).all()
+
+        check_flatten(lazy)
+        check_flatten(lazy_stack([lazy, lazy.copy()], 0))
+        nested = TensorDict(s=lazy, batch_size=lazy.batch_size).flatten_keys()
+        assert isinstance(nested.get("s.n.u"), UnbatchedTensor)
+        assert (nested.unflatten_keys()["s"] == lazy).all()
+
     @pytest.mark.parametrize("index", [0, (0,), (0, Ellipsis), slice(0, 1)])
     def test_lazy_setitem_new_key_is_exclusive(self, index):
         # a new key written at an index goes only into the members that the

@@ -1629,6 +1629,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 values = list(value)
             else:
                 values = _recursive_unbind_list(value, self.stack_dim)
+        elif _is_unbatched(value):
+            values = self._unbatched_member_values(value)
         else:
             values = value.unbind(self.stack_dim)
         for tensordict, item in _zip_strict(self.tensordicts, values):
@@ -1679,7 +1681,10 @@ class LazyStackedTensorDict(TensorDictBase):
             validated = True
         if self._is_vmapped:
             value = self._hook_in(value)
-        values = value.unbind(self.stack_dim)
+        if _is_unbatched(value):
+            values = self._unbatched_member_values(value)
+        else:
+            values = value.unbind(self.stack_dim)
         for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_tuple(
                 key,
@@ -1689,6 +1694,16 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
             )
         return self
+
+    def _unbatched_member_values(self, value: Tensor) -> list[Tensor]:
+        """The ``UnbatchedTensor`` ``value`` for each member, as ``unbind`` gives it.
+
+        The stack dim does not apply to it: it belongs to the whole stack, so
+        each member holds an alias of it with the batch size of the member.
+        """
+        return [
+            _unbatched_with_batch_size(value, td.batch_size) for td in self.tensordicts
+        ]
 
     def _split_index(self, index: IndexType) -> _SplitIndex:
         """Read ``index`` as indices of the members of the stack that it reaches.
