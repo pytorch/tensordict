@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.util
 import io
 import math
@@ -1863,6 +1864,96 @@ class TestLazyStackedTensorDict:
             td is not member for td, member in zip(empty.tensordicts, lazy.tensordicts)
         )
         assert list(empty.keys(True)) == (["sub"] if recurse else [])
+
+    def test_empty_recurse_leaves_no_reference_cycle(self):
+        # empty(recurse=True) frees what it builds by reference counting: a
+        # cycle per call would leave garbage for the collector, and the
+        # collections it adds can run at any point of the caller's code
+        tds = [
+            TensorDict(
+                a=torch.zeros(2),
+                n=TensorDict(b=torch.zeros(2), batch_size=[2]),
+                batch_size=[2],
+            ),
+            TensorDict(
+                n=lazy_stack(
+                    [
+                        TensorDict(a=torch.zeros(2), batch_size=[2]),
+                        TensorDict(a=torch.zeros(2), e=torch.ones(2), batch_size=[2]),
+                    ]
+                ),
+                batch_size=[2],
+            ),
+        ]
+        for td in tds:
+            td.empty(recurse=True)  # warm up caches
+        gc.collect()
+        gc.disable()
+        try:
+            for td in tds:
+                for _ in range(10):
+                    td.empty(recurse=True)
+            assert gc.collect() == 0
+        finally:
+            gc.enable()
+
+    def test_lazy_empty_recurse_drops_member_leaves(self):
+        # empty(recurse=True) drops the tensors that only some members of a
+        # nested lazy stack hold, as on a lazy stack at the root, and keeps
+        # the non-tensor entries, as a dense tensordict does (#2840)
+        class MC(TensorClass):
+            n: TensorDict
+
+        class Typed(TypedTensorDict):
+            n: TensorDictBase
+
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(2), batch_size=[2]),
+                TensorDict(
+                    a=torch.zeros(2),
+                    e=torch.ones(2),
+                    s=TensorDict(x=torch.ones(2, 3), batch_size=[2, 3]),
+                    f=NonTensorData("f", batch_size=[2]),
+                    batch_size=[2],
+                ),
+            ],
+            1,
+            stack_dim_name="m",
+        )
+        expected = [[], ["f", "s"]]
+        assert [sorted(td.keys()) for td in lazy.empty(True).tensordicts] == expected
+        stacks = lazy_stack([lazy, lazy.clone()])
+        for td, path in (
+            (TensorDict(n=lazy, batch_size=[2]), ("n",)),
+            (TensorDict(t=TensorDict(n=lazy, batch_size=[2])), ("t", "n")),
+            (MC(n=lazy, batch_size=[2]), ("n",)),
+            (Typed(n=lazy, batch_size=[2]), ("n",)),
+            (TensorDict(n=stacks, batch_size=[2]), ("n",)),
+        ):
+            for empty in (
+                td.empty(recurse=True),
+                td.empty(recurse=True, batch_size=td.batch_size),
+            ):
+                assert type(empty) is type(td)
+                nested = empty.get(path)
+                assert type(nested) is LazyStackedTensorDict
+                assert nested.batch_size == td.get(path).batch_size
+                members = nested.tensordicts
+                if type(members[0]) is LazyStackedTensorDict:
+                    # the stack of stacks
+                    assert nested.stack_dim == 0
+                    members = [td for stack in members for td in stack.tensordicts]
+                else:
+                    assert nested.stack_dim == 1
+                    assert nested.names == [None, "m"]
+                assert [sorted(td.keys()) for td in members] == expected * (
+                    len(members) // 2
+                )
+                assert members[1]["s"].batch_size == torch.Size([2, 3])
+                assert members[1]["s"].is_empty()
+                assert members[1]["f"] == "f"
+                assert not list(empty.keys(True, True))
 
     def test_lazy_empty_batch_size_list_vs_size(self):
         # the same batch size as a list, a tuple or a torch.Size gives a lazy stack
