@@ -145,10 +145,6 @@ Examples
 'Pose'
 ```
 
-rename_keys(*mapping*, ***, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
-
-TensorClass-specific rename_keys: the destinations must be fields, which are never removed.
-
 select(**keys*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *as_tensordict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 TensorClass-specific select that supports `as_tensordict`.

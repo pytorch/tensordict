@@ -142,7 +142,6 @@ Methods
 | [`TensorDictBase.split_keys`](generated/tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys)(*key_sets[, ...]) | Splits the tensordict in subsets given one or more set of keys. |
 | [`TensorDictBase.separates`](generated/tensordict.TensorDictBase.separates.html#tensordict.TensorDictBase.separates)(*keys[, default, ...]) | Separates the specified keys from the tensordict in-place. |
 | [`TensorDictBase.rename_key_`](generated/tensordict.TensorDictBase.rename_key_.html#tensordict.TensorDictBase.rename_key_)(old_key, new_key) | Renames a key with a new string and returns the same tensordict with the updated key name. |
-| [`TensorDictBase.rename_keys`](generated/tensordict.TensorDictBase.rename_keys.html#tensordict.TensorDictBase.rename_keys)(mapping, *[, strict]) | Returns a tensordict with several keys renamed at once. |
 | [`TensorDictBase.flatten_keys`](generated/tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys)([separator, ...]) | Converts a nested tensordict into a flat one, recursively. |
 | [`TensorDictBase.unflatten_keys`](generated/tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys)([separator, ...]) | Converts a flat tensordict into a nested one, recursively. |
 | [`TensorDictBase.create_nested`](generated/tensordict.TensorDictBase.create_nested.html#tensordict.TensorDictBase.create_nested)(key) | Creates a nested tensordict of the same shape, device and dim names as the current tensordict. |

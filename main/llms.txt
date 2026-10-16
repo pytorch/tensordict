@@ -306,7 +306,6 @@
 - [TensorDictBase.rename](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.rename.md)
 - [TensorDictBase.rename](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.rename_.md)
 - [TensorDictBase.rename_key](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.rename_key_.md)
-- [TensorDictBase.rename_keys](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.rename_keys.md)
 - [TensorDictBase.repeat](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.repeat.md)
 - [TensorDictBase.repeat_interleave](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.repeat_interleave.md)
 - [TensorDictBase.replace](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.replace.md)

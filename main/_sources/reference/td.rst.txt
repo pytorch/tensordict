@@ -174,7 +174,6 @@ see :ref:`keys`. For values that are not tensors, see
     TensorDictBase.split_keys
     TensorDictBase.separates
     TensorDictBase.rename_key_
-    TensorDictBase.rename_keys
     TensorDictBase.flatten_keys
     TensorDictBase.unflatten_keys
     TensorDictBase.create_nested
