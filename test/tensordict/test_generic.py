@@ -9400,8 +9400,9 @@ class TestGeneric:
             cls(a=torch.zeros(3, 4), batch_size=[3], device="cpu") for _ in range(2)
         ],
         "keys in another order": lambda cls: [
-            cls(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]),
-            cls(b=torch.full((3,), 2.0), a=torch.full((3,), 3.0), batch_size=[3]),
+            # the first tensordict's keys are not sorted: the result keeps them
+            cls(b=torch.ones(3), a=torch.zeros(3), batch_size=[3]),
+            cls(a=torch.full((3,), 3.0), b=torch.full((3,), 2.0), batch_size=[3]),
         ],
         "exclusive keys": lambda cls: [
             cls(a=torch.zeros(3), batch_size=[3]),
