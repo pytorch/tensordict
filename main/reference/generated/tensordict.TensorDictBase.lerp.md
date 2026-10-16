@@ -1,6 +1,6 @@
 # TensorDictBase.lerp
 
-TensorDictBase.lerp(*end: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *weight: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
+TensorDictBase.lerp(*end: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *weight: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
 
 Does a linear interpolation of two tensors `start` (given by `self`) and `end` based on a scalar or tensor `weight`.
 

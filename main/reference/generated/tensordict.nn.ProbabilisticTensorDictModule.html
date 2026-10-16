@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev5880+g3b553d893.d20261016)">
+<meta name="llm:version" content="main (0.15.0.dev5881+g9eddf4fed.d20261016)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5880+g3b553d893.d20261016)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5881+g9eddf4fed.d20261016)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1652,7 +1652,7 @@ module in a <a class="reference internal" href="tensordict.nn.ProbabilisticTenso
 get the distribution without a value, call <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="tensordict.nn.ProbabilisticTensorDictModule.get_dist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_dist()</span></code></a>. To get the
 log-probability of a value, call <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule.log_prob" title="tensordict.nn.ProbabilisticTensorDictModule.log_prob"><code class="xref py py-meth docutils literal notranslate"><span class="pre">log_prob()</span></code></a>.</p>
 <p>The value depends on the interaction type. The module uses
-<a class="reference internal" href="tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type" title="tensordict.nn.probabilistic.interaction_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code></a> if it is set (see
+<a class="reference internal" href="tensordict.nn.interaction_type.html#tensordict.nn.interaction_type" title="tensordict.nn.interaction_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code></a> if it is set (see
 <a class="reference internal" href="tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>). Otherwise it uses
 <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>. See <a class="reference internal" href="tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType"><code class="xref py py-class docutils literal notranslate"><span class="pre">InteractionType</span></code></a>
 for what each type reads from the distribution. By default the
@@ -1755,7 +1755,7 @@ is DETERMINISTIC.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>When a value is computed, the module first reads
-<a class="reference internal" href="tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type" title="tensordict.nn.probabilistic.interaction_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code></a>. If it
+<a class="reference internal" href="tensordict.nn.interaction_type.html#tensordict.nn.interaction_type" title="tensordict.nn.interaction_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code></a>. If it
 returns <code class="docutils literal notranslate"><span class="pre">None</span></code> (outside of <a class="reference internal" href="tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.set_interaction_type"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>),
 the module uses <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>. TorchRL
 collectors sample with <code class="docutils literal notranslate"><span class="pre">InteractionType.RANDOM</span></code> by default

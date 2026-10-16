@@ -1,6 +1,6 @@
 # TensorDictBase.set
 
-TensorDictBase.set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self
+TensorDictBase.set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self
 
 Sets an entry, and returns the tensordict.
 

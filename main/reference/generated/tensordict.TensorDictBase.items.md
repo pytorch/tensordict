@@ -1,6 +1,6 @@
 # TensorDictBase.items
 
-TensorDictBase.items(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf=None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection]]
+TensorDictBase.items(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf=None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)]]
 
 Returns a generator of the `(key, value)` pairs of the tensordict.
 

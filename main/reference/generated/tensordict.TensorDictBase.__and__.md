@@ -1,6 +1,6 @@
 # TensorDictBase.__and__
 
-TensorDictBase.__and__(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
+TensorDictBase.__and__(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
 
 Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value.
 

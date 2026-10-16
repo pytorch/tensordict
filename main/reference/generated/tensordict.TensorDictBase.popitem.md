@@ -1,6 +1,6 @@
 # TensorDictBase.popitem
 
-TensorDictBase.popitem() → [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection]
+TensorDictBase.popitem() → [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)]
 
 Removes the item that was last inserted into the TensorDict.
 

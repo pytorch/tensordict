@@ -112,7 +112,7 @@ to make sure that all of these are fulfilled.
 > `set_interaction_type("deterministic")`. The first replay under another interaction type emits a
 > `UserWarning`. The check covers only the [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) instances
 > inside the wrapped [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module): other code that branches on
-> [`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type) (for example an exploration module) and wrapped
+> `interaction_type()` (for example an exploration module) and wrapped
 > functions that are not modules are not checked; if the wrapped module holds no
 > [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), the replay repeats the captured branch without a
 > warning. Capture one `CudaGraphModule` per interaction type whenever the output depends on it.

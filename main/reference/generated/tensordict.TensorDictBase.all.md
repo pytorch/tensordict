@@ -1,6 +1,6 @@
 # TensorDictBase.all
 
-TensorDictBase.all(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | TensorCollection
+TensorDictBase.all(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Checks if all values are True/non-null in the tensordict.
 

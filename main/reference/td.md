@@ -27,6 +27,10 @@ its tensors.
 [`MemoryMappedTensor`](generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) is not a tensordict. It is a tensor whose data
 is in a file, and the type of the entries of a memory-mapped tensordict.
 
+[`TensorCollection`](generated/tensordict.TensorCollection.html#tensordict.TensorCollection) is the common base class of the tensordicts and
+the subclasses of [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass): the type hint for "a tensordict or
+a tensorclass".
+
 Other containers have their own pages: [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass), the class
 form with typed fields and methods, and non-tensor data
 ([tensorclass and non-tensor data](tc.html#api-tensorclass)), [`TypedTensorDict`](generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict)
@@ -42,6 +46,7 @@ form with typed fields and methods, and non-tensor data
 
 | [`MemoryMappedTensor`](generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor)(source, *[, dtype, ...]) | A CPU tensor whose storage is a file on disk, or anonymous shared memory when no filename is given. |
 | --- | --- |
+| [`TensorCollection`](generated/tensordict.TensorCollection.html#tensordict.TensorCollection)(*args, **kwargs) | A base class for TensorDictBase and TensorClass. |
 
 ## Methods by task
 
@@ -172,6 +177,7 @@ Classes and functions
 | [`unravel_key`](generated/tensordict.unravel_key.html#tensordict.unravel_key)(key) | Unravel a nested key. |
 | --- | --- |
 | [`unravel_key_list`](generated/tensordict.unravel_key_list.html#tensordict.unravel_key_list)(keys) | Unravels every key of a list, as [`unravel_key()`](generated/tensordict.unravel_key.html#tensordict.unravel_key) does. |
+| [`unravel_key_to_tuple`](generated/tensordict.unravel_key_to_tuple.html#tensordict.unravel_key_to_tuple)(key) | Unravel a nested key into a flat tuple of str. |
 | [`merge_tensordicts`](generated/tensordict.merge_tensordicts.html#tensordict.merge_tensordicts)(*tensordicts[, callback_exist]) | Merges tensordicts together. |
 
 ### Indexing, masking, and splitting

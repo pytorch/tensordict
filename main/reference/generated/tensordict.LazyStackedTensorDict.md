@@ -257,7 +257,7 @@ Heterogeneous dimensions are returned as -1.
 The shape of a tensor entry is read from the members. Other entries
 are read with [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get), which stacks them.
 
-get_nestedtensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, ***, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
+get_nestedtensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, ***, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Returns a nested tensor when stacking cannot be achieved.
 

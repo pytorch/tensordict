@@ -1,6 +1,6 @@
 # TensorDictBase.setdefault
 
-TensorDictBase.setdefault(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
+TensorDictBase.setdefault(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Inserts the `key` entry with a value of `default` if `key` is not in the tensordict.
 

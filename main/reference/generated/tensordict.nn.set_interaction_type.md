@@ -6,7 +6,7 @@ Bases: `_DecoratorContextManager`
 
 Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function.
 
-Inside the block, [`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type)
+Inside the block, [`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)
 returns `type`, and every [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) uses it
 instead of its `default_interaction_type`. When the block ends, the
 previous value comes back.

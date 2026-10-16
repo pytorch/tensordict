@@ -1,4 +1,4 @@
-﻿.. currentmodule:: tensordict.nn.probabilistic
+﻿.. currentmodule:: tensordict.nn
 
 
 interaction_type
@@ -6,5 +6,5 @@ interaction_type
 
 .. autofunction:: interaction_type
 
-.. minigallery:: tensordict.nn.probabilistic.interaction_type
+.. minigallery:: tensordict.nn.interaction_type
     :add-heading: Tutorials that use ``interaction_type``

@@ -1,6 +1,6 @@
 # TensorDictBase.mod
 
-TensorDictBase.mod(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.mod(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 Computes the element-wise modulo of `self` and `other`.
 

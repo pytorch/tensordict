@@ -1,6 +1,6 @@
 # TensorDictBase.maximum
 
-TensorDictBase.maximum_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.maximum_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`maximum()`](tensordict.TensorDictBase.maximum.html#tensordict.TensorDictBase.maximum).
 

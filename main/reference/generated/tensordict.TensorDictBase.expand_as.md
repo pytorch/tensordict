@@ -1,6 +1,6 @@
 # TensorDictBase.expand_as
 
-TensorDictBase.expand_as(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.expand_as(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 Broadcasts the shape of the tensordict to the shape of other and expands it accordingly.
 

@@ -1,6 +1,6 @@
 # TensorDictBase.minimum
 
-TensorDictBase.minimum_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.minimum_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`minimum()`](tensordict.TensorDictBase.minimum.html#tensordict.TensorDictBase.minimum).
 

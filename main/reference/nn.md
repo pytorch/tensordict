@@ -74,7 +74,7 @@ tensor.
 
 | [`composite_lp_aggregate`](generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate)([nowarn]) | Returns whether a [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
 | --- | --- |
-| [`probabilistic.interaction_type`](generated/tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type)() | Returns the interaction type set by [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it. |
+| [`interaction_type`](generated/tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)() | Returns the interaction type set by [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it. |
 
 ## Ensembles
 

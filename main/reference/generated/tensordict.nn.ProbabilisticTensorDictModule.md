@@ -15,7 +15,7 @@ get the distribution without a value, call `get_dist()`. To get the
 log-probability of a value, call `log_prob()`.
 
 The value depends on the interaction type. The module uses
-[`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type) if it is set (see
+[`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type) if it is set (see
 [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)). Otherwise it uses
 `default_interaction_type`. See [`InteractionType`](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType)
 for what each type reads from the distribution. By default the
@@ -103,7 +103,7 @@ is DETERMINISTIC.
 Note
 
 When a value is computed, the module first reads
-[`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type). If it
+[`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type). If it
 returns `None` (outside of [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)),
 the module uses `default_interaction_type`. TorchRL
 collectors sample with `InteractionType.RANDOM` by default

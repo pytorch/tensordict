@@ -1,6 +1,6 @@
 # TensorDictBase.mul
 
-TensorDictBase.mul_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.mul_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`mul()`](tensordict.TensorDictBase.mul.html#tensordict.TensorDictBase.mul).
 

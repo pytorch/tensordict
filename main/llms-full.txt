@@ -5936,7 +5936,7 @@ tensor([1, 1, 1, 1, 1, 1, 1, 1])
 
 `set_interaction_type()` with no argument sets `DETERMINISTIC`.
 `set_interaction_type(None)` restores the `default_interaction_type` of
-each module. The function `tensordict.nn.probabilistic.interaction_type()`
+each module. The function `tensordict.nn.interaction_type()`
 returns the type of the current block, or `None` outside a block. TorchRL
 collectors sample with `RANDOM` by default (their `exploration_type`
 argument).
@@ -7028,7 +7028,7 @@ Heterogeneous dimensions are returned as -1.
 The shape of a tensor entry is read from the members. Other entries
 are read with [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get), which stacks them.
 
-get_nestedtensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, ***, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
+get_nestedtensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, ***, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Returns a nested tensor when stacking cannot be achieved.
 
@@ -8922,7 +8922,7 @@ documentation.
 
 *class*tensordict.TensorClass(**args*, ***kwargs*)
 
-Bases: `TensorCollection`
+Bases: [`TensorCollection`](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 A base class for dataclass-like containers of tensors.
 
@@ -9302,7 +9302,7 @@ Returns a tuple of indexed tensorclass instances unbound along the indicated dim
 
 Resulting tensorclass instances will share the storage of the initial tensorclass instance.
 
-update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
+update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
 
 Writes the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
 
@@ -9312,7 +9312,7 @@ written too, and the call warns. Starting with TensorDict 0.17, the default
 will change to writing only the entries in `keys_to_update`, as for a
 TensorDict source.
 
-update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index.
 
@@ -9346,6 +9346,109 @@ Changing the shape of a TensorDict
 [Slicing, indexing, and masking](../../tutorials/tensordict_slicing.html)
 
 Slicing, indexing, and masking
+
+---
+
+# TensorCollection
+
+*class*tensordict.TensorCollection(**args*, ***kwargs*)
+
+Bases: [`object`](https://docs.python.org/3/builtins/functions.html#object)
+
+A base class for TensorDictBase and TensorClass.
+
+This is an abstract base class that provides the foundation for tensor collections
+like TensorDict and TensorClass. It serves as a common interface for all tensor
+collection types in the tensordict library.
+
+Use it in type hints and `isinstance` checks for "a tensordict or a
+tensorclass". Classes decorated with `@tensorclass` do not inherit from
+it, only subclasses of [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) do; to check both,
+use [`is_tensor_collection()`](tensordict.is_tensor_collection.html#tensordict.is_tensor_collection).
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass, TensorCollection, TensorDict
+>>> class Data(TensorClass):
+... x: torch.Tensor
+>>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+>>> isinstance(td, TensorCollection)
+True
+>>> isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection)
+True
+>>> isinstance(torch.zeros(3), TensorCollection)
+False
+```
+
+## Tutorials that use `TensorCollection`
+
+![](../../_images/sphx_glr_data_fashion_thumb.png)
+
+[Using TensorDict for datasets](../../tutorials/data_fashion.html)
+
+Using TensorDict for datasets
+![](../../_images/sphx_glr_functional_thumb.png)
+
+[Functional calls and ensembles with TensorDict](../../tutorials/functional.html)
+
+Functional calls and ensembles with TensorDict
+![](../../_images/sphx_glr_serialization_speed_thumb.png)
+
+[Benchmarking TensorDict serialization speed](../../tutorials/serialization_speed.html)
+
+Benchmarking TensorDict serialization speed
+![](../../_images/sphx_glr_streamed_tensordict_thumb.png)
+
+[Building tensordicts from streams](../../tutorials/streamed_tensordict.html)
+
+Building tensordicts from streams
+![](../../_images/sphx_glr_tensorclass_fashion_thumb.png)
+
+[Using tensorclasses for datasets](../../tutorials/tensorclass_fashion.html)
+
+Using tensorclasses for datasets
+![](../../_images/sphx_glr_tensorclass_imagenet_thumb.png)
+
+[Batched data loading with tensorclasses](../../tutorials/tensorclass_imagenet.html)
+
+Batched data loading with tensorclasses
+![](../../_images/sphx_glr_tensordict_keys_thumb.png)
+
+[Getting, setting, and nesting keys](../../tutorials/tensordict_keys.html)
+
+Getting, setting, and nesting keys
+![](../../_images/sphx_glr_tensordict_memory_thumb.png)
+
+[Devices and memory-mapped tensors](../../tutorials/tensordict_memory.html)
+
+Devices and memory-mapped tensors
+![](../../_images/sphx_glr_tensordict_module_thumb.png)
+
+[Building models with TensorDictModule](../../tutorials/tensordict_module.html)
+
+Building models with TensorDictModule
+![](../../_images/sphx_glr_tensordict_preallocation_thumb.png)
+
+[Filling a TensorDict row by row](../../tutorials/tensordict_preallocation.html)
+
+Filling a TensorDict row by row
+![](../../_images/sphx_glr_tensordict_shapes_thumb.png)
+
+[Changing the shape of a TensorDict](../../tutorials/tensordict_shapes.html)
+
+Changing the shape of a TensorDict
+![](../../_images/sphx_glr_tensordict_slicing_thumb.png)
+
+[Slicing, indexing, and masking](../../tutorials/tensordict_slicing.html)
+
+Slicing, indexing, and masking
+![](../../_images/sphx_glr_zarr_storage_thumb.png)
+
+[Storing TensorDicts in zarr](../../tutorials/zarr_storage.html)
+
+Storing TensorDicts in zarr
 
 ---
 
@@ -9664,7 +9767,7 @@ Storing TensorDicts in zarr
 
 # TensorDictBase.__and__
 
-TensorDictBase.__and__(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
+TensorDictBase.__and__(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
 
 Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value.
 
@@ -9959,7 +10062,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.add
 
-TensorDictBase.add(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.add(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Adds `other`, scaled by `alpha`, to `self`.
 
@@ -9987,7 +10090,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.add
 
-TensorDictBase.add_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.add_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 In-place version of [`add()`](tensordict.TensorDictBase.add.html#tensordict.TensorDictBase.add).
 
@@ -10080,7 +10183,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.all
 
-TensorDictBase.all(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | TensorCollection
+TensorDictBase.all(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Checks if all values are True/non-null in the tensordict.
 
@@ -10189,7 +10292,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.any
 
-TensorDictBase.any(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | TensorCollection
+TensorDictBase.any(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Checks if any value is True/non-null in the tensordict.
 
@@ -10888,7 +10991,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.bitwise_and
 
-TensorDictBase.bitwise_and(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.bitwise_and(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Performs a bitwise AND operation between `self` and `other`.
 
@@ -11138,7 +11241,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.chunk
 
-TensorDictBase.chunk(*chunks: [int](https://docs.python.org/3/builtins/functions.html#int)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[TensorCollection, ...]
+TensorDictBase.chunk(*chunks: [int](https://docs.python.org/3/builtins/functions.html#int)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection), ...]
 
 Splits a tensordict into the specified number of chunks, if possible.
 
@@ -11199,7 +11302,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.clamp_max
 
-TensorDictBase.clamp_max(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.clamp_max(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Clamps each element of `self` to at most `other`.
 
@@ -11224,7 +11327,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.clamp_max
 
-TensorDictBase.clamp_max_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.clamp_max_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`clamp_max()`](tensordict.TensorDictBase.clamp_max.html#tensordict.TensorDictBase.clamp_max).
 
@@ -11239,7 +11342,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.clamp_min
 
-TensorDictBase.clamp_min(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.clamp_min(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Clamps each element of `self` to at least `other`.
 
@@ -12271,7 +12374,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.div
 
-TensorDictBase.div(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.div(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Divides each element of the input `self` by the corresponding element of `other`.
 
@@ -12642,7 +12745,7 @@ Changing the shape of a TensorDict
 
 # TensorDictBase.expand_as
 
-TensorDictBase.expand_as(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.expand_as(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 Broadcasts the shape of the tensordict to the shape of other and expands it accordingly.
 
@@ -15467,7 +15570,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.items
 
-TensorDictBase.items(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf=None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection]]
+TensorDictBase.items(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf=None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)]]
 
 Returns a generator of the `(key, value)` pairs of the tensordict.
 
@@ -15641,7 +15744,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.lerp
 
-TensorDictBase.lerp(*end: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *weight: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
+TensorDictBase.lerp(*end: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *weight: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*) → Self
 
 Does a linear interpolation of two tensors `start` (given by `self`) and `end` based on a scalar or tensor `weight`.
 
@@ -16135,7 +16238,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.logical_and
 
-TensorDictBase.logical_and(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.logical_and(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Performs a logical AND operation between `self` and `other`.
 
@@ -16301,7 +16404,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.map
 
-TensorDictBase.map(*fn: Callable[[TensorCollection], TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *num_workers: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *out: TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *chunksize: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_chunks: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pool: mp.Pool | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *max_tasks_per_child: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *worker_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *index_with_generator: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *pbar: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *mp_start_method: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.map(*fn: Callable[[[TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)], [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *num_workers: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *out: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *chunksize: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_chunks: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pool: mp.Pool | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *max_tasks_per_child: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *worker_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *index_with_generator: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *pbar: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *mp_start_method: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Maps a function to splits of the tensordict across one dimension.
 
@@ -16437,7 +16540,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.map_iter
 
-TensorDictBase.map_iter(*fn: Callable[[TensorCollection], TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *num_workers: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *shuffle: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *chunksize: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_chunks: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pool: mp.Pool | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *max_tasks_per_child: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *worker_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *index_with_generator: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *pbar: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *mp_start_method: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Iterator[T]
+TensorDictBase.map_iter(*fn: Callable[[[TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)], [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *num_workers: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *shuffle: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *chunksize: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_chunks: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pool: mp.Pool | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *max_tasks_per_child: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *worker_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *index_with_generator: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *pbar: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *mp_start_method: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Iterator[T]
 
 Maps a function to splits of the tensordict across one dimension iteratively.
 
@@ -16802,7 +16905,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.maximum
 
-TensorDictBase.maximum(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.maximum(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Computes the element-wise maximum of `self` and `other`.
 
@@ -16827,7 +16930,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.maximum
 
-TensorDictBase.maximum_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.maximum_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`maximum()`](tensordict.TensorDictBase.maximum.html#tensordict.TensorDictBase.maximum).
 
@@ -17373,7 +17476,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.minimum
 
-TensorDictBase.minimum(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.minimum(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Computes the element-wise minimum of `self` and `other`.
 
@@ -17398,7 +17501,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.minimum
 
-TensorDictBase.minimum_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.minimum_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`minimum()`](tensordict.TensorDictBase.minimum.html#tensordict.TensorDictBase.minimum).
 
@@ -17413,7 +17516,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.mod
 
-TensorDictBase.mod(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.mod(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 Computes the element-wise modulo of `self` and `other`.
 
@@ -17502,7 +17605,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.mul
 
-TensorDictBase.mul(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.mul(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Multiplies `other` to `self`.
 
@@ -17531,7 +17634,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.mul
 
-TensorDictBase.mul_(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
+TensorDictBase.mul_(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
 In-place version of [`mul()`](tensordict.TensorDictBase.mul.html#tensordict.TensorDictBase.mul).
 
@@ -18260,7 +18363,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.new_tensor
 
-TensorDictBase.new_tensor(*data: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [ndarray](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray) | [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) = NO_DEFAULT*, *requires_grad: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *pin_memory: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.new_tensor(*data: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [ndarray](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray) | [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) = NO_DEFAULT*, *requires_grad: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *pin_memory: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Returns a new TensorDict with data as the tensor `data`.
 
@@ -18720,7 +18823,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.pop
 
-TensorDictBase.pop(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
+TensorDictBase.pop(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Removes and returns a value from a tensordict.
 
@@ -18754,7 +18857,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.popitem
 
-TensorDictBase.popitem() → [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection]
+TensorDictBase.popitem() → [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)]
 
 Removes the item that was last inserted into the TensorDict.
 
@@ -18767,7 +18870,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.pow
 
-TensorDictBase.pow(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.pow(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Takes the power of each element in `self` with `other` and returns a tensor with the result.
 
@@ -19778,7 +19881,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.rsub
 
-TensorDictBase.rsub(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.rsub(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Subtracts `self`, scaled by `alpha`, from `other`, leaf by leaf.
 
@@ -20210,7 +20313,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.set
 
-TensorDictBase.set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self
+TensorDictBase.set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self
 
 Sets an entry, and returns the tensordict.
 
@@ -20296,7 +20399,7 @@ Changing the shape of a TensorDict
 
 # TensorDictBase.set
 
-TensorDictBase.set_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
+TensorDictBase.set_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Copies a value into an existing entry, which keeps its storage.
 
@@ -20352,7 +20455,7 @@ Getting, setting, and nesting keys
 
 # TensorDictBase.set_at
 
-TensorDictBase.set_at_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection*, *index: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
+TensorDictBase.set_at_(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *index: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Writes `value` into the existing entry `key` at the index `index`, in place.
 
@@ -20432,7 +20535,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.setdefault
 
-TensorDictBase.setdefault(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
+TensorDictBase.setdefault(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Inserts the `key` entry with a value of `default` if `key` is not in the tensordict.
 
@@ -21119,7 +21222,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.sub
 
-TensorDictBase.sub(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.sub(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Subtracts `other`, scaled by `alpha`, from `self`.
 
@@ -22921,7 +23024,7 @@ Changing the shape of a TensorDict
 
 # TensorDictBase.update
 
-TensorDictBase.update(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *update_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *ignore_lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*) → Self
+TensorDictBase.update(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *update_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *ignore_lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*) → Self
 
 Writes the entries of a dictionary or another tensordict into this tensordict, and returns it.
 
@@ -23069,7 +23172,7 @@ Getting, setting, and nesting keys
 
 # TensorDictBase.update
 
-TensorDictBase.update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → Self
+TensorDictBase.update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → Self
 
 Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
 
@@ -23137,7 +23240,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.update_at
 
-TensorDictBase.update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
 
@@ -23198,7 +23301,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.values
 
-TensorDictBase.values(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf=None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection]
+TensorDictBase.values(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf=None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Iterator](https://docs.python.org/3/library/typing.html#typing.Iterator)[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)]
 
 Returns a generator of the values of the tensordict.
 
@@ -25304,7 +25407,7 @@ set, `None` is returned instead of the default. Defaults to
 
 # load
 
-tensordict.load(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path)*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *out: TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *subpath: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → TensorCollection
+tensordict.load(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path)*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *out: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *subpath: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Loads a tensordict that [`save()`](tensordict.save.html#tensordict.save) wrote.
 
@@ -25364,7 +25467,7 @@ torch.Size([3, 2])
 
 # load_memmap
 
-tensordict.load_memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path)*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *out: TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *subpath: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → TensorCollection
+tensordict.load_memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path)*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *out: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *subpath: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Loads a memory-mapped tensordict from disk.
 
@@ -25425,7 +25528,7 @@ MemoryMappedTensor
 
 # make_tensordict
 
-tensordict.make_tensordict(*input_dict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
+tensordict.make_tensordict(*input_dict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
 
 Returns a TensorDict created from the keyword arguments or an input dictionary.
 
@@ -25549,7 +25652,7 @@ Examples
 
 # memmap
 
-tensordict.memmap(*data: TensorCollection*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → TensorCollection
+tensordict.memmap(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Writes all tensors onto memory-mapped tensors in a new tensordict.
 
@@ -25799,7 +25902,7 @@ to make sure that all of these are fulfilled.
 > `set_interaction_type("deterministic")`. The first replay under another interaction type emits a
 > `UserWarning`. The check covers only the [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) instances
 > inside the wrapped [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module): other code that branches on
-> [`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type) (for example an exploration module) and wrapped
+> `interaction_type()` (for example an exploration module) and wrapped
 > functions that are not modules are not checked; if the wrapped module holds no
 > [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), the replay repeats the captured branch without a
 > warning. Capture one `CudaGraphModule` per interaction type whenever the output depends on it.
@@ -26237,7 +26340,7 @@ get the distribution without a value, call `get_dist()`. To get the
 log-probability of a value, call `log_prob()`.
 
 The value depends on the interaction type. The module uses
-[`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type) if it is set (see
+[`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type) if it is set (see
 [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)). Otherwise it uses
 `default_interaction_type`. See [`InteractionType`](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType)
 for what each type reads from the distribution. By default the
@@ -26325,7 +26428,7 @@ is DETERMINISTIC.
 Note
 
 When a value is computed, the module first reads
-[`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type). If it
+[`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type). If it
 returns `None` (outside of [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)),
 the module uses `default_interaction_type`. TorchRL
 collectors sample with `InteractionType.RANDOM` by default
@@ -31060,6 +31163,28 @@ Returns the variance of the distribution.
 
 ---
 
+# interaction_type
+
+tensordict.nn.interaction_type() → [InteractionType](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | [None](https://docs.python.org/3/builtins/constants.html#None)
+
+Returns the interaction type set by [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it.
+
+When it returns `None`, each [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule)
+uses its `default_interaction_type`.
+
+Examples
+
+```
+>>> from tensordict.nn import interaction_type, set_interaction_type
+>>> print(interaction_type())
+None
+>>> with set_interaction_type("mode"):
+... print(interaction_type())
+mode
+```
+
+---
+
 # inv_softplus
 
 tensordict.nn.inv_softplus(*bias: [float](https://docs.python.org/3/builtins/functions.html#float) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [float](https://docs.python.org/3/builtins/functions.html#float) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
@@ -31103,17 +31228,6 @@ Custom mappings can be added through `tensordict.nn.add_custom_mapping`.
 Returns:
 
 a Callable
-
----
-
-# interaction_type
-
-tensordict.nn.probabilistic.interaction_type() → [InteractionType](tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) | [None](https://docs.python.org/3/builtins/constants.html#None)
-
-Returns the interaction type set by [`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it.
-
-When it returns `None`, each [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule)
-uses its `default_interaction_type`.
 
 ---
 
@@ -31246,7 +31360,7 @@ Bases: `_DecoratorContextManager`
 
 Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function.
 
-Inside the block, [`interaction_type()`](tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type)
+Inside the block, [`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)
 returns `type`, and every [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) uses it
 instead of its `default_interaction_type`. When the block ends, the
 previous value comes back.
@@ -31858,7 +31972,7 @@ the path to the archive.
 
 # save
 
-tensordict.save(*data: TensorCollection*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → TensorCollection
+tensordict.save(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Saves a tensordict to disk, as memory-mapped files.
 
@@ -32968,6 +33082,39 @@ Examples
 
 ---
 
+# unravel_key_to_tuple
+
+tensordict.unravel_key_to_tuple(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), ...]
+
+Unravel a nested key into a flat tuple of str.
+
+Unlike [`unravel_key()`](tensordict.unravel_key.html#tensordict.unravel_key), a str key gives a one-element
+tuple, and an invalid key gives `()` instead of raising.
+
+Parameters:
+
+**key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to unravel.
+
+Returns:
+
+a flat tuple of str, or `()` if `key` is not a valid nested key.
+
+Examples
+
+```
+>>> from tensordict import unravel_key_to_tuple
+>>> unravel_key_to_tuple("a")
+('a',)
+>>> unravel_key_to_tuple(("a", ("b", ("c",))))
+('a', 'b', 'c')
+>>> unravel_key_to_tuple(("a", 1))
+()
+>>> unravel_key_to_tuple(1)
+()
+```
+
+---
+
 # Buffer
 
 *class*tensordict.utils.Buffer(*data=None*, ***, *persistent=True*)
@@ -33402,7 +33549,7 @@ tensor.
 
 | [`composite_lp_aggregate`](generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate)([nowarn]) | Returns whether a [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
 | --- | --- |
-| [`probabilistic.interaction_type`](generated/tensordict.nn.probabilistic.interaction_type.html#tensordict.nn.probabilistic.interaction_type)() | Returns the interaction type set by [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it. |
+| [`interaction_type`](generated/tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)() | Returns the interaction type set by [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it. |
 
 ## Ensembles
 
@@ -33680,6 +33827,10 @@ its tensors.
 [`MemoryMappedTensor`](generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) is not a tensordict. It is a tensor whose data
 is in a file, and the type of the entries of a memory-mapped tensordict.
 
+[`TensorCollection`](generated/tensordict.TensorCollection.html#tensordict.TensorCollection) is the common base class of the tensordicts and
+the subclasses of [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass): the type hint for "a tensordict or
+a tensorclass".
+
 Other containers have their own pages: [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass), the class
 form with typed fields and methods, and non-tensor data
 ([tensorclass and non-tensor data](tc.html#api-tensorclass)), [`TypedTensorDict`](generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict)
@@ -33695,6 +33846,7 @@ form with typed fields and methods, and non-tensor data
 
 | [`MemoryMappedTensor`](generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor)(source, *[, dtype, ...]) | A CPU tensor whose storage is a file on disk, or anonymous shared memory when no filename is given. |
 | --- | --- |
+| [`TensorCollection`](generated/tensordict.TensorCollection.html#tensordict.TensorCollection)(*args, **kwargs) | A base class for TensorDictBase and TensorClass. |
 
 ## Methods by task
 
@@ -33825,6 +33977,7 @@ Classes and functions
 | [`unravel_key`](generated/tensordict.unravel_key.html#tensordict.unravel_key)(key) | Unravel a nested key. |
 | --- | --- |
 | [`unravel_key_list`](generated/tensordict.unravel_key_list.html#tensordict.unravel_key_list)(keys) | Unravels every key of a list, as [`unravel_key()`](generated/tensordict.unravel_key.html#tensordict.unravel_key) does. |
+| [`unravel_key_to_tuple`](generated/tensordict.unravel_key_to_tuple.html#tensordict.unravel_key_to_tuple)(key) | Unravel a nested key into a flat tuple of str. |
 | [`merge_tensordicts`](generated/tensordict.merge_tensordicts.html#tensordict.merge_tensordicts)(*tensordicts[, callback_exist]) | Merges tensordicts together. |
 
 ### Indexing, masking, and splitting
@@ -35139,21 +35292,21 @@ it between processes.
 
 # Computation times
 
-**01:24.171** total execution time for 14 files **from all galleries**:
+**01:23.149** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:39.755 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.313 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.635 | 0.0 |
-| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.018 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.657 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.458 | 0.0 |
-| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.167 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:38.964 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.167 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.522 | 0.0 |
+| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.017 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.660 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.493 | 0.0 |
+| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.159 | 0.0 |
 | [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.128 | 0.0 |
 | [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.009 | 0.0 |
-| [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
+| [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.008 | 0.0 |
 | [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`reference/generated/tutorials/tensordict_memory.py`) | 00:00.006 | 0.0 |
 | [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.005 | 0.0 |
 | [Filling a TensorDict row by row](tutorials/tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`reference/generated/tutorials/tensordict_preallocation.py`) | 00:00.003 | 0.0 |
@@ -36462,29 +36615,29 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:16, 343kB/s]
- 1%| | 197k/26.4M [00:00<00:48, 544kB/s]
- 3%|▎ | 721k/26.4M [00:00<00:16, 1.55MB/s]
- 11%|█ | 2.85M/26.4M [00:00<00:03, 5.89MB/s]
- 22%|██▏ | 5.80M/26.4M [00:00<00:01, 10.6MB/s]
- 39%|███▉ | 10.4M/26.4M [00:00<00:00, 19.0MB/s]
- 57%|█████▋ | 15.1M/26.4M [00:01<00:00, 26.4MB/s]
- 76%|███████▌ | 20.0M/26.4M [00:01<00:00, 29.4MB/s]
- 90%|████████▉ | 23.7M/26.4M [00:01<00:00, 28.3MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 19.5MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:16, 346kB/s]
+ 1%| | 197k/26.4M [00:00<00:47, 548kB/s]
+ 2%|▏ | 623k/26.4M [00:00<00:19, 1.32MB/s]
+ 9%|▉ | 2.36M/26.4M [00:00<00:04, 4.90MB/s]
+ 18%|█▊ | 4.72M/26.4M [00:00<00:02, 8.61MB/s]
+ 37%|███▋ | 9.73M/26.4M [00:00<00:00, 18.6MB/s]
+ 60%|██████ | 15.9M/26.4M [00:01<00:00, 29.6MB/s]
+ 76%|███████▌ | 20.0M/26.4M [00:01<00:00, 31.8MB/s]
+ 92%|█████████▏| 24.3M/26.4M [00:01<00:00, 34.4MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 19.6MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 312kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 311kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:12, 342kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:07, 544kB/s]
- 17%|█▋ | 754k/4.42M [00:00<00:02, 1.62MB/s]
- 66%|██████▌ | 2.92M/4.42M [00:00<00:00, 5.44MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 5.76MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:12, 345kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:07, 548kB/s]
+ 18%|█▊ | 786k/4.42M [00:00<00:02, 1.71MB/s]
+ 70%|███████ | 3.11M/4.42M [00:00<00:00, 5.87MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 5.80MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 39.0MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 46.6MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -36604,8 +36757,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 2.02 s
-TensorDict DataLoader: 0.08 s
+torchvision DataLoader: 2.01 s
+TensorDict DataLoader: 0.09 s
 ```
 
 ## Model
@@ -36767,7 +36920,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 2.2274 s
+TensorDict training done! time: 2.1649 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -36777,7 +36930,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.6426 s
+Training done! time: 4.5719 s
 ```
 
 ## Conclusion
@@ -36806,7 +36959,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.635 seconds)
+**Total running time of the script:** (0 minutes 15.522 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -37421,7 +37574,7 @@ the other modules of `tensordict.nn`.
 from [`TensorDictModule`](../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 0.009 seconds)
+**Total running time of the script:** (0 minutes 0.008 seconds)
 
 [`Download Jupyter notebook: functional.ipynb`](../_downloads/105b30183ad4a9afd272c38cb842a9b7/functional.ipynb)
 
@@ -38023,7 +38176,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 39.755 seconds)
+**Total running time of the script:** (0 minutes 38.964 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -38037,21 +38190,21 @@ layouts, and read timings.
 
 # Computation times
 
-**01:24.171** total execution time for 14 files **from tutorials**:
+**01:23.149** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:39.755 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.313 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.635 | 0.0 |
-| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.018 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.657 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.458 | 0.0 |
-| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.167 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:38.964 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.167 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.522 | 0.0 |
+| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.017 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.660 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.493 | 0.0 |
+| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.159 | 0.0 |
 | [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.128 | 0.0 |
 | [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.009 | 0.0 |
-| [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
+| [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.008 | 0.0 |
 | [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`tensordict_memory.py`) | 00:00.006 | 0.0 |
 | [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.005 | 0.0 |
 | [Filling a TensorDict row by row](tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`tensordict_preallocation.py`) | 00:00.003 | 0.0 |
@@ -38158,8 +38311,8 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 TensorDict(
  fields={
- stream0: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False),
- stream1: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False)},
+ stream0: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False),
+ stream1: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False)},
  batch_size=torch.Size([2]),
  device=None,
  is_shared=False)
@@ -38302,8 +38455,8 @@ print("TensorDict from stream", td)
 ```
 TensorDict from stream TensorDict(
  fields={
- bucket0: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False),
- bucket1: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False)},
+ bucket0: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False),
+ bucket1: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False)},
  batch_size=torch.Size([5]),
  device=None,
  is_shared=False)
@@ -38345,7 +38498,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.018 seconds)
+**Total running time of the script:** (0 minutes 6.017 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 
@@ -38619,7 +38772,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.2608 s
+Tensorclass training done! time: 2.2519 s
 ```
 
 ## Conclusion
@@ -38640,7 +38793,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.657 seconds)
+**Total running time of the script:** (0 minutes 4.660 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -39006,8 +39159,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 999 images per second, 0.22 s
-train, tensorclass DataLoader: 4531 images per second, 0.05 s
+train, regular DataLoader: 960 images per second, 0.23 s
+train, tensorclass DataLoader: 4173 images per second, 0.05 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -39024,8 +39177,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 594 images per second, 0.22 s
-val, tensorclass DataLoader: 14994 images per second, 0.01 s
+val, regular DataLoader: 600 images per second, 0.22 s
+val, tensorclass DataLoader: 18443 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -39072,7 +39225,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.458 seconds)
+**Total running time of the script:** (0 minutes 1.493 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -40163,13 +40316,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 135.6 us
- TDM: 150.2 us
- Sequential: 209.1 us
+ Regular: 137.3 us
+ TDM: 151.8 us
+ Sequential: 211.8 us
 Compiled
- Regular: 152.9 us
- TDM: 165.8 us
- Sequential: 173.0 us
+ Regular: 152.0 us
+ TDM: 165.9 us
+ Sequential: 171.9 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -40322,7 +40475,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.313 seconds)
+**Total running time of the script:** (0 minutes 16.167 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -40524,7 +40677,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fc5f85c83d0>
+<torch._C.Generator object at 0x7fa6d3dc83d0>
 ```
 
 ## Indexing
@@ -41343,7 +41496,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.167 seconds)
+**Total running time of the script:** (0 minutes 0.159 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 
