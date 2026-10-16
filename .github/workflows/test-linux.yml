@@ -239,6 +239,11 @@ jobs:
           TORCH_VERSION: stable
           # pytest-xdist workers for run_test.sh; the runner has 48 CPUs.
           TD_TEST_WORKERS: 16
+          # The known failures of TestContainersCompile in
+          # test/tensordict/test_conformance.py depend on the torch version,
+          # so one job runs it: the one that gets the newest stable torch
+          # (torch 2.15 has no Python 3.10 wheels).
+          TENSORDICT_COMPILE_CONFORMANCE: ${{ matrix.python_version == '3.14' && '1' || '' }}
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |
