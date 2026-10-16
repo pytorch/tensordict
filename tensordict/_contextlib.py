@@ -16,7 +16,12 @@ import warnings
 from typing import Any, Callable, cast, TypeVar
 
 import numpy as np
-from tensordict.utils import _parse_to, _user_stacklevel, is_tensorclass
+from tensordict.utils import (
+    _parse_to,
+    _user_stacklevel,
+    is_tensorclass,
+    KEY_SEPARATOR,
+)
 from torch.compiler import is_compiling
 
 # Used for annotating the decorator usage of _DecoratorContextManager (e.g.,
@@ -211,7 +216,7 @@ LAST_OP_MAPS["swapdims"] = _reverse_transpose
 
 
 def _reverse_flatten_keys(self, args, kwargs, out):
-    sep = args[0] if args else "."
+    sep = args[0] if args else KEY_SEPARATOR
     if _changed_in_place(self, out):
         separator = kwargs.get("separator", sep)
         # flatten_keys(inplace=True) records whether unflatten_keys undoes it
@@ -236,7 +241,7 @@ LAST_OP_MAPS["flatten_keys"] = _reverse_flatten_keys
 
 
 def _reverse_unflatten_keys(self, args, kwargs, out):
-    sep = args[0] if args else "."
+    sep = args[0] if args else KEY_SEPARATOR
     if not out.is_locked:
         return out.update(self.flatten_keys(sep), inplace=False)
     else:

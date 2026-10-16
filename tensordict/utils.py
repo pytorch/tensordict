@@ -77,6 +77,8 @@ __all__ = [
     "DeviceType",
     "IndexType",
     "NestedKey",
+    # Constants
+    "KEY_SEPARATOR",
     # Classes
     "Buffer",
     "LinkedList",
@@ -233,6 +235,10 @@ _DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
+
+# The default separator of flatten_keys and unflatten_keys. The defaults are
+# bound when the methods are defined, so reassigning it changes nothing.
+KEY_SEPARATOR: str = "."
 
 
 _KEY_ERROR = 'key "{}" not found in {} with keys {}'
