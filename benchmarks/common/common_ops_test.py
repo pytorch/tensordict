@@ -10,6 +10,7 @@ import itertools
 import pytest
 import torch
 from tensordict import (
+    is_non_tensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorStack,
@@ -482,6 +483,22 @@ def test_stacked_getitem(benchmark):
     benchmark(lambda: td[key])
 
 
+def test_shallow_nested_getitemleaf(benchmark):
+    # td["next", "obs"]: each tensor leaf read checks for non-tensor data.
+    td = TensorDict({"next": {"obs": torch.zeros(3)}})
+    benchmark(lambda: td["next", "obs"])
+
+
+@pytest.mark.parametrize("value", ["tensor", "parameter", "tensordict"])
+def test_is_non_tensor(benchmark, value):
+    data = {
+        "tensor": torch.zeros(3),
+        "parameter": torch.nn.Parameter(torch.zeros(3)),
+        "tensordict": TensorDict(),
+    }[value]
+    benchmark(is_non_tensor, data)
+
+
 def test_lock_nested(benchmark):
     benchmark.pedantic(
         lambda td: list(td.lock_()),
@@ -520,6 +537,11 @@ def test_unlock_stack_nested(benchmark):
         rounds=1000,
         iterations=1,
     )
+
+
+def test_data_nested_locked(benchmark):
+    td = big_nested_td_locked()[0][0]
+    benchmark(lambda: td.data)
 
 
 def test_flatten_speed(benchmark):
@@ -737,6 +759,18 @@ def test_setitem_rows_store_with_device(benchmark, value_device, store_device):
     )
     index = torch.arange(256, device=store_device) + 100
     benchmark(store.__setitem__, index, data)
+
+
+@pytest.mark.parametrize("index", ["tensor", "mask"])
+def test_getitem_non_tensor_rows(benchmark, index):
+    # 32 rows of a 256-row string entry, as verl selects a mini-batch
+    stack = NonTensorStack.from_list([f"x{i}" for i in range(256)])
+    rows = torch.randperm(256, generator=torch.Generator().manual_seed(0))[:32]
+    if index == "mask":
+        mask = torch.zeros(256, dtype=torch.bool)
+        mask[rows] = True
+        rows = mask
+    benchmark(stack.__getitem__, rows)
 
 
 def test_setitem(benchmark, td, c):

@@ -26,6 +26,7 @@ from tensordict import (
     capture_non_tensor_stack,
     lazy_stack,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     set_capture_non_tensor_stack,
     TensorClass,
     tensorclass,
@@ -36,7 +37,9 @@ from tensordict._utils_options import _set_capture_non_tensor_stack
 from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack
 from tensordict.utils import (
     _check_recursive_properties,
+    _is_non_tensor,
     _pass_through,
+    _pass_through_cls,
     is_non_tensor,
     LinkedList,
     set_list_to_stack,
@@ -882,6 +885,44 @@ class TestNonTensorData:
         for obj in others:
             assert not tc_is_non_tensor(obj)
             assert not is_non_tensor(obj)
+
+    @pytest.mark.parametrize("memo", ["cold", "warm"])
+    def test_is_non_tensor_exact_tensor(self, memo, monkeypatch):
+        # An exact torch.Tensor is answered before is_compiling() and the memo;
+        # tensor subclasses and other values take the general path.
+        class FlaggedTensor(torch.Tensor):
+            _is_non_tensor = True
+
+        # value -> (is_non_tensor, _pass_through)
+        cases = [
+            (torch.zeros(()), False, False),
+            (torch.nn.Parameter(torch.zeros(())), False, False),
+            (MemoryMappedTensor.from_tensor(torch.zeros(())), False, False),
+            (torch.zeros(()).as_subclass(FlaggedTensor), True, True),
+            (UnbatchedTensor(torch.zeros(())), False, True),
+            (NonTensorData("a"), True, True),
+            (TensorDict(), False, False),
+            (self.SomeTensorClass(a="a", b=torch.zeros(())), False, False),
+            ("a", False, False),
+        ]
+        if memo == "cold":
+            monkeypatch.setattr("tensordict.utils._NON_TENSOR_MEMO", {})
+            monkeypatch.setattr("tensordict.utils._PASSTHROUGH_MEMO", {})
+        for _ in range(2):
+            for value, non_tensor, pass_through in cases:
+                assert is_non_tensor(value) is non_tensor
+                assert _is_non_tensor(type(value)) is non_tensor
+                assert _pass_through(value) is pass_through
+                assert _pass_through_cls(type(value)) is pass_through
+
+        def is_compiling():
+            raise AssertionError("called is_compiling() for an exact Tensor")
+
+        monkeypatch.setattr("tensordict.utils.is_compiling", is_compiling)
+        assert is_non_tensor(torch.zeros(())) is False
+        assert _pass_through(torch.zeros(())) is False
+        with pytest.raises(AssertionError, match="is_compiling"):
+            is_non_tensor(torch.nn.Parameter(torch.zeros(())))
 
     @set_list_to_stack(True)
     def test_linked_list(self):
@@ -3261,6 +3302,136 @@ class TestNonTensorData:
         view = stack[1:]
         view[0] = "hop"
         assert stack.tolist() == ["walk", "hop", "stand"]
+
+    @staticmethod
+    def _advanced_index_stack(kind):
+        if kind == "str":
+            return NonTensorStack("a", "b", "c", "d")
+        if kind == "dict":
+            return NonTensorStack.from_list([NonTensorData({"i": i}) for i in range(4)])
+        if kind == "nested":
+            return NonTensorStack.from_list(
+                [[f"{i}{j}" for j in range(2)] for i in range(4)]
+            )
+        if kind == "locked":
+            return NonTensorStack("a", "b", "c", "d").lock_()
+        if kind == "named":
+            stack = NonTensorStack("a", "b", "c", "d")
+            stack.names = ["n"]
+            return stack
+        if kind == "metadata":
+            return NonTensorStack(*[MetaData(f"m{i}") for i in range(4)])
+        if kind == "mixed":
+            return NonTensorStack("a", MetaData("b"), "c", MetaData("d"))
+        if kind == "stack_dim_1":
+            return NonTensorStack(
+                *[NonTensorStack(*[f"{i}{j}" for j in range(4)]) for i in range(2)],
+                stack_dim=1,
+            )
+        if kind == "shared":
+            return NonTensorStack("a", "b", "c", "d").share_memory_()
+        raise ValueError(kind)
+
+    @staticmethod
+    def _describe_index_result(result, source):
+        if not isinstance(result, NonTensorStack):
+            return type(result), result
+        members = [
+            (type(td), td.batch_size, td.is_locked, td._is_shared, td.names)
+            for td in result.tensordicts
+        ]
+        source_members = {id(td) for td in source.tensordicts}
+        return (
+            type(result),
+            result.tolist(),
+            result.batch_size,
+            result.names,
+            result.is_locked,
+            result._is_shared,
+            result.stack_dim,
+            members,
+            # the members are copies, distinct from each other
+            [id(td) in source_members for td in result.tensordicts],
+            len({id(td) for td in result.tensordicts}),
+        )
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "str",
+            "dict",
+            "nested",
+            "locked",
+            "named",
+            "metadata",
+            "mixed",
+            "stack_dim_1",
+            "shared",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "index",
+        [
+            torch.tensor([2, 0, 0, -1]),
+            (torch.tensor([1, 3]),),
+            [3, 1, 1],
+            np.array([0, 2]),
+            torch.tensor([True, False, True, True]),
+            torch.zeros(4, dtype=torch.bool),
+            torch.tensor([], dtype=torch.long),
+            torch.tensor([0, 4]),
+            torch.tensor([True, False]),
+            torch.tensor([[0, 1], [2, 3]]),
+            torch.tensor([0.0, 1.0]),
+        ],
+        ids=[
+            "tensor",
+            "tuple",
+            "list",
+            "ndarray",
+            "mask",
+            "empty_mask",
+            "empty_tensor",
+            "out_of_range",
+            "short_mask",
+            "2d",
+            "float",
+        ],
+    )
+    @pytest.mark.parametrize("capture", [False, True])
+    def test_nontensorstack_advanced_index_fast_path(
+        self, kind, index, capture, monkeypatch
+    ):
+        # the fast path of an advanced index gives what the general path gives
+        def get(stack):
+            with _set_capture_non_tensor_stack(capture):
+                try:
+                    result = stack[index]
+                except Exception as err:
+                    return type(err), str(err)
+            return self._describe_index_result(result, stack)
+
+        fast_stack = self._advanced_index_stack(kind)
+        fast = get(fast_stack)
+        locked = fast_stack.is_locked
+        monkeypatch.setattr(NonTensorStack, "_getitem_copies", lambda self, index: None)
+        general_stack = self._advanced_index_stack(kind)
+        assert get(general_stack) == fast
+        assert general_stack.is_locked == locked
+
+    @pytest.mark.parametrize("kind", ["str", "dict", "nested", "locked", "named"])
+    def test_nontensorstack_advanced_index_fast_path_taken(self, kind):
+        stack = self._advanced_index_stack(kind)
+        for index in (torch.tensor([2, 0, 0]), [1, 2], torch.tensor([True] * 4)):
+            result = stack._getitem_copies(index)
+            assert result is not None
+            assert type(result) is NonTensorStack
+            assert result.tolist() == stack[index].tolist()
+        # members of another type, and capture_non_tensor_stack, take the
+        # general path
+        assert self._advanced_index_stack("metadata")._getitem_copies([0]) is None
+        with _set_capture_non_tensor_stack(True):
+            assert stack._getitem_copies([0]) is None
 
     def test_tensorclass_nontensor_field_gather_then_assign(self):
         @tensorclass

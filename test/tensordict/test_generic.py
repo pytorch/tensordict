@@ -12117,6 +12117,62 @@ class TestGeneric:
         call(td, None)
         assert td["b"] == "text"
 
+    @pytest.mark.parametrize("method", ["update_", "copy_"])
+    def test_update__forward_ad(self, method):
+        # inside a dual level, update_ and copy_ copy each leaf with copy_,
+        # which keeps the tangents: _foreach_copy_ has no forward derivative
+        # (#2886)
+        fwAD = torch.autograd.forward_ad
+        with fwAD.dual_level():
+            with warnings.catch_warnings():
+                # make_dual loads its decompositions with torch.jit.script
+                # once, which warns that it is deprecated
+                warnings.simplefilter("ignore", FutureWarning)
+                warnings.simplefilter("ignore", DeprecationWarning)
+                p = fwAD.make_dual(torch.ones(3), torch.full((3,), 5.0))
+            td = TensorDict(a=torch.zeros(3), b=torch.zeros(3))
+            getattr(td, method)(TensorDict(a=p * 2, b=torch.ones(3)))
+            assert (fwAD.unpack_dual(td["a"]).tangent == 10).all()
+            assert fwAD.unpack_dual(td["b"]).tangent is None
+            assert (td["a"] == 2).all() and (td["b"] == 1).all()
+
+    @pytest.mark.parametrize("method", ["update_", "copy_"])
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_update__autograd(self, method, lazy):
+        # update_ and copy_ record the graph of a copy_ of each leaf (#2863):
+        # torch._foreach_copy_ records none, and marks every leaf as
+        # requiring grad.
+        def make():
+            if lazy:
+                return lazy_stack(
+                    [TensorDict(a=torch.zeros(3), b=torch.zeros(3)) for _ in range(2)]
+                )
+            return TensorDict(a=torch.zeros(2, 3), b=torch.zeros(2, 3))
+
+        x = torch.randn(2, 3, requires_grad=True)
+        td = make()
+        getattr(td, method)(TensorDict(a=x * 2, b=torch.ones(2, 3)))
+        assert td["a"].requires_grad and not td["b"].requires_grad
+        td["a"].sum().backward()
+        assert (x.grad == 2).all()
+        assert (td["a"] == x * 2).all() and (td["b"] == 1).all()
+        # a destination that requires grad: the graph of copy_ too
+        x.grad = None
+        getattr(td, method)(TensorDict(a=torch.ones(2, 3), b=x * 3))
+        assert td["a"].requires_grad and td["b"].requires_grad
+        td["b"].sum().backward()
+        assert (x.grad == 3).all()
+        # without grad mode, no graph
+        td = make()
+        with torch.no_grad():
+            getattr(td, method)(TensorDict(a=x * 2, b=torch.ones(2, 3)))
+        assert not td["a"].requires_grad and not td["b"].requires_grad
+        # a leaf that requires grad raises before anything is written
+        td = TensorDict(a=torch.zeros(3), b=nn.Parameter(torch.zeros(3)))
+        with pytest.raises(RuntimeError, match="leaf Variable that requires grad"):
+            getattr(td, method)(TensorDict(a=x[0] * 2, b=torch.ones(3)))
+        assert (td["a"] == 0).all() and (td["b"] == 0).all()
+
     def test_update__intersection_ignores_unknown(self):
         # Without keys_to_update, update_ writes the keys of the source that
         # self has and ignores the others, as long as one key matches.

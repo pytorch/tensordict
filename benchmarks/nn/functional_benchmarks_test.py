@@ -220,6 +220,14 @@ def test_exec_td_decorator(benchmark, net):
 
 
 @torch.no_grad()
+def test_soft_update_lerp(benchmark, net):
+    # The soft target-network update of TorchRL's SoftUpdate, on locked params.
+    source = TensorDict.from_module(net).lock_()
+    target = source.clone().lock_()
+    benchmark(lambda: target.data.lerp_(source.data, 0.005))
+
+
+@torch.no_grad()
 @pytest.mark.parametrize("stack", [True, False])
 @pytest.mark.parametrize("tdmodule", [True, False])
 def test_vmap_mlp_speed_decorator(benchmark, stack, tdmodule):
