@@ -11603,21 +11603,73 @@ class TestGeneric:
         a: torch.Tensor
         b: torch.Tensor
 
-    # (dest, source) pairs for update_ and copy_: the first two take the one
-    # walk of _update_plan for two flat TensorDicts, the others the general
-    # route (#2859).
+    # (dest, source) pairs for update_ and copy_: the first five take the one
+    # walk of _update_plan for two trees of TensorDicts, the others the
+    # general route (#2859).
     _UPDATE__PLAN_CASES = {
         "same keys": lambda flat: (flat(0, "a", "b"), flat(1, "a", "b")),
         "other key order": lambda flat: (flat(0, "a", "b"), flat(1, "b", "a")),
+        "nested": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x", "y")).set("b", torch.zeros(3, 2)),
+            flat(1, "b").set("n", flat(1, "y", "x")).set("a", torch.ones(3, 2)),
+        ),
+        "nested twice": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x").set("m", flat(0, "z"))),
+            flat(1, "a").set("n", flat(1, "x").set("m", flat(1, "z"))),
+        ),
+        "nested empty": lambda flat: (
+            flat(0, "a").set("e", TensorDict(batch_size=[3])),
+            flat(1, "a").set("e", TensorDict(batch_size=[3])),
+        ),
+        "only empty nested": lambda flat: (
+            TensorDict(e=TensorDict(batch_size=[3]), batch_size=[3]),
+            TensorDict(e=TensorDict(batch_size=[3]), batch_size=[3]),
+        ),
+        "nested extra source key": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "x", "y")),
+        ),
+        "nested missing source key": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x", "y")),
+            flat(1, "a").set("n", flat(1, "x")),
+        ),
+        "nested other key": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "y")),
+        ),
+        "nested tensor source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", torch.ones(3, 2)),
+        ),
+        "nested tensor dest": lambda flat: (
+            flat(0, "a").set("n", torch.zeros(3, 2)),
+            flat(1, "a").set("n", flat(1, "x")),
+        ),
+        "nested named": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x", names=["t"])),
+            flat(1, "a").set("n", flat(1, "x")),
+        ),
+        "nested lazy stack source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", lazy_stack(list(flat(1, "x").unbind(0)))),
+        ),
+        "nested subclass source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "x", cls=TestGeneric._SlowPathTensorDict)),
+        ),
+        "nested non-tensor": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x").set_non_tensor("s", "x")),
+            flat(1, "a").set("n", flat(1, "x").set_non_tensor("s", "y")),
+        ),
+        "nested grad source": lambda flat: (
+            flat(0, "a").set("n", flat(0, "x")),
+            flat(1, "a").set("n", flat(1, "x")).apply(lambda t: t.requires_grad_()),
+        ),
         "extra source key": lambda flat: (flat(0, "a", "b"), flat(1, "a", "b", "c")),
         "missing source key": lambda flat: (flat(0, "a", "b"), flat(1, "a")),
         "one other key": lambda flat: (flat(0, "a", "b"), flat(1, "a", "c")),
         "no common key": lambda flat: (flat(0, "a"), flat(1, "c")),
         "empty": lambda flat: (flat(0), flat(1)),
-        "nested": lambda flat: (
-            flat(0, "a").set("n", flat(0, "x")),
-            flat(1, "a").set("n", flat(1, "x")),
-        ),
         "parameter source": lambda flat: (
             flat(0, "a", "b"),
             flat(1, "a").set("b", nn.Parameter(torch.full((3, 2), 2.0))),
@@ -11736,6 +11788,32 @@ class TestGeneric:
         store[2].update_(obs)
         assert (store[1:3]["critic"] == 1).all() and (store[1:3]["policy"] == 2).all()
         assert (store[0] == 0).all() and (store[3] == 0).all()
+
+    def test_update__plan_nested_one_walk(self, monkeypatch):
+        # copy_ and update_ between two trees of TensorDicts of tensors, such
+        # as TorchRL transitions with a "next" entry, pair the leaves without
+        # listing them with _items_list (#2859).
+        def transition(value):
+            return TensorDict(
+                obs=torch.full((3, 4), value),
+                next=TensorDict(
+                    obs=torch.full((3, 4), value + 1),
+                    reward=torch.full((3, 1), value + 2),
+                    batch_size=[3],
+                ),
+                batch_size=[3],
+            )
+
+        dest, source = transition(0.0), transition(10.0)
+
+        def items_list(*args, **kwargs):
+            raise AssertionError("_items_list was called")
+
+        monkeypatch.setattr(TensorDictBase, "_items_list", items_list)
+        dest.copy_(source)
+        assert (dest == transition(10.0)).all()
+        dest.update_(transition(20.0))
+        assert (dest == transition(20.0)).all()
 
     def test_sub_td_update_overwrites_in_place(self):
         # A sub-tensordict writes the entries it has into its source, in place,
