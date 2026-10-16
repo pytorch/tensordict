@@ -560,6 +560,38 @@ def _leaves_on(td: TensorDictBase, device: torch.device) -> bool:
     return True
 
 
+def _pair_dense_leaves(
+    dests: dict, sources: dict, vals: list, other_vals: list
+) -> bool:
+    """Pairs the leaves of two trees of exact ``TensorDict`` nodes that have the same keys.
+
+    ``dests`` and ``sources`` are the ``_tensordict`` dicts of two such nodes.
+    Their tensors are appended to ``vals`` and ``other_vals``, depth first in
+    the key order of ``dests``: the order of ``_items_list(True, True)``.
+    Returns ``False`` at the first key that ``sources`` lacks, or whose entries
+    are not both plain tensors or both exact ``TensorDict`` nodes, and when the
+    nodes have different numbers of keys: the caller then takes the general
+    route of ``_update_plan``.
+    """
+    if len(dests) != len(sources):
+        return False
+    for key, val in dests.items():
+        other = sources.get(key)
+        cls = type(val)
+        if cls is Tensor:
+            if type(other) is not Tensor:
+                return False
+            vals.append(val)
+            other_vals.append(other)
+        elif not (
+            cls is _TENSORDICT_TYPE
+            and type(other) is cls
+            and _pair_dense_leaves(val._tensordict, other._tensordict, vals, other_vals)
+        ):
+            return False
+    return True
+
+
 def _mixes_lazy_stacks(td: TensorDictBase, others: tuple) -> bool:
     """Returns whether some of ``td`` and the tensordicts in ``others`` are lazy stacks and some are not.
 
@@ -5769,6 +5801,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         stack overrides it with the plans of its members, which it checks
         before it writes any member (#2776).
         """
+        if type(input_dict_or_td) is type(self) and self._is_dense_node():
+            # two trees of exact TensorDicts with the same keys and only plain
+            # tensor leaves: pair the leaves in the order of _items_list below,
+            # in one walk. Any other entry takes the general route (#2859).
+            dests = self._tensordict
+            sources = input_dict_or_td._tensordict
+            if dests and len(dests) == len(sources):
+                vals = []
+                other_val = []
+                for key, val in dests.items():
+                    other = sources.get(key)
+                    cls = type(val)
+                    if cls is Tensor:
+                        if type(other) is not Tensor:
+                            break
+                        vals.append(val)
+                        other_val.append(other)
+                    elif not (
+                        cls is _TENSORDICT_TYPE
+                        and type(other) is cls
+                        and _pair_dense_leaves(
+                            val._tensordict, other._tensordict, vals, other_val
+                        )
+                    ):
+                        break
+                else:
+                    if vals:
+                        return vals, other_val, None
         keys, vals = self._items_list(True, True)
         source = dict(zip(*input_dict_or_td._items_list(True, True)))
         new_keys = [key for key in keys if key in source]
@@ -8114,9 +8174,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             and batch_size is None
             and checked
             and not call_on_nested
-            and not constructor_kwargs
+            # to() passes call_on_unbatched, which _dense_apply takes
+            and (
+                not constructor_kwargs
+                or list(constructor_kwargs) == ["call_on_unbatched"]
+            )
             and not is_compiling()
-            and device is NO_DEFAULT
             and names is NO_DEFAULT
             and (
                 is_leaf is None
@@ -8134,6 +8197,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 (),
                 filter_empty,
                 _default_is_leaf if is_leaf is None else is_leaf,
+                device,
+                constructor_kwargs.get("call_on_unbatched", False),
             )
             if propagate_lock and self.is_locked and result is not None:
                 result.lock_()

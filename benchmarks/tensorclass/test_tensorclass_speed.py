@@ -12,6 +12,7 @@ import torch
 from tensordict import (
     lazy_stack,
     NonTensorData,
+    NonTensorStack,
     TensorClass,
     tensorclass,
     TensorDict,
@@ -247,6 +248,14 @@ def test_nontensor_lazy_stack_copy(benchmark):
         ]
     )
     benchmark(td.copy)
+
+
+def test_nontensor_stack_of_dicts_copy(benchmark):
+    # a verl non-tensor column: one dict per row
+    stack = NonTensorStack.from_list(
+        [{"index": i, "split": "train", "answer": str(i)} for i in range(256)]
+    )
+    benchmark(stack.copy)
 
 
 if __name__ == "__main__":

@@ -1629,6 +1629,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 values = list(value)
             else:
                 values = _recursive_unbind_list(value, self.stack_dim)
+        elif _is_unbatched(value):
+            values = self._unbatched_member_values(value)
         else:
             values = value.unbind(self.stack_dim)
         for tensordict, item in _zip_strict(self.tensordicts, values):
@@ -1679,7 +1681,10 @@ class LazyStackedTensorDict(TensorDictBase):
             validated = True
         if self._is_vmapped:
             value = self._hook_in(value)
-        values = value.unbind(self.stack_dim)
+        if _is_unbatched(value):
+            values = self._unbatched_member_values(value)
+        else:
+            values = value.unbind(self.stack_dim)
         for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_tuple(
                 key,
@@ -1689,6 +1694,16 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
             )
         return self
+
+    def _unbatched_member_values(self, value: Tensor) -> list[Tensor]:
+        """The ``UnbatchedTensor`` ``value`` for each member, as ``unbind`` gives it.
+
+        The stack dim does not apply to it: it belongs to the whole stack, so
+        each member holds an alias of it with the batch size of the member.
+        """
+        return [
+            _unbatched_with_batch_size(value, td.batch_size) for td in self.tensordicts
+        ]
 
     def _split_index(self, index: IndexType) -> _SplitIndex:
         """Read ``index`` as indices of the members of the stack that it reaches.
@@ -4498,7 +4513,10 @@ class LazyStackedTensorDict(TensorDictBase):
 
         Each leaf of ``source`` broadcasts to the leaf of ``self``, as in
         ``TensorDict.update_``: it is indexed at ``i`` along the stack dim if
-        it has that dim, and goes whole to each member otherwise.
+        it has that dim, and goes whole to each member otherwise. An
+        ``UnbatchedTensor`` leaf of the members has no batch dims: where the
+        stack dim cannot face the dim found that way, it faces the dim of
+        ``value`` before the shape of the leaf, as for a stack along dim 0.
         """
         member = self.tensordicts[i]
         piece = {}
@@ -4509,6 +4527,13 @@ class LazyStackedTensorDict(TensorDictBase):
                     # the dim of value that the stack dim of self faces when
                     # the shapes are aligned on the right, as torch does
                     dim = self.stack_dim + value.ndim - dest.ndim - 1
+                    if (
+                        dim >= 0
+                        and value.shape[dim] not in (len(self.tensordicts), 1)
+                        and _is_unbatched(dest)
+                    ):
+                        # an unbatched leaf has no batch dims
+                        dim = value.ndim - dest.ndim - 1
                     if dim >= 0:
                         if value.shape[dim] == len(self.tensordicts):
                             value = value.select(dim, i)
