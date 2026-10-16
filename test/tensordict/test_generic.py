@@ -11515,6 +11515,48 @@ class TestGeneric:
         assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
         assert_allclose_td(out, td * 2)
 
+    @pytest.mark.parametrize("named", [False, True])
+    def test_apply_is_leaf(self, named):
+        # is_leaf is a documented keyword of apply and named_apply: it decides
+        # which entries fn is called on, here non-tensor data too
+        for cls in (TensorDictBase, TensorDict, TensorDictParams):
+            meth = getattr(cls, "named_apply" if named else "apply")
+            param = inspect.signature(meth).parameters["is_leaf"]
+            assert param.kind is inspect.Parameter.KEYWORD_ONLY
+            assert param.default is None
+
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            s: str
+
+        td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+        tc = MyClass(x=torch.zeros(3), s="a string", batch_size=[3])
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(3), b={"c": torch.zeros(3)}, batch_size=[3])
+        )
+        cases = [
+            (td, None, ["Tensor"]),
+            (td, is_leaf_nontensor, ["Tensor", "NonTensorData"]),
+            (
+                lazy_stack([td[0], td[1]]),
+                is_leaf_nontensor,
+                ["Tensor", "NonTensorData"] * 2,
+            ),
+            (tc, is_leaf_nontensor, ["Tensor", "NonTensorData"]),
+            (params, lambda cls: True, ["Parameter", "TensorDict"]),
+        ]
+        seen = []
+        for data, is_leaf, expected in cases:
+            seen.clear()
+            if named:
+                data.named_apply(
+                    lambda name, x: seen.append(type(x).__name__), is_leaf=is_leaf
+                )
+            else:
+                data.apply(lambda x: seen.append(type(x).__name__), is_leaf=is_leaf)
+            assert seen == expected
+
     def test_apply_out_batch_size_list_multithread(self):
         td = TensorDict(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
         out = td.clone()

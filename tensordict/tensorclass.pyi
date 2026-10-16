@@ -1160,6 +1160,7 @@ class TensorClass(_TensorClassInitArgs):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
@@ -1176,6 +1177,7 @@ class TensorClass(_TensorClassInitArgs):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...

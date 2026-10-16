@@ -725,6 +725,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -740,6 +741,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 

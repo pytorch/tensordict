@@ -6936,6 +6936,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> Self | None:
@@ -7001,6 +7002,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
+            is_leaf (Callable[[type], bool], optional): called with the type of
+                each entry; ``fn`` is called on the entries for which it returns
+                ``True``, and ``apply`` goes into the others. Defaults to ``None``,
+                which uses :func:`~tensordict.default_is_leaf`: ``fn`` is called
+                on tensors, and ``apply`` goes into tensordicts, tensorclasses
+                and non-tensor data (which is kept unchanged). Pass
+                :func:`~tensordict.is_leaf_nontensor` to call ``fn`` on non-tensor
+                data too:
+
+                    >>> from tensordict import is_leaf_nontensor
+                    >>> td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+                    >>> seen = []
+                    >>> _ = td.apply(lambda x: seen.append(type(x).__name__))
+                    >>> seen
+                    ['Tensor']
+                    >>> seen = []
+                    >>> _ = td.apply(lambda x: seen.append(type(x).__name__), is_leaf=is_leaf_nontensor)
+                    >>> seen
+                    ['Tensor', 'NonTensorData']
 
             out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
                 creating a new tensordict:
@@ -7088,6 +7109,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default=default,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            is_leaf=is_leaf,
             out=out,
             **constructor_kwargs,
         )
@@ -7108,6 +7130,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
         out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> Self | None:
@@ -7174,6 +7197,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
+            is_leaf (Callable[[type], bool], optional): called with the type of
+                each entry; ``fn`` is called on the entries for which it returns
+                ``True``, and ``named_apply`` goes into the others. Defaults to ``None``,
+                which uses :func:`~tensordict.default_is_leaf`: ``fn`` is called
+                on tensors, and ``named_apply`` goes into tensordicts, tensorclasses
+                and non-tensor data (which is kept unchanged). Pass
+                :func:`~tensordict.is_leaf_nontensor` to call ``fn`` on non-tensor
+                data too:
+
+                    >>> from tensordict import is_leaf_nontensor
+                    >>> td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+                    >>> seen = []
+                    >>> _ = td.named_apply(lambda name, x: seen.append(type(x).__name__))
+                    >>> seen
+                    ['Tensor']
+                    >>> seen = []
+                    >>> _ = td.named_apply(lambda name, x: seen.append(type(x).__name__), is_leaf=is_leaf_nontensor)
+                    >>> seen
+                    ['Tensor', 'NonTensorData']
 
             out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
                 creating a new tensordict:
@@ -7295,6 +7338,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             nested_keys=nested_keys,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            is_leaf=is_leaf,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
