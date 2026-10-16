@@ -996,6 +996,24 @@ class TestTD:
         assert (result_c["a"] == 1).all()
         assert set(data.keys(True)) == {"a", "b", "raw", ("raw", "p")}
 
+    def test_rename_keys_params(self, mode):
+        # TensorDictParams.rename_keys returns a TensorDict, which compiles
+        def rename_keys(params):
+            return params.rename_keys({"a": "b", "b": "a"}).rename_keys(
+                {"missing": "c"}, strict=False
+            )
+
+        rename_keys_c = torch.compile(rename_keys, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        )
+        result = rename_keys(params)
+        result_c = rename_keys_c(params)
+        assert type(result_c) is type(result) is TensorDict
+        assert (result_c == result).all()
+        assert (result_c["a"] == 1).all()
+        assert result_c["a"] is params["b"]
+
     def test_exclude(self, mode):
         def exclude_keys(td: TensorDict):
             return td.exclude("b")
