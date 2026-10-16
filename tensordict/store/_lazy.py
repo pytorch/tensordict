@@ -78,6 +78,7 @@ from tensordict.utils import (
     _warn_nested_key_in_flat_keys,
     _zip_strict,
     is_non_tensor,
+    KEY_SEPARATOR,
     NestedKey,
     unravel_key,
 )
@@ -584,7 +585,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     # Override: works on an in-memory copy, also with inplace=True, which
     # raises in 0.17 as on the parent store.
     @_as_context_manager()
-    def flatten_keys(self, separator=".", inplace=False, is_leaf=None):
+    def flatten_keys(self, separator=KEY_SEPARATOR, inplace=False, is_leaf=None):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
 
         The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
@@ -610,7 +611,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     # Override: works on an in-memory copy, as flatten_keys does.
     @_as_context_manager()
-    def unflatten_keys(self, separator=".", inplace=False):
+    def unflatten_keys(self, separator=KEY_SEPARATOR, inplace=False):
         if inplace:
             warn_deprecated(
                 "LazyStackedTensorDictStore[i].unflatten_keys(inplace=True)",
@@ -2573,7 +2574,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     # keeps while locked: a locked store would keep a copy of its data, and
     # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
-    def flatten_keys(self, separator=".", inplace=False, is_leaf=None):
+    def flatten_keys(self, separator=KEY_SEPARATOR, inplace=False, is_leaf=None):
         """Returns an in-memory copy where the nested keys are joined by ``separator``.
 
         The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
@@ -2597,7 +2598,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     # keeps while locked: a locked store would keep a copy of its data, and
     # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
-    def unflatten_keys(self, separator=".", inplace=False):
+    def unflatten_keys(self, separator=KEY_SEPARATOR, inplace=False):
         if inplace:
             raise ValueError(
                 f"Cannot call unflatten_keys in_place with a {type(self).__name__}."
