@@ -133,7 +133,8 @@ def _copy_pytree_containers(value):
     """Return ``tree_map(_identity, value)``: new dicts, lists and tuples, the same leaves.
 
     Copies the containers of the exact types ``dict``, ``list`` and ``tuple``
-    itself, which is faster than ``tree_map``, and hands any other value to
+    itself, which is faster than ``tree_map``, returns other pytree leaves
+    (such as tensors and arrays) as they are, and hands any other value to
     ``tree_map``.
     """
     cls = type(value)
@@ -145,6 +146,8 @@ def _copy_pytree_containers(value):
         return [_copy_pytree_containers(v) for v in value]
     if cls is tuple:
         return tuple(_copy_pytree_containers(v) for v in value)
+    if tree_is_leaf(value):
+        return value
     return tree_map(_identity, value)
 
 

@@ -2757,7 +2757,18 @@ class TestNonTensorData:
             assert type(td["val"]) is type(val1)
             assert td["val"] == val1
 
-    @pytest.mark.parametrize("data", ["a string", 3, None, [1, 2], {"a": [1]}])
+    @pytest.mark.parametrize(
+        "data",
+        [
+            "a string",
+            3,
+            None,
+            [1, 2],
+            {"a": [1]},
+            [torch.zeros(1), np.zeros(1)],
+            {"t": torch.zeros(1), "a": (np.zeros(1),)},
+        ],
+    )
     def test_copy(self, data, monkeypatch):
         nt = NonTensorData(data, batch_size=[2], names=["n"], device="cpu")
         is_leaf = not isinstance(data, (list, dict))
