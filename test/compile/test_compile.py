@@ -745,6 +745,29 @@ class TestTD:
             for r, e in zip(result, expected):
                 assert (r["a", "b"] == e["a", "b"]).all()
 
+    @pytest.mark.parametrize("named", [False, True])
+    def test_apply_is_leaf(self, named, mode):
+        # With is_leaf=is_leaf_nontensor, fn is called on the non-tensor entry
+        # and drops it by returning None
+        def fn(x):
+            return x * 2 if isinstance(x, torch.Tensor) else None
+
+        def apply(td):
+            if named:
+                return td.named_apply(lambda name, x: fn(x), is_leaf=is_leaf_nontensor)
+            return td.apply(fn, is_leaf=is_leaf_nontensor)
+
+        apply_c = torch.compile(apply, fullgraph=True, mode=mode)
+        for n in (4, 6):
+            td = TensorDict(
+                a=torch.ones(n), b={"c": torch.ones(n, 2)}, s="a string", batch_size=[n]
+            )
+            expected = apply(td)
+            result = apply_c(td)
+            assert set(expected.keys(True, True)) == {"a", ("b", "c")}
+            assert set(result.keys(True, True)) == {"a", ("b", "c")}
+            assert_close(result, expected)
+
     @pytest.mark.parametrize("dtype", [None, torch.float64])
     def test_new_tensor_dtype(self, dtype, mode):
         # Each entry takes its own dtype, or dtype if given, as in eager mode;
