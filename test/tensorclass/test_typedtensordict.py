@@ -905,6 +905,44 @@ class TestFromTensordict:
         assert state.batch_size == torch.Size([2])
         assert state.eta.shape == (2, 3)
 
+    def test_from_tensordict_lazy_stack_repr_does_not_stack(self, monkeypatch):
+        # #2800: printing reads the shapes and dtypes from the members, as the
+        # lazy stack's own repr does
+        tds = [self._make_td() for _ in range(2)]
+        tds[1]["X"] = tds[1]["X"].double()
+        state = PredictorState.from_tensordict(lazy_stack(tds))
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(tensors, *args, **kwargs):
+            calls.append(len(tensors))
+            return stack(tensors, *args, **kwargs)
+
+        monkeypatch.setattr(torch, "stack", counting_stack)
+        text = repr(state)
+        assert calls == []
+        # torch.stack promotes the dtype of X
+        assert (
+            "X: Tensor(shape=torch.Size([2, 5, 4]), device=cpu, "
+            "dtype=torch.float64, is_shared=False)" in text
+        )
+        assert (
+            "eta: Tensor(shape=torch.Size([2, 5, 3]), device=cpu, "
+            "dtype=torch.float32, is_shared=False)" in text
+        )
+
+    def test_from_tensordict_lazy_stack_repr_ragged(self):
+        # the entries whose shapes differ print with -1, as in the lazy stack
+        tds = [self._make_td() for _ in range(2)]
+        tds[1]["beta"] = torch.zeros(5, 2)
+        ls = lazy_stack(tds)
+        state = PredictorState.from_tensordict(ls)
+        fields = repr(ls).split("    exclusive_fields")[0]
+        assert repr(state).startswith(
+            fields.replace(type(ls).__name__, "PredictorState")
+        )
+        assert "beta: Tensor(shape=torch.Size([2, 5, -1])" in fields
+
     def test_from_tensordict_lazy_stack_inplace(self):
         # #2242: the in-place methods write into the members of the stack
         tds = [self._make_td() for _ in range(2)]
