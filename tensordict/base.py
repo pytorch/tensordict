@@ -1381,6 +1381,8 @@ def _empty_leaves(td: TensorDictBase) -> list[NestedKey]:
     leaves = {}
 
     def walk(td, prefix):
+        if _is_tensorclass(type(td)):
+            td = td._tensordict
         if type(td) is not TensorDict:
             from tensordict._lazy import LazyStackedTensorDict
             from tensordict.typedtensordict import TypedTensorDict
