@@ -7986,8 +7986,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 # For other ops (data ops like zero_, and to() with a
                 # batch_size, which passes call_on_unbatched=True), apply the
                 # function normally.
-                unbatched_new_batch = batch_size is not None and _is_unbatched(item)
-                if unbatched_new_batch and not call_on_unbatched:
+                if (
+                    batch_size is not None
+                    and not call_on_unbatched
+                    and _is_unbatched(item)
+                ):
                     item_trsf = _unbatched_with_batch_size(item, batch_size)
                 else:
                     _others = [
@@ -8002,7 +8005,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             item_trsf = fn(key, item, *_others)
                     else:
                         item_trsf = fn(item, *_others)
-                    if unbatched_new_batch and _is_unbatched(item_trsf):
+                    if (
+                        call_on_unbatched
+                        and batch_size is not None
+                        and _is_unbatched(item)
+                        and _is_unbatched(item_trsf)
+                    ):
                         item_trsf = _unbatched_with_batch_size(item_trsf, batch_size)
             if item_trsf is not None:
                 if not any_set:
