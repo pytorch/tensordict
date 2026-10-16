@@ -4978,6 +4978,15 @@ class TestTensorDictParams:
         assert all(registered[key] is entries[key] for key in entries)
         assert (params["n", "c"] == 1).all()
 
+    def test_update_nested_content_locked(self):
+        # only a nested tensordict of the content is locked: update() unlocks
+        # it as well, and leaves the root unlocked
+        params = self._params()
+        params._param_td["n"].lock_()
+        assert params.update({"n": {"q": torch.ones(4)}}) is params
+        assert not params._param_td.is_locked
+        assert (params["n", "q"] == 1).all()
+
     def test_update_root_locked(self):
         params = self._params().lock_()
         with pytest.raises(RuntimeError, match="locked"):

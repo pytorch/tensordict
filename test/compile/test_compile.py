@@ -2730,6 +2730,55 @@ class TestNN:
             assert result.names == expected.names == ["x"]
             assert_close(result, expected)
 
+    @pytest.mark.parametrize("op", ["clone", "init", "unsqueeze"])
+    def test_tdparams_new(self, mode, op):
+        # Building a new TensorDictParams in the compiled region (gh-2791).
+        def fn(params):
+            if op == "clone":
+                return params.clone(recurse=False)
+            if op == "init":
+                return TensorDictParams(params)
+            return params._legacy_unsqueeze(0)
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4])
+        )
+        expected = fn(params)
+        result = fn_c(params)
+        assert type(result) is type(expected) is TensorDictParams
+        assert result.batch_size == expected.batch_size
+        for named in ("named_parameters", "named_buffers"):
+            result_named = dict(getattr(result, named)())
+            expected_named = dict(getattr(expected, named)())
+            assert result_named.keys() == expected_named.keys()
+            for key, value in result_named.items():
+                assert type(value) is type(expected_named[key])
+        assert_close(result, expected)
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_tdparams_update(self, mode, lock):
+        # update() on a TensorDictParams passed into the compiled region
+        # (gh-2791), with an unlocked or a locked content.
+        def update(params, other):
+            params.update(other)
+            return params
+
+        update_c = torch.compile(update, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4]),
+            lock=lock,
+        )
+        other = TensorDictParams(
+            TensorDict(a=torch.zeros(4, 3), b={"d": torch.ones(4)}, batch_size=[4])
+        )
+        result = update_c(params, other)
+        assert result is params
+        assert params._param_td.is_locked is lock
+        assert params["a"] is other["a"]
+        assert params["b", "d"] is other["b", "d"]
+        assert dict(params.named_parameters()).keys() == {"a", "b.c", "b.d"}
+
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
