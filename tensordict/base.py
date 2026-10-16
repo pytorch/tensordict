@@ -6851,6 +6851,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             nested_keys=nested_keys,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            out=out,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
