@@ -4799,19 +4799,18 @@ def _get_at(self, key: NestedKey, *args, **kwargs):
     # Find what the default is
     if args:
         default = args[0]
-        if len(args) > 1 or kwargs:
+        if len(args) > 1:
             raise TypeError("only one (keyword) argument is allowed.")
-    elif kwargs:
+    elif "default" in kwargs:
         default = kwargs.pop("default")
-        if args or kwargs:
-            raise TypeError("only one (keyword) argument is allowed.")
     elif _td_base._GET_DEFAULTS_TO_NONE:
         default = None
     else:
         default = NO_DEFAULT
 
     try:
-        out = self.get(key, NO_DEFAULT)
+        # the other keywords go on to get, as TensorDictBase.get_at does
+        out = self.get(key, NO_DEFAULT, **kwargs)
         # A None field is None at every index, as obj[index].field is
         return None if out is None else out[index]
     except (AttributeError, KeyError):

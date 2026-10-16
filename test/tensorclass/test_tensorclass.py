@@ -4470,6 +4470,34 @@ class TestTensorClass:
         assert data.get_at(("y", "foo"), slice(2, 3), "working") == "working"
         assert data.get_at("foo", slice(2, 3), "working") == "working"
 
+    def test_tensorclass_get_at_passes_get_kwargs(self):
+        # https://github.com/pytorch/tensordict/issues/2830
+        @tensorclass
+        class A:
+            X: torch.Tensor
+            k: Optional[Tensor] = None
+
+        a = A(X=torch.arange(6).view(3, 2), batch_size=[3])
+        td = TensorDict(X=torch.arange(6).view(3, 2), batch_size=[3])
+        expected = torch.tensor([0, 1])
+        assert (td.get_at("X", 0, as_list=True) == expected).all()
+        assert (a.get_at("X", 0, as_list=True) == expected).all()
+        assert (a.get_at("X", 0, default=None, as_list=True) == expected).all()
+        assert (a.get_at("X", index=0, as_list=True) == expected).all()
+        # the forms that worked before keep working
+        assert (a.get_at("X", 0) == expected).all()
+        assert (a.get_at("X", index=0) == expected).all()
+        assert (a.get_at("X", 0, None) == expected).all()
+        assert (a.get_at("X", 0, default=None) == expected).all()
+        assert a.get_at("k", 0) is None
+        assert a.get_at("k", 0, as_list=True) is None
+        assert a.get_at("foo", 0, "working") == "working"
+        assert a.get_at("foo", 0, default="working", as_list=True) == "working"
+        assert a.get_at("foo", 0) is None
+        assert a.get_at("foo", 0, as_list=True) is None
+        with pytest.raises(TypeError, match="index argument missing"):
+            a.get_at("X")
+
     def test_tensorclass_set_at_(self):
         @tensorclass
         class MyDataNest:
