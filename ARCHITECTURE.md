@@ -450,10 +450,15 @@ touches these places:
      operations on each type and on its dense copy and compares the
      results. Its known failures are in
      `test/tensordict/conformance_known_failures.json`, rewritten the same
-     way. Its `TestOneImplementation` fails when a class overrides a
-     public method of `TensorDictBase` that is not in its list of allowed
-     overrides: write a hook instead, or add the override to the list and
-     give the reason in its `# Override:` comment.
+     way. `TestContainersCompile`, in the same file, runs these operations
+     under `torch.compile(fullgraph=True)` and compares them with eager
+     mode. Its known failures change with the torch version: they are in
+     `conformance_compile_known_failures.json`, and the tests run only
+     with `TENSORDICT_COMPILE_CONFORMANCE=1`, which the CI job with the
+     newest stable torch sets. `TestOneImplementation` fails when a class
+     overrides a public method of `TensorDictBase` that is not in its list
+     of allowed overrides: write a hook instead, or add the override to the
+     list and give the reason in its `# Override:` comment.
 9. `benchmarks/` when the operation is on a hot path.
 
 ## Where things live

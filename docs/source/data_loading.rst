@@ -78,6 +78,20 @@ of points:
   >>> [cloud["points"].shape for cloud in batch.unbind(0)]
   [torch.Size([5, 3]), torch.Size([2, 3]), torch.Size([7, 3]), torch.Size([3, 3])]
 
+:func:`~tensordict.collate` does both: it stacks the samples densely if
+their shapes match, and lazily otherwise. It also reads samples that hold
+tensordicts or tensorclasses in a tuple or a dict, such as ``(td, label)``
+pairs, which ``torch.stack`` cannot stack:
+
+  >>> from tensordict import collate
+  >>> pairs = [(TensorDict({"features": torch.randn(3)}), i) for i in range(10)]
+  >>> features, labels = next(iter(DataLoader(pairs, batch_size=4, collate_fn=collate)))
+  >>> type(features).__name__, features.batch_size, labels
+  ('TensorDict', torch.Size([4]), tensor([0, 1, 2, 3]))
+  >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate)))
+  >>> type(batch).__name__
+  'LazyStackedTensorDict'
+
 Batch samplers
 --------------
 

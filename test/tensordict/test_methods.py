@@ -2508,6 +2508,18 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_c[key] + 1 != td[key]).any()
                 assert (td_1[key] == td[key] + 1).all()
 
+    def test_named_apply_out(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if not isinstance(td, LazyStackedTensorDict):
+            td_c = td.to_tensordict(retain_none=True)
+        else:
+            td_c = td.clone()
+        td.named_apply(lambda name, x: x + 1, out=td_c)
+        assert_allclose_td(
+            td.filter_non_tensor_data().data + 1,
+            td_c.filter_non_tensor_data().filter_empty_(),
+        )
+
     def test_named_apply_complete(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock_()

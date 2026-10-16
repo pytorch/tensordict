@@ -54,6 +54,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collec
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import (
+    collate,
     dense_stack_tds,
     merge_tensordicts,
     pad,
@@ -7064,6 +7065,66 @@ class TestGeneric:
         else:
             assert "masks" not in padded_td.keys()
 
+    def test_collate_dataloader(self):
+        @tensorclass
+        class Sample:
+            x: torch.Tensor
+
+        def load(samples):
+            dl = torch.utils.data.DataLoader(  # noqa: TOR401
+                samples, batch_size=4, collate_fn=collate
+            )
+            return next(iter(dl))
+
+        # tensordicts with matching shapes stack densely
+        tds = [
+            TensorDict(a=torch.full((3,), i), nested=TensorDict(b=torch.zeros(2)))
+            for i in range(8)
+        ]
+        batch = load(tds)
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (4,)
+        assert batch["nested", "b"].shape == (4, 2)
+        assert (batch["a"][:, 0] == torch.arange(4)).all()
+        # tensorclasses keep their type
+        batch = load([Sample(x=torch.randn(3)) for _ in range(8)])
+        assert type(batch) is Sample
+        assert batch.x.shape == (4, 3)
+        batch = load([Sample(x=torch.randn(n + 1)) for n in range(8)])
+        assert isinstance(batch, Sample)
+        assert [x.shape for x in batch.get("x", as_list=True)] == [
+            (1,),
+            (2,),
+            (3,),
+            (4,),
+        ]
+        # ragged tensordicts stack lazily
+        batch = load([TensorDict(points=torch.randn(n + 1, 3)) for n in range(8)])
+        assert isinstance(batch, LazyStackedTensorDict)
+        assert [td["points"].shape for td in batch.tensordicts] == [
+            (1, 3),
+            (2, 3),
+            (3, 3),
+            (4, 3),
+        ]
+        # tuples, namedtuples and dicts recurse
+        td, label = load([(TensorDict(a=torch.randn(3)), i) for i in range(8)])
+        assert td.batch_size == (4,)
+        assert (label == torch.arange(4)).all()
+        Pair = namedtuple("Pair", ["td", "label"])
+        batch = load([Pair(TensorDict(a=torch.randn(3)), i) for i in range(8)])
+        assert type(batch) is Pair
+        assert batch.td.batch_size == (4,)
+        batch = load(
+            [{"td": TensorDict(a=torch.randn(3)), "x": torch.ones(2)} for _ in range(8)]
+        )
+        assert batch["td"].batch_size == (4,)
+        assert batch["x"].shape == (4, 2)
+        # anything that is not a non-empty list is returned as is
+        td = TensorDict(a=torch.zeros(4), batch_size=[4])
+        assert collate(td) is td
+        assert collate([]) == []
+
     def test_pad_sequence_padding_side(self):
         # https://github.com/pytorch/tensordict/issues/2808
         d1 = TensorDict(
@@ -11516,6 +11577,22 @@ class TestGeneric:
         assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
         assert_allclose_td(out, td * 2)
 
+    @pytest.mark.parametrize("nested_keys", [False, True])
+    def test_named_apply_out(self, nested_keys):
+        # named_apply writes into out= and returns it, as apply does
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.zeros(3, 2)}, batch_size=[3])
+        out = td.apply(lambda x: torch.full_like(x, 7.0))
+        names = []
+
+        def fn(name, x):
+            names.append(name)
+            return x + 1
+
+        result = td.named_apply(fn, nested_keys=nested_keys, out=out)
+        assert result is out
+        assert_allclose_td(out, td.apply(lambda x: x + 1))
+        assert set(names) == ({"a", ("b", "c")} if nested_keys else {"a", "c"})
+
     @pytest.mark.parametrize("named", [False, True])
     def test_apply_is_leaf(self, named):
         # is_leaf is a documented keyword of apply and named_apply: it decides
@@ -11812,16 +11889,16 @@ _SYNC_COUNTER = 0
 
 
 @pytest.fixture
-def _path_td_sync():
+def _path_td_sync(monkeypatch):
     def _sync_td(self):
         global _SYNC_COUNTER
         _SYNC_COUNTER += 1
         super(TensorDict, self)._sync_all()
 
-    _sync_all = TensorDict._sync_all
-    TensorDict._sync_all = _sync_td
-    yield
-    TensorDict._sync_all = _sync_all
+    # monkeypatch deletes the attribute on teardown, so TensorDict inherits
+    # _sync_all again. Assigning the old value back would leave an override
+    # in TensorDict.__dict__, which TestOneImplementation then reports.
+    monkeypatch.setattr(TensorDict, "_sync_all", _sync_td)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,10 @@ Its subclasses keep their entries in different places:
 :class:`MemoryMappedTensor` is not a tensordict. It is a tensor whose data
 is in a file, and the type of the entries of a memory-mapped tensordict.
 
+:class:`TensorCollection` is the common base class of the tensordicts and
+the subclasses of :class:`TensorClass`: the type hint for "a tensordict or
+a tensorclass".
+
 Other containers have their own pages: :class:`TensorClass`, the class
 form with typed fields and methods, and non-tensor data
 (:ref:`api-tensorclass`), :class:`TypedTensorDict`
@@ -56,6 +60,7 @@ form with typed fields and methods, and non-tensor data
     :template: class.rst
 
     MemoryMappedTensor
+    TensorCollection
 
 .. _api-tensordict-methods:
 
@@ -210,6 +215,7 @@ see :ref:`keys`. For values that are not tensors, see
 
     unravel_key
     unravel_key_list
+    unravel_key_to_tuple
     merge_tensordicts
 
 .. _api-methods-indexing:
@@ -320,6 +326,7 @@ dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
     pad
     pad_sequence
     unpad_sequence
+    collate
 
 .. _api-methods-device:
 
