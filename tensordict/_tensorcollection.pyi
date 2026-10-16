@@ -11,7 +11,7 @@ import enum
 import multiprocessing.pool
 import types
 from abc import abstractmethod
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 from typing import (
     Any,
@@ -992,6 +992,9 @@ class TensorCollection:
     ) -> Self: ...
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
+    ) -> Self: ...
+    def rename_keys(
+        self, mapping: Mapping[NestedKey, NestedKey], *, strict: bool = True
     ) -> Self: ...
     def del_(self, key: NestedKey) -> Self: ...
     def gather_and_stack(

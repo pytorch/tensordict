@@ -1051,6 +1051,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_unlock_and_set
     def _select(self, *args, **kwargs): ...
 
+    # Override: renames in _param_td, so that the result is a TensorDictParams.
+    @_carry_over
+    def _rename_keys(self, pairs, *, strict, prune_root):
+        """Renames the keys of a copy of _param_td and wraps it."""
+
     # Override: shares the parameters of _param_td in place.
     @_fallback
     def _share_memory_(self): ...

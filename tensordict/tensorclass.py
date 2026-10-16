@@ -64,6 +64,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _register_tensor_class,
+    _rename_keys_pairs,
     _TENSORDICTBASE_MIXINS,
     _UNSET,
     _update_at_aliases,
@@ -1626,6 +1627,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
 
     if not hasattr(cls, "select") and "select" not in expected_keys:
         cls.select = _tc_select
+    if not hasattr(cls, "rename_keys") and "rename_keys" not in expected_keys:
+        cls.rename_keys = _tc_rename_keys
     if not hasattr(cls, "to_tensordict") and "to_tensordict" not in expected_keys:
         cls.to_tensordict = _to_tensordict
     if not hasattr(cls, "device") and "device" not in expected_keys:
@@ -4330,6 +4333,26 @@ def _tc_select(
         return self
     non_tensordict = dict(self._non_tensordict)
     return type(self)._from_tensordict(result, non_tensordict, safe=False)
+
+
+def _tc_rename_keys(self, mapping, *, strict: bool = True):
+    """TensorClass-specific rename_keys: the destinations must be fields, which are never removed."""
+    pairs = _rename_keys_pairs(mapping)
+    cls = type(self)
+    dst_roots = {dst[0] for _, dst in pairs}
+    unknown = dst_roots - cls.__expected_keys__
+    if unknown:
+        raise AttributeError(
+            f"The destinations {sorted(unknown)} are not fields of {cls.__name__} "
+            f"({sorted(cls.__expected_keys__)})."
+        )
+    result = self._tensordict._rename_keys(pairs, strict=strict, prune_root=False)
+    non_tensordict = {
+        key: value
+        for key, value in self._non_tensordict.items()
+        if key not in dst_roots
+    }
+    return cls._from_tensordict(result, non_tensordict, safe=False)
 
 
 def _device(self) -> torch.device:

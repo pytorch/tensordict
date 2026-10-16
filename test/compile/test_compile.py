@@ -951,6 +951,27 @@ class TestTD:
         assert "missing_key" not in result_c.keys()
         assert "b" not in result_c.keys()
 
+    @pytest.mark.parametrize("batch_size", [[3], [5]])
+    def test_rename_keys(self, mode, batch_size):
+        def rename_keys(td: TensorDict):
+            return td.rename_keys({"a": "b", "b": "a", ("raw", "p"): "pressure"})
+
+        rename_keys_c = torch.compile(rename_keys, fullgraph=True, mode=mode)
+
+        data = TensorDict(
+            a=torch.zeros(batch_size),
+            b=torch.ones(batch_size),
+            raw=TensorDict(p=torch.full(batch_size, 2.0), batch_size=batch_size),
+            batch_size=batch_size,
+        )
+        result = rename_keys(data)
+        result_c = rename_keys_c(data)
+        assert set(result_c.keys(True)) == set(result.keys(True))
+        assert set(result_c.keys(True)) == {"a", "b", "pressure"}
+        assert (result_c == result).all()
+        assert (result_c["a"] == 1).all()
+        assert set(data.keys(True)) == {"a", "b", "raw", ("raw", "p")}
+
     def test_exclude(self, mode):
         def exclude_keys(td: TensorDict):
             return td.exclude("b")
