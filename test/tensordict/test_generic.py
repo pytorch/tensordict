@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dis
 import enum
 import gc
 import importlib.util
@@ -52,7 +53,7 @@ from tensordict import (
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
-from tensordict._torch_func import _stack as stack_td
+from tensordict._torch_func import _stack as stack_td, TD_HANDLED_FUNCTIONS
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import (
     collate,
@@ -3674,6 +3675,38 @@ class TestGeneric:
         resulting_shape = _getitem_batch_size(shape, idx)
         assert expected_shape == resulting_shape, (idx, expected_shape, resulting_shape)
         assert type(resulting_shape) is torch.Size
+
+    @pytest.mark.parametrize(
+        "owner,name",
+        [
+            (TensorDictBase, "_apply_nest"),
+            (TensorDictBase, "_index_tensordict"),
+            (TensorDictBase, "__torch_function__"),
+            (TensorDictBase, "_convert_to_tensordict"),
+            (TensorDictBase, "_compare"),
+            (TensorDictBase, "all"),
+            (TensorDictBase, "any"),
+            (TensorDictBase, "_cast_reduction"),
+            (tensordict._td, "_clone_value"),
+        ],
+        ids=lambda x: getattr(x, "__name__", x),
+    )
+    def test_hot_path_has_no_function_level_import(self, owner, name):
+        # These run on every call, or for every node of a tree: they read the
+        # tensordict classes and tables from module globals, since a
+        # function-level import costs about 100 ns each time it runs
+        imported = [
+            instruction.argval
+            for instruction in dis.get_instructions(getattr(owner, name))
+            if instruction.opname == "IMPORT_NAME"
+        ]
+        assert not [module for module in imported if module.startswith("tensordict")]
+
+    def test_torch_function_table(self):
+        # TensorDictBase.__torch_function__ reads the table that _torch_func
+        # fills
+        assert tensordict_base._TD_HANDLED_FUNCTIONS is TD_HANDLED_FUNCTIONS
+        assert torch.stack in TD_HANDLED_FUNCTIONS
 
     @pytest.mark.parametrize("idx", [(10, 0), (0, -8), (0, 7), (0, 0, 0, 0, 0)])
     def test_getitem_batch_size_int_tuple_error(self, idx):

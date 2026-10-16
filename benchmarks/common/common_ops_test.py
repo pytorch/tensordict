@@ -1145,6 +1145,25 @@ def test_pointwise_nested(benchmark, op):
     benchmark(fn, td)
 
 
+@pytest.mark.parametrize(
+    "op", ["reshape", "view_flatten", "unsqueeze", "unbind", "clone", "eq_all"]
+)
+def test_shape_ops_nested(benchmark, op):
+    td = TensorDict(
+        {"a": torch.randn(8, 3), "b": torch.randn(8), "n": {"c": torch.randn(8, 4)}},
+        [8],
+    )
+    fn = {
+        "reshape": lambda td: td.reshape(2, 4),
+        "view_flatten": lambda td: td.view(2, 4).flatten(0, 1),
+        "unsqueeze": lambda td: td.unsqueeze(0),
+        "unbind": lambda td: td.unbind(0),
+        "clone": lambda td: td.clone(),
+        "eq_all": lambda td: (td == td).all(),
+    }[op]
+    benchmark(fn, td)
+
+
 def test_split(benchmark):
     (td,), _ = big_nested_td(size=(3, 20))
     benchmark(lambda td: td.split(2, dim=1), td)

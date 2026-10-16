@@ -18,6 +18,7 @@ import numbers
 import operator
 from typing import Any, TYPE_CHECKING
 
+import tensordict.base as _td_base
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
@@ -272,7 +273,7 @@ class _PointwiseOps:
         member and stacks the results lazily; it returns ``default`` only for
         ``==`` and ``!=``, and raises ``ValueError`` for the other ops.
         """
-        from tensordict._td import TensorDict
+        TensorDict = _td_base._TENSORDICT_TYPE
 
         if (isinstance(other, Tensor) and other.ndim) or (
             _is_tensor_collection(type(other))

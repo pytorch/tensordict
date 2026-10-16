@@ -58,6 +58,7 @@ from tensordict.base import (
     _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
+    _set_subtensordict_type,
     _set_tensordict_type,
     _UNSET,
     _warn_empty_names,
@@ -83,7 +84,6 @@ from tensordict.utils import (
     _cast_scalar,
     _CHECK_INVARIANTS,
     _check_invariants,
-    _clone_value,
     _create_segments_from_int,
     _encode_key_for_filesystem,
     _GENERIC_NESTED_ERR,
@@ -201,6 +201,16 @@ def _nested_members_hold_leaf(td: TensorDict) -> bool:
         elif _members_hold_leaf([item]):
             return True
     return False
+
+
+def _clone_value(value, recurse: bool):
+    if recurse:
+        # this is not a problem for locked tds as we will not lock it
+        return value.clone()
+    elif _is_tensor_collection(type(value)):
+        return value._clone(recurse=False)
+    else:
+        return value
 
 
 class TensorDict(TensorDictBase):
@@ -4108,6 +4118,7 @@ def _str_to_index(index: Any) -> IndexType:
 
 _register_tensor_class(TensorDict)
 _set_tensordict_type(TensorDict)
+_set_subtensordict_type(_SubTensorDict)
 _register_tensor_class(_SubTensorDict)
 
 

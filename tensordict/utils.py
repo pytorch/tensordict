@@ -2285,18 +2285,6 @@ def _set_max_batch_size(
         curr_dim += 1
 
 
-def _clone_value(value, recurse: bool):
-    from tensordict.base import _is_tensor_collection
-
-    if recurse:
-        # this is not a problem for locked tds as we will not lock it
-        return value.clone()
-    elif _is_tensor_collection(type(value)):
-        return value._clone(recurse=False)
-    else:
-        return value
-
-
 def _get_shape_from_args(*args, kwarg_name="size", **kwargs):
     if not args and not kwargs:
         return ()
