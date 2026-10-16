@@ -5724,6 +5724,23 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         stack overrides it with the plans of its members, which it checks
         before it writes any member (#2776).
         """
+        if type(input_dict_or_td) is type(self) and self._is_dense_node():
+            # two exact TensorDicts with the same keys and only plain tensor
+            # leaves: pair the leaves in the key order of self, as below, in
+            # one walk. Any other entry takes the general route (#2859).
+            dests = self._tensordict
+            sources = input_dict_or_td._tensordict
+            if dests and len(dests) == len(sources):
+                vals = []
+                other_val = []
+                for key, val in dests.items():
+                    other = sources.get(key)
+                    if type(val) is not Tensor or type(other) is not Tensor:
+                        break
+                    vals.append(val)
+                    other_val.append(other)
+                else:
+                    return vals, other_val, None
         keys, vals = self._items_list(True, True)
         source = dict(zip(*input_dict_or_td._items_list(True, True)))
         new_keys = [key for key in keys if key in source]
