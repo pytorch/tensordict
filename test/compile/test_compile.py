@@ -26,6 +26,7 @@ from tensordict import (
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     MetaData,
     NonTensorData,
     NonTensorStack,
@@ -823,6 +824,61 @@ class TestTD:
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
+    @staticmethod
+    def _unbind_split(td, op):
+        if op == "unbind":
+            return td.unbind(0)
+        if op == "iter":
+            return list(td)
+        if op == "chunk":
+            return td.chunk(2, 0)
+        return td.split(2, 0)
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    def test_unbind_split_shared(self, op, mode):
+        # A shared tensordict can be unbound, iterated, chunked and split in
+        # a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4]).share_memory_()
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert r.batch_size == e.batch_size
+            assert r.is_shared() == e.is_shared()
+            assert (r == e).all()
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    @pytest.mark.parametrize("container", ["td", "tc"])
+    def test_unbind_split_memmap(self, op, container, mode, tmpdir):
+        # A memory-mapped tensordict or tensorclass can be unbound, iterated,
+        # chunked and split in a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        if container == "td":
+            data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4])
+        else:
+            data = MyClass(
+                a=MyClass(a=None, b=torch.arange(4.0), batch_size=[4]), batch_size=[4]
+            )
+        data.memmap_(tmpdir)
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert type(r) is type(e)
+            assert r.batch_size == e.batch_size
+            assert r.is_memmap()
+            assert (r == e).all()
+            # Dynamo cannot build a MemoryMappedTensor, so compiled code
+            # returns plain tensors over the same file, as compiled indexing
+            # does.
+            assert type(r.get(("a", "b"))) is torch.Tensor
+            assert isinstance(e.get(("a", "b")), MemoryMappedTensor)
+        # Writes through a result reach the file.
+        result[0].get(("a", "b")).add_(10)
+        assert data.get(("a", "b"))[0] == 10
+        assert type(data).load_memmap(tmpdir).get(("a", "b"))[0] == 10
+
     def test_split_across_batch_sizes(self, mode):
         # From the second batch size on, the batch size is dynamic: the split
         # sizes must be computed from a symbolic size under fullgraph=True.
@@ -1490,6 +1546,21 @@ class TestTD:
         result = td.clone()
         assert inplace_c(result, other) is result
         assert_close(result, expected)
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_detach_no_grad(self, lazy, mode):
+        # detach_() traces when no leaf requires grad: Dynamo cannot trace
+        # Tensor.detach_() on a graph input, so those leaves are skipped (#2792)
+        def detach_(td):
+            return td.detach_()
+
+        td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
+        if lazy:
+            td = LazyStackedTensorDict(*[t.clone() for t in td.unbind(0)], stack_dim=0)
+        expected = td.clone()
+        detach_c = torch.compile(detach_, fullgraph=True, mode=mode)
+        assert detach_c(td) is td
+        assert_close(td, expected)
 
     @pytest.mark.parametrize("after_empty", ["tensor", "nested"])
     def test_tree_map_empty_nested_first(self, after_empty, mode):
@@ -2783,6 +2854,55 @@ class TestNN:
             assert result.device == expected.device
             assert result.names == expected.names == ["x"]
             assert_close(result, expected)
+
+    @pytest.mark.parametrize("op", ["clone", "init", "unsqueeze"])
+    def test_tdparams_new(self, mode, op):
+        # Building a new TensorDictParams in the compiled region (gh-2791).
+        def fn(params):
+            if op == "clone":
+                return params.clone(recurse=False)
+            if op == "init":
+                return TensorDictParams(params)
+            return params._legacy_unsqueeze(0)
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4])
+        )
+        expected = fn(params)
+        result = fn_c(params)
+        assert type(result) is type(expected) is TensorDictParams
+        assert result.batch_size == expected.batch_size
+        for named in ("named_parameters", "named_buffers"):
+            result_named = dict(getattr(result, named)())
+            expected_named = dict(getattr(expected, named)())
+            assert result_named.keys() == expected_named.keys()
+            for key, value in result_named.items():
+                assert type(value) is type(expected_named[key])
+        assert_close(result, expected)
+
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_tdparams_update(self, mode, lock):
+        # update() on a TensorDictParams passed into the compiled region
+        # (gh-2791), with an unlocked or a locked content.
+        def update(params, other):
+            params.update(other)
+            return params
+
+        update_c = torch.compile(update, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4]),
+            lock=lock,
+        )
+        other = TensorDictParams(
+            TensorDict(a=torch.zeros(4, 3), b={"d": torch.ones(4)}, batch_size=[4])
+        )
+        result = update_c(params, other)
+        assert result is params
+        assert params._param_td.is_locked is lock
+        assert params["a"] is other["a"]
+        assert params["b", "d"] is other["b", "d"]
+        assert dict(params.named_parameters()).keys() == {"a", "b.c", "b.d"}
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])

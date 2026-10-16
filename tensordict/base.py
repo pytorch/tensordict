@@ -10972,6 +10972,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         tensors (a lazy stack detaches each member) or when the leaves cannot
         be detached in place (a sub-tensordict raises).
         """
+        compiling = is_compiling()
         for key, value in self.items():
             if _is_unbatched(value):
                 # A tensordict stores an UnbatchedTensor as an alias that
@@ -10979,6 +10980,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 self._set_str(
                     key, value.detach(), inplace=False, validated=True, ignore_lock=True
                 )
+            elif (
+                compiling
+                and isinstance(value, torch.Tensor)
+                and not value.requires_grad
+                and value._base is None
+            ):
+                # detach_() does nothing on such a leaf, and Dynamo cannot
+                # trace an in-place view op on a graph input (#2792).
+                continue
             else:
                 value.detach_()
 
