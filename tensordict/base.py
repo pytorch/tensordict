@@ -2838,9 +2838,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if move_to is not None and not (
                     isinstance(item, Tensor) and item.device == move_to
                 ):
-                    # a nested TensorDict written at an existing key moves its
-                    # own entries, by the rule above
-                    if type(item) is not TensorDict or value_key not in keys:
+                    # a nested TensorDict written at an existing key of a CPU
+                    # store moves its own entries, by the rule above. On CUDA,
+                    # it is moved whole: a lazy stack there would copy each
+                    # leaf with a blocking copy_
+                    if (
+                        type(item) is not TensorDict
+                        or value_key not in keys
+                        or move_to.type != "cpu"
+                    ):
                         # non-blocking, as value.to(move_to) would copy it
                         item = item.to(move_to, non_blocking=move_to.type == "cuda")
                 if value_key in keys:

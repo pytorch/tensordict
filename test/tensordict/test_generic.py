@@ -3957,6 +3957,7 @@ class TestGeneric:
             "new_key",
             "non_tensor",
             "nested_lazy",
+            "into_lazy",
             "nested_tc",
             "subclass",
             "batch_size",
@@ -3992,7 +3993,7 @@ class TestGeneric:
                 a=torch.zeros(6, 3),
                 n=TensorDict(b=torch.zeros(6, dtype=torch.long), batch_size=[6]),
                 s=NonTensorData("old", batch_size=[6]),
-                lz=TensorDict(c=torch.zeros(6, 2), batch_size=[6]),
+                lz=lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(6)]),
                 tc=Data(x=torch.zeros(6, 2), s="old", batch_size=[6]),
                 batch_size=[6],
                 device=device,
@@ -4014,6 +4015,9 @@ class TestGeneric:
             value["lz"] = lazy_stack(
                 [TensorDict(c=torch.full((2,), float(i))) for i in range(4)]
             )
+        elif case == "into_lazy":
+            # a dense value written into the lazy stack of store
+            value["lz"] = TensorDict(c=torch.ones(4, 2), batch_size=[4])
         elif case == "nested_tc":
             value["tc"] = Data(x=torch.ones(4, 2), s="new", batch_size=[4])
         elif case == "subclass":
