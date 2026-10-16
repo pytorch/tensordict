@@ -7676,15 +7676,24 @@ class NonTensorStack(LazyStackedTensorDict):
 
     # Override: an advanced index copies the entries, as it does for tensors.
     def __getitem__(self, index: IndexType) -> NonTensorStack | NonTensorDataBase | Any:
-        # perf: a 1-D index tensor, array or list (or a 1-tuple of one, as a
-        # TensorDict passes it) builds the copied stack in one go. Ints and
-        # slices only pay the type tests.
-        element = index[0] if type(index) is tuple and len(index) == 1 else index
-        cls = type(element)
-        if (cls is Tensor or cls is np.ndarray) and element.ndim == 1 or cls is list:
-            result = self._getitem_copies(index)
-            if result is not None:
-                return result
+        cls = type(index)
+        if cls is not int and cls is not slice:
+            # perf: a 1-D index tensor, array or list (or a 1-tuple of one,
+            # as a TensorDict passes it) builds the copied stack in one go.
+            # Ints and slices only pay the first type test.
+            if cls is tuple and len(index) == 1:
+                cls = type(index[0])
+                element = index[0]
+            else:
+                element = index
+            if (
+                cls is list
+                or (cls is Tensor or cls is np.ndarray)
+                and element.ndim == 1
+            ):
+                result = self._getitem_copies(index)
+                if result is not None:
+                    return result
         result = super().__getitem__(index)
         if not isinstance(result, NonTensorStack):
             return result
