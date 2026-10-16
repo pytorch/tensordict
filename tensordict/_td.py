@@ -514,19 +514,39 @@ class TensorDict(TensorDictBase):
         # An exact TensorDict without dim names: _dense_apply rebuilds it.
         return type(self) is TensorDict and self._td_dim_names is None
 
-    def _dense_apply(self, fn, named, nested_keys, prefix, filter_empty, is_leaf):
+    def _dense_apply(
+        self,
+        fn,
+        named,
+        nested_keys,
+        prefix,
+        filter_empty,
+        is_leaf,
+        device=NO_DEFAULT,
+        call_on_unbatched=False,
+    ):
         # What _apply_nest returns for a node that passes _is_dense_node, with
-        # checked=True and no others, out, inplace, batch size, device or
-        # names: each node gets the batch size and device of its source node.
-        # Entries other than tensors and such nodes take the steps of
-        # _apply_nest for one entry.
-        result = self._new_unsafe(batch_size=self._batch_size, device=self._device)
+        # checked=True and no others, out, inplace, batch size or names: each
+        # node gets the batch size of its source node, and the given device
+        # or, without one, the device of its source node. Entries other than
+        # tensors and such nodes take the steps of _apply_nest for one entry.
+        result = self._new_unsafe(
+            batch_size=self._batch_size,
+            device=self._device if device is NO_DEFAULT else device,
+        )
         _tensordict = result._tensordict
         for key, item in self._tensordict.items():
             cls = type(item)
             if cls is TensorDict and item._td_dim_names is None:
                 item_trsf = item._dense_apply(
-                    fn, named, nested_keys, prefix + (key,), filter_empty, is_leaf
+                    fn,
+                    named,
+                    nested_keys,
+                    prefix + (key,),
+                    filter_empty,
+                    is_leaf,
+                    device,
+                    call_on_unbatched,
                 )
             elif cls is not Tensor and not is_leaf(cls):
                 # the call _apply_nest makes for a nested collection
@@ -534,7 +554,7 @@ class TensorDict(TensorDictBase):
                     fn,
                     inplace=False,
                     batch_size=None,
-                    device=NO_DEFAULT,
+                    device=device,
                     checked=True,
                     named=named,
                     nested_keys=nested_keys,
@@ -543,7 +563,7 @@ class TensorDict(TensorDictBase):
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
                     out=None,
-                    call_on_unbatched=False,
+                    call_on_unbatched=call_on_unbatched,
                 )
             elif named:
                 if nested_keys:
