@@ -256,8 +256,13 @@ def pad(
             # The loop can fail before any check does, for example in the
             # pad of a nested lazy stack, whose checks skip its stack dim:
             # raise the error of the first failing check, if one fails, as
-            # the walk before the loop would have.
-            _pad_preflight(tensordict, pad_size)
+            # the walk before the loop would have, without the loop's error
+            # as its context.
+            try:
+                _pad_preflight(tensordict, pad_size)
+            except Exception as err:
+                err.__context__ = None
+                raise
         raise
 
     if inplace:

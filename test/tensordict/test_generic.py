@@ -6012,7 +6012,8 @@ class TestGeneric:
         # pad(safe=True) checks a dense tensordict while it pads it, not in a
         # walk before: it must give the result or the error of that walk
         # followed by an unchecked pad, including when a nested lazy stack
-        # fails in its own pad before a later leaf fails the check.
+        # fails in its own pad before a later leaf fails the check. The error
+        # must not chain the error that the check repeats.
         @tensorclass
         class _Sample:
             x: torch.Tensor
@@ -6067,7 +6068,7 @@ class TestGeneric:
             try:
                 return fn(), None
             except Exception as err:
-                return None, (type(err), str(err))
+                return None, (type(err), str(err), type(err.__context__))
 
         def reference():
             _pad_preflight(td, pad_size)
