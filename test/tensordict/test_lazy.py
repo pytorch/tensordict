@@ -4243,9 +4243,51 @@ class TestLazyStackedTensorDict:
         parts = make().split_keys({(*prefix, "extra"): (*prefix, "e")})
         parts = [part.get("s", part) if prefix else part for part in parts]
         assert leaves(parts[0]) == expected([set(), {("e",)}])[0]
+        # a key set may be an iterator
+        parts = make().split_keys(
+            (key for key in [(*prefix, "a")]), [(*prefix, "extra")], inplace=inplace
+        )
+        parts = [part.get("s", part) if prefix else part for part in parts]
+        assert [leaves(part) for part in parts[:2]] == expected(
+            [{("a",)}, {("a",)}], [set(), {("extra",)}]
+        )
         if prefix:
             with pytest.raises(KeyError, match="outside that stack"):
                 make().split_keys({("s", "extra"): "e"})
+            # an entry moved out of the stack is in no other part
+            parts = make().split_keys(
+                {("s", "a"): "a2"},
+                [("s", "extra")],
+                inplace=inplace,
+                reproduce_struct=reproduce_struct,
+            )
+            assert set(parts[0].keys(True, True)) == {"a2"}
+            assert leaves(parts[1]["s"]) == [set(), {("extra",)}]
+            assert leaves(parts[2]["s"]) == [common, common | {("t",), ("n", "x")}]
+
+            # a lazy stack in a tensorclass is split in the same way
+            class MC(TensorClass):
+                a: torch.Tensor
+                extra: torch.Tensor | None = None
+
+            members = [TensorDict(a=torch.zeros(2), batch_size=[2]) for _ in range(2)]
+            members[1]["extra"] = torch.ones(2)
+            td = TensorDict(
+                s=MC._from_tensordict(lazy_stack(members, stack_dim)),
+                batch_size=[2, 2],
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                parts = td.split_keys(
+                    [("s", "extra")],
+                    inplace=inplace,
+                    reproduce_struct=reproduce_struct,
+                )
+            assert all(isinstance(part["s"], MC) for part in parts)
+            assert [leaves(part["s"]._tensordict) for part in parts] == [
+                [set(), {("extra",)}],
+                [{("a",)}, {("a",)}],
+            ]
 
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim

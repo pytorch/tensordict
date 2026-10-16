@@ -1704,7 +1704,7 @@ def _all_leaf_keys(td: TensorDictBase) -> list:
 
 
 def _lazy_on_path(td: TensorDictBase, key: tuple) -> bool:
-    """Whether ``td`` or a tensordict that ``key`` runs through in it is lazy, as a lazy stack is: a cheap test before ``_held_keys``."""
+    """Whether ``td`` or a tensordict that ``key`` runs through in it is lazy, as a lazy stack is: a cheap test before ``_held_by_member``."""
     for name in key[:-1]:
         if getattr(td, "_lazy", False):
             return True
@@ -1714,9 +1714,34 @@ def _lazy_on_path(td: TensorDictBase, key: tuple) -> bool:
     return getattr(td, "_lazy", False)
 
 
-def _held_keys(td: TensorDictBase) -> set:
-    """The keys of ``td`` that a member of a lazy stack in it may hold, as tuples: its leaves and the tensordicts above them."""
-    return {key[:i] for key in _all_leaf_keys(td) for i in range(1, len(key) + 1)}
+def _held_by_member(td: TensorDictBase, key: tuple) -> bool:
+    """Whether ``td`` holds ``key``, in some member of each lazy stack that ``key`` runs through."""
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+    from tensordict.typedtensordict import TypedTensorDict
+
+    # each node is a tensordict that holds key[:i], and the next name
+    nodes = [(0, td)]
+    while nodes:
+        i, td = nodes.pop()
+        if i == len(key):
+            return True
+        if type(td) is TensorDict:
+            # the common case, read without the checks below
+            value = td._tensordict.get(key[i])
+        elif not _is_tensor_collection(type(td)) or _is_non_tensor(type(td)):
+            continue
+        else:
+            # these hold their entries in the tensordict that they wrap
+            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
+                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+            if isinstance(td, LazyStackedTensorDict):
+                nodes.extend((i, member) for member in td.tensordicts)
+                continue
+            value = td._get_str(key[i], None)
+        if value is not None:
+            nodes.append((i + 1, value))
+    return False
 
 
 def _split_keys_by_member(
@@ -1729,6 +1754,18 @@ def _split_keys_by_member(
     """
     from tensordict._lazy import LazyStackedTensorDict
 
+    if _is_tensorclass(type(td)):
+        # split the tensordict that it wraps, as td.split_keys does
+        parts = _split_keys_by_member(
+            td._tensordict, key_sets, inplace, reproduce_struct
+        )
+        parts = [
+            td._from_tensordict(part, dict(td._non_tensordict), safe=False)
+            for part in parts
+        ]
+        if inplace:
+            parts[-1] = td
+        return parts
     if isinstance(td, LazyStackedTensorDict):
         members = zip(
             *(
@@ -1751,7 +1788,7 @@ def _split_keys_by_member(
             elif out_key[0] == key[0] and len(out_key) > 1:
                 sets = nested.setdefault(key[0], [{} for _ in key_sets])
                 sets[i][key[1:]] = out_key[1:]
-            elif key[1:] in _held_keys(value) and td.get(key, None) is None:
+            elif _held_by_member(value, key[1:]) and td.get(key, None) is None:
                 raise KeyError(
                     f"split_keys cannot move {key}, which only some members of "
                     f"a lazy stack hold, to {out_key}, outside that stack."
@@ -1762,7 +1799,10 @@ def _split_keys_by_member(
         *own_sets, inplace=inplace, strict=False, reproduce_struct=reproduce_struct
     )
     for name, sets in nested.items():
-        sub_parts = _split_keys_by_member(td.get(name), sets, inplace, reproduce_struct)
+        # the last part lacks the keys that own_sets moved out of name
+        sub_parts = _split_keys_by_member(
+            parts[-1].get(name), sets, inplace, reproduce_struct
+        )
         for part, sub_part in zip(parts, sub_parts):
             if part.get(name, None) is sub_part:
                 # inplace: the last part is td, split in place
@@ -10009,6 +10049,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_del = set()
         leaf_keys = None
         warn = True
+        dict_sets = []
         for key_set in key_sets:
             out = self.empty(recurse=reproduce_struct)
             if reproduce_struct:
@@ -10024,13 +10065,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             outs.append(out)
             if not isinstance(key_set, dict):
                 key_set = {key: key for key in key_set}
+            # a key set may be an iterator, read once
+            dict_sets.append(key_set)
             for key in key_set:
                 try:
                     val = last_out.pop(key, default)
                 except KeyError:
                     if not _has_lazy_stack(self):
                         raise
-                    held = _held_keys(self)
                     key_sets = [
                         {
                             _unravel_key_to_tuple(k): _unravel_key_to_tuple(
@@ -10038,10 +10080,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             )
                             for k in ks
                         }
-                        for ks in key_sets
+                        for ks in (*dict_sets, *key_sets[len(dict_sets) :])
                     ]
                     for k in (k for ks in key_sets for k in ks):
-                        if k not in held:
+                        if not _held_by_member(self, k):
                             # raises if no member holds k
                             self.get(k, NO_DEFAULT)
                     return tuple(
@@ -10052,7 +10094,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     and not strict
                     and warn
                     and _lazy_on_path(self, _unravel_key_to_tuple(key))
-                    and _unravel_key_to_tuple(key) in _held_keys(self)
+                    and _held_by_member(self, _unravel_key_to_tuple(key))
                 ):
                     # once per call, for a key that only some members of a
                     # lazy stack hold (#2827)
