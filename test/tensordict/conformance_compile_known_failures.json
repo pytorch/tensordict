@@ -208,10 +208,7 @@
  "td_params filling": [
   "detach_()"
  ],
- "td_params key_edits": [
-  "rename_keys({'a': 'b', 'b': 'a'})",
-  "rename_keys({'a': ('n', 'x'), 'missing': 'z'}, strict=False)"
- ],
+ "td_params key_edits": [],
  "td_params keys": [],
  "td_params masking": [
   "masked_select(mask)"
@@ -219,8 +216,7 @@
  "td_params pointwise": [],
  "td_params reductions": [],
  "td_params select": [
-  "clone()",
-  "clone(recurse=False)"
+  "clone()"
  ],
  "td_params serialization": [
   "state_dict()",
