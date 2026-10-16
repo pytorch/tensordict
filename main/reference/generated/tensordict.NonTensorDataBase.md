@@ -133,6 +133,10 @@ maybe_to_stack()
 
 Converts the NonTensorDataBase object to a NonTensorStack object if it has a non-empty batch-size.
 
+rename_keys(*mapping*, ***, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
+
+TensorClass-specific rename_keys: the destinations must be fields, which are never removed.
+
 select(**keys*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *as_tensordict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 TensorClass-specific select that supports `as_tensordict`.

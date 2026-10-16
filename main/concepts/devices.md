@@ -241,7 +241,10 @@ machine:
 `td.to("cuda", non_blocking_pin=True)` pins and copies in one call. In this
 form, the pinning is asynchronous: threads pin the leaves while the copies
 run. With `td.pin_memory().to("cuda")`, all the leaves are pinned before
-the first copy starts.
+the first copy starts. Starting the threads has a fixed cost on every call,
+so the one-call form pays off only for large tensordicts, with leaves of a
+MiB or more and tens of MiB in total. For smaller ones, a plain
+`td.to("cuda")` is usually faster than either form.
 [`pin_memory_()`](../reference/generated/tensordict.TensorDictBase.pin_memory_.html#tensordict.TensorDictBase.pin_memory_) is deprecated, and will be removed
 in version 0.17. Use `pin_memory(inplace=True)`.
 
