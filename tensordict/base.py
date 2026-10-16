@@ -1367,6 +1367,60 @@ def _empty_misfit(
     return None
 
 
+def _empty_leaves(td: TensorDictBase) -> list[NestedKey]:
+    """The keys of the leaves that ``empty(recurse=True)`` drops from ``td``.
+
+    They are those of ``keys(True, True)``, and in a nested lazy stack those of
+    every member: ``keys()`` lists only the keys that all members hold (#2840).
+    """
+    leaves = {}
+    _add_empty_leaves(td, None, leaves)
+    return list(leaves)
+
+
+def _add_empty_leaves(td: TensorDictBase, prefix: tuple | None, leaves: dict) -> None:
+    """Adds the keys of the leaves of ``td`` under ``prefix`` to ``leaves``, for :func:`_empty_leaves`."""
+    # A module-level function, not a closure: a recursive closure refers to
+    # itself through its cell, a reference cycle that every call would leave
+    # for the garbage collector.
+    from tensordict._td import TensorDict
+
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if type(td) is not TensorDict:
+        from tensordict._lazy import LazyStackedTensorDict
+        from tensordict.typedtensordict import TypedTensorDict
+
+        # these hold their entries in the tensordict that they wrap
+        while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
+            td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+        if isinstance(td, LazyStackedTensorDict):
+            for member in td.tensordicts:
+                _add_empty_leaves(member, prefix, leaves)
+            return
+        if not isinstance(td, TensorDict):
+            for key in td.keys(True, True):
+                if prefix is not None:
+                    key = prefix + (key if isinstance(key, tuple) else (key,))
+                leaves[key] = None
+            return
+    # as keys(True, True)
+    for key, value in td._tensordict.items():
+        cls = type(value)
+        full_key = key if prefix is None else prefix + (key,)
+        if cls is Tensor:
+            leaves[full_key] = None
+            continue
+        if cls is TensorDict or (
+            _is_tensor_collection(cls)
+            and not is_non_tensor(cls)
+            and not _pass_through(value)
+        ):
+            _add_empty_leaves(value, (key,) if prefix is None else full_key, leaves)
+        elif _default_is_leaf(cls):
+            leaves[full_key] = None
+
+
 def _set_at_casts(td: TensorDictBase, value: Any) -> bool:
     """Whether writing the list or number ``value`` at an index of every entry of ``td``, which has a non-tensor entry, casts it to a tensor there."""
     if is_compiling() or td._is_shared or td._is_memmap:
@@ -8952,9 +9006,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if not recurse:
             result = self._select(set_shared=False)
         else:
-            # simply exclude the leaves. A comprehension walks the keys once:
-            # unpacking the view would call its __len__, which walks them too.
-            leaves = [key for key in self.keys(True, True)]  # noqa: C416
+            # simply exclude the leaves
+            leaves = _empty_leaves(self)
             # The tensorclass entries become shells that the caller fills:
             # __post_init__ would see no fields, here or when to() rebuilds
             # them. Dynamo cannot set a ContextVar, so compiled code still
