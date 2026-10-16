@@ -4519,9 +4519,14 @@ class TestTensorClass:
         td = TensorDict(X=torch.arange(6).view(3, 2), batch_size=[3])
         expected = torch.tensor([0, 1])
         assert (td.get_at("X", 0, as_list=True) == expected).all()
-        assert (a.get_at("X", 0, as_list=True) == expected).all()
-        assert (a.get_at("X", 0, default=None, as_list=True) == expected).all()
-        assert (a.get_at("X", index=0, as_list=True) == expected).all()
+        # as_list=True reaches get, which warns that it ignores it on a dense
+        # tensorclass until TensorDict 0.17 (#2551)
+        with pytest.warns(FutureWarning, match=r"A\.get\(key, as_list=True\)"):
+            assert (a.get_at("X", 0, as_list=True) == expected).all()
+        with pytest.warns(FutureWarning, match=r"A\.get\(key, as_list=True\)"):
+            assert (a.get_at("X", 0, default=None, as_list=True) == expected).all()
+        with pytest.warns(FutureWarning, match=r"A\.get\(key, as_list=True\)"):
+            assert (a.get_at("X", index=0, as_list=True) == expected).all()
         # the forms that worked before keep working
         assert (a.get_at("X", 0) == expected).all()
         assert (a.get_at("X", index=0) == expected).all()
