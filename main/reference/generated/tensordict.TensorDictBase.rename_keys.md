@@ -39,8 +39,8 @@ raises `KeyError`. If `False`, it is skipped. Defaults to
 Returns:
 
 a new tensordict of the same type as `self`, except that a
-sub-tensordict view returns a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), as
-[`exclude()`](tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude) does.
+sub-tensordict view and a `TensorDictParams`
+return a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), as [`exclude()`](tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude) does.
 
 Raises:
 
