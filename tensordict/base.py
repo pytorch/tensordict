@@ -1242,6 +1242,11 @@ _IS_LEAF_WITHOUT_NODES = (
 )
 
 
+def _leaf_data(leaf):
+    """The ``data`` of a leaf: the function that ``TensorDictBase.data`` applies."""
+    return leaf.data
+
+
 # Set while an in-place method runs on a tensordict whose file is opened
 # read-only, so that the nested calls it makes do not warn again.
 _READ_ONLY_CALL = local()
@@ -6716,19 +6721,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _data(self):
-        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        data = [val.data for val in vals]
-        items = dict(zip(keys, data))
-
-        def get(name, val):
-            return items.get(name, val)
-
         return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            propagate_lock=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            _leaf_data, propagate_lock=True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
 
     def _data_setter(self, value: Self):
@@ -10548,7 +10542,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.unlock_()
 
     def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
-        """Registers the parent tensordict that handles the lock."""
+        """Locks this tensordict and the tensor collections it holds, and registers the parents that hold the lock.
+
+        ``lock_()`` calls it on an unlocked root, with no
+        ``lock_parents_weakrefs``; each node calls it on its sub-tensordicts
+        with the weakrefs of the parents above them. The hook sets
+        ``_is_locked`` and, out of compile, adds the parents it does not hold
+        yet to ``_lock_parents_weakrefs`` (which ``unlock_`` checks) and builds
+        the locked schema. Returns ``None``.
+        """
         self._is_locked = True
         if lock_parents_weakrefs is not None:
             existing = self._lock_parents_weakrefs

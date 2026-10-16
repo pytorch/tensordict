@@ -522,6 +522,11 @@ def test_unlock_stack_nested(benchmark):
     )
 
 
+def test_data_nested_locked(benchmark):
+    td = big_nested_td_locked()[0][0]
+    benchmark(lambda: td.data)
+
+
 def test_flatten_speed(benchmark):
     td = big_nested_td()[0][0]
     benchmark(lambda: td.flatten_keys())
