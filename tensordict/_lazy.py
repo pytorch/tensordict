@@ -3645,8 +3645,39 @@ class LazyStackedTensorDict(TensorDictBase):
                     self.tensordicts[member].update(piece, inplace=True)
                 else:
                     self._setitem_member(member, member_index, piece)
+        elif is_compiling() and self._mask_covers_stack_dim(index, value):
+            # _split_index reads the mask into the positions of each member
+            # with tolist(), which Dynamo cannot trace. A value that is the same
+            # for every element needs no positions: each member takes its
+            # slice of the mask, over all its batch dims (a 0-dim mask would
+            # be read as a new dim).
+            mask = index[0] if isinstance(index, tuple) else index
+            mask = mask.reshape(
+                mask.shape + (1,) * (self.batch_dims - mask.ndim)
+            ).expand(self.batch_size)
+            for member, td in enumerate(self.tensordicts):
+                td[mask.select(self.stack_dim, member)] = value
         else:
             _set_at_each_key(self, value, index)
+
+    def _mask_covers_stack_dim(self, index: IndexType, value: Any) -> bool:
+        """Whether ``index`` is a boolean mask of the leading batch dims, the stack dim included, ``value`` a number or a 0-dim tensor, and the members share their keys."""
+        if isinstance(index, tuple) and len(index) == 1:
+            index = index[0]
+        return (
+            not is_non_tensor(self)
+            and isinstance(index, Tensor)
+            and index.dtype is torch.bool
+            and self.stack_dim < index.ndim <= self.batch_dims
+            and self.batch_dims > 1
+            and index.shape == self.batch_size[: index.ndim]
+            and (
+                isinstance(value, numbers.Number)
+                or (isinstance(value, Tensor) and not value.ndim)
+            )
+            # A member writes all its keys; the stack writes only the shared ones
+            and not self._has_exclusive_keys
+        )
 
     def _setitem_member(self, member: int, member_index: IndexType, piece) -> None:
         """Write ``piece`` at ``member_index`` of the member at position ``member``, for :meth:`__setitem__`."""

@@ -547,15 +547,80 @@ class TestTD:
 
     @pytest.mark.parametrize("device", [None, "cpu"])
     def test_td_index_bool_mask(self, mode, device):
-        # the masked size depends on the data, so this graph-breaks
         def add_one(td, mask):
             return td[mask] + 1
 
-        add_one_c = torch.compile(add_one, mode=mode)
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(3)}}, [3], device=device)
         result = add_one_c(data, torch.tensor([True, False, True]))
         assert result.shape == torch.Size([2])
         assert (result["a", "b"] == torch.tensor([1, 3])).all()
+
+    @pytest.mark.parametrize("dynamic", [False, True])
+    @pytest.mark.parametrize(
+        "name", ["td[mask]", "td[mask[:, 0], 0]", "td.masked_select(mask)"]
+    )
+    def test_td_select_rows_bool_mask(self, mode, name, dynamic):
+        # The batch size and the leaves count the mask the same way, so that
+        # they share one size (#2785)
+        fn = {
+            "td[mask]": lambda td, mask: td[mask],
+            "td[mask[:, 0], 0]": lambda td, mask: td[mask[:, 0], 0],
+            "td.masked_select(mask)": lambda td, mask: td.masked_select(mask),
+        }[name]
+        td = TensorDict(
+            a=torch.randn(4, 3, 5), b=TensorDict(c=torch.randn(4, 3)), batch_size=[4, 3]
+        )
+        mask = torch.tensor(
+            [[True, False, True], [False, True, True], [True, True, False], [0, 0, 1]],
+            dtype=torch.bool,
+        )
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode, dynamic=dynamic)
+        result = fn_c(td, mask)
+        expected = fn(td, mask)
+        assert result.batch_size == expected.batch_size
+        assert (result == expected).all()
+
+    @pytest.mark.parametrize("dynamic", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("value", [1, torch.tensor(2.0)], ids=["int", "tensor"])
+    @pytest.mark.parametrize("mask_dims", [1, 2])
+    @pytest.mark.parametrize("exclusive", [False, True])
+    def test_lazy_stack_write_rows_bool_mask(
+        self, mode, dynamic, stack_dim, value, mask_dims, exclusive
+    ):
+        # Each member takes its slice of the mask (#2785)
+        def fill(td, mask):
+            td[mask] = value
+            return td
+
+        def make():
+            tds = [
+                TensorDict(a=torch.zeros(4, 5), b={"c": torch.zeros(4)}, batch_size=[4])
+                for _ in range(4)
+            ]
+            if exclusive:
+                # Eager writes only the keys that every member has
+                tds[1]["x"] = torch.zeros(4, 2)
+            return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+
+        if exclusive:
+            # The stack cannot be indexed in one graph here
+            fill_c = torch.compile(fill, mode=mode, dynamic=dynamic)
+        else:
+            fill_c = torch.compile(fill, fullgraph=True, mode=mode, dynamic=dynamic)
+
+        mask = torch.tensor(
+            [[True, False, True, True], [0, 1, 1, 0], [1, 1, 0, 0], [0, 0, 0, 1]],
+            dtype=torch.bool,
+        )
+        if mask_dims == 1:
+            mask = mask[:, 0]
+        result = fill_c(make(), mask)
+        expected = fill(make(), mask)
+        assert expected["a"].sum() > 0
+        for r, e in zip(result.tensordicts, expected.tensordicts):
+            assert (r == e).all()
 
     def test_stack(self, mode):
         def stack_tds(td0, td1):
