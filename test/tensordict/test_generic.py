@@ -11576,6 +11576,22 @@ class TestGeneric:
         assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
         assert_allclose_td(out, td * 2)
 
+    @pytest.mark.parametrize("nested_keys", [False, True])
+    def test_named_apply_out(self, nested_keys):
+        # named_apply writes into out= and returns it, as apply does
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.zeros(3, 2)}, batch_size=[3])
+        out = td.apply(lambda x: torch.full_like(x, 7.0))
+        names = []
+
+        def fn(name, x):
+            names.append(name)
+            return x + 1
+
+        result = td.named_apply(fn, nested_keys=nested_keys, out=out)
+        assert result is out
+        assert_allclose_td(out, td.apply(lambda x: x + 1))
+        assert set(names) == ({"a", ("b", "c")} if nested_keys else {"a", "c"})
+
     @pytest.mark.parametrize("named", [False, True])
     def test_apply_is_leaf(self, named):
         # is_leaf is a documented keyword of apply and named_apply: it decides

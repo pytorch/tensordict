@@ -7339,6 +7339,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             nested_keys=nested_keys,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            out=out,
             is_leaf=is_leaf,
             **constructor_kwargs,
         )
