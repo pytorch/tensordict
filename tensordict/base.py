@@ -2772,12 +2772,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
+            # the device the entries of value are moved to as they are written
+            move_to = None
             if isinstance(value, dict):
                 value = self.from_dict_instance(
                     value, batch_size=indexed_bs, device=self.device
                 )
             elif value.device != self.device:
-                value = value.to(self.device)
+                from tensordict._td import TensorDict
+
+                if value.device is None and type(value) is TensorDict:
+                    # the leaves of a value without a device are often on
+                    # self.device already: move the others as they are
+                    # written, rather than a copy of the whole tree first
+                    move_to = self.device
+                else:
+                    value = value.to(self.device)
                 # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
                 if value.shape == indexed_bs[-len(value.shape) :]:
@@ -2798,6 +2808,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys = set(self.keys())
             subtd = None
             for value_key, item in value.items():
+                if move_to is not None and not (
+                    isinstance(item, Tensor) and item.device == move_to
+                ):
+                    # a nested TensorDict written at an existing key moves its
+                    # own entries, by the rule above
+                    if type(item) is not type(value) or value_key not in keys:
+                        item = item.to(move_to)
                 if value_key in keys:
                     self._set_at_str(
                         value_key, item, index, validated=True, non_blocking=False

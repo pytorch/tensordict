@@ -3950,6 +3950,132 @@ class TestGeneric:
         assert (td["a"].x == 0).all()
         assert (td["x"] == torch.tensor([0.0, 1.0, 1.0, 0.0])[:, None]).all()
 
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "dense",
+            "new_key",
+            "non_tensor",
+            "nested_lazy",
+            "nested_tc",
+            "subclass",
+            "batch_size",
+            "locked_new_key",
+            "other_device_leaf",
+        ],
+    )
+    @pytest.mark.parametrize("index", ["tensor", "slice"])
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "cpu",
+            "meta",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ),
+        ],
+    )
+    def test_setitem_value_without_device(self, case, index, device):
+        # td[idx] = value, for a value without a device, moves the entries of
+        # value that are on another device as it writes them, rather than a
+        # moved copy of value: the result is the one of value.to(td.device)
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+            s: str
+
+        def make_store():
+            store = TensorDict(
+                a=torch.zeros(6, 3),
+                n=TensorDict(b=torch.zeros(6, dtype=torch.long), batch_size=[6]),
+                s=NonTensorData("old", batch_size=[6]),
+                lz=TensorDict(c=torch.zeros(6, 2), batch_size=[6]),
+                tc=Data(x=torch.zeros(6, 2), s="old", batch_size=[6]),
+                batch_size=[6],
+                device=device,
+            )
+            return store.lock_() if case == "locked_new_key" else store
+
+        value = TensorDict(
+            a=torch.arange(12.0).view(4, 3),
+            n=TensorDict(b=torch.arange(4), batch_size=[4]),
+            batch_size=[4],
+        )
+        if case in ("new_key", "locked_new_key"):
+            value["new"] = torch.ones(4, 2)
+            value["new_n"] = TensorDict(d=torch.ones(4), batch_size=[4])
+            value["new_s"] = NonTensorData("new", batch_size=[4])
+        elif case == "non_tensor":
+            value["s"] = NonTensorData("new", batch_size=[4])
+        elif case == "nested_lazy":
+            value["lz"] = lazy_stack(
+                [TensorDict(c=torch.full((2,), float(i))) for i in range(4)]
+            )
+        elif case == "nested_tc":
+            value["tc"] = Data(x=torch.ones(4, 2), s="new", batch_size=[4])
+        elif case == "subclass":
+            value["a"] = nn.Parameter(torch.ones(4, 3))
+            value["n", "b"] = MemoryMappedTensor.from_tensor(torch.arange(4))
+        elif case == "batch_size":
+            # the batch size of value is set to the one of the index
+            value.batch_size = []
+        elif case == "other_device_leaf":
+            if device != "cuda" and torch.cuda.is_available():
+                other = "cuda"
+            else:
+                # a leaf on the meta device cannot be copied to another one
+                other = "meta" if device != "meta" else "cpu"
+            value["n", "b"] = value["n", "b"].to(other)
+        idx = torch.arange(1, 5) if index == "tensor" else slice(1, 5)
+
+        def write(store, value):
+            try:
+                with torch.no_grad():
+                    store[idx] = value
+            except Exception as err:
+                return type(err), str(err)
+            return None
+
+        def describe(store):
+            out = [(store.device, store.is_locked)]
+            for key in store.keys(True, is_leaf=is_leaf_nontensor):
+                entry = store.get(key)
+                if isinstance(entry, torch.Tensor):
+                    out.append(
+                        (key, type(entry), entry.dtype, entry.device, entry.shape)
+                    )
+                    if entry.device.type != "meta":
+                        out.append(entry.cpu().tolist())
+                elif is_non_tensor(entry):
+                    out.append((key, type(entry), entry.device, entry.tolist()))
+                else:
+                    out.append((key, type(entry), entry.device))
+            return out
+
+        store, expected = make_store(), make_store()
+        try:
+            moved = value.to(expected.device)
+        except Exception as err:
+            expected_err = type(err), str(err)
+        else:
+            expected_err = write(expected, moved)
+        assert write(store, value) == expected_err
+        if expected_err is not None:
+            assert case in ("locked_new_key", "other_device_leaf")
+            return
+        assert describe(store) == describe(expected)
+
+        if case == "dense" and device == "cpu":
+            # the leaves are on the device of store: no copy of value is made
+            with mock.patch.object(
+                TensorDict, "_to", autospec=True, side_effect=TensorDict._to
+            ) as to:
+                store[idx] = value
+            assert not to.called
+
     @pytest.mark.parametrize("write", ["update_at_", "sub_update_at_", "sub_set_at_"])
     def test_update_at_tensorclass_value(self, write):
         @tensorclass
