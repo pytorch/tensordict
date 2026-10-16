@@ -265,7 +265,10 @@
   "del_(('a', 'x'))",
   "del_(())",
   "flatten_keys(inplace=True)",
-  "get_at(('a', 'x'), 0)"
+  "get_at(('a', 'x'), 0)",
+  "rename_keys({'a': 'b', 'b': 'a'})",
+  "rename_keys({'a': 'b'})",
+  "rename_keys({'a': ('n', 'x'), 'missing': 'z'}, strict=False)"
  ],
  "td_h5 keys": [
   "is_contiguous()",

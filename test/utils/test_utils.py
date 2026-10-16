@@ -29,6 +29,7 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import (
     _deprecation,
+    KEY_SEPARATOR,
     lazy_stack,
     set_printoptions,
     tensorclass,
@@ -616,6 +617,51 @@ def test_unravel_key_list_rejects_non_sequences(keys):
         TypeError, match="incompatible function arguments.*list or a tuple of keys"
     ):
         unravel_key_list(keys)
+
+
+def test_key_separator_is_the_flatten_keys_default():
+    assert KEY_SEPARATOR == "."
+    assert tensordict.utils.KEY_SEPARATOR is KEY_SEPARATOR
+    # Every flatten_keys/unflatten_keys signature, stubs included, names the
+    # constant as its default rather than repeating the literal.
+    package = Path(tensordict.__file__).parent
+    root = package.parent
+    found, offenders = [], []
+    for path in sorted([*package.rglob("*.py"), *package.rglob("*.pyi")]):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not (
+                isinstance(node, ast.FunctionDef)
+                and node.name in ("flatten_keys", "unflatten_keys")
+            ):
+                continue
+            args = node.args.args
+            defaults = dict(
+                zip(
+                    [arg.arg for arg in args][-len(node.args.defaults) :],
+                    node.args.defaults,
+                )
+            )
+            if "separator" not in defaults:
+                continue
+            location = f"{path.relative_to(root)}:{node.lineno}"
+            found.append(location)
+            default = defaults["separator"]
+            if not (isinstance(default, ast.Name) and default.id == "KEY_SEPARATOR"):
+                offenders.append(f"{location}: {ast.unparse(default)}")
+    assert len(found) >= 16, found
+    assert not offenders, "\n".join(offenders)
+    for cls in (
+        tensordict.TensorDictBase,
+        tensordict.TensorDict,
+        tensordict.LazyStackedTensorDict,
+        tensordict.PersistentTensorDict,
+        tensordict.TensorDictStore,
+        tensordict.LazyStackedTensorDictStore,
+        tensordict.TensorDictParams,
+    ):
+        for name in ("flatten_keys", "unflatten_keys"):
+            parameters = inspect.signature(getattr(cls, name)).parameters
+            assert parameters["separator"].default == KEY_SEPARATOR, (cls, name)
 
 
 def test_C_module_is_deprecated():

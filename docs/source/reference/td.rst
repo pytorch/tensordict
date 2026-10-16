@@ -179,6 +179,7 @@ see :ref:`keys`. For values that are not tensors, see
     TensorDictBase.split_keys
     TensorDictBase.separates
     TensorDictBase.rename_key_
+    TensorDictBase.rename_keys
     TensorDictBase.flatten_keys
     TensorDictBase.unflatten_keys
     TensorDictBase.create_nested
@@ -324,6 +325,7 @@ dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
     dense_stack_tds
     pad
     pad_sequence
+    unpad_sequence
 
 .. _api-methods-device:
 
@@ -394,6 +396,11 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.quint8
     TensorDictBase.quint4x2
 
+``to`` and the dtype shorthands take a ``cast_filter`` predicate
+``fn(key, value) -> bool`` that selects the leaves to cast. The predicates
+below test the dtype of their last argument, so they serve as a
+``cast_filter`` and as a test in :meth:`~tensordict.TensorDictBase.apply`.
+
 .. rubric:: Functions
 
 .. autosummary::
@@ -401,6 +408,10 @@ control the memory that holds them. See :ref:`devices`.
     :template: function.rst
 
     from_consolidated
+    is_inexact
+    is_floating
+    is_integer
+    is_bool
 
 .. _api-methods-pointwise:
 
@@ -818,6 +829,19 @@ Their pages name the replacement and the release that removes them.
 
 Package constants
 -----------------
+
+.. py:data:: KEY_SEPARATOR
+    :module: tensordict
+
+    ``"."``, the default ``separator`` of
+    :meth:`~tensordict.TensorDictBase.flatten_keys` and
+    :meth:`~tensordict.TensorDictBase.unflatten_keys`, for code that joins or
+    splits nested keys the same way, such as
+    ``tuple(name.split(KEY_SEPARATOR))``. The names of
+    :meth:`~tensordict.TensorDictBase.state_dict` also use ``"."``, the
+    ``torch.nn.Module`` convention, independently of this constant.
+    Reassigning it has no effect: the defaults are bound when the methods are
+    defined. It can also be imported from ``tensordict.utils``.
 
 .. py:data:: NO_DEFAULT
     :module: tensordict.base

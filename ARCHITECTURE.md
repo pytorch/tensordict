@@ -227,6 +227,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_update_fast(source)` | `update` with default arguments, outside of `torch.compile` | write without the checks and return `True`, or write nothing and return `False` | `TensorDict` |
 | `_update_entries(source, *, clone, inplace, ...)` | `update` | write the entries, after the lock check and the handling of `None`, `self` and `keys_to_update` | sub, lazy, lazy store |
 | `_update_(source, *, clone, non_blocking, keys_to_update)` | `update_` | copy into the existing leaves | sub, lazy, store, lazy store, element |
+| `_update_plan(source, *, non_blocking)` | the base `_update_` without `keys_to_update`, and the lazy `_update_` for each member | pair the leaves that `update_` copies, write nothing, and return `(dests, sources, finish)`, or `None` where no leaf matches | lazy |
 | `_update_at_(source, idx, *, ...)` | `update_at_` with a non-empty index | copy into the leaves at `idx` | lazy, NTS |
 | `_setitem_index(index, value)` | `td[index] = value` | write `value` at the batch `index`; a str or tuple key and an `Ellipsis` are handled before the call | lazy, file, store, lazy store, element |
 | `_empty(recurse, batch_size, device, names)` | `empty` | return a new, unlocked tensordict without tensor leaves | lazy, file, store; one body for lazy store and element |

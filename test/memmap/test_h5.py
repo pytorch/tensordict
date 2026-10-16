@@ -13,6 +13,7 @@ import tensordict.persistent as tensordict_persistent
 import torch
 from tensordict import (
     lazy_stack,
+    MemoryMappedTensor,
     NonTensorData,
     NonTensorStack,
     PersistentTensorDict,
@@ -265,6 +266,46 @@ class TestH5Serialization:
         assert h5td.to_tensordict()[1:3]["mission"] == [b"go right", b"stop"]
         assert h5td.clone(False)[3]["mission"] == b"wait"
         h5td.close()
+
+    @pytest.mark.parametrize("non_tensor_as_stack", [False, True])
+    @pytest.mark.parametrize("with_prefix", [False, True])
+    def test_h5_memmap_enum(self, tmp_path, non_tensor_as_stack, with_prefix):
+        # an enum column reads as a non-tensor: memmap() keeps it as one,
+        # as to_tensordict().memmap() does (#2781)
+        enum = h5py.enum_dtype({"A": 0, "B": 1}, basetype="i1")
+        with h5py.File(tmp_path / "file.h5", "w") as f:
+            f["pos"] = np.arange(4, dtype=np.float32)
+            f.create_dataset("color", data=np.array([0, 1, 1, 0]), dtype=enum)
+            f.create_dataset("sub/e", data=np.array([1, 0, 0, 1]), dtype=enum)
+        h5td = PersistentTensorDict.from_h5(
+            tmp_path / "file.h5", non_tensor_as_stack=non_tensor_as_stack
+        )
+        expected = h5td.to_tensordict().memmap()
+        prefix = tmp_path / "memmap" if with_prefix else None
+        out = h5td.memmap(prefix)
+        h5td.close()
+        assert isinstance(out.get("pos"), MemoryMappedTensor)
+        assert (out.get("pos") == torch.arange(4)).all()
+        cls = NonTensorStack if non_tensor_as_stack else NonTensorData
+        for key in ("color", ("sub", "e")):
+            assert type(out.get(key)) is cls
+            assert type(expected.get(key)) is cls
+            assert np.array_equal(out.get(key).tolist(), expected.get(key).tolist())
+
+    def test_h5_memmap_non_tensor_list(self, tmp_path):
+        # tensordict writes a NonTensorData that is not a str as an opaque
+        # dataset, whose metadata also has a torch dtype (#2781)
+        td = TensorDict({"a": torch.zeros(3), "l": NonTensorData([1, 2, 3])}, [3])
+        PersistentTensorDict.from_dict(td, tmp_path / "file.h5").close()
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+        expected = h5td.to_tensordict().memmap()
+        out = h5td.memmap(tmp_path / "memmap")
+        h5td.close()
+        assert isinstance(out.get("a"), MemoryMappedTensor)
+        assert type(out.get("l")) is NonTensorData
+        assert type(expected.get("l")) is NonTensorData
+        assert np.array_equal(out.get("l").data, expected.get("l").data)
+        assert np.array_equal(out.get("l").data, [1, 2, 3])
 
     def test_rename_key_missing(self, tmp_path):
         # the error names the missing source key, not the free destination
@@ -691,6 +732,59 @@ def test_inplace_methods_write_nested_file(tmp_path):
             torch.testing.assert_close(data.to_tensordict(), expected)
             for file in files[start:]:
                 assert (file["x"] != 1).all()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_update_keys_to_update_writes_nested_file(tmp_path):
+    # #2780: update_ with keys_to_update writes the h5 files that a tensordict
+    # holds, as without keys_to_update, also for a key that names a
+    # tensordict, and raises before it writes for a key that self lacks
+    files = []
+
+    def h5():
+        files.append(
+            PersistentTensorDict.from_dict(
+                TensorDict(x=torch.ones(3), batch_size=[3]),
+                filename=tmp_path / f"{len(files)}.h5",
+            )
+        )
+        return files[-1]
+
+    def member(n):
+        return TensorDict(a=torch.ones(3), n=n, batch_size=[3])
+
+    layouts = (
+        lambda: member(h5()),
+        lambda: member(TensorDict(m=h5(), batch_size=[3])),
+        lambda: member(lazy_stack([h5(), h5()], 1)),
+        lambda: lazy_stack([member(h5()), member(h5())]),
+        lambda: lazy_stack([member(lazy_stack([h5(), h5()], 1)) for _ in range(2)]),
+    )
+    for make in layouts:
+        for keys in (["n"], [key for key in make().keys(True, True) if "x" in key]):
+            start = len(files)
+            data = make()
+            expected = data.to_tensordict()
+            source = expected * 0 + 5
+            assert data.update_(source, keys_to_update=keys) is data
+            expected.update_(source, keys_to_update=keys)
+            torch.testing.assert_close(data.to_tensordict(), expected)
+            assert (data["a"] == 1).all()
+            for file in files[start:]:
+                assert (file["x"] == 5).all()
+            # from a file
+            source = PersistentTensorDict.from_dict(
+                expected * 0 + 6, filename=tmp_path / f"src{start}.h5"
+            )
+            assert data.update_(source, keys_to_update=keys) is data
+            for file in files[start:]:
+                assert (file["x"] == 6).all()
+            source = expected * 0 + 5
+            source["n", "y"] = torch.zeros(source["n"].batch_size)
+            with pytest.raises(KeyError, match="not found in the dest"):
+                data.update_(source * 0, keys_to_update=["n"])
+            for file in files[start:]:
+                assert (file["x"] == 6).all()
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
