@@ -1269,6 +1269,13 @@ class TestTDModule:
                 assert nokeys_call(td) is td
         assert (td["b"] == 1).all()
 
+    def test_dispatch_tensordict_unbound_none_self(self):
+        # An unbound call with self=None and a tensordict raises the error
+        # of a function without in keys, as with any other input
+        td = TensorDict(x=torch.randn(2, 3), batch_size=[2])
+        with pytest.raises(RuntimeError, match="The in keys must be passed"):
+            TensorDictModule.forward(None, td)
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)

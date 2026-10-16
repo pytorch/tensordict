@@ -267,7 +267,12 @@ class dispatch:
             # A tensordict input is passed on as is whether or not dispatch is
             # on: test for it first, so that ``module(td)`` skips the rest
             if is_method:
-                if len(args) > 1 and is_tensor_collection(args[1]):
+                # (an unbound call with self=None raises below, as before)
+                if (
+                    len(args) > 1
+                    and args[0] is not None
+                    and is_tensor_collection(args[1])
+                ):
                     # Read the source as below when dispatch is on, so that a
                     # missing attribute raises and a lazy property resolves
                     if isinstance(self.source, str) and _dispatch_td_nn_modules():
