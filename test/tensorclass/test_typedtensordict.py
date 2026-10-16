@@ -1046,6 +1046,25 @@ class TestFromTensordict:
         assert (tds[1]["c"] == 1).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_from_tensordict_lazy_stack_update_rejected(self, stack_dim):
+        # #2776: a part of the input that a member rejects raises before the
+        # members before it are written
+        class Flat(TypedTensorDict):
+            a: Tensor
+
+        tds = [
+            TensorDict(a=torch.ones(3, 2), batch_size=[3]),
+            TensorDict(a=torch.ones(3, 3), batch_size=[3]),
+        ]
+        state = Flat.from_tensordict(lazy_stack(tds, stack_dim))
+        source = TensorDict(
+            a=torch.zeros(*state.batch_size, 2), batch_size=state.batch_size
+        )
+        with pytest.raises(RuntimeError, match="must match the size of tensor"):
+            state.update_(source)
+        assert (tds[0]["a"] == 1).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_from_tensordict_lazy_stack_index_views(self, stack_dim):
         # #2759: indexing returns views of the members, as indexing the stack
         # does, so writes through the result reach them

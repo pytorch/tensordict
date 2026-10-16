@@ -5132,6 +5132,64 @@ class TestLazyStackedTensorDict:
             assert (td["a"] == 1).all()
             assert (td["n", "x"] == 3).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("kind", ["dense", "h5", "holds_h5", "lazy"])
+    @pytest.mark.parametrize("kind_rejects", [False, True])
+    def test_update__rejected_writes_nothing(
+        self, stack_dim, kind, kind_rejects, tmp_path
+    ):
+        # #2776: a part of the source that a member rejects raises before the
+        # members before it are written
+        if kind in ("h5", "holds_h5") and not _has_h5py:
+            pytest.skip("h5py not found.")
+        from tensordict import PersistentTensorDict
+
+        def make(kind, rejects):
+            # a member of batch size [3], whose "a" an entry of shape [3, 2] fits
+            shape = (3, 3) if rejects else (3, 2)
+            if kind == "lazy":
+                return lazy_stack(
+                    [TensorDict(a=torch.ones(shape[1:])) for _ in range(3)]
+                )
+            if kind == "dense":
+                return TensorDict(a=torch.ones(shape), batch_size=[3])
+            h5 = PersistentTensorDict.from_dict(
+                TensorDict(a=torch.ones(shape), batch_size=[3]),
+                filename=tmp_path / f"{rejects}.h5",
+            )
+            if kind == "h5":
+                return h5
+            return TensorDict(a=torch.ones(shape), n=h5, batch_size=[3])
+
+        if kind_rejects:
+            members = [make("dense", False), make(kind, True)]
+        else:
+            members = [make(kind, False), make("dense", True)]
+        td = lazy_stack(members, stack_dim)
+        source = TensorDict(a=torch.zeros(*td.batch_size, 2), batch_size=td.batch_size)
+        with pytest.raises(RuntimeError, match="must match the size of tensor"):
+            td.update_(source)
+        with pytest.raises(RuntimeError, match="must match the size of tensor"):
+            td.copy_(source)
+        for member in td.tensordicts:
+            assert (member["a"] == 1).all()
+        # a member before it that lacks the key raises first
+        td_key = lazy_stack(
+            [TensorDict(b=torch.ones(3, 2), batch_size=[3]), members[1]], stack_dim
+        )
+        with pytest.raises(KeyError, match="The key a was not found"):
+            td_key.update_(source)
+        if kind == "holds_h5" and not kind_rejects:
+            # update_ writes such a member before it reaches the next one
+            return
+        # a key that a member lacks
+        td = lazy_stack(
+            [members[0], TensorDict(b=torch.ones(3, 2), batch_size=[3])], stack_dim
+        )
+        with pytest.raises(KeyError, match="The key a was not found"):
+            td.update_(source)
+        assert (members[0]["a"] == 1).all()
+
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
         td = TensorDict(
