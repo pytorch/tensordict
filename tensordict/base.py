@@ -539,23 +539,21 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
-def _moves_without_sync(td: TensorDictBase, device: torch.device) -> bool:
-    """Returns whether the entries of the ``TensorDict`` ``td`` can be moved to ``device`` one at a time.
+def _leaves_on(td: TensorDictBase, device: torch.device) -> bool:
+    """Returns whether each tensor of the ``TensorDict`` ``td`` is on ``device`` already.
 
-    That is the case when each tensor of ``td`` and of its nested ``TensorDict``
-    instances is on ``device`` already, or on the CPU for a CUDA ``device``: such
-    a copy is non-blocking and needs no sync. Any other copy is left to
-    ``td.to(device)``, which syncs once for all the leaves and raises before
-    anything is written; so are the other nested collections. Non-tensor data
-    holds no tensor.
+    So are the tensors of its nested ``TensorDict`` instances; non-tensor data
+    holds no tensor. Any other nested collection gives ``False``. A tensor on
+    another device is left to ``td.to(device)``, which copies all the leaves
+    before anything is written: on CUDA, copies from pageable memory issued
+    between the writes would wait for each write.
     """
-    cuda = device.type == "cuda"
     for item in td._tensordict.values():
         if isinstance(item, Tensor):
-            if item.device != device and not (cuda and item.device.type == "cpu"):
+            if item.device != device:
                 return False
         elif type(item) is type(td):
-            if not _moves_without_sync(item, device):
+            if not _leaves_on(item, device):
                 return False
         elif not is_non_tensor(item):
             return False
@@ -2807,11 +2805,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if (
                     value.device is None
                     and type(value) is TensorDict
-                    and _moves_without_sync(value, self.device)
+                    and _leaves_on(value, self.device)
                 ):
-                    # the leaves of a value without a device are often on
-                    # self.device already: move the others as they are
-                    # written, rather than a copy of the whole tree first
+                    # the tensors of a value without a device are often on
+                    # self.device already: write them as they are, rather
+                    # than a moved copy of the whole tree
                     move_to = self.device
                 else:
                     value = value.to(self.device)
@@ -2835,20 +2833,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys = set(self.keys())
             subtd = None
             for value_key, item in value.items():
-                if move_to is not None and not (
-                    isinstance(item, Tensor) and item.device == move_to
+                if (
+                    move_to is not None
+                    and not isinstance(item, Tensor)
+                    and (type(item) is not TensorDict or value_key not in keys)
                 ):
-                    # a nested TensorDict written at an existing key of a CPU
-                    # store moves its own entries, by the rule above. On CUDA,
-                    # it is moved whole: a lazy stack there would copy each
-                    # leaf with a blocking copy_
-                    if (
-                        type(item) is not TensorDict
-                        or value_key not in keys
-                        or move_to.type != "cpu"
-                    ):
-                        # non-blocking, as value.to(move_to) would copy it
-                        item = item.to(move_to, non_blocking=move_to.type == "cuda")
+                    # non-tensor data and a nested TensorDict under a new key
+                    # get the device of self, as in value.to(move_to); their
+                    # tensors are on it already. A nested TensorDict at an
+                    # existing key gets it from the entry it is written into.
+                    item = item.to(move_to)
                 if value_key in keys:
                     self._set_at_str(
                         value_key, item, index, validated=True, non_blocking=False
