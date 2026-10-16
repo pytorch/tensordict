@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.util
 import io
 import math
@@ -1863,6 +1864,38 @@ class TestLazyStackedTensorDict:
             td is not member for td, member in zip(empty.tensordicts, lazy.tensordicts)
         )
         assert list(empty.keys(True)) == (["sub"] if recurse else [])
+
+    def test_empty_recurse_leaves_no_reference_cycle(self):
+        # empty(recurse=True) frees what it builds by reference counting: a
+        # cycle per call would leave garbage for the collector, and the
+        # collections it adds can run at any point of the caller's code
+        tds = [
+            TensorDict(
+                a=torch.zeros(2),
+                n=TensorDict(b=torch.zeros(2), batch_size=[2]),
+                batch_size=[2],
+            ),
+            TensorDict(
+                n=lazy_stack(
+                    [
+                        TensorDict(a=torch.zeros(2), batch_size=[2]),
+                        TensorDict(a=torch.zeros(2), e=torch.ones(2), batch_size=[2]),
+                    ]
+                ),
+                batch_size=[2],
+            ),
+        ]
+        for td in tds:
+            td.empty(recurse=True)  # warm up caches
+        gc.collect()
+        gc.disable()
+        try:
+            for td in tds:
+                for _ in range(10):
+                    td.empty(recurse=True)
+            assert gc.collect() == 0
+        finally:
+            gc.enable()
 
     def test_lazy_empty_recurse_drops_member_leaves(self):
         # empty(recurse=True) drops the tensors that only some members of a

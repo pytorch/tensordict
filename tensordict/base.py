@@ -1503,48 +1503,52 @@ def _empty_leaves(td: TensorDictBase) -> list[NestedKey]:
     They are those of ``keys(True, True)``, and in a nested lazy stack those of
     every member: ``keys()`` lists only the keys that all members hold (#2840).
     """
+    leaves = {}
+    _add_empty_leaves(td, None, leaves)
+    return list(leaves)
+
+
+def _add_empty_leaves(td: TensorDictBase, prefix: tuple | None, leaves: dict) -> None:
+    """Adds the keys of the leaves of ``td`` under ``prefix`` to ``leaves``, for :func:`_empty_leaves`."""
+    # A module-level function, not a closure: a recursive closure refers to
+    # itself through its cell, a reference cycle that every call would leave
+    # for the garbage collector.
     from tensordict._td import TensorDict
 
-    leaves = {}
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if type(td) is not TensorDict:
+        from tensordict._lazy import LazyStackedTensorDict
+        from tensordict.typedtensordict import TypedTensorDict
 
-    def walk(td, prefix):
-        if _is_tensorclass(type(td)):
-            td = td._tensordict
-        if type(td) is not TensorDict:
-            from tensordict._lazy import LazyStackedTensorDict
-            from tensordict.typedtensordict import TypedTensorDict
-
-            # these hold their entries in the tensordict that they wrap
-            while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
-                td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
-            if isinstance(td, LazyStackedTensorDict):
-                for member in td.tensordicts:
-                    walk(member, prefix)
-                return
-            if not isinstance(td, TensorDict):
-                for key in td.keys(True, True):
-                    if prefix is not None:
-                        key = prefix + (key if isinstance(key, tuple) else (key,))
-                    leaves[key] = None
-                return
-        # as keys(True, True)
-        for key, value in td._tensordict.items():
-            cls = type(value)
-            full_key = key if prefix is None else prefix + (key,)
-            if cls is Tensor:
-                leaves[full_key] = None
-                continue
-            if cls is TensorDict or (
-                _is_tensor_collection(cls)
-                and not is_non_tensor(cls)
-                and not _pass_through(value)
-            ):
-                walk(value, (key,) if prefix is None else full_key)
-            elif _default_is_leaf(cls):
-                leaves[full_key] = None
-
-    walk(td, None)
-    return list(leaves)
+        # these hold their entries in the tensordict that they wrap
+        while isinstance(td, TypedTensorDict) or _is_tensorclass(type(td)):
+            td = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+        if isinstance(td, LazyStackedTensorDict):
+            for member in td.tensordicts:
+                _add_empty_leaves(member, prefix, leaves)
+            return
+        if not isinstance(td, TensorDict):
+            for key in td.keys(True, True):
+                if prefix is not None:
+                    key = prefix + (key if isinstance(key, tuple) else (key,))
+                leaves[key] = None
+            return
+    # as keys(True, True)
+    for key, value in td._tensordict.items():
+        cls = type(value)
+        full_key = key if prefix is None else prefix + (key,)
+        if cls is Tensor:
+            leaves[full_key] = None
+            continue
+        if cls is TensorDict or (
+            _is_tensor_collection(cls)
+            and not is_non_tensor(cls)
+            and not _pass_through(value)
+        ):
+            _add_empty_leaves(value, (key,) if prefix is None else full_key, leaves)
+        elif _default_is_leaf(cls):
+            leaves[full_key] = None
 
 
 def _warn_empty_names(
