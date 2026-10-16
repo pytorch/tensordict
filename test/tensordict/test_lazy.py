@@ -5653,6 +5653,50 @@ class TestLazyStackedTensorDict:
                 assert (member["x"] == 1).all()
                 assert (member["u"] == 1).all()
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_update__unbatched(self, stack_dim):
+        # #2868: the stack dim does not index an unbatched leaf of the
+        # members, along any stack dim: update_ writes the source into each
+        # member, in place, as along dim 0
+        def u(value):
+            return UnbatchedTensor(torch.full((4,), float(value)))
+
+        members = [
+            TensorDict(a=torch.zeros(3), u=u(0), batch_size=[3]) for _ in range(2)
+        ]
+        lazy = lazy_stack(members, stack_dim)
+        ptrs = [member["u"].data_ptr() for member in members]
+        calls = (
+            lambda: lazy.update_({"u": u(1)}),
+            lambda: lazy.update_(TensorDict(u=u(2))),
+            lambda: lazy.update_(TensorDict(u=u(3), batch_size=lazy.batch_size)),
+            lambda: lazy.update_({"u": torch.full((4,), 4.0)}),
+            lambda: lazy.copy_(TensorDict(a=torch.tensor(5.0), u=u(5))),
+        )
+        for value, call in enumerate(calls, 1):
+            assert call() is lazy
+            for member, ptr in zip(members, ptrs):
+                assert isinstance(member["u"], UnbatchedTensor)
+                assert member["u"].data_ptr() == ptr
+                assert (member["u"] == value).all()
+        # a source with a leading dim of the size of the stack gives each
+        # member its row
+        lazy.update_({"u": torch.arange(8.0).view(2, 4)})
+        for member, row in zip(members, torch.arange(8.0).view(2, 4)):
+            assert (member["u"] == row).all()
+        # a leaf whose first dim is the size of the stack: a dict source is
+        # split along that dim, along any stack dim, as on main
+        members = [
+            TensorDict(
+                a=torch.zeros(3), u=UnbatchedTensor(torch.zeros(2)), batch_size=[3]
+            )
+            for _ in range(2)
+        ]
+        lazy = lazy_stack(members, stack_dim)
+        lazy.update_({"u": torch.arange(2.0)})
+        for i, member in enumerate(members):
+            assert (member["u"] == i).all()
+
     @pytest.mark.parametrize("source_is_lazy", [True, False])
     def test_update_batch_size(self, source_is_lazy):
         td = TensorDict(
