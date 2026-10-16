@@ -2761,15 +2761,14 @@ class TestNonTensorData:
     def test_copy(self, data, monkeypatch):
         nt = NonTensorData(data, batch_size=[2], names=["n"], device="cpu")
         is_leaf = not isinstance(data, (list, dict))
-        if is_leaf:
-            # A shallow copy of a value that is not a container skips the
-            # pytree pass over the non-tensor fields (#2554)
-            def tree_map(*args, **kwargs):
-                raise AssertionError("tree_map was called")
 
-            monkeypatch.setattr(
-                sys.modules[NonTensorData.__module__], "tree_map", tree_map
-            )
+        # A shallow copy skips the pytree pass over the non-tensor fields: of
+        # a value that is not a container (#2554), and of dicts and lists
+        # (#2862)
+        def tree_map(*args, **kwargs):
+            raise AssertionError("tree_map was called")
+
+        monkeypatch.setattr(sys.modules[NonTensorData.__module__], "tree_map", tree_map)
         for copy in (nt.copy(), nt._clone(recurse=False)):
             assert type(copy) is NonTensorData
             assert copy._tensordict is not nt._tensordict
@@ -2779,6 +2778,67 @@ class TestNonTensorData:
             assert copy.data == data
             # containers are copied, other values are not
             assert (copy.data is nt.data) is is_leaf
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            "s",
+            None,
+            b"b",
+            [{"role": "user", "content": "q"}],
+            {"a": 1, "b": [1.5, {"c": (True, "d")}], "o": object()},
+            (1, "x", [2]),
+            collections.OrderedDict(a=[1]),
+            collections.namedtuple("NT", "a b")(1, [2]),
+            torch.arange(3),
+            np.arange(3),
+            TensorDict(a=torch.zeros(2)),
+            {"td": TensorDict(a=torch.zeros(2)), "l": [torch.ones(1)]},
+        ],
+        ids=lambda data: type(data).__name__,
+    )
+    @pytest.mark.parametrize("cls", ["NonTensorData", "MetaData", "subclass"])
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_copy_matches_general_path(self, data, cls, locked):
+        # The fast shallow copy of a NonTensorData gives what
+        # TensorClass._clone gives: new dicts, lists and tuples, the same
+        # leaves, and the same attributes
+        if cls == "subclass":
+
+            class NonTensorDataSubclass(NonTensorData):
+                pass
+
+            cls = NonTensorDataSubclass
+        else:
+            cls = {"NonTensorData": NonTensorData, "MetaData": MetaData}[cls]
+        nt = cls(data, batch_size=[2], names=["n"], device="cpu", _metadata={"k": [1]})
+        if locked:
+            nt.lock_()
+
+        def structure(src, value):
+            # the type of each container and whether it is the source's
+            result = [type(value), value is src]
+            if type(value) in (dict, collections.OrderedDict):
+                result += [(k, structure(src[k], v)) for k, v in value.items()]
+            elif isinstance(value, (list, tuple)):
+                result += [structure(s, v) for s, v in zip(src, value)]
+            return result
+
+        expected = TensorClass._clone(nt, recurse=False)
+        for copy in (nt.copy(), nt._clone(recurse=False)):
+            assert type(copy) is type(expected)
+            assert list(copy.__dict__) == list(expected.__dict__)
+            assert type(copy._tensordict) is type(expected._tensordict)
+            assert copy._tensordict is not nt._tensordict
+            assert copy.batch_size == expected.batch_size
+            assert copy.names == expected.names
+            assert copy.device == expected.device
+            assert copy.is_locked == expected.is_locked
+            assert list(copy._non_tensordict) == list(expected._non_tensordict)
+            for key, value in copy._non_tensordict.items():
+                assert structure(nt._non_tensordict[key], value) == structure(
+                    nt._non_tensordict[key], expected._non_tensordict[key]
+                )
 
     def test_shared_copy_non_tensor_data(self):
         # copy() of a shared NonTensorData reads the value, not the shared

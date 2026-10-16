@@ -126,6 +126,28 @@ def _identity(cls):
     return cls
 
 
+_PYTREE_SCALAR_LEAVES = (str, int, float, bool, bytes, type(None))
+
+
+def _copy_pytree_containers(value):
+    """Return ``tree_map(_identity, value)``: new dicts, lists and tuples, the same leaves.
+
+    Copies the containers of the exact types ``dict``, ``list`` and ``tuple``
+    itself, which is faster than ``tree_map``, and hands any other value to
+    ``tree_map``.
+    """
+    cls = type(value)
+    if cls in _PYTREE_SCALAR_LEAVES:
+        return value
+    if cls is dict:
+        return {k: _copy_pytree_containers(v) for k, v in value.items()}
+    if cls is list:
+        return [_copy_pytree_containers(v) for v in value]
+    if cls is tuple:
+        return tuple(_copy_pytree_containers(v) for v in value)
+    return tree_map(_identity, value)
+
+
 try:
     from typing import dataclass_transform
 except ImportError:
@@ -6330,21 +6352,40 @@ class NonTensorDataBase(TensorClass):
 
     def _clone(self, recurse: bool = True):
         non_tensordict = self._non_tensordict
-        if not recurse and all(map(tree_is_leaf, non_tensordict.values())):
+        td = self._tensordict
+        if (
+            not recurse
+            and not is_compiling()
+            and type(self) is NonTensorData
+            and type(td) is TensorDict
+            and not td._tensordict
+            and non_tensordict.keys() == NonTensorData.__expected_keys__
+            and NonTensorData.__eq__ is not _eq
+        ):
+            # The result of TensorClass._clone, built directly: with these
+            # keys, _from_tensordict's checks pass and __post_init__ (which
+            # has patched __eq__ already) does nothing.
+            result = NonTensorData.__new__(NonTensorData)
+            result.__dict__["_tensordict"] = td._clone(recurse=False)
+            result.__dict__["_non_tensordict"] = {
+                key: _copy_pytree_containers(value)
+                for key, value in non_tensordict.items()
+            }
+        elif not recurse and all(map(tree_is_leaf, non_tensordict.values())):
             # TensorClass._clone would copy the values with tree_map, which
             # returns pytree leaves unchanged: skip it.
             result = self._from_tensordict(
-                self._tensordict._clone(recurse=False),
+                td._clone(recurse=False),
                 dict(non_tensordict),
                 safe=False,
             )
         else:
             result = TensorClass._clone(self, recurse)
-        if not recurse and self._tensordict._is_shared:
+        if not recurse and td._is_shared:
             # The shallow copy holds the same shared wrapper: mark it shared so
             # that reads unwrap the value and in-place updates write through it.
             result._tensordict._is_shared = True
-        elif not recurse and self._tensordict._is_memmap:
+        elif not recurse and td._is_memmap:
             # memmap_(share_non_tensor=True) wraps the value, and the copy is
             # not memory-mapped: give it the value.
             result._non_tensordict["data"] = self.data
