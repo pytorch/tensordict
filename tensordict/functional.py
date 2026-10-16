@@ -756,10 +756,9 @@ def unpad_sequence(
     ``return_mask=True``: each row of ``padded`` keeps, in every entry, the
     positions that the mask marks along ``pad_dim``. These must form one
     contiguous run per row, as the masks of :func:`~tensordict.pad_sequence`
-    do. Left and right padding
-    are both read from the mask. Non-tensor entries are kept as they are,
-    except when ``pad_dim`` is a batch dimension: then they lose their pad
-    slots too.
+    do. Left and right padding are both read from the mask. Non-tensor
+    entries are kept as they are, except when ``pad_dim`` is a batch
+    dimension: then they lose their pad slots too.
 
     The lengths are read on the host (``.tolist()``), which synchronizes
     with the device: this is meant for post-processing, not for compiled
@@ -834,9 +833,14 @@ def unpad_sequence(
     # Batch dims of each sample
     batch_dims = padded.batch_dims - 1
 
-    def bounds(key, pos_pad_dim):
+    def bounds(key, pos_pad_dim, max_len):
         # The starts and lengths of the data along pad_dim, one per sample
         if isinstance(mask, torch.Tensor):
+            if mask.shape[-1] != max_len:
+                raise ValueError(
+                    "A tensor mask must have shape [len(padded), max_len] = "
+                    f"[{mask.shape[0]}, {max_len}], got {tuple(mask.shape)}."
+                )
             m = mask
         else:
             # The masks of pad_sequence hold the batch dims, and the padded
@@ -847,6 +851,9 @@ def unpad_sequence(
             m = m.movedim(min(pos_pad_dim, batch_dims) + 1, -1)
             if m.ndim > 2:
                 m = m.flatten(1, -2).any(1)
+        if m.shape[-1] == 0:
+            # Every sample is empty along pad_dim
+            return [0] * m.shape[0], [0] * m.shape[0]
         m = m.to(torch.uint8)
         # First and last marked positions and their count, in one sync
         starts, ends, lengths = torch.stack(
@@ -872,13 +879,20 @@ def unpad_sequence(
     if batch_dims > 0 and all(pos < batch_dims for pos in pad_dims.values()):
         # The batch was padded too: slicing it unpads every entry
         batch_pad_dim = next(iter(pad_dims.values()), pad_dim % batch_dims)
-        starts, lengths = bounds(next(iter(pad_dims), None), batch_pad_dim)
+        starts, lengths = bounds(
+            next(iter(pad_dims), None),
+            batch_pad_dim,
+            padded.batch_size[batch_pad_dim + 1],
+        )
         samples = [
             padded[i][(slice(None),) * batch_pad_dim + (slice(start, start + n),)]
             for i, (start, n) in enumerate(zip(starts, lengths))
         ]
     else:
-        key_bounds = {key: bounds(key, pos) for key, pos in pad_dims.items()}
+        key_bounds = {
+            key: bounds(key, pos, padded.get(key).shape[pos + 1])
+            for key, pos in pad_dims.items()
+        }
         samples = []
         for i in range(padded.batch_size[0]):
             sample = padded[i]

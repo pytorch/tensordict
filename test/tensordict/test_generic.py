@@ -7097,6 +7097,19 @@ class TestGeneric:
             unpad_sequence(padded, mask["b"][0])
         with pytest.raises(ValueError, match="shape"):
             unpad_sequence(padded, mask["b"][:1])
+        # a second dim that is not the padded length
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, mask["b"][:, 1:])
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(padded, torch.cat([mask["b"], mask["b"]], -1))
+        # the same when the batch was padded
+        batch_padded = pad_sequence(
+            [TensorDict(a=torch.randn(n, 3), batch_size=[n]) for n in (2, 4)]
+        )
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(batch_padded, mask["b"][:, 1:])
+        with pytest.raises(ValueError, match="shape"):
+            unpad_sequence(batch_padded, torch.cat([mask["b"], mask["b"]], -1))
         with pytest.raises(ValueError, match="batch dimension"):
             unpad_sequence(padded[0], mask)
         with pytest.raises(KeyError, match="'a'"):
@@ -7111,6 +7124,14 @@ class TestGeneric:
         stack = lazy_stack(list(padded.unbind(0)))
         self._assert_unpadded(unpad_sequence(stack, mask), tds)
         assert stack.tensordicts[0]["a"].shape == torch.Size([4, 3])
+
+    @pytest.mark.parametrize("batch_size", [[], [0]])
+    def test_unpad_sequence_empty(self, batch_size):
+        # https://github.com/pytorch/tensordict/issues/2808
+        # every sample has length 0 along pad_dim
+        tds = [TensorDict(a=torch.zeros(0, 3), batch_size=batch_size)] * 2
+        samples = unpad_sequence(pad_sequence(tds, return_mask=True))
+        self._assert_unpadded(samples, tds)
 
     @pytest.mark.parametrize("count_duplicates", [False, True])
     def test_param_count(self, count_duplicates):
