@@ -97,6 +97,7 @@ _REPR_OPTIONS = {
     "show_storage_size": False,
     "plain": False,
     "sort_keys": "alphabetical",
+    "compact": False,
 }
 
 _REPR_OPTIONS_KEYS = frozenset(_REPR_OPTIONS)
@@ -126,8 +127,10 @@ class set_printoptions(_DecoratorContextManager):
             ``show_is_shared``, ``show_shape``, ``show_field_device``,
             ``show_dtype``, ``show_field_is_shared``, ``show_grad``,
             ``show_is_contiguous``, ``show_is_view``, ``show_storage_size``,
-            ``plain`` and ``sort_keys``. An unknown option raises a
-            ``TypeError``.
+            ``plain``, ``sort_keys`` and ``compact``. An unknown option
+            raises a ``TypeError``. ``compact=True`` prints each entry on
+            one line as its dtype and its shape after the batch dims
+            (``f32[3]``); see :ref:`printing`.
 
     Examples:
         >>> import torch

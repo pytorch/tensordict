@@ -129,6 +129,13 @@ _OPS = {
         "del_(('a', 'x'))": _inplace(lambda td: td.del_(("a", "x"))),
         "rename_key_('a', 'z')": _inplace(lambda td: td.rename_key_("a", "z")),
         "rename_key_('a', ())": _inplace(lambda td: td.rename_key_("a", ())),
+        "rename_keys({'a': 'b', 'b': 'a'})": lambda td: td.rename_keys(
+            {"a": "b", "b": "a"}
+        ),
+        "rename_keys({'a': ('n', 'x'), 'missing': 'z'}, strict=False)": lambda td: (
+            td.rename_keys({"a": ("n", "x"), "missing": "z"}, strict=False)
+        ),
+        "rename_keys({'a': 'b'})": lambda td: td.rename_keys({"a": "b"}),
         "flatten_keys()": lambda td: td.flatten_keys(),
         "flatten_keys(inplace=True)": _inplace(
             lambda td: td.flatten_keys(inplace=True)
