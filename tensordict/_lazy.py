@@ -549,6 +549,17 @@ def _restore_names(td, snapshot) -> None:
         td.names = snapshot
 
 
+def _is_plain_tensor(tensor) -> bool:
+    # A dense tensor that torch.stack stacks into a plain torch.Tensor.
+    return (
+        type(tensor) in (Tensor, torch.nn.Parameter, MemoryMappedTensor)
+        and tensor.layout is torch.strided
+        and not tensor.is_nested
+        and not tensor.is_quantized
+        and not torch._C._functorch.is_batchedtensor(tensor)
+    )
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A stack of tensordicts that keeps each input as a separate tensordict.
 
@@ -1329,9 +1340,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
         Heterogeneous dimensions are returned as -1.
 
-        This implementation is inefficient as it will attempt to stack the items
-        to compute their shape, and should only be used for printing.
+        The shape of a tensor entry is read from the members. Other entries
+        are read with :meth:`get`, which stacks them.
         """
+        leaf = self._plain_leaf(key)
+        if leaf is not None:
+            return leaf[0]
         try:
             item = self.get(key)
             return item.shape
@@ -1357,6 +1371,43 @@ class LazyStackedTensorDict(TensorDictBase):
                 return torch.Size(shape)
             else:
                 raise err
+
+    def _plain_leaf(self, key):
+        """Returns the shape of entry ``key`` and the members' tensors, without stacking them.
+
+        The shape is the one :meth:`get_item_shape` gives, with -1 for the
+        dims where the members differ. Returns ``None`` if the entry is not a
+        plain tensor in every member, or if a hook changes what :meth:`get`
+        returns.
+        """
+        if (
+            not isinstance(key, str)
+            or not self.tensordicts
+            or self._hook_out is not None
+            or self._is_vmapped
+        ):
+            return None
+        shapes, tensors = [], []
+        for td in self.tensordicts:
+            if isinstance(td, LazyStackedTensorDict):
+                leaf = td._plain_leaf(key)
+                if leaf is None:
+                    return None
+                shapes.append(leaf[0])
+                tensors.extend(leaf[1])
+                continue
+            tensor = td._get_str(key, None)
+            if not _is_plain_tensor(tensor):
+                return None
+            shapes.append(tensor.shape)
+            tensors.append(tensor)
+        shape = list(shapes[0])
+        for other in shapes[1:]:
+            if len(shape) != len(other):
+                return torch.Size([-1]), tensors
+            shape = [s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, other)]
+        shape.insert(self.stack_dim, len(self.tensordicts))
+        return torch.Size(shape), tensors
 
     # Override: the members must agree.
     def is_shared(self) -> bool:
