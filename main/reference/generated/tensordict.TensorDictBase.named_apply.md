@@ -1,6 +1,6 @@
 # TensorDictBase.named_apply
 
-TensorDictBase.named_apply(*fn: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)*, **others: T*, *nested_keys: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = NO_DEFAULT*, *names: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = NO_DEFAULT*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *propagate_lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *call_on_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***constructor_kwargs*) → Self | [None](https://docs.python.org/3/builtins/constants.html#None)
+TensorDictBase.named_apply(*fn: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)*, **others: T*, *nested_keys: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = NO_DEFAULT*, *names: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = NO_DEFAULT*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *propagate_lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *call_on_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[type](https://docs.python.org/3/builtins/functions.html#type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***constructor_kwargs*) → Self | [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new tensordict.
 
@@ -69,6 +69,29 @@ the function to all leaves.
 ... return val.apply(mean_any, call_on_nested=True)
 ... return val.mean()
 >>> td_mean = td.apply(mean_any, call_on_nested=True)
+```
+- **is_leaf** (*Callable**[**[*[*type*](https://docs.python.org/3/builtins/functions.html#type)*]**,*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)*]**,**optional*) - 
+
+called with the type of
+each entry; `fn` is called on the entries for which it returns
+`True`, and `named_apply` goes into the others. Defaults to `None`,
+which uses [`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is_leaf): `fn` is called
+on tensors, and `named_apply` goes into tensordicts, tensorclasses
+and non-tensor data (which is kept unchanged). Pass
+[`is_leaf_nontensor()`](tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor) to call `fn` on non-tensor
+data too:
+
+```
+>>> from tensordict import is_leaf_nontensor
+>>> td = TensorDict(a=torch.zeros(3), b="a string", batch_size=[3])
+>>> seen = []
+>>> _ = td.named_apply(lambda name, x: seen.append(type(x).__name__))
+>>> seen
+['Tensor']
+>>> seen = []
+>>> _ = td.named_apply(lambda name, x: seen.append(type(x).__name__), is_leaf=is_leaf_nontensor)
+>>> seen
+['Tensor', 'NonTensorData']
 ```
 - **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - 
 

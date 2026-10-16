@@ -824,6 +824,19 @@ Their pages name the replacement and the release that removes them.
 Package constants
 -----------------
 
+.. py:data:: KEY_SEPARATOR
+    :module: tensordict
+
+    ``"."``, the default ``separator`` of
+    :meth:`~tensordict.TensorDictBase.flatten_keys` and
+    :meth:`~tensordict.TensorDictBase.unflatten_keys`, for code that joins or
+    splits nested keys the same way, such as
+    ``tuple(name.split(KEY_SEPARATOR))``. The names of
+    :meth:`~tensordict.TensorDictBase.state_dict` also use ``"."``, the
+    ``torch.nn.Module`` convention, independently of this constant.
+    Reassigning it has no effect: the defaults are bound when the methods are
+    defined. It can also be imported from ``tensordict.utils``.
+
 .. py:data:: NO_DEFAULT
     :module: tensordict.base
 

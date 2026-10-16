@@ -679,6 +679,18 @@ Their pages name the replacement and the release that removes them.
 
 ## Package constants
 
+tensordict.KEY_SEPARATOR
+
+`"."`, the default `separator` of
+[`flatten_keys()`](generated/tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys) and
+[`unflatten_keys()`](generated/tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys), for code that joins or
+splits nested keys the same way, such as
+`tuple(name.split(KEY_SEPARATOR))`. The names of
+[`state_dict()`](generated/tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict) also use `"."`, the
+`torch.nn.Module` convention, independently of this constant.
+Reassigning it has no effect: the defaults are bound when the methods are
+defined. It can also be imported from `tensordict.utils`.
+
 tensordict.base.NO_DEFAULT
 
 The sentinel that marks an argument as not given where `None` is a valid
