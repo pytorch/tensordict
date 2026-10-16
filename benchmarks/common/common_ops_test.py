@@ -988,6 +988,17 @@ def test_to_same_device(benchmark):
     benchmark(td.to, "cpu")
 
 
+def test_to_dtype_nested(benchmark):
+    # A device-less mesh-like tree cast to double, as PhysicsNeMo's Mesh.to
+    td = TensorDict(
+        points=torch.randn(64, 3),
+        cells=torch.randn(32, 3),
+        point_data=TensorDict(t=torch.randn(64)),
+        cell_data=TensorDict(p=torch.randn(32)),
+    )
+    benchmark(td.to, torch.float64)
+
+
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to(benchmark, td):
     benchmark(td.to, "cuda:0")

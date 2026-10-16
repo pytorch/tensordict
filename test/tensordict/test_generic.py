@@ -1234,6 +1234,113 @@ class TestGeneric:
         assert result["a"] is td["a"]
         assert result["nested", "c"] is td["nested", "c"]
 
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flat",
+            "nested",
+            "nested_device",
+            "locked",
+            "empty",
+            "names",
+            "nested_names",
+            "lazy",
+            "non_tensor",
+            "unbatched",
+            "params",
+            "tensorclass",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "args,kwargs",
+        [
+            (("cpu",), {}),
+            ((torch.device("cpu"),), {"non_blocking": True}),
+            ((torch.float64,), {}),
+            (("cpu", torch.float64), {}),
+            (("meta",), {}),
+        ],
+    )
+    def test_to_dense_tree_matches_general_path(self, kind, args, kwargs, monkeypatch):
+        # to() on a tree of exact TensorDicts without dim names rebuilds it
+        # in one pass, with the target device on every node, and hands the
+        # other entries to _apply_nest: the result is the one of the generic
+        # walk.
+        def make():
+            leaves = {"a": torch.zeros(2, 3), "b": torch.ones(2)}
+            if kind == "flat":
+                return TensorDict(leaves, batch_size=[2])
+            if kind == "empty":
+                return TensorDict(batch_size=[2])
+            if kind == "params":
+                return TensorDictParams(TensorDict(leaves, batch_size=[2]))
+            sub = {"c": torch.zeros(2, 4), "d": {"e": torch.ones(2, 1)}}
+            td = TensorDict({**leaves, "nested": sub}, batch_size=[2])
+            if kind == "nested_device":
+                td["other"] = TensorDict(f=torch.zeros(2), batch_size=[2], device="cpu")
+            elif kind == "locked":
+                td.lock_()
+            elif kind == "names":
+                td.names = ["x"]
+            elif kind == "nested_names":
+                td["nested"].names = ["x"]
+            elif kind == "lazy":
+                td["lazy"] = lazy_stack(
+                    [TensorDict(f=torch.zeros(3)), TensorDict(f=torch.ones(3))]
+                )
+            elif kind == "non_tensor":
+                td["nested", "s"] = NonTensorData("s", batch_size=[2])
+            elif kind == "unbatched":
+                td["nested", "u"] = tensordict.UnbatchedTensor(torch.zeros(5))
+            elif kind == "tensorclass":
+
+                @tensorclass
+                class Holder:
+                    x: torch.Tensor
+                    td: TensorDict
+
+                return Holder(x=torch.zeros(2), td=td, batch_size=[2])
+            return td
+
+        td = make()
+        with monkeypatch.context() as m:
+            m.setattr(TensorDict, "_is_dense_node", lambda self: False)
+            expected = td.to(*args, **kwargs)
+        walked = []
+        apply_nest = TensorDictBase._apply_nest
+
+        def record_apply_nest(self, *a, **kw):
+            walked.append(type(self))
+            return apply_nest(self, *a, **kw)
+
+        monkeypatch.setattr(TensorDictBase, "_apply_nest", record_apply_nest)
+        result = td.to(*args, **kwargs)
+        if kind in ("flat", "nested", "nested_device", "locked", "empty"):
+            assert walked == []
+        assert type(result) is type(expected)
+        if is_tensorclass(td):
+            td, result, expected = (
+                td._tensordict,
+                result._tensordict,
+                expected._tensordict,
+            )
+        assert list(result.keys(True)) == list(expected.keys(True))
+        nodes = [k for k in result.keys(True) if is_tensor_collection(result[k])]
+        for key in [()] + nodes:
+            r = result[key] if key else result
+            e = expected[key] if key else expected
+            assert type(r) is type(e)
+            assert r.batch_size == e.batch_size
+            assert r.device == e.device
+            assert r.names == e.names
+            assert r.is_locked == e.is_locked
+        for key in result.keys(True, True):
+            r, e = result.get(key), expected.get(key)
+            assert type(r) is type(e)
+            if isinstance(r, torch.Tensor):
+                assert (r.dtype, r.device, r.shape) == (e.dtype, e.device, e.shape)
+                assert (r is td.get(key)) == (e is td.get(key))
+
     def test_sub_to_batch_size_same_device(self):
         source = TensorDict(a=torch.zeros(4, 2, 3), batch_size=[4, 2], device="cpu")
         td = source._get_sub_tensordict(0)

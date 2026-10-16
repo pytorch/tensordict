@@ -8069,9 +8069,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             and batch_size is None
             and checked
             and not call_on_nested
-            and not constructor_kwargs
+            # to() passes call_on_unbatched, which _dense_apply takes
+            and (
+                not constructor_kwargs
+                or list(constructor_kwargs) == ["call_on_unbatched"]
+            )
             and not is_compiling()
-            and device is NO_DEFAULT
             and names is NO_DEFAULT
             and (
                 is_leaf is None
@@ -8089,6 +8092,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 (),
                 filter_empty,
                 _default_is_leaf if is_leaf is None else is_leaf,
+                device,
+                constructor_kwargs.get("call_on_unbatched", False),
             )
             if propagate_lock and self.is_locked and result is not None:
                 result.lock_()
