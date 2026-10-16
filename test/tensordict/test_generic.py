@@ -8174,7 +8174,8 @@ class TestGeneric:
             )
         )
         out = params.rename_keys({"w": "w2", ("sub", "v"): "v"})
-        assert type(out) is TensorDictParams
+        # a TensorDict, as for select and exclude, so that it compiles
+        assert type(out) is TensorDict
         assert set(out.keys(True)) == {"w2", "v"}
         assert out.get("w2") is params.get("w")
         assert isinstance(out.get("v"), nn.Parameter)

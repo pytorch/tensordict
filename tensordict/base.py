@@ -6817,8 +6817,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Returns:
             a new tensordict of the same type as ``self``, except that a
-            sub-tensordict view returns a :class:`~tensordict.TensorDict`, as
-            :meth:`exclude` does.
+            sub-tensordict view and a :class:`~tensordict.nn.TensorDictParams`
+            return a :class:`~tensordict.TensorDict`, as :meth:`exclude` does.
 
         Raises:
             KeyError: if ``strict=True`` and a source is missing, or if a key is
