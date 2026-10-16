@@ -1456,6 +1456,130 @@ class TestFromTensordict:
             assert (td["n", "x"] == 3).all()
         assert (tds[0]["e"] == 1).all()
 
+    @pytest.mark.parametrize("depth", [1, 2])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "op", ["add_", "mul_", "zero_", "lerp_", "clamp_min_", "copy_", "update_"]
+    )
+    def test_from_tensordict_lazy_stack_held_exclusive_keys_inplace(
+        self, op, stack_dim, depth, tmp_path
+    ):
+        # #2759: a key that only some members of a lazy stack that a member
+        # holds is left unchanged, as in a single stack (#2739)
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        batch = [3] if stack_dim else []
+
+        def member(extra, value=1.0):
+            inner = [
+                TensorDict(x=torch.full((3,), value), batch_size=batch)
+                for _ in range(2)
+            ]
+            if extra:
+                inner[0]["e"] = torch.full((3,), value)
+            n = lazy_stack(inner, stack_dim)
+            if depth == 2:
+                n = TensorDict(m=n, batch_size=batch)
+            return TensorDict(a=torch.full((3,), value), n=n, batch_size=batch)
+
+        tds = [member(True), member(False)]
+        state = Nested.from_tensordict(lazy_stack(tds))
+        dense = state.to_tensordict().apply(lambda x: torch.full_like(x, 3.0))
+        # an input that holds e too
+        held = Nested.from_tensordict(
+            lazy_stack([member(True, 3.0), member(False, 3.0)])
+        )
+        args = {
+            "add_": (1.0,),
+            "mul_": (2.0,),
+            "zero_": (),
+            "lerp_": (dense, 0.5),
+            "clamp_min_": (3.0,),
+            "copy_": (held,),
+            "update_": (held,),
+        }[op]
+        assert getattr(state, op)(*args) is state
+        expected = {"zero_": 0.0, "copy_": 3.0, "update_": 3.0, "clamp_min_": 3.0}
+        expected = expected.get(op, 2.0)
+        inner = ("n", "m") if depth == 2 else ("n",)
+        for td in tds:
+            assert (td["a"] == expected).all()
+            assert (td[inner + ("x",)] == expected).all()
+        assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
+        if op == "update_":
+            # a dense input reaches the leaves of the inner stack too
+            assert state.update_(dense.apply(lambda x: x + 1)) is state
+            for td in tds:
+                assert (td[inner + ("x",)] == 4).all()
+            assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
+        if op in ("copy_", "update_") and _has_h5py:
+            # an h5 file, or a lazy stack of them, which cannot select
+            values = dense.apply(lambda x: x + 2)
+            file = PersistentTensorDict.from_dict(values, filename=tmp_path / "a.h5")
+            files = lazy_stack(
+                [
+                    PersistentTensorDict.from_dict(
+                        value + 1, filename=tmp_path / f"{i}.h5"
+                    )
+                    for i, value in enumerate(values.unbind(0))
+                ]
+            )
+            for value, source in ((5, file), (6, files)):
+                assert getattr(state, op)(source) is state
+                for td in tds:
+                    assert (td["a"] == value).all()
+                    assert (td[inner + ("x",)] == value).all()
+                assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
+        if op == "add_":
+            # a call that raises writes nothing
+            with pytest.raises(KeyError):
+                state.add_(dense.exclude(inner + ("x",)))
+            for td in tds:
+                assert (td["a"] == expected).all()
+
+    @pytest.mark.parametrize("op", ["add_", "zero_", "update_", "copy_"])
+    def test_from_tensordict_lazy_stack_held_exclusive_keys_batch_sizes_differ(
+        self, op
+    ):
+        # #2759: the members hold tensordicts of other batch sizes, so their
+        # shared leaves cannot be read: the source changes them, as on main
+        class Nested(TypedTensorDict):
+            a: Tensor
+            n: TensorDict
+
+        def members(value):
+            inner = [
+                TensorDict(x=torch.full((3, 2), value), batch_size=[3])
+                for _ in range(2)
+            ]
+            inner[0]["e"] = torch.full((3, 2), value)
+            return [
+                TensorDict(
+                    a=torch.full((3,), value),
+                    n=TensorDict(x=torch.full((3, 2, 2), value), batch_size=[3]),
+                    batch_size=[3],
+                ),
+                TensorDict(
+                    a=torch.full((3,), value), n=lazy_stack(inner, 1), batch_size=[3]
+                ),
+            ]
+
+        tds = members(1.0)
+        state = Nested.from_tensordict(lazy_stack(tds))
+        args = {
+            "add_": (2.0,),
+            "zero_": (),
+            "update_": (lazy_stack(members(3.0)),),
+            "copy_": (lazy_stack(members(3.0)),),
+        }[op]
+        assert getattr(state, op)(*args) is state
+        expected = 0.0 if op == "zero_" else 3.0
+        for td in tds:
+            assert (td["a"] == expected).all()
+            assert (td["n", "x"] == expected).all()
+
     @pytest.mark.parametrize("op", ["add_", "zero_", "mul_", "copy_"])
     def test_from_tensordict_lazy_stack_uneven_exclusive_keys_inplace(self, op):
         # #2759: the shared leaves differ in shape, so they cannot be read as
