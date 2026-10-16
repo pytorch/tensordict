@@ -498,6 +498,31 @@ pickle file. ``load_memmap_`` and ``memmap_refresh_`` take the same
 argument. For :func:`torch.load`, keep ``weights_only=True`` and allowlist
 only the classes that you trust (see `torch.save and torch.load`_).
 
+A module ``state_dict()`` round-trips this way:
+
+  >>> model = torch.nn.Linear(2, 2)
+  >>> _ = TensorDict.from_pytree(model.state_dict()).memmap(root / "model")
+  >>> sd = TensorDict.load_memmap(root / "model", allow_pickle=False).to_pytree()
+  >>> all(torch.equal(sd[k], v) for k, v in model.state_dict().items())
+  True
+
+The state dicts of an optimizer and of a learning-rate scheduler hold
+``None``, ``str`` values and Python numbers, which ``from_pytree`` rejects
+(``None`` and ``str`` leaves) or returns as tensors (numbers). Save them with
+:func:`torch.save` and load them with ``torch.load(path, weights_only=True)``,
+which round-trips them exactly without unpickling arbitrary objects:
+
+  >>> optim = torch.optim.Adam(model.parameters(), lr=1e-3)
+  >>> model(torch.randn(3, 2)).sum().backward()
+  >>> optim.step()
+  >>> torch.save(optim.state_dict(), root / "optim.pt")
+  >>> optim_sd = torch.load(root / "optim.pt", weights_only=True)
+  >>> optim_sd["param_groups"] == optim.state_dict()["param_groups"]
+  True
+  >>> optim_sd["param_groups"][0]["foreach"] is None
+  True
+  >>> torch.optim.Adam(model.parameters()).load_state_dict(optim_sd)
+
 tensordict also protects the paths that it writes:
 
 - If the path of a new leaf file is a symbolic link, tensordict raises an
