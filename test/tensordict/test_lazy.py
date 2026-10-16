@@ -4214,13 +4214,38 @@ class TestLazyStackedTensorDict:
             [{("b",)}, {("b",)}],
             [{("n", "c")}, {("n", "c"), ("extra",), ("t",), ("n", "x")}],
         )
-        # As on main, a key set that names an exclusive entry raises, and with
-        # strict=False the entry stays in the last part
+        # A key set that names an exclusive entry gets it from the members
+        # that hold it; a key that no member holds raises (#2827)
+        assert split([("a",)], [("extra",)]) == expected(
+            [{("a",)}, {("a",)}],
+            [set(), {("extra",)}],
+            [common, common | {("t",), ("n", "x")}],
+        )
+        assert split([("b",), ("t",), ("n", "x")]) == expected(
+            [{("b",)}, {("b",), ("t",), ("n", "x")}],
+            [{("a",), ("n", "c")}, {("a",), ("n", "c"), ("extra",)}],
+        )
         with pytest.raises(KeyError):
-            split([("a",)], [("extra",)])
-        assert split([("a",)], [("extra",)], strict=False) == expected(
+            split([("a",)], [("extra",), ("nope",)])
+        # with strict=False the entry stays in the last part, as on main, with
+        # one FutureWarning per call until 0.17
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17") as w:
+            parts = split([("a",)], [("extra",), ("t",)], strict=False)
+        assert len(w) == 1
+        assert parts == expected(
             [{("a",)}, {("a",)}], [set(), set()], [common, common | exclusive]
         )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            split([("a",)], [("nope",)], strict=False)
+        # a renamed exclusive entry stays in its lazy stack
+        prefix = ("s",) if nesting == "in a td" else ()
+        parts = make().split_keys({(*prefix, "extra"): (*prefix, "e")})
+        parts = [part.get("s", part) if prefix else part for part in parts]
+        assert leaves(parts[0]) == expected([set(), {("e",)}])[0]
+        if prefix:
+            with pytest.raises(KeyError, match="outside that stack"):
+                make().split_keys({("s", "extra"): "e"})
 
     def test_chunk_lazy_zero_size_dim(self):
         # torch.chunk gives `chunks` empty pieces along a zero-size dim
