@@ -114,6 +114,29 @@ def test_tdseq_dispatch(benchmark):
     )
 
 
+def make_tdseq_tdmodules():
+    return (
+        (
+            TensorDictSequential(
+                TensorDictModule(nn.Linear(4, 4), in_keys=["x"], out_keys=["h0"]),
+                TensorDictModule(nn.Tanh(), in_keys=["h0"], out_keys=["h1"]),
+                TensorDictModule(nn.Linear(4, 2), in_keys=["h1"], out_keys=["y"]),
+            ),
+            TensorDict({"x": torch.zeros(16, 4)}, [16]),
+        ),
+        {},
+    )
+
+
+def test_tdseq_tdmodules(benchmark):
+    benchmark.pedantic(
+        lambda net, td: net(td),
+        setup=make_tdseq_tdmodules,
+        warmup_rounds=10,
+        rounds=1000,
+    )
+
+
 def make_tdseq_selected_out_keys():
     return (
         (

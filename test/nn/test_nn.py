@@ -1198,6 +1198,84 @@ class TestTDModule:
             assert func(td) is td
         assert (td["b"] == 1).all()
 
+    @pytest.mark.parametrize("dispatch_mode", [True, False])
+    @pytest.mark.parametrize(
+        "make_input",
+        [
+            lambda: TensorDict(a=torch.zeros(2, 1), batch_size=[2]),
+            lambda: TensorDict(a=torch.zeros(2, 1), batch_size=[2], names=["n"]),
+            lambda: lazy_stack([TensorDict(a=torch.zeros(1)) for _ in range(2)]),
+            lambda: TensorDictParams(TensorDict(a=torch.zeros(2, 1))),
+            lambda: TensorDict(a=torch.zeros(2, 1), batch_size=[2]).lock_(),
+        ],
+        ids=["td", "names", "lazy", "params", "locked"],
+    )
+    def test_dispatch_tensordict_input(self, dispatch_mode, make_input):
+        # A tensordict is passed to forward as is, with dispatch on or off
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        td = make_input()
+        with _set_dispatch_td_nn_modules(dispatch_mode):
+            if td.is_locked:
+                with pytest.raises(RuntimeError, match="locked"):
+                    tdm(td)
+                assert "b" not in td.keys()
+                return
+            out = tdm(td)
+        assert out is td
+        assert type(td) is type(make_input())
+        assert td["b"].shape == (2, 1)
+        assert td.names == make_input().names
+
+    @pytest.mark.parametrize("dispatch_mode", [True, False])
+    @pytest.mark.parametrize("bound", [False, True])
+    def test_dispatch_tensordict_reads_source(self, dispatch_mode, bound):
+        # With a tensordict input, the source is read only when dispatch is
+        # on: a missing one raises, and a property is resolved once
+        class LazyKeys(nn.Module):
+            reads = 0
+
+            @property
+            def in_keys(self):
+                type(self).reads += 1
+                return ["a"]
+
+            out_keys = ["b"]
+
+            def inner(self, tensordict):
+                return tensordict.set("b", tensordict["a"] + 1)
+
+            forward = dispatch(inner)
+
+        class NoKeys(nn.Module):
+            def inner(self, tensordict):
+                return tensordict
+
+            forward = dispatch(inner)
+
+        lazy, nokeys = LazyKeys(), NoKeys()
+        if bound:
+            lazy_call = dispatch(lazy.inner)
+            nokeys_call = dispatch(nokeys.inner)
+        else:
+            lazy_call, nokeys_call = lazy, nokeys
+        td = TensorDict(a=torch.zeros(1))
+        with _set_dispatch_td_nn_modules(dispatch_mode):
+            assert lazy_call(td) is td
+            assert LazyKeys.reads == int(dispatch_mode)
+            if dispatch_mode:
+                with pytest.raises(AttributeError, match="in_keys"):
+                    nokeys_call(td)
+            else:
+                assert nokeys_call(td) is td
+        assert (td["b"] == 1).all()
+
+    def test_dispatch_tensordict_unbound_none_self(self):
+        # An unbound call with self=None and a tensordict raises the error
+        # of a function without in keys, as with any other input
+        td = TensorDict(x=torch.randn(2, 3), batch_size=[2])
+        with pytest.raises(RuntimeError, match="The in keys must be passed"):
+            TensorDictModule.forward(None, td)
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
@@ -2755,6 +2833,36 @@ class TestSkipExisting:
             with pytest.raises(ValueError, match="fail"):
                 module(TensorDict({"in": torch.zeros(())}, []))
             assert skip_existing() == ["other"]
+        assert skip_existing() is False
+
+    def test_unchanged_mode_not_written_back(self, monkeypatch):
+        # The decorator of forward writes the mode back only if the call
+        # changed it, as setting an unchanged mode does nothing.
+        _skip_existing = tensordict.nn.utils._skip_existing
+        calls = []
+        set_mode = _skip_existing.set_mode
+
+        def counting_set_mode(mode):
+            calls.append(mode)
+            set_mode(mode)
+
+        def leak(x):
+            set_skip_existing(True).__enter__()
+            return x + 1
+
+        seq = TensorDictSequential(
+            TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["mid"]),
+            TensorDictModule(lambda x: x + 1, in_keys=["mid"], out_keys=["out"]),
+        )
+        leaky = TensorDictModule(leak, in_keys=["in"], out_keys=["out"])
+        monkeypatch.setattr(_skip_existing, "set_mode", counting_set_mode)
+        td = seq(TensorDict({"in": torch.zeros(())}, []))
+        assert (td["out"] == 2).all()
+        assert calls == []
+        assert skip_existing() is False
+
+        leaky(TensorDict({"in": torch.zeros(())}, []))
+        assert calls == [True, False]
         assert skip_existing() is False
 
 
