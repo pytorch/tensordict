@@ -26,6 +26,7 @@ from tensordict import (
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     MetaData,
     NonTensorData,
     NonTensorStack,
@@ -795,6 +796,61 @@ class TestTD:
         unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
+
+    @staticmethod
+    def _unbind_split(td, op):
+        if op == "unbind":
+            return td.unbind(0)
+        if op == "iter":
+            return list(td)
+        if op == "chunk":
+            return td.chunk(2, 0)
+        return td.split(2, 0)
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    def test_unbind_split_shared(self, op, mode):
+        # A shared tensordict can be unbound, iterated, chunked and split in
+        # a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4]).share_memory_()
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert r.batch_size == e.batch_size
+            assert r.is_shared() == e.is_shared()
+            assert (r == e).all()
+
+    @pytest.mark.parametrize("op", ["unbind", "iter", "chunk", "split"])
+    @pytest.mark.parametrize("container", ["td", "tc"])
+    def test_unbind_split_memmap(self, op, container, mode, tmpdir):
+        # A memory-mapped tensordict or tensorclass can be unbound, iterated,
+        # chunked and split in a compiled graph (#2788).
+        fn_c = torch.compile(self._unbind_split, fullgraph=True, mode=mode)
+        if container == "td":
+            data = TensorDict({"a": {"b": torch.arange(4.0)}}, [4])
+        else:
+            data = MyClass(
+                a=MyClass(a=None, b=torch.arange(4.0), batch_size=[4]), batch_size=[4]
+            )
+        data.memmap_(tmpdir)
+        expected = self._unbind_split(data, op)
+        result = fn_c(data, op)
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert type(r) is type(e)
+            assert r.batch_size == e.batch_size
+            assert r.is_memmap()
+            assert (r == e).all()
+            # Dynamo cannot build a MemoryMappedTensor, so compiled code
+            # returns plain tensors over the same file, as compiled indexing
+            # does.
+            assert type(r.get(("a", "b"))) is torch.Tensor
+            assert isinstance(e.get(("a", "b")), MemoryMappedTensor)
+        # Writes through a result reach the file.
+        result[0].get(("a", "b")).add_(10)
+        assert data.get(("a", "b"))[0] == 10
+        assert type(data).load_memmap(tmpdir).get(("a", "b"))[0] == 10
 
     def test_split_across_batch_sizes(self, mode):
         # From the second batch size on, the batch size is dynamic: the split

@@ -26,6 +26,7 @@ from tensordict.utils import (
     _zip_strict,
     IndexType,
 )
+from torch.compiler import is_compiling
 
 if TYPE_CHECKING:
     from typing import Self
@@ -1168,6 +1169,11 @@ class MemoryMappedTensor(torch.Tensor):
         return tensor
 
     def unbind(self, dim):
+        if is_compiling():
+            # Dynamo cannot rebuild a MemoryMappedTensor or compare storage
+            # pointers: here and in chunk and split, return plain tensors, as
+            # compiled indexing does.
+            return super().unbind(dim)
         out = super().unbind(dim)
         if dim < 0:
             dim = self.ndim + dim
@@ -1177,6 +1183,8 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     def chunk(self, chunks, dim=0):
+        if is_compiling():
+            return super().chunk(chunks, dim)
         dim = _maybe_correct_neg_dim(dim, self.shape)
         out = super().chunk(chunks, dim)
         slices = []
@@ -1193,6 +1201,8 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     def split(self, split_size, dim=0):
+        if is_compiling():
+            return super().split(split_size, dim)
         dim = _maybe_correct_neg_dim(dim, self.shape)
         out = super().split(split_size, dim)
         slices = []
