@@ -969,7 +969,20 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
                         input_dict_or_td = TensorDict.from_dict(
                             input_dict_or_td, batch_dims=self.batch_dims
                         )
-                    input_dict_or_td = input_dict_or_td.select(*keys, strict=False)
+                    if _reads_copies(input_dict_or_td):
+                        # files and stores cannot select: read the keys
+                        input_keys = input_dict_or_td.keys(True, True)
+                        input_dict_or_td = TensorDict(
+                            {
+                                key: input_dict_or_td.get(key)
+                                for key in keys
+                                if key in input_keys
+                            },
+                            batch_size=input_dict_or_td.batch_size,
+                            device=input_dict_or_td.device,
+                        )
+                    else:
+                        input_dict_or_td = input_dict_or_td.select(*keys, strict=False)
         if reads_copies and not source._reads_return_copies:
             # the update_ of a member leaves the files that it holds
             # unchanged: update a stacked copy, written back as for add_

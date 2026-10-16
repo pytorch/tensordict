@@ -1375,7 +1375,7 @@ class TestFromTensordict:
         "op", ["add_", "mul_", "zero_", "lerp_", "clamp_min_", "copy_", "update_"]
     )
     def test_from_tensordict_lazy_stack_held_exclusive_keys_inplace(
-        self, op, stack_dim, depth
+        self, op, stack_dim, depth, tmp_path
     ):
         # #2759: a key that only some members of a lazy stack that a member
         # holds is left unchanged, as in a single stack (#2739)
@@ -1427,6 +1427,24 @@ class TestFromTensordict:
             for td in tds:
                 assert (td[inner + ("x",)] == 4).all()
             assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
+        if op in ("copy_", "update_") and _has_h5py:
+            # an h5 file, or a lazy stack of them, which cannot select
+            values = dense.apply(lambda x: x + 2)
+            file = PersistentTensorDict.from_dict(values, filename=tmp_path / "a.h5")
+            files = lazy_stack(
+                [
+                    PersistentTensorDict.from_dict(
+                        value + 1, filename=tmp_path / f"{i}.h5"
+                    )
+                    for i, value in enumerate(values.unbind(0))
+                ]
+            )
+            for value, source in ((5, file), (6, files)):
+                assert getattr(state, op)(source) is state
+                for td in tds:
+                    assert (td["a"] == value).all()
+                    assert (td[inner + ("x",)] == value).all()
+                assert (tds[0][inner].tensordicts[0]["e"] == 1).all()
         if op == "add_":
             # a call that raises writes nothing
             with pytest.raises(KeyError):
