@@ -378,6 +378,60 @@ def _has_exclusive_keys(td: LazyStackedTensorDict) -> bool:
     )
 
 
+def _exclusive_keys_or_reads_copies(td: TensorDictBase) -> tuple[bool, bool]:
+    """Whether a lazy stack that ``td`` is, stacks or holds, at any depth, has keys that only some of its members hold, and, if not, whether ``td`` reads copies, as :func:`_reads_copies`: one walk for both."""
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, LazyStackedTensorDict):
+        # the keys of a member that is a lazy stack, or that holds one, are
+        # those all the members of that stack hold
+        if td._has_exclusive_keys:
+            return True, False
+        children = td.tensordicts
+    elif td._reads_return_copies:
+        # a file or a store holds no lazy stack
+        return False, True
+    else:
+        children = [
+            value
+            for value in td.values()
+            if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+        ]
+    reads = False
+    for child in children:
+        child_exclusive, child_reads = _exclusive_keys_or_reads_copies(child)
+        if child_exclusive:
+            return True, False
+        reads = reads or child_reads
+    return False, reads
+
+
+def _reads_copies_or_holds_lazy_stack(td: TensorDictBase) -> tuple[bool, bool]:
+    """Whether ``td`` reads copies, as :func:`_reads_copies`, and whether ``td``, or a tensordict that it holds or stacks, holds a lazy stack: one walk for both."""
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, LazyStackedTensorDict):
+        reads = holds = False
+        children = td.tensordicts
+    elif td._reads_return_copies:
+        return True, False
+    else:
+        children = [
+            value
+            for value in td.values()
+            if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+        ]
+        reads = False
+        holds = any(isinstance(child, LazyStackedTensorDict) for child in children)
+    for child in children:
+        if reads and holds:
+            break
+        child_reads, child_holds = _reads_copies_or_holds_lazy_stack(child)
+        reads = reads or child_reads
+        holds = holds or child_holds
+    return reads, holds
+
+
 def _select_shared(value: Any, keys: list) -> Any:
     """The entries under ``keys`` of a tensor-collection operand, typed or not, for a method that runs on those keys of a lazy stack; other operands as they are."""
     if isinstance(value, TypedTensorDict):
@@ -781,8 +835,8 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # stack, which writing back the leaves read from self cannot do when they
     # are nested, also where the members read copies, such as h5 files (#2773).
     # Other sources take the inherited path. On a stack with exclusive keys,
-    # also in a stack that it stacks (#2759), which the method leaves
-    # unchanged, and where only the entries of the members read copies, it
+    # also in a stack that it stacks or that a member holds (#2759), which the
+    # method leaves unchanged, and where only the entries of the members read copies, it
     # changes a copy of the shared leaves, each read as one stacked tensor,
     # which the source writes into its members (#2739). Members that differ
     # in shape change their shared leaves through a selection of them.
@@ -794,29 +848,46 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         # torch.compile, newer torch gives the name of the code of a wrapper
         # such as new_func, not the name that functools.wraps set
         name = inspect.unwrap(method).__name__.lstrip("_")
-        if not _has_exclusive_keys(source) and (
-            source._reads_return_copies or not _reads_copies(source)
-        ):
+        exclusive, reads = _exclusive_keys_or_reads_copies(source)
+        on_copies = exclusive or (reads and not source._reads_return_copies)
+        if on_copies:
+            try:
+                items = list(source.items(True, True))
+            except RuntimeError:
+                # members that differ in shape cannot be read as one tensor:
+                # the method runs on the shared leaves of each member, which a
+                # selection holds (#2739), unless they read copies
+                if exclusive:
+                    # the walk stops at the first exclusive keys
+                    reads = _reads_copies(source)
+                shared = None
+                if not reads:
+                    try:
+                        keys = list(source.keys(True, True))
+                        shared = source.select(*keys)
+                    except RuntimeError:
+                        # members that hold tensordicts of other batch sizes
+                        pass
+                if shared is not None:
+                    args = [_select_shared(a, keys) for a in args]
+                    kwargs = {k: _select_shared(v, keys) for k, v in kwargs.items()}
+                    result = getattr(shared, name)(*args, **kwargs)
+                    # broadcasting self returns a new tensordict and writes nothing
+                    return self if result is shared else result
+                if _has_exclusive_keys(source) or (
+                    reads and not source._reads_return_copies
+                ):
+                    raise
+                # the exclusive keys are only in lazy stacks that the members
+                # hold and nothing else needs copies: the source changes
+                # them, as before (#2759)
+                on_copies = False
+        if not on_copies:
             result = getattr(source, name)(*args, **kwargs)
             if result is not source:
                 # broadcasting self returns a new tensordict and writes nothing
                 return result
             return self
-        try:
-            items = list(source.items(True, True))
-        except RuntimeError:
-            # members that differ in shape cannot be read as one tensor: the
-            # method runs on the shared leaves of each member, which a
-            # selection holds (#2739), unless they read copies
-            if _reads_copies(source):
-                raise
-            keys = list(source.keys(True, True))
-            args = [_select_shared(a, keys) for a in args]
-            kwargs = {k: _select_shared(v, keys) for k, v in kwargs.items()}
-            shared = source.select(*keys)
-            result = getattr(shared, name)(*args, **kwargs)
-            # broadcasting self returns a new tensordict and writes nothing
-            return self if result is shared else result
         leaves = TensorDict(batch_size=self.batch_size, device=self.device)
         for key, value in items:
             if isinstance(value, torch.Tensor):
@@ -841,6 +912,26 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         self._write_back(keys, values, name)
         return self
 
+    # Override: a lazy source indexes its members, so the result holds views of
+    # them, as indexing the stack does; the base method would stack copies of
+    # the flat leaves (#2759). Other sources, and members whose reads return
+    # copies (files, stores), index as before.
+    def _index_tensordict(self, index, new_batch_size=None, names=None):
+        source = self._source
+        if (
+            isinstance(source, LazyStackedTensorDict)
+            and new_batch_size is None
+            and names is None
+            and not source._reads_return_copies
+        ):
+            result = source[index]
+            if isinstance(result, TypedTensorDict):
+                # an int picks a member that is itself typed: wrap its source
+                result = result._source
+        else:
+            result = source._index_tensordict(index, new_batch_size, names)
+        return type(self)._wrap_td(result)
+
     # Override: a lazy source splits the input over its members, which write
     # it in place, also when they are locked or nested, are files or lazy
     # stacks themselves (#2771, #2773); members that hold files update a
@@ -857,11 +948,45 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             )
         if isinstance(input_dict_or_td, TypedTensorDict):
             input_dict_or_td = input_dict_or_td._source
-        if keys_to_update is None and _has_exclusive_keys(source):
-            keys_to_update = [
-                _unravel_key_to_tuple(key) for key in source.keys(True, True)
-            ]
-        if not source._reads_return_copies and _reads_copies(source):
+        exclusive, reads_copies = _exclusive_keys_or_reads_copies(source)
+        if exclusive:
+            # the walk stops at the first exclusive keys
+            reads_copies, holds_lazy_stack = _reads_copies_or_holds_lazy_stack(source)
+        if keys_to_update is None and exclusive:
+            try:
+                keys = [_unravel_key_to_tuple(key) for key in source.keys(True, True)]
+            except RuntimeError:
+                # members that hold tensordicts of other batch sizes list no
+                # keys: with exclusive keys only in lazy stacks that the
+                # members hold, the source updates them, as before (#2759)
+                if _has_exclusive_keys(source):
+                    raise
+            else:
+                if not holds_lazy_stack:
+                    keys_to_update = keys
+                else:
+                    # keys_to_update would miss the leaves of a lazy stack
+                    # that a member holds: keep the keys that every member
+                    # holds (#2759)
+                    if not _is_tensor_collection(type(input_dict_or_td)):
+                        input_dict_or_td = TensorDict.from_dict(
+                            input_dict_or_td, batch_dims=self.batch_dims
+                        )
+                    if _reads_copies(input_dict_or_td):
+                        # files and stores cannot select: read the keys
+                        input_keys = input_dict_or_td.keys(True, True)
+                        input_dict_or_td = TensorDict(
+                            {
+                                key: input_dict_or_td.get(key)
+                                for key in keys
+                                if key in input_keys
+                            },
+                            batch_size=input_dict_or_td.batch_size,
+                            device=input_dict_or_td.device,
+                        )
+                    else:
+                        input_dict_or_td = input_dict_or_td.select(*keys, strict=False)
+        if reads_copies and not source._reads_return_copies:
             # the update_ of a member leaves the files that it holds
             # unchanged: update a stacked copy, written back as for add_
             return self._inplace_on_copies(
@@ -1298,7 +1423,6 @@ _WRAP_DELEGATES = [
     "contiguous",
     "masked_fill",
     "masked_select",
-    "_index_tensordict",
 ]
 
 # In-place: delegate to _source, return self

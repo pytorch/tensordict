@@ -29,6 +29,7 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import (
     _deprecation,
+    KEY_SEPARATOR,
     lazy_stack,
     set_printoptions,
     tensorclass,
@@ -36,8 +37,10 @@ from tensordict import (
     UnbatchedTensor,
     unravel_key,
     unravel_key_list,
+    unravel_key_to_tuple,
 )
 from tensordict._indexing import convert_ellipsis_to_idx
+from tensordict._tensorcollection import TensorCollection
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -470,12 +473,33 @@ def test_unravel_keys():
 @pytest.mark.parametrize("key,expected", _VALID_KEYS)
 def test_unravel_key_to_tuple(key, expected):
     expected = (expected,) if isinstance(expected, str) else expected
-    assert _unravel_key_to_tuple(key) == expected
+    assert unravel_key_to_tuple(key) == expected
 
 
 @pytest.mark.parametrize("key", _INVALID_TUPLE_KEYS + _NON_TUPLE_INVALID_KEYS)
 def test_unravel_key_to_tuple_invalid(key):
-    assert _unravel_key_to_tuple(key) == ()
+    assert unravel_key_to_tuple(key) == ()
+
+
+def test_unravel_key_to_tuple_public():
+    assert "unravel_key_to_tuple" in tensordict.__all__
+    assert tensordict.unravel_key_to_tuple is tensordict.utils.unravel_key_to_tuple
+    # The private name keeps working for current callers.
+    assert _unravel_key_to_tuple is unravel_key_to_tuple
+
+
+def test_TensorCollection_public():
+    assert "TensorCollection" in tensordict.__all__
+    assert tensordict.TensorCollection is TensorCollection
+
+    class Data(tensordict.TensorClass):
+        x: torch.Tensor
+
+    td = TensorDict(x=torch.zeros(3), batch_size=[3])
+    assert isinstance(td, tensordict.TensorCollection)
+    assert isinstance(lazy_stack([td, td]), tensordict.TensorCollection)
+    assert isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection)
+    assert not isinstance(torch.zeros(3), tensordict.TensorCollection)
 
 
 def _reference_unravel_key_to_tuple(key):
@@ -595,14 +619,60 @@ def test_unravel_key_list_rejects_non_sequences(keys):
         unravel_key_list(keys)
 
 
+def test_key_separator_is_the_flatten_keys_default():
+    assert KEY_SEPARATOR == "."
+    assert tensordict.utils.KEY_SEPARATOR is KEY_SEPARATOR
+    # Every flatten_keys/unflatten_keys signature, stubs included, names the
+    # constant as its default rather than repeating the literal.
+    package = Path(tensordict.__file__).parent
+    root = package.parent
+    found, offenders = [], []
+    for path in sorted([*package.rglob("*.py"), *package.rglob("*.pyi")]):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not (
+                isinstance(node, ast.FunctionDef)
+                and node.name in ("flatten_keys", "unflatten_keys")
+            ):
+                continue
+            args = node.args.args
+            defaults = dict(
+                zip(
+                    [arg.arg for arg in args][-len(node.args.defaults) :],
+                    node.args.defaults,
+                )
+            )
+            if "separator" not in defaults:
+                continue
+            location = f"{path.relative_to(root)}:{node.lineno}"
+            found.append(location)
+            default = defaults["separator"]
+            if not (isinstance(default, ast.Name) and default.id == "KEY_SEPARATOR"):
+                offenders.append(f"{location}: {ast.unparse(default)}")
+    assert len(found) >= 16, found
+    assert not offenders, "\n".join(offenders)
+    for cls in (
+        tensordict.TensorDictBase,
+        tensordict.TensorDict,
+        tensordict.LazyStackedTensorDict,
+        tensordict.PersistentTensorDict,
+        tensordict.TensorDictStore,
+        tensordict.LazyStackedTensorDictStore,
+        tensordict.TensorDictParams,
+    ):
+        for name in ("flatten_keys", "unflatten_keys"):
+            parameters = inspect.signature(getattr(cls, name)).parameters
+            assert parameters["separator"].default == KEY_SEPARATOR, (cls, name)
+
+
 def test_C_module_is_deprecated():
     sys.modules.pop("tensordict._C", None)
     with pytest.warns(DeprecationWarning, match="tensordict._C is deprecated") as w:
         import tensordict._C as _C
     # The message names only public replacements.
     (message,) = [str(r.message) for r in w if "tensordict._C" in str(r.message)]
-    assert "Use tensordict.unravel_key (also for unravel_keys) and" in message
-    assert "tensordict.unravel_key_list." in message
+    assert "Use tensordict.unravel_key (also for unravel_keys)," in message
+    assert "tensordict.unravel_key_list and" in message
+    assert "tensordict.unravel_key_to_tuple (for _unravel_key_to_tuple)" in message
     assert "from tensordict.utils" not in message
     assert _C.unravel_key is unravel_key
     assert _C.unravel_key_list is unravel_key_list
@@ -1231,6 +1301,38 @@ def test_get_shared_executor():
     td = TensorDict({"a": torch.zeros(2), "b": torch.ones(3)})
     td.consolidate(num_threads=2)
     assert executor.submit(lambda: 2).result() == 2
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="os.fork is not available")
+def test_get_shared_executor_after_fork_with_lock_held():
+    # A process forked while a thread holds the executors lock must still be
+    # able to get a shared executor. The fork happens in a fresh interpreter,
+    # and the child is killed by SIGALRM if it hangs.
+    code = (
+        "import os, signal, threading\n"
+        "import tensordict.utils as tu\n"
+        "held, release = threading.Event(), threading.Event()\n"
+        "def hold():\n"
+        "    with tu._SHARED_EXECUTORS_LOCK:\n"
+        "        held.set()\n"
+        "        release.wait()\n"
+        "thread = threading.Thread(target=hold)\n"
+        "thread.start()\n"
+        "held.wait()\n"
+        "pid = os.fork()\n"
+        "if pid == 0:\n"
+        "    signal.alarm(10)\n"
+        "    ok = tu._get_shared_executor(2).submit(lambda: 1).result() == 1\n"
+        "    os._exit(0 if ok else 1)\n"
+        "release.set()\n"
+        "thread.join()\n"
+        "_, status = os.waitpid(pid, 0)\n"
+        "assert os.waitstatus_to_exitcode(status) == 0, status\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize(

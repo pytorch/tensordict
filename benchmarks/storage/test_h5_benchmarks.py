@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib
 
+import numpy as np
 import pytest
 import torch
 from tensordict import PersistentTensorDict, TensorDict
@@ -71,3 +72,29 @@ def test_h5_index_large_arrays(benchmark, large_arrays, idx):
 
 def test_h5_to_tensordict_many_keys(benchmark, many_keys):
     benchmark(many_keys.to_tensordict)
+
+
+@pytest.fixture(scope="module")
+def string_column(tmp_path_factory):
+    import h5py
+
+    # a string column that another tool wrote, one string per row
+    n_rows = 100_000
+    filename = tmp_path_factory.mktemp("h5") / "strings.h5"
+    with h5py.File(filename, "w") as f:
+        f["pos"] = np.zeros((n_rows, 3), dtype=np.float32)
+        f.create_dataset(
+            "mission",
+            data=[f"mission {i}" for i in range(n_rows)],
+            dtype=h5py.string_dtype(),
+        )
+    return PersistentTensorDict.from_h5(filename, non_tensor_as_stack=True)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [3, slice(100, 356), torch.arange(0, 100_000, 400)],
+    ids=["int", "slice", "sorted_fancy"],
+)
+def test_h5_index_string_column(benchmark, string_column, idx):
+    benchmark(lambda: string_column[idx]["mission"])

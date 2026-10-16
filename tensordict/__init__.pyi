@@ -29,6 +29,7 @@ from tensordict._td import (
     stack,
     TensorDict,
 )
+from tensordict._tensorcollection import TensorCollection
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.base import (
     _default_is_leaf as default_is_leaf,
@@ -49,11 +50,13 @@ from tensordict.base import (
     TensorDictBase,
 )
 from tensordict.functional import (
+    collate,
     dense_stack_tds,
     make_tensordict,
     merge_tensordicts,
     pad,
     pad_sequence,
+    unpad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import (
@@ -80,8 +83,13 @@ from tensordict.utils import (
     assert_close,
     capture_non_tensor_stack,
     get_printoptions,
+    is_bool,
+    is_floating,
+    is_inexact,
+    is_integer,
     is_non_tensor,
     is_tensorclass,
+    KEY_SEPARATOR,
     lazy_legacy,
     list_to_stack,
     parse_tensor_dict_string,
@@ -91,6 +99,7 @@ from tensordict.utils import (
     set_printoptions,
     unravel_key,
     unravel_key_list,
+    unravel_key_to_tuple,
 )
 
 __version__: str | None
@@ -99,6 +108,7 @@ __all__ = [
     # Core classes
     "TensorDict",
     "TensorDictBase",
+    "TensorCollection",
     "LazyStackedTensorDict",
     "UnbatchedTensor",
     "TensorClass",
@@ -109,6 +119,8 @@ __all__ = [
     "LazyStackedTensorDictStore",
     "NestedKey",
     "PackLayout",
+    # Constants
+    "KEY_SEPARATOR",
     # Factory functions
     "from_csv",
     "from_dict",
@@ -148,6 +160,9 @@ __all__ = [
     "merge_tensordicts",
     "pad",
     "pad_sequence",
+    "unpad_sequence",
+    # Data loading
+    "collate",
     # Utility functions
     "is_tensor_collection",
     "is_non_tensor",
@@ -156,7 +171,13 @@ __all__ = [
     "assert_allclose_td",
     "unravel_key",
     "unravel_key_list",
+    "unravel_key_to_tuple",
     "parse_tensor_dict_string",
+    # Dtype predicates
+    "is_inexact",
+    "is_floating",
+    "is_integer",
+    "is_bool",
     # Configuration
     "default_is_leaf",
     "is_leaf_nontensor",

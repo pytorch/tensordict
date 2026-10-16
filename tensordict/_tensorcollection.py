@@ -14,6 +14,24 @@ class TensorCollection:
     This is an abstract base class that provides the foundation for tensor collections
     like TensorDict and TensorClass. It serves as a common interface for all tensor
     collection types in the tensordict library.
+
+    Use it in type hints and ``isinstance`` checks for "a tensordict or a
+    tensorclass". Classes decorated with ``@tensorclass`` do not inherit from
+    it, only subclasses of :class:`~tensordict.TensorClass` do; to check both,
+    use :func:`~tensordict.is_tensor_collection`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorClass, TensorCollection, TensorDict
+        >>> class Data(TensorClass):
+        ...     x: torch.Tensor
+        >>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        >>> isinstance(td, TensorCollection)
+        True
+        >>> isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection)
+        True
+        >>> isinstance(torch.zeros(3), TensorCollection)
+        False
     """
 
     def __init__(self, *args, **kwargs):

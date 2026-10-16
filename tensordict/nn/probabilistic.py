@@ -148,6 +148,14 @@ def interaction_type() -> InteractionType | None:
 
     When it returns ``None``, each :class:`ProbabilisticTensorDictModule`
     uses its ``default_interaction_type``.
+
+    Examples:
+        >>> from tensordict.nn import interaction_type, set_interaction_type
+        >>> print(interaction_type())
+        None
+        >>> with set_interaction_type("mode"):
+        ...     print(interaction_type())
+        mode
     """
     return _interaction_type.get_mode()
 
@@ -155,7 +163,7 @@ def interaction_type() -> InteractionType | None:
 class set_interaction_type(_DecoratorContextManager):
     """Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function.
 
-    Inside the block, :func:`~tensordict.nn.probabilistic.interaction_type`
+    Inside the block, :func:`~tensordict.nn.interaction_type`
     returns ``type``, and every :class:`ProbabilisticTensorDictModule` uses it
     instead of its ``default_interaction_type``. When the block ends, the
     previous value comes back.
@@ -174,6 +182,12 @@ class set_interaction_type(_DecoratorContextManager):
             started inside the block see the process-wide interaction type.
             If ``False``, the interaction type applies to the whole process.
             Defaults to ``False``.
+
+    .. note:: Threads. By default the interaction type is process-wide: a
+        ``with`` block in one thread also changes what the modules running in
+        other threads at that time use. Pass ``thread_local=True`` to keep a
+        block to its own thread. A thread started inside such a block reads
+        the process-wide value, not the block's.
 
     Examples:
         >>> import torch
@@ -302,10 +316,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     log-probability of a value, call :meth:`log_prob`.
 
     The value depends on the interaction type. The module uses
-    :func:`~tensordict.nn.probabilistic.interaction_type` if it is set (see
+    :func:`~tensordict.nn.interaction_type` if it is set (see
     :class:`~tensordict.nn.set_interaction_type`). Otherwise it uses
     ``default_interaction_type``. See :class:`~tensordict.nn.InteractionType`
-    for what each type reads from the distribution.
+    for what each type reads from the distribution. By default the
+    interaction type is process-wide, so a :class:`~tensordict.nn.set_interaction_type`
+    block in one thread also changes the value that modules running in other
+    threads use. Pass ``thread_local=True`` to keep the block to its own
+    thread.
 
     With ``return_log_prob=True`` and the ``RANDOM`` interaction type, the
     module draws and scores the value in one call if the distribution class
@@ -399,7 +417,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             is DETERMINISTIC.
 
             .. note:: When a value is computed, the module first reads
-                :func:`~tensordict.nn.probabilistic.interaction_type`. If it
+                :func:`~tensordict.nn.interaction_type`. If it
                 returns ``None`` (outside of :class:`set_interaction_type`),
                 the module uses ``default_interaction_type``. TorchRL
                 collectors sample with ``InteractionType.RANDOM`` by default
