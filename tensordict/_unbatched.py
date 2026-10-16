@@ -72,6 +72,19 @@ def _cache_key_data(tensor: torch.Tensor):
     return extract_tensor_metadata_for_cache_key(tensor)
 
 
+def _unbatched_with_batch_size(tensor, batch_size):
+    """Return an alias of the ``UnbatchedTensor`` ``tensor`` with ``batch_size``.
+
+    Callers use this function rather than a method: Dynamo does not inline the
+    methods of the wrapper subclass, so a method would set the batch size on
+    the fake tensor, and Dynamo cannot read back a batch size such as
+    ``s0 // 2`` from there. Dynamo inlines this function and records the write.
+    """
+    out = torch.ops.aten.alias.default(tensor)
+    out.batch_size = batch_size
+    return out
+
+
 class _UnbatchedTensorMixin:
     """Shared Python protocol delegations for ``UnbatchedTensor`` variants."""
 
@@ -96,11 +109,6 @@ class _UnbatchedTensorMixin:
         batch_size = getattr(self, "_batch_size", None)
         if batch_size is not None:
             out.batch_size = batch_size
-        return out
-
-    def _with_batch_size(self, batch_size):
-        out = self.copy()
-        out.batch_size = batch_size
         return out
 
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int):
@@ -292,7 +300,7 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         def __new__(cls, data, batch_size=None):
             if isinstance(data, cls):
                 if batch_size is not None:
-                    return data._with_batch_size(batch_size)
+                    return _unbatched_with_batch_size(data, batch_size)
                 return data
             if not isinstance(data, torch.Tensor):
                 data = torch.as_tensor(data)
@@ -390,7 +398,7 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
             if dim < 0:
                 dim += len(batch_size) + 1
             batch_size.insert(dim, len(list_of_non_tensor))
-            return first._with_batch_size(batch_size)
+            return _unbatched_with_batch_size(first, batch_size)
 
 else:
     # Safe fallback: _make_subclass + __torch_function__
@@ -459,7 +467,7 @@ else:
         def __new__(cls, data, batch_size=None):
             if isinstance(data, cls):
                 if batch_size is not None:
-                    return data._with_batch_size(batch_size)
+                    return _unbatched_with_batch_size(data, batch_size)
                 return data
             if not isinstance(data, torch.Tensor):
                 data = torch.as_tensor(data)
@@ -525,4 +533,4 @@ else:
             if dim < 0:
                 dim += len(batch_size) + 1
             batch_size.insert(dim, len(list_of_non_tensor))
-            return first._with_batch_size(batch_size)
+            return _unbatched_with_batch_size(first, batch_size)

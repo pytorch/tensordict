@@ -253,39 +253,16 @@
  "td_with_unbatched filling": [],
  "td_with_unbatched key_edits": [],
  "td_with_unbatched keys": [],
- "td_with_unbatched masking": [
-  "masked_select(mask)"
- ],
- "td_with_unbatched pointwise": [
-  "(td > 0) ^ (td < 1)",
-  "(td > 0) | (td < 1)"
- ],
+ "td_with_unbatched masking": [],
+ "td_with_unbatched pointwise": [],
  "td_with_unbatched reductions": [],
  "td_with_unbatched select": [],
  "td_with_unbatched serialization": [
   "state_dict()"
  ],
- "td_with_unbatched setitem": [
-  "td[0] = dense[0] * 0"
- ],
- "td_with_unbatched shape": [
-  "chunk(2, 0)",
-  "split(2, 0)",
-  "split([1, 3], 0)",
-  "torch.cat([td, td], 1)",
-  "torch.stack([td, td], 1)"
- ],
- "td_with_unbatched update": [
-  "copy_(dense * 0)",
-  "update(dense + 1)",
-  "update(dense + 1, inplace=True)",
-  "update(dense + 1, keys_to_update=['a'])",
-  "update(dense[0], update_batch_size=True)",
-  "update_(dense * 0)",
-  "update_(dense * 0, keys_to_update=['a'])",
-  "update_at_(dense[0] * 0, 0, keys_to_update=['a'])",
-  "update_at_(dense[1:3] * 0, slice(1, 3))"
- ],
+ "td_with_unbatched setitem": [],
+ "td_with_unbatched shape": [],
+ "td_with_unbatched update": [],
  "typed_lazy apply": [],
  "typed_lazy empty": [],
  "typed_lazy filling": [],

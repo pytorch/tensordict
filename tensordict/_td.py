@@ -33,6 +33,7 @@ from tensordict._indexing import (
 )
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
+from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
     _default_is_leaf,
     _device_recorder,
@@ -801,7 +802,7 @@ class TensorDict(TensorDictBase):
 
         def _add_batch_dim_wrapper(key: str, value: Any) -> Any:
             if _is_unbatched(value):
-                return value._with_batch_size(td.batch_size)._add_batch_dim(
+                return _unbatched_with_batch_size(value, td.batch_size)._add_batch_dim(
                     in_dim=in_dim, vmap_level=vmap_level
                 )
             if is_tensor_collection(value):
@@ -842,7 +843,9 @@ class TensorDict(TensorDictBase):
 
         def _process_remove(value):
             if _is_unbatched(value):
-                return value._with_batch_size(self.batch_size)._remove_batch_dim(
+                return _unbatched_with_batch_size(
+                    value, self.batch_size
+                )._remove_batch_dim(
                     vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
                 )
             if is_tensor_collection(value):
@@ -874,7 +877,9 @@ class TensorDict(TensorDictBase):
 
         def _process_value(value):
             if _is_unbatched(value):
-                return value._with_batch_size(self.batch_size)._maybe_remove_batch_dim(
+                return _unbatched_with_batch_size(
+                    value, self.batch_size
+                )._maybe_remove_batch_dim(
                     funcname=funcname,
                     vmap_level=vmap_level,
                     batch_size=batch_size,
@@ -932,7 +937,7 @@ class TensorDict(TensorDictBase):
         for split, bsz in _zip_strict(splits, batch_sizes):
             for key, value in split.items():
                 if _is_unbatched(value):
-                    split[key] = value._with_batch_size(bsz)
+                    split[key] = _unbatched_with_batch_size(value, bsz)
         device = self.device
         is_shared = self._is_shared
         is_memmap = self._is_memmap
@@ -1843,7 +1848,7 @@ class TensorDict(TensorDictBase):
             if _is_unbatched(dest):
                 self._set_str(
                     key,
-                    dest._with_batch_size(self.batch_size),
+                    _unbatched_with_batch_size(dest, self.batch_size),
                     inplace=False,
                     validated=True,
                 )

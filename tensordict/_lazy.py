@@ -53,6 +53,7 @@ from tensordict._indexing import (
 )
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensorcollection import TensorCollection
+from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
     _copy_leaves,
     _default_is_leaf,
@@ -2352,7 +2353,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     raise RuntimeError
             elif _is_unbatched(out):
-                out = out._with_batch_size(self.batch_size)
+                out = _unbatched_with_batch_size(out, self.batch_size)
                 if self._hook_out is not None:
                     out = self._hook_out(out)
             elif self._hook_out is not None:
@@ -5422,7 +5423,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def _transform_value(self, item):
         if _is_unbatched(item):
-            return item._with_batch_size(self.batch_size)
+            return _unbatched_with_batch_size(item, self.batch_size)
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
     def _set_str(

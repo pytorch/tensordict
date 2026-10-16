@@ -867,6 +867,50 @@ class TestTD:
             for r, e in zip(result, expected):
                 assert (r["a", "b"] == e["a", "b"]).all()
 
+    @pytest.mark.parametrize("dynamic", [False, True])
+    @pytest.mark.parametrize(
+        "op",
+        ["chunk", "split", "cat", "stack", "or", "update", "update_at_", "setitem"],
+    )
+    def test_unbatched_new_batch_size(self, op, dynamic, mode):
+        # These operations give an unbatched entry a new batch size. With
+        # dynamic shapes it is an expression such as s0 // 2, which Dynamo
+        # must read back from the entry (#2789); with static shapes the entry
+        # must not keep the batch size of the input.
+        def setitem(td):
+            td[0] = td.to_tensordict()[0] * 0
+            return td
+
+        fn = {
+            "chunk": lambda td: td.chunk(2, 0),
+            "split": lambda td: td.split([1, 3], 0),
+            "cat": lambda td: (torch.cat([td, td], 0),),
+            "stack": lambda td: (torch.stack([td, td], 1),),
+            "or": lambda td: ((td > 0) | (td < 1),),
+            "update": lambda td: (td.update(td.to_tensordict() + 1),),
+            "update_at_": lambda td: (
+                td.update_at_(td.to_tensordict()[1:3] * 0, slice(1, 3)),
+            ),
+            "setitem": lambda td: (setitem(td),),
+        }[op]
+        fn_c = torch.compile(fn, fullgraph=True, dynamic=dynamic, mode=mode)
+        a, u = torch.randn(4, 3, 2, 1, 5), torch.randn(7, 11)
+
+        def make():
+            return TensorDict(
+                a=a.clone(), u=UnbatchedTensor(u.clone()), batch_size=[4, 3, 2, 1]
+            )
+
+        expected = fn(make())
+        result = fn_c(make())
+        assert len(result) == len(expected)
+        for r, e in zip(result, expected):
+            assert r.batch_size == e.batch_size
+            assert isinstance(r["u"], UnbatchedTensor)
+            assert r["u"].batch_size == e["u"].batch_size
+            assert (r["a"] == e["a"]).all()
+            assert (r["u"] == e["u"]).all()
+
     @pytest.mark.parametrize("named", [False, True])
     def test_apply_is_leaf(self, named, mode):
         # With is_leaf=is_leaf_nontensor, fn is called on the non-tensor entry
