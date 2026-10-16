@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import bisect
 import numbers
 import operator
 import os
@@ -401,31 +402,83 @@ def _shared_keys(tensordicts: list[TensorDict]) -> list[str]:
     return list(first)
 
 
-def _raise_if_copy_fails(
-    dests: list[Tensor], sources: list[Tensor], non_blocking: bool, start: int
-) -> None:
-    """Raises the error of the first copy of ``sources`` into ``dests`` that cannot be done, before any copy (#2776).
+def _is_grad_leaf(tensor: Tensor) -> bool:
+    return tensor.requires_grad and tensor.is_leaf
 
+
+def _copy_fails(dest: Tensor, source: Tensor) -> bool:
+    if dest.shape == source.shape:
+        return False
+    try:
+        return torch.broadcast_shapes(dest.shape, source.shape) != dest.shape
+    except RuntimeError:
+        return True
+
+
+def _raise_if_missing(name, source, dest) -> None:
+    if source is not None and dest is None:
+        raise KeyError(f"The key {name} was not found in the dest tensordict.")
+
+
+def _raise_if_update_fails(
+    members: list[TensorDictBase],
+    pieces: Sequence[TensorDictBase],
+    plans: list,
+    dests: list[Tensor],
+    sources: list[Tensor],
+    ends: list[int],
+    non_blocking: bool,
+    start: int = 0,
+) -> None:
+    """Raises the error that ``update_`` raises when it updates the ``members`` one at a time, before any member is written (#2776).
+
+    ``dests`` and ``sources`` are the leaves that the ``plans`` pair, those
+    of member ``i`` ending at ``ends[i]``. A member without a plan is
+    written by its own ``update_``, before the planned ones are copied.
     ``torch._foreach_copy_`` checks the leaves that require grad before it
     copies, but the shapes only at each copy, after the copies before it.
-    The pairs before ``start`` are only checked where a later pair differs
-    in shape: ``torch._foreach_copy_`` raises at them before it writes the
-    later ones.
+    The shapes of the pairs before ``start`` are left to that copy.
     """
+    grad = torch.is_grad_enabled()
     if [dest.shape for dest in dests[start:]] == [
         source.shape for source in sources[start:]
-    ]:
+    ] and (not grad or None not in plans or not any(map(_is_grad_leaf, dests))):
         return
-    for dest, source in zip(dests, sources):
-        if dest.shape == source.shape:
-            continue
-        try:
-            fails = torch.broadcast_shapes(dest.shape, source.shape) != dest.shape
-        except RuntimeError:
-            fails = True
-        if fails:
-            # copy_ raises before it writes, with the error of update_
-            dest.copy_(source, non_blocking=non_blocking)
+    first = next(
+        (
+            i
+            for i, (dest, source) in enumerate(zip(dests, sources))
+            if (grad and _is_grad_leaf(dest)) or _copy_fails(dest, source)
+        ),
+        None,
+    )
+    if first is None:
+        return
+    member = bisect.bisect_right(ends, first)
+    # a member before it without a plan raises first where it lacks a key
+    for td, piece, plan in zip(members[:member], pieces, plans):
+        if (
+            plan is None
+            and type(td).update_ is TensorDictBase.update_
+            and type(td)._update_ is TensorDictBase._update_
+        ):
+            piece._apply_nest(
+                _raise_if_missing,
+                td,
+                nested_keys=True,
+                default=None,
+                filter_empty=True,
+                named=True,
+                is_leaf=_is_leaf_nontensor,
+            )
+    # the copy of a member raises first at a leaf that requires grad
+    if grad:
+        for i in range(first + 1, ends[member]):
+            if _is_grad_leaf(dests[i]):
+                first = i
+                break
+    # copy_ raises before it writes, with the error of update_
+    dests[first].copy_(sources[first], non_blocking=non_blocking)
 
 
 def _stack_chain(
@@ -4245,21 +4298,24 @@ class LazyStackedTensorDict(TensorDictBase):
             plans = self._member_plans(pieces, non_blocking)
         else:
             plans = [None] * len(pieces)
-        dests, sources = [], []
+        dests, sources, ends = [], [], []
         for plan in plans:
             if plan is not None:
                 dests += plan[0]
                 sources += plan[1]
+            ends.append(len(dests))
         # a copy into the first member, unless it is a lazy stack, raises
-        # before the other members are written: only those are checked
+        # before the other members are written: their pairs are checked first
         start = 0
         if (
             None not in plans
             and plans
             and not isinstance(self.tensordicts[0], LazyStackedTensorDict)
         ):
-            start = len(plans[0][0])
-        _raise_if_copy_fails(dests, sources, non_blocking, start)
+            start = ends[0]
+        _raise_if_update_fails(
+            self.tensordicts, pieces, plans, dests, sources, ends, non_blocking, start
+        )
         # the members on other routes are written first: one that raises
         # leaves the planned members unchanged
         for td_dest, td_source, plan in _zip_strict(self.tensordicts, pieces, plans):
@@ -4271,7 +4327,16 @@ class LazyStackedTensorDict(TensorDictBase):
                     keys_to_update=keys_to_update,
                 )
         if dests:
-            _copy_leaves(dests, sources, non_blocking)
+            try:
+                _copy_leaves(dests, sources, non_blocking)
+            except RuntimeError:
+                # the copy checks the leaves that require grad before the
+                # shapes of the first member: raise as update_ of that
+                # member does where both fail
+                _raise_if_update_fails(
+                    self.tensordicts, pieces, plans, dests, sources, ends, non_blocking
+                )
+                raise
         for plan in plans:
             if plan is not None and plan[2] is not None:
                 plan[2]()

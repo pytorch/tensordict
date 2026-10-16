@@ -5094,6 +5094,12 @@ class TestLazyStackedTensorDict:
             td.copy_(source)
         for member in td.tensordicts:
             assert (member["a"] == 1).all()
+        # a member before it that lacks the key raises first
+        td_key = lazy_stack(
+            [TensorDict(b=torch.ones(3, 2), batch_size=[3]), members[1]], stack_dim
+        )
+        with pytest.raises(KeyError, match="The key a was not found"):
+            td_key.update_(source)
         if kind == "holds_h5" and not kind_rejects:
             # update_ writes such a member before it reaches the next one
             return
