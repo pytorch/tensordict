@@ -10,6 +10,7 @@ import itertools
 import pytest
 import torch
 from tensordict import (
+    is_non_tensor,
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorStack,
@@ -479,6 +480,22 @@ def test_stacked_getitem(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19))
     benchmark(lambda: td[key])
+
+
+def test_shallow_nested_getitemleaf(benchmark):
+    # td["next", "obs"]: each tensor leaf read checks for non-tensor data.
+    td = TensorDict({"next": {"obs": torch.zeros(3)}})
+    benchmark(lambda: td["next", "obs"])
+
+
+@pytest.mark.parametrize("value", ["tensor", "parameter", "tensordict"])
+def test_is_non_tensor(benchmark, value):
+    data = {
+        "tensor": torch.zeros(3),
+        "parameter": torch.nn.Parameter(torch.zeros(3)),
+        "tensordict": TensorDict(),
+    }[value]
+    benchmark(is_non_tensor, data)
 
 
 def test_lock_nested(benchmark):

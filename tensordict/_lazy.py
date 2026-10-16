@@ -331,7 +331,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             value = value[0]
             cls = type(value)
         if _is_tensor_collection(cls):
-            if not is_non_tensor(cls) and not _pass_through(value):
+            if not _pass_through(value):
                 yield from self._iter_helper(value, prefix=full_key)
         if not leaves_only or is_leaf(cls):
             yield key if prefix is None else full_key
