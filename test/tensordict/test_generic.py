@@ -55,6 +55,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collec
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import _NESTED_TENSORS_AS_LISTS, NO_DEFAULT, TensorDictBase
 from tensordict.functional import (
+    _pad_preflight,
     collate,
     dense_stack_tds,
     merge_tensordicts,
@@ -5985,6 +5986,111 @@ class TestGeneric:
         for t, snap in zip(lst.tensordicts, snapshots):
             assert t["x"] is snap
         assert lst.batch_size == torch.Size([2, 4])
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "dense",
+            "nested",
+            "names_locked",
+            "lazy_dim0",
+            "lazy_dim1",
+            "tensorclass",
+            "params",
+            "non_tensor",
+            "unbatched",
+            "empty_nested",
+            "top_lazy",
+            "top_tensorclass",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "pad_size",
+        [[0, 2], [1, -1, 0, 1], [-3, 0], [-4, 0], [0, 0, -3, 0], [-4, 0, 0, -3]],
+    )
+    def test_pad_safe_matches_preflight(self, case, pad_size):
+        # pad(safe=True) checks a dense tensordict while it pads it, not in a
+        # walk before: it must give the result or the error of that walk
+        # followed by an unchecked pad, including when a nested lazy stack
+        # fails in its own pad before a later leaf fails the check.
+        @tensorclass
+        class _Sample:
+            x: torch.Tensor
+
+        def lazy(dim):
+            # a lazy stack of batch size [3, 2] along dim
+            size = (3, 2)[1 - dim]
+            tds = [
+                TensorDict(x=torch.ones(size), batch_size=[size])
+                for _ in range((3, 2)[dim])
+            ]
+            return lazy_stack(tds, dim)
+
+        b = torch.zeros(3, 2, dtype=torch.bool)
+        inputs = {
+            "dense": lambda: TensorDict(a=torch.ones(3, 2, 4), b=b, batch_size=[3, 2]),
+            "nested": lambda: TensorDict(
+                n=TensorDict(c=torch.ones(3, 2, 1), batch_size=[3, 2]),
+                b=b,
+                batch_size=[3, 2],
+            ),
+            "names_locked": lambda: TensorDict(
+                {"a": torch.ones(3, 2), "n": {"c": torch.ones(3, 2, 5)}},
+                batch_size=[3, 2],
+                names=["t", "u"],
+            ).lock_(),
+            "lazy_dim0": lambda: TensorDict(l=lazy(0), b=b, batch_size=[3, 2]),
+            "lazy_dim1": lambda: TensorDict(l=lazy(1), b=b, batch_size=[3, 2]),
+            "tensorclass": lambda: TensorDict(
+                t=_Sample(x=torch.ones(3, 2), batch_size=[3, 2]), b=b, batch_size=[3, 2]
+            ),
+            "params": lambda: TensorDict(
+                p=TensorDictParams(TensorDict(w=torch.ones(3, 2), batch_size=[3, 2])),
+                b=b,
+                batch_size=[3, 2],
+            ),
+            "non_tensor": lambda: TensorDict(b=b, batch_size=[3, 2]).set_non_tensor(
+                "s", "x"
+            ),
+            "unbatched": lambda: TensorDict(
+                u=tensordict.UnbatchedTensor(torch.zeros(5)), b=b, batch_size=[3, 2]
+            ),
+            "empty_nested": lambda: TensorDict(
+                e=TensorDict(batch_size=[3, 2]), b=b, batch_size=[3, 2]
+            ),
+            "top_lazy": lambda: lazy(0),
+            "top_tensorclass": lambda: _Sample(x=torch.ones(3, 2), batch_size=[3, 2]),
+        }
+        td = inputs[case]()
+
+        def run(fn):
+            try:
+                return fn(), None
+            except Exception as err:
+                return None, (type(err), str(err))
+
+        def reference():
+            _pad_preflight(td, pad_size)
+            return pad(td, pad_size, safe=False)
+
+        out, err = run(lambda: pad(td, pad_size))
+        ref, ref_err = run(reference)
+        assert err == ref_err
+        if ref_err is not None:
+            return
+        assert type(out) is type(ref)
+        assert out.batch_size == ref.batch_size
+        assert out.names == ref.names
+        assert out.is_locked == ref.is_locked
+        keys = list(ref.keys(True, is_leaf=is_leaf_nontensor))
+        assert list(out.keys(True, is_leaf=is_leaf_nontensor)) == keys
+        for key in keys:
+            value, expected = out.get(key), ref.get(key)
+            assert type(value) is type(expected), key
+            if is_non_tensor(expected):
+                assert value.tolist() == expected.tolist(), key
+            elif not is_tensor_collection(expected):
+                assert torch.equal(value, expected), key
 
     def test_pad_inplace_tensorclass(self):
         @tensorclass

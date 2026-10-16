@@ -13,6 +13,7 @@ from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
     NonTensorStack,
+    pad,
     TensorDict,
 )
 from tensordict.utils import _unravel_key_to_tuple, unravel_key, unravel_key_list
@@ -1129,6 +1130,26 @@ def test_pack_nested(benchmark, op):
 def test_apply_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(td.apply, lambda x: x)
+
+
+@pytest.mark.parametrize("safe", [True, False])
+def test_pad_nested(benchmark, safe):
+    # a TorchRL transition, padded to a common length as split_trajectories does
+    td = TensorDict(
+        {
+            "observation": torch.randn(48, 17),
+            "action": torch.randn(48, 6),
+            "done": torch.zeros(48, 1, dtype=torch.bool),
+            "collector": {"traj_ids": torch.zeros(48, dtype=torch.long)},
+            "next": {
+                "observation": torch.randn(48, 17),
+                "reward": torch.randn(48, 1),
+                "done": torch.zeros(48, 1, dtype=torch.bool),
+            },
+        },
+        [48],
+    )
+    benchmark(pad, td, [0, 16], safe=safe)
 
 
 @pytest.mark.parametrize("op", ["neg", "mul_scalar", "add"])

@@ -141,7 +141,12 @@ def pad(
     if len(pad_size) % 2:
         raise RuntimeError("pad_size must have an even number of dimensions")
 
-    if safe:
+    # perf: a dense tensordict padded out of place runs the checks of
+    # _pad_preflight in the loop below, leaf by leaf and in the same order,
+    # rather than in a walk of the tree before it. Nothing is written to the
+    # input, so the first failing check raises the same error.
+    check = safe and not inplace and type(tensordict) is TensorDict
+    if safe and not check:
         _pad_preflight(tensordict, pad_size, inplace=inplace)
 
     if is_non_tensor(tensordict):
@@ -189,48 +194,71 @@ def pad(
     # Snapshot keys so mid-iteration rebinds on `out is tensordict` don't
     # invalidate the iterator under inplace=True.
     keys = list(tensordict.keys())
-    for key in keys:
-        tensor = tensordict._get_str(key, default=None)
-        if tensor is None:
-            continue
+    try:
+        for key in keys:
+            tensor = tensordict._get_str(key, default=None)
+            if tensor is None:
+                continue
 
-        if _is_unbatched(tensor):
-            if not inplace:
-                out._set_str(key, tensor, validated=True, inplace=False)
-            continue
-
-        if is_non_tensor(tensor):
-            if not tensor.batch_size:
-                # Unbatched non-tensor metadata: not indexed along the batch
-                # dims, so padding leaves it untouched.
+            if _is_unbatched(tensor):
                 if not inplace:
                     out._set_str(key, tensor, validated=True, inplace=False)
                 continue
-            if inplace and isinstance(tensor, NonTensorStack):
-                _pad_non_tensor(tensor, pad_size, inplace=True)
+
+            if is_non_tensor(tensor):
+                if check:
+                    _pad_preflight(tensor, pad_size, prefix=(key,))
+                if not tensor.batch_size:
+                    # Unbatched non-tensor metadata: not indexed along the batch
+                    # dims, so padding leaves it untouched.
+                    if not inplace:
+                        out._set_str(key, tensor, validated=True, inplace=False)
+                    continue
+                if inplace and isinstance(tensor, NonTensorStack):
+                    _pad_non_tensor(tensor, pad_size, inplace=True)
+                    continue
+                padded = _pad_non_tensor(tensor, pad_size, inplace=False)
+                del tensor
+                out._set_str(key, padded, validated=True, inplace=False)
                 continue
-            padded = _pad_non_tensor(tensor, pad_size, inplace=False)
+
+            if _is_tensor_collection(type(tensor)):
+                nested_check = check and type(tensor) is TensorDict
+                if check and not nested_check:
+                    _pad_preflight(
+                        tensor._tensordict if is_tensorclass(tensor) else tensor,
+                        pad_size,
+                        prefix=(key,),
+                    )
+                padded = pad(
+                    tensor, pad_size, value, inplace=inplace, safe=nested_check
+                )
+                if not inplace:
+                    out._set_str(key, padded, validated=True, inplace=False)
+                continue
+
+            shape = _shape(tensor)
+            cur_pad = reverse_pad
+            if len(pad_size) < len(shape) * 2:
+                cur_pad = [0] * (len(shape) * 2 - len(pad_size)) + reverse_pad
+            if check:
+                _pad_check_leaf(key, shape, pad_size, cur_pad)
+
+            padded = torch.nn.functional.pad(tensor, cur_pad, value=value)
+            # Drop the local ref to the old tensor before rebinding the dict
+            # entry: with no other refs, the _set_str overwrite drops the old
+            # storage's refcount to 0 and the allocator can reuse the block
+            # for the next leaf's pad.
             del tensor
             out._set_str(key, padded, validated=True, inplace=False)
-            continue
-
-        if _is_tensor_collection(type(tensor)):
-            padded = pad(tensor, pad_size, value, inplace=inplace, safe=False)
-            if not inplace:
-                out._set_str(key, padded, validated=True, inplace=False)
-            continue
-
-        cur_pad = reverse_pad
-        if len(pad_size) < len(_shape(tensor)) * 2:
-            cur_pad = [0] * (len(_shape(tensor)) * 2 - len(pad_size)) + reverse_pad
-
-        padded = torch.nn.functional.pad(tensor, cur_pad, value=value)
-        # Drop the local ref to the old tensor before rebinding the dict
-        # entry: with no other refs, the _set_str overwrite drops the old
-        # storage's refcount to 0 and the allocator can reuse the block
-        # for the next leaf's pad.
-        del tensor
-        out._set_str(key, padded, validated=True, inplace=False)
+    except Exception:
+        if check:
+            # The loop can fail before any check does, for example in the
+            # pad of a nested lazy stack, whose checks skip its stack dim:
+            # raise the error of the first failing check, if one fails, as
+            # the walk before the loop would have.
+            _pad_preflight(tensordict, pad_size)
+        raise
 
     if inplace:
         # Leaves now all match new_batch_size; flip the dict's advertised
@@ -338,22 +366,29 @@ def _pad_preflight(
             _pad_preflight(tensor, pad_size, inplace=inplace, prefix=nested_key)
             continue
         shape = _shape(tensor)
-        if len(pad_size) > 2 * len(shape):
-            raise RuntimeError(
-                f"pad_size of length {len(pad_size)} is too long for leaf "
-                f"{key!r} with shape {tuple(shape)}."
-            )
         cur_pad = reverse_pad
         if len(pad_size) < len(shape) * 2:
             cur_pad = [0] * (len(shape) * 2 - len(pad_size)) + reverse_pad
-        for i in range(0, len(cur_pad), 2):
-            dim = len(shape) - 1 - (i // 2)
-            left, right = cur_pad[i], cur_pad[i + 1]
-            if shape[dim] + left + right < 0:
-                raise RuntimeError(
-                    f"Pad ({left}, {right}) on dim {dim} of leaf {key!r} "
-                    f"(size {shape[dim]}) would produce a negative output size."
-                )
+        _pad_check_leaf(key, shape, pad_size, cur_pad)
+
+
+def _pad_check_leaf(
+    key: str, shape: torch.Size, pad_size: Sequence[int], cur_pad: list[int]
+) -> None:
+    """Raise if ``F.pad`` of the leaf at ``key`` with widths ``cur_pad`` would fail."""
+    if len(pad_size) > 2 * len(shape):
+        raise RuntimeError(
+            f"pad_size of length {len(pad_size)} is too long for leaf "
+            f"{key!r} with shape {tuple(shape)}."
+        )
+    for i in range(0, len(cur_pad), 2):
+        dim = len(shape) - 1 - (i // 2)
+        left, right = cur_pad[i], cur_pad[i + 1]
+        if shape[dim] + left + right < 0:
+            raise RuntimeError(
+                f"Pad ({left}, {right}) on dim {dim} of leaf {key!r} "
+                f"(size {shape[dim]}) would produce a negative output size."
+            )
 
 
 def _pad_non_tensor(
