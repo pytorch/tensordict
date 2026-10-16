@@ -43,9 +43,7 @@
  "memmap_td update": [],
  "nested_stacked_td apply": [],
  "nested_stacked_td empty": [],
- "nested_stacked_td filling": [
-  "detach_()"
- ],
+ "nested_stacked_td filling": [],
  "nested_stacked_td key_edits": [
   "get(('a', 'x'), None)"
  ],
@@ -68,9 +66,7 @@
  "nested_stacked_td update": [],
  "nested_td apply": [],
  "nested_td empty": [],
- "nested_td filling": [
-  "detach_()"
- ],
+ "nested_td filling": [],
  "nested_td key_edits": [],
  "nested_td keys": [],
  "nested_td masking": [
@@ -87,9 +83,7 @@
  "nested_td update": [],
  "nested_tensorclass apply": [],
  "nested_tensorclass empty": [],
- "nested_tensorclass filling": [
-  "detach_()"
- ],
+ "nested_tensorclass filling": [],
  "nested_tensorclass key_edits": [],
  "nested_tensorclass keys": [],
  "nested_tensorclass masking": [
@@ -108,9 +102,7 @@
  "nested_tensorclass update": [],
  "nested_typed_td apply": [],
  "nested_typed_td empty": [],
- "nested_typed_td filling": [
-  "detach_()"
- ],
+ "nested_typed_td filling": [],
  "nested_typed_td key_edits": [],
  "nested_typed_td keys": [],
  "nested_typed_td masking": [
@@ -127,9 +119,7 @@
  "nested_typed_td update": [],
  "stacked_td apply": [],
  "stacked_td empty": [],
- "stacked_td filling": [
-  "detach_()"
- ],
+ "stacked_td filling": [],
  "stacked_td key_edits": [
   "get(('a', 'x'), None)"
  ],
@@ -186,9 +176,7 @@
  "sub_td2 update": [],
  "td apply": [],
  "td empty": [],
- "td filling": [
-  "detach_()"
- ],
+ "td filling": [],
  "td key_edits": [],
  "td keys": [],
  "td masking": [
@@ -247,9 +235,7 @@
  ],
  "td_reset_bs apply": [],
  "td_reset_bs empty": [],
- "td_reset_bs filling": [
-  "detach_()"
- ],
+ "td_reset_bs filling": [],
  "td_reset_bs key_edits": [],
  "td_reset_bs keys": [],
  "td_reset_bs masking": [
@@ -266,9 +252,7 @@
  "td_reset_bs update": [],
  "td_with_non_tensor apply": [],
  "td_with_non_tensor empty": [],
- "td_with_non_tensor filling": [
-  "detach_()"
- ],
+ "td_with_non_tensor filling": [],
  "td_with_non_tensor key_edits": [],
  "td_with_non_tensor keys": [],
  "td_with_non_tensor masking": [
@@ -287,9 +271,7 @@
  "td_with_non_tensor update": [],
  "td_with_non_tensor_and_metadata apply": [],
  "td_with_non_tensor_and_metadata empty": [],
- "td_with_non_tensor_and_metadata filling": [
-  "detach_()"
- ],
+ "td_with_non_tensor_and_metadata filling": [],
  "td_with_non_tensor_and_metadata key_edits": [],
  "td_with_non_tensor_and_metadata keys": [],
  "td_with_non_tensor_and_metadata masking": [
@@ -306,9 +288,7 @@
  "td_with_non_tensor_and_metadata update": [],
  "td_with_unbatched apply": [],
  "td_with_unbatched empty": [],
- "td_with_unbatched filling": [
-  "detach_()"
- ],
+ "td_with_unbatched filling": [],
  "td_with_unbatched key_edits": [],
  "td_with_unbatched keys": [],
  "td_with_unbatched masking": [
@@ -346,9 +326,7 @@
  ],
  "typed_lazy apply": [],
  "typed_lazy empty": [],
- "typed_lazy filling": [
-  "detach_()"
- ],
+ "typed_lazy filling": [],
  "typed_lazy key_edits": [
   "get(('a', 'x'), None)"
  ],
@@ -371,9 +349,7 @@
  "typed_lazy update": [],
  "typed_td apply": [],
  "typed_td empty": [],
- "typed_td filling": [
-  "detach_()"
- ],
+ "typed_td filling": [],
  "typed_td key_edits": [],
  "typed_td keys": [],
  "typed_td masking": [
