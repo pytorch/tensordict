@@ -148,6 +148,8 @@ class _PersistentBackend:
     # set while from_dict writes data with a known batch size: groups then get
     # their metadata when they are created
     metadata_on_create = False
+    # Pickles made before the zarr read policy retain the warning default.
+    allow_pickle: bool | None = None
 
     def __init__(self, locking=None):
         self.locking = locking
@@ -694,10 +696,34 @@ class _ZarrBackend(_PersistentBackend):
         if marker is None:
             # foreign zarr store: return the raw payload
             return node[()]
-        raw = node[...].tobytes()
-        if marker.get("encoding") == "json":
-            return json.loads(raw.decode("utf-8"))
-        return pickle.loads(raw)
+        encoding = marker.get("encoding") if isinstance(marker, dict) else None
+        if encoding == "json":
+            return json.loads(node[...].tobytes().decode("utf-8"))
+        if encoding != "pickle":
+            raise ValueError(f"Unknown zarr non-tensor encoding: {encoding!r}.")
+        if self.allow_pickle is False:
+            raise RuntimeError(
+                "Refusing to load pickled non-tensor data from a zarr TensorDict. "
+                "Pickle can execute arbitrary code. Pass allow_pickle=True only "
+                "when the saved data is trusted."
+            )
+        if self.allow_pickle is None:
+            # point to the first frame outside tensordict: the user's call
+            frame, stacklevel = sys._getframe(1), 2
+            while frame is not None and frame.f_code.co_filename.startswith(
+                _PACKAGE_DIR
+            ):
+                frame, stacklevel = frame.f_back, stacklevel + 1
+            warnings.warn(
+                "PersistentTensorDict is loading a pickled non-tensor zarr field. "
+                "This is only safe for trusted data. Starting with TensorDict "
+                "0.17, the default will change to allow_pickle=False. Pass "
+                "allow_pickle=True to acknowledge trusted data or "
+                "allow_pickle=False to reject pickle now.",
+                FutureWarning,
+                stacklevel=stacklevel,
+            )
+        return pickle.loads(node[...].tobytes())
 
     @staticmethod
     def _normalize_index(idx):
@@ -1034,6 +1060,12 @@ class PersistentTensorDict(
             its rows. Otherwise it reads as one
             :class:`~tensordict.NonTensorData` that holds the whole array.
             Defaults to ``False``.
+        allow_pickle (bool or None, optional): zarr non-tensor read policy.
+            ``False`` rejects pickle before decoding; ``True`` permits it for
+            trusted data. ``None`` (default) permits it with a ``FutureWarning``
+            when read. Starting with TensorDict 0.17, the default will change to
+            ``allow_pickle=False``. Tensor and JSON entries, and HDF5, are
+            unaffected.
         **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset` (h5
             backend) or :meth:`zarr.Group.create_array` (zarr backend). With the
             zarr backend, arrays are stored as a single chunk without compression
@@ -1107,8 +1139,11 @@ class PersistentTensorDict(
         device=None,
         validate_batch_size: bool = True,
         non_tensor_as_stack: bool = False,
+        allow_pickle: bool | None = None,
         **kwargs,
     ):
+        if allow_pickle is not None and not isinstance(allow_pickle, bool):
+            raise TypeError("allow_pickle must be a bool or None.")
         if batch_size is None:
             batch_size = torch.Size(())
         self._locked_tensordicts = []
@@ -1120,6 +1155,7 @@ class PersistentTensorDict(
             )
         self.backend = backend
         self._backend = backend_cls(locking=self.LOCKING)
+        self._backend.allow_pickle = allow_pickle
         self._backend.check_available()
 
         self.filename = filename
@@ -1180,6 +1216,7 @@ class PersistentTensorDict(
         mode="r",
         batch_size: torch.Size | None = None,
         non_tensor_as_stack: bool = False,
+        allow_pickle: bool | None = None,
     ):
         """Opens a zarr store; the public :meth:`~.from_zarr` calls it.
 
@@ -1194,6 +1231,7 @@ class PersistentTensorDict(
             batch_size=batch_size,
             backend="zarr",
             non_tensor_as_stack=non_tensor_as_stack,
+            allow_pickle=allow_pickle,
         )
         if batch_size is None:
             metadata = out._backend.read_attrs_metadata(out.file)
@@ -1220,6 +1258,7 @@ class PersistentTensorDict(
         device=None,
         backend: str = "h5",
         batch_dims: int | None = None,
+        allow_pickle: bool | None = None,
         **kwargs,
     ):
         """Converts a dictionary or a TensorDict to a h5 file or zarr store.
@@ -1246,6 +1285,11 @@ class PersistentTensorDict(
             batch_dims (int, optional): for a dict input without
                 ``batch_size``, the number of leading dims of the inferred
                 batch size. Exclusive with ``batch_size``.
+            allow_pickle (bool or None, optional): zarr read policy for the
+                returned handle. ``None`` (default) trusts the values just
+                written, as does ``True``. ``False`` rejects reads of pickled
+                non-tensor values. Reopening uses the new call's policy.
+                HDF5 is unaffected.
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`
                 (h5 backend) or :meth:`zarr.Group.create_array` (zarr backend).
 
@@ -1276,6 +1320,7 @@ class PersistentTensorDict(
             device=device,
             backend=backend,
             batch_dims=batch_dims,
+            allow_pickle=allow_pickle,
             **kwargs,
         )
 
@@ -1290,8 +1335,14 @@ class PersistentTensorDict(
         backend: str = "h5",
         names=None,
         batch_dims=None,
+        allow_pickle: bool | None = None,
         **kwargs,
     ):
+        if allow_pickle is not None and not isinstance(allow_pickle, bool):
+            raise TypeError("allow_pickle must be a bool or None.")
+        # Only this writer truncates the store and knows all its values.
+        if backend == "zarr" and allow_pickle is None:
+            allow_pickle = True
         # from_dict, which also sets the dimension names before writing the
         # metadata, so that a store that cannot replace an entry gets it once
         backend_cls = _BACKENDS.get(backend)
@@ -1313,7 +1364,12 @@ class PersistentTensorDict(
 
         # let's make a tensordict first
         out = cls(
-            group=file, batch_size=batch_size, device=device, backend=backend, **kwargs
+            group=file,
+            batch_size=batch_size,
+            device=device,
+            backend=backend,
+            allow_pickle=allow_pickle,
+            **kwargs,
         )
         out._backend.metadata_on_create = _has_batch_size
         if is_tensor_collection(input_dict):
@@ -1358,6 +1414,7 @@ class PersistentTensorDict(
             # a persisted batch size was already validated at write time
             validate_batch_size=nested_batch_size is None,
             non_tensor_as_stack=self._non_tensor_as_stack,
+            allow_pickle=self._backend.allow_pickle,
             **self._dataset_kwargs,
         )
         # share the backend instance so per-store state (e.g. the consolidated
@@ -2381,6 +2438,7 @@ class PersistentTensorDict(
                 device=td.device,
                 backend=self.backend,
                 non_tensor_as_stack=self._non_tensor_as_stack,
+                allow_pickle=self._backend.allow_pickle,
                 **self._dataset_kwargs,
             )
             self._nested_tensordicts[key]._backend = self._backend
@@ -2440,6 +2498,7 @@ class PersistentTensorDict(
                 device=self.device,
                 batch_size=self.batch_size,
                 non_tensor_as_stack=self._non_tensor_as_stack,
+                allow_pickle=self._backend.allow_pickle,
                 **self._dataset_kwargs,
             )
             clone._nested_tensordicts = nested_tds

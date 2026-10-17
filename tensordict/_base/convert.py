@@ -799,6 +799,7 @@ class _Conversion:
         batch_dims: int | None = None,
         batch_size: torch.Size | None = None,
         non_tensor_as_stack: bool = False,
+        allow_pickle: bool | None = None,
     ):
         """Creates a PersistentTensorDict from a zarr store.
 
@@ -825,6 +826,12 @@ class _Conversion:
                 leading dims equal the batch size. Otherwise it reads as one
                 :class:`~tensordict.NonTensorData` that holds the whole
                 array. Defaults to ``False``.
+            allow_pickle (bool or None, optional): whether to decode pickled
+                non-tensor values. ``False`` rejects them before decoding;
+                ``True`` permits them only for data you trust. The default,
+                ``None``, permits them with a ``FutureWarning`` when read.
+                Starting with TensorDict 0.17, the default will change to
+                ``allow_pickle=False``. Tensor and JSON entries are unaffected.
 
         Returns:
             A PersistentTensorDict representation of the input zarr store.
@@ -857,6 +864,7 @@ class _Conversion:
             mode=mode,
             batch_size=batch_size,
             non_tensor_as_stack=non_tensor_as_stack,
+            allow_pickle=allow_pickle,
         )
         if auto_batch_size:
             if batch_size is not None:
@@ -2961,6 +2969,8 @@ class _Conversion:
     def to_zarr(
         self,
         filename,
+        *,
+        allow_pickle: bool | None = None,
         **kwargs,
     ) -> Any:
         """Converts a tensordict to a PersistentTensorDict with the zarr backend.
@@ -2981,6 +2991,13 @@ class _Conversion:
                 dimensions of each leaf and trailing dimensions are left whole
                 (e.g. ``chunks=(16,)`` chunks every leaf along its first
                 dimension in blocks of 16).
+
+        Keyword Args:
+            allow_pickle (bool or None, optional): read policy for the returned
+                handle. ``None`` (default) trusts the values just written, as
+                does ``True``. ``False`` rejects reads of pickled non-tensor
+                values. Reopening the store with :meth:`~.from_zarr` uses that
+                call's policy, not the writer's.
 
         Returns:
             A :class:`~tensordict.PersistentTensorDict` instance linked to the newly created store.
@@ -3016,6 +3033,7 @@ class _Conversion:
             filename=filename,
             backend="zarr",
             names=self.names if self._has_names() else None,
+            allow_pickle=allow_pickle,
             **kwargs,
         )
 

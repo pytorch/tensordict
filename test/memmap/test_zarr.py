@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    from_zarr,
     lazy_stack,
     NonTensorData,
     NonTensorStack,
@@ -161,6 +162,181 @@ class TestZarrRoundTrip:
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrNonTensor:
+    @pytest.mark.parametrize("allow_pickle", [None, True, False])
+    @pytest.mark.parametrize("stack", [False, True])
+    @pytest.mark.parametrize("factory", ["constructor", "persistent", "tensor", "free"])
+    def test_pickle_read_policy(
+        self, tmp_path, monkeypatch, allow_pickle, stack, factory
+    ):
+        value = (
+            NonTensorStack(_CustomNonTensor(), {1, 2})
+            if stack
+            else NonTensorData(_CustomNonTensor(), batch_size=[2])
+        )
+        path = tmp_path / "policy.zarr"
+        TensorDict({"obj": value, "json": "text", "x": torch.zeros(2)}, [2]).to_zarr(
+            path
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            if factory == "constructor":
+                td = PersistentTensorDict(
+                    filename=path,
+                    backend="zarr",
+                    batch_size=[2],
+                    allow_pickle=allow_pickle,
+                )
+            else:
+                loader = {
+                    "persistent": PersistentTensorDict.from_zarr,
+                    "tensor": TensorDict.from_zarr,
+                    "free": from_zarr,
+                }[factory]
+                td = loader(path, allow_pickle=allow_pickle)
+            assert td["json"] == "text"
+            assert td["x"].shape == (2,)
+        if allow_pickle is False:
+
+            def unexpected_loads(*args, **kwargs):
+                pytest.fail("pickle.loads must not be called")
+
+            monkeypatch.setattr("tensordict.persistent.pickle.loads", unexpected_loads)
+            with pytest.raises(RuntimeError, match="allow_pickle=True"):
+                td["obj"]
+        elif allow_pickle is None:
+            with pytest.warns(
+                FutureWarning, match="0.17.*allow_pickle=False"
+            ) as record:
+                td["obj"]
+            assert record[0].filename == __file__
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                actual = td["obj"]
+                assert actual == (value.tolist() if stack else value.data)
+
+    @pytest.mark.parametrize("allow_pickle", [None, True, False])
+    @pytest.mark.parametrize(
+        "operation",
+        ["nested", "index", "get_at", "clone", "copy", "to", "pickle", "locked"],
+    )
+    def test_pickle_policy_propagation(self, tmp_path, allow_pickle, operation):
+        path = tmp_path / "policy.zarr"
+        TensorDict(
+            {("nested", "obj"): NonTensorData(_CustomNonTensor(), batch_size=[2])},
+            [2],
+        ).to_zarr(path)
+        td = PersistentTensorDict.from_zarr(path, allow_pickle=allow_pickle)
+        # Exercise both cached nested views and those reconstructed from metadata.
+        td["nested"]
+        key = ("nested", "obj")
+        if operation == "nested":
+            td, key = td["nested"], "obj"
+        elif operation == "index":
+            td = td[0]
+        elif operation == "clone":
+            td = td.clone(recurse=False)
+        elif operation == "copy":
+            td = td.clone(newfile=tmp_path / "copy.zarr")
+        elif operation == "to":
+            td = td.to("cpu")
+        elif operation == "pickle":
+            td = pickle.loads(pickle.dumps(td))
+        elif operation == "locked":
+            td.lock_()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            if allow_pickle is False:
+                with pytest.raises(RuntimeError, match="allow_pickle=True"):
+                    td.get_at(key, 0) if operation == "get_at" else td[key]
+            elif allow_pickle is None:
+                with pytest.warns(FutureWarning, match="0.17.*allow_pickle=False"):
+                    td.get_at(key, 0) if operation == "get_at" else td[key]
+            else:
+                result = td.get_at(key, 0) if operation == "get_at" else td[key]
+                assert (
+                    result.data if is_non_tensor(result) else result
+                ) == _CustomNonTensor()
+
+    def test_pickle_policy_old_state(self, tmp_path):
+        path = tmp_path / "old.zarr"
+        TensorDict({"obj": _CustomNonTensor()}, []).to_zarr(path)
+        td = PersistentTensorDict.from_zarr(path)
+        state = td.__getstate__()
+        del state["_backend"].allow_pickle
+        restored = PersistentTensorDict.__new__(PersistentTensorDict)
+        restored.__setstate__(state)
+        with pytest.warns(FutureWarning, match="0.17.*allow_pickle=False"):
+            assert restored["obj"] == _CustomNonTensor()
+
+    @pytest.mark.parametrize(
+        "marker",
+        [{}, {"encoding": "other"}, {"encoding": None}, {"encoding": {}}, "pickle"],
+    )
+    @pytest.mark.parametrize("allow_pickle", [None, True, False])
+    def test_unknown_non_tensor_encoding(
+        self, tmp_path, monkeypatch, marker, allow_pickle
+    ):
+        path = tmp_path / "encoding.zarr"
+        TensorDict({"obj": _CustomNonTensor()}, []).to_zarr(path)
+        td = PersistentTensorDict.from_zarr(path, mode="r+", allow_pickle=allow_pickle)
+        td.file["obj"].attrs["__tensordict_non_tensor__"] = marker
+
+        def unexpected_loads(*args, **kwargs):
+            pytest.fail("pickle.loads must not be called for an unknown encoding")
+
+        monkeypatch.setattr("tensordict.persistent.pickle.loads", unexpected_loads)
+        with pytest.raises(ValueError, match="Unknown zarr non-tensor encoding"):
+            td["obj"]
+
+    @pytest.mark.parametrize("writer", ["to_zarr", "from_dict"])
+    @pytest.mark.parametrize("allow_pickle", [None, True, False])
+    def test_pickle_policy_writer(self, tmp_path, writer, allow_pickle):
+        path = tmp_path / "written.zarr"
+        td = TensorDict({"obj": _CustomNonTensor()}, [])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            if writer == "to_zarr":
+                written = td.to_zarr(path, allow_pickle=allow_pickle)
+            else:
+                written = PersistentTensorDict.from_dict(
+                    td, path, backend="zarr", allow_pickle=allow_pickle
+                )
+            if allow_pickle is False:
+                with pytest.raises(RuntimeError, match="allow_pickle=True"):
+                    written["obj"]
+            else:
+                assert written["obj"] == _CustomNonTensor()
+        # Neither an independent reader nor append mode inherits writer trust.
+        for mode in ("r", "a"):
+            reopened = from_zarr(path, mode=mode)
+            with pytest.warns(FutureWarning, match="0.17.*allow_pickle=False"):
+                assert reopened["obj"] == _CustomNonTensor()
+
+    @pytest.mark.parametrize(
+        "factory", ["constructor", "from_zarr", "free", "from_dict", "to_zarr"]
+    )
+    @pytest.mark.parametrize("invalid", [0, 1, "yes", [], np.bool_(True)])
+    def test_pickle_policy_validation(self, tmp_path, factory, invalid):
+        path = tmp_path / "invalid.zarr"
+        td = TensorDict({"x": torch.zeros(2)}, [2])
+        with pytest.raises(TypeError, match="allow_pickle must be a bool or None"):
+            if factory == "constructor":
+                PersistentTensorDict(
+                    filename=path, backend="zarr", mode="w", allow_pickle=invalid
+                )
+            elif factory == "from_zarr":
+                TensorDict.from_zarr(path, allow_pickle=invalid)
+            elif factory == "free":
+                from_zarr(path, allow_pickle=invalid)
+            elif factory == "from_dict":
+                PersistentTensorDict.from_dict(
+                    td, path, backend="zarr", allow_pickle=invalid
+                )
+            else:
+                td.to_zarr(path, allow_pickle=invalid)
+        assert not path.exists()
+
     def test_zarr_nontensor(self, tmpdir):
         path = Path(tmpdir) / "store.zarr"
         td = TensorDict(
