@@ -708,6 +708,12 @@ class _ZarrBackend(_PersistentBackend):
                 "when the saved data is trusted."
             )
         if self.allow_pickle is None:
+            # point to the first frame outside tensordict: the user's call
+            frame, stacklevel = sys._getframe(1), 2
+            while frame is not None and frame.f_code.co_filename.startswith(
+                _PACKAGE_DIR
+            ):
+                frame, stacklevel = frame.f_back, stacklevel + 1
             warnings.warn(
                 "PersistentTensorDict is loading a pickled non-tensor zarr field. "
                 "This is only safe for trusted data. Starting with TensorDict "
@@ -715,7 +721,7 @@ class _ZarrBackend(_PersistentBackend):
                 "allow_pickle=True to acknowledge trusted data or "
                 "allow_pickle=False to reject pickle now.",
                 FutureWarning,
-                stacklevel=5,
+                stacklevel=stacklevel,
             )
         return pickle.loads(node[...].tobytes())
 

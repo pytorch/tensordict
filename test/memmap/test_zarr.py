@@ -204,8 +204,11 @@ class TestZarrNonTensor:
             with pytest.raises(RuntimeError, match="allow_pickle=True"):
                 td["obj"]
         elif allow_pickle is None:
-            with pytest.warns(FutureWarning, match="0.17.*allow_pickle=False"):
+            with pytest.warns(
+                FutureWarning, match="0.17.*allow_pickle=False"
+            ) as record:
                 td["obj"]
+            assert record[0].filename == __file__
         else:
             with warnings.catch_warnings():
                 warnings.simplefilter("error", FutureWarning)
