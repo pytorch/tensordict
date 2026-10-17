@@ -1702,6 +1702,32 @@ class TestTDSequence:
         assert isinstance(seq_select.module, nn.ModuleDict)
         assert list(seq_select.module) == ["layer0", "layer2"]
 
+    @pytest.mark.parametrize("mapping", [dict, OrderedDict])
+    @pytest.mark.parametrize("in_keys", [None, ["y"]])
+    def test_named_nested_select_subsequence(self, mapping, in_keys):
+        first = TensorDictModule(lambda x: x + 1, ["x"], ["y"])
+        second = TensorDictModule(lambda y: y + 2, ["y"], ["z"])
+        unused = TensorDictModule(lambda y: y + 3, ["y"], ["unused"])
+        nested = TensorDictSequential(first, second, unused)
+        last = TensorDictModule(lambda z: z * 2, ["z"], ["out"])
+        seq = TensorDictSequential(
+            mapping(
+                discarded=TensorDictModule(lambda x: x - 1, ["x"], ["discarded"]),
+                nested=nested,
+                last=last,
+            )
+        )
+
+        selected = seq.select_subsequence(in_keys=in_keys, out_keys=["out"])
+        assert list(selected.module) == ["nested", "last"]
+        assert selected["last"] is last
+        assert selected["nested"][-1] is second
+        assert len(selected["nested"]) == (2 if in_keys is None else 1)
+        assert len(nested) == 3
+        assert len(seq) == 3
+        td = TensorDict(x=torch.tensor(0.0), y=torch.tensor(1.0))
+        torch.testing.assert_close(selected(td)["out"], torch.tensor(6.0))
+
     def test_ordered_dict_select_outkeys(self):
         ordered_dict = OrderedDict(
             layer0=TensorDictModule(
