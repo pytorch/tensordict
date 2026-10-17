@@ -353,7 +353,7 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 
 ```
 train, regular DataLoader: 956 images per second, 0.23 s
-train, tensorclass DataLoader: 4219 images per second, 0.05 s
+train, tensorclass DataLoader: 4630 images per second, 0.05 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -370,8 +370,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 579 images per second, 0.22 s
-val, tensorclass DataLoader: 17928 images per second, 0.01 s
+val, regular DataLoader: 584 images per second, 0.22 s
+val, tensorclass DataLoader: 22973 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -418,7 +418,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.546 seconds)
+**Total running time of the script:** (0 minutes 1.552 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
