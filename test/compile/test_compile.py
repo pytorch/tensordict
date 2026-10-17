@@ -4379,6 +4379,29 @@ class TestGuardCount:
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
+    @pytest.mark.parametrize("kind", ["memmap", "shared"])
+    def test_slice_dynamic_memmap_shared_no_recompile(self, kind, tmpdir):
+        # gh-2899: a memory-mapped or shared tensordict also compiles a slice
+        # with a symbolic bound once, and keeps its flags as in eager
+        def fn(td, marker):
+            out = td[marker.shape[0] :]
+            return out.get("x").sum(), out._is_memmap, out._is_shared
+
+        td = TensorDict({"x": torch.randn(32, 3)}, batch_size=[32])
+        if kind == "memmap":
+            td = td.memmap_(tmpdir)
+        else:
+            td = td.share_memory_()
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, dynamic=True, fullgraph=True)
+        for n in (5, 7, 9):
+            marker = torch.zeros(n)
+            out, is_memmap, is_shared = compiled(td, marker)
+            expected, expected_memmap, expected_shared = fn(td, marker)
+            torch.testing.assert_close(out, expected)
+            assert (is_memmap, is_shared) == (expected_memmap, expected_shared)
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
     def test_contains_key_order_no_recompile(self):
         # `key in td` guards on the key, not on the order of the keys (#2892)
         def fn(td):

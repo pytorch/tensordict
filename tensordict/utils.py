@@ -2661,13 +2661,15 @@ def isin(
 def _index_preserve_data_ptr(index):
     if isinstance(index, tuple):
         return all(_index_preserve_data_ptr(idx) for idx in index)
+    # slices first: under torch.compile, ``index is None`` on a slice fixes the
+    # SymInt bounds it holds (gh-2899)
+    if isinstance(index, slice):
+        return index.start is None or index.start == 0
     # we can't use a list comprehension here because it fails with tensor indices
     if index is None or index is Ellipsis:
         return True
     # torch reads a bool as a 0-d mask, which copies
     if isinstance(index, int) and not isinstance(index, bool):
-        return True
-    if isinstance(index, slice) and (index.start == 0 or index.start is None):
         return True
     return False
 
