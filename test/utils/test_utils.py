@@ -8,6 +8,7 @@ import ast
 import collections
 import importlib
 import inspect
+import itertools
 import os
 import pkgutil
 import queue
@@ -37,7 +38,7 @@ from tensordict import (
     unravel_key,
     unravel_key_list,
 )
-from tensordict._indexing import convert_ellipsis_to_idx
+from tensordict._indexing import _slice_length, convert_ellipsis_to_idx
 from tensordict.utils import (
     _check_recursive_properties,
     _get_shared_executor,
@@ -207,6 +208,20 @@ def test_getitem_batch_size_ellipsis(index):
     # the Ellipsis does not need to be converted first
     tensor = torch.zeros(3, 4, 5)
     assert _getitem_batch_size(tensor.shape, index) == tensor[index].shape
+
+
+def test_slice_length_symbolic(monkeypatch):
+    # gh-2889: the formula that torch.compile takes, on ints, gives the length
+    # that slice.indices gives; a negative step, which a TensorDict without
+    # tensor leaves takes, keeps slice.indices
+    monkeypatch.setattr(tensordict._indexing, "is_dynamo_compiling", lambda: True)
+    bounds = [None, -12, -7, -3, -1, 0, 1, 2, 3, 7, 12]
+    for n in range(9):
+        for start, stop, step in itertools.product(
+            bounds, bounds, [None, 1, 2, 3, -1, -2, -3]
+        ):
+            index = slice(start, stop, step)
+            assert _slice_length(index, n) == len(range(n)[index]), (index, n)
 
 
 @pytest.fixture

@@ -24,6 +24,7 @@ from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
+from types import EllipsisType
 from typing import (
     Any,
     Callable,
@@ -2322,7 +2323,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if idx_unravel:
                 return self._get_tuple_maybe_non_tensor(idx_unravel, NO_DEFAULT)
 
-        if (istuple and not index) or (not istuple and index is Ellipsis):
+        # Ellipsis is found by its type, and an empty tuple by comparison:
+        # under torch.compile, an ``is`` test on a slice, or the truth value of
+        # a tuple holding one, fixes the bounds of the slice.
+        if (istuple and index == ()) or (not istuple and type(index) is EllipsisType):
             # empty tuple returns self
             return self
         if not istuple:
@@ -2335,7 +2339,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         #     torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
         #     for idx in index
         # )
-        if istuple and any(idx is Ellipsis for idx in index):
+        if istuple and any(type(idx) is EllipsisType for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if len(index) <= self.batch_dims and all(
             isinstance(idx, slice) and idx == slice(None) for idx in index

@@ -4124,6 +4124,61 @@ class TestGuardCount:
 
     """Tests that verify compile guard/recompile counts for optimized paths."""
 
+    @pytest.mark.parametrize(
+        "variant", ["start", "stop", "start_stop", "dim0", "batch_size"]
+    )
+    @pytest.mark.parametrize("tensorclass_", [False, True])
+    def test_slice_dynamic_no_recompile(self, variant, tensorclass_):
+        # gh-2889: a slice with a symbolic bound, or of a symbolic batch size,
+        # compiles once, as slicing the leaves does
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        def fn(td, marker):
+            a = marker.shape[0]
+            if variant == "start":
+                out = td[:, a:]
+            elif variant == "stop":
+                out = td[:, :a]
+            elif variant == "start_stop":
+                out = td[:, a : a + 4]
+            elif variant == "dim0":
+                out = td.transpose(0, 1)[a:]
+            else:
+                out = td[:, 3:]
+            return out.get("x").sum(), out.batch_size
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, dynamic=True, fullgraph=True)
+        for n in (5, 7, 9):
+            width = 32 + n if variant == "batch_size" else 32
+            x = torch.randn(2, width, 3)
+            if tensorclass_:
+                td = Data(x=x, batch_size=[2, width])
+            else:
+                td = TensorDict({"x": x}, batch_size=[2, width])
+            marker = torch.zeros(n)
+            out, batch_size = compiled(td, marker)
+            expected, expected_batch_size = fn(td, marker)
+            torch.testing.assert_close(out, expected)
+            assert batch_size == expected_batch_size
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
+    @pytest.mark.parametrize(
+        "index", [slice(None, None, -1), (slice(None), slice(2, 5, -1))]
+    )
+    def test_slice_dynamic_negative_step(self, index):
+        # gh-2889: a TensorDict without tensor leaves takes a negative step, and
+        # compiled gives the batch size that eager gives
+        def fn(td):
+            return td[index].batch_size
+
+        compiled = torch.compile(fn, backend="eager", dynamic=True, fullgraph=True)
+        for n in (5, 7, 9):
+            td = TensorDict({}, batch_size=[n, 6])
+            assert compiled(td) == fn(td)
+
     def test_clone_recurse_false_no_recompile(self):
         def fn(td):
             c = td.clone(recurse=False)
