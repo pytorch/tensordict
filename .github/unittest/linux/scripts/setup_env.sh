@@ -39,12 +39,25 @@ if [ ! -d "${conda_dir}" ]; then
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
+# Free-threaded Pythons (3.14t, 3.15t) are built with pyenv. They and Python
+# 3.15 install the test dependencies with pip instead of environment.yml, and
+# skip the optional ones that do not install yet: h5py, for instance, has no
+# wheels for 3.15.
+free_threaded=false
+pip_only=false
+if [[ "${PYTHON_VERSION}" == *t ]]; then
+    free_threaded=true
+    pip_only=true
+elif [[ "${PYTHON_VERSION}" == "3.15" ]]; then
+    pip_only=true
+fi
+
 # 2. Create test environment at ./env
 printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
-    if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-        # Install free-threaded Python 3.14 using pyenv with --disable-gil
+    if ${free_threaded}; then
+        # Install free-threaded Python using pyenv with --disable-gil
         # Install build dependencies
         apt install -y build-essential libssl-dev zlib1g-dev \
             libbz2-dev libreadline-dev libsqlite3-dev curl git \
@@ -56,11 +69,11 @@ if [ ! -d "${env_dir}" ]; then
         export PATH="${PYENV_ROOT}/bin:${PATH}"
         eval "$(pyenv init -)"
 
-        # Build Python 3.14 with free-threading (--disable-gil)
-        PYTHON_CONFIGURE_OPTS="--disable-gil" pyenv install 3.14
+        # Build Python with free-threading (--disable-gil): 3.15t builds 3.15
+        PYTHON_CONFIGURE_OPTS="--disable-gil" pyenv install "${PYTHON_VERSION%t}"
 
         # Set pyenv to use this version
-        pyenv global 3.14
+        pyenv global "${PYTHON_VERSION%t}"
 
         # Create a virtual environment using free-threaded Python
         python3 -m venv "${env_dir}"
@@ -70,7 +83,7 @@ if [ ! -d "${env_dir}" ]; then
 fi
 
 # Activate the environment
-if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+if ${free_threaded}; then
     # Ensure pyenv is initialized (needed for activation even if env already exists)
     export PYENV_ROOT="${root_dir}/.pyenv"
     export PATH="${PYENV_ROOT}/bin:${PATH}"
@@ -87,17 +100,14 @@ printf "* Installing dependencies (except PyTorch)\n"
 
 pip install pip --upgrade
 
-if [ "${PYTHON_VERSION}" == "3.14t" ]; then
-    # For free-threaded Python, install dependencies via pip
+if ${pip_only}; then
     # Install test dependencies (mirrors environment.yml)
-    pip install numpy expecttest pyyaml hypothesis future cloudpickle \
-        pytest pytest-benchmark pytest-mock pytest-instafail \
-        pytest-rerunfailures pytest-timeout pytest-xdist protobuf redis mypy
-    # h5py, orjson and mosaicml-streaming may not be available for 3.14t yet
-    pip install h5py || echo "h5py not available for Python 3.14t, skipping"
-    pip install orjson || echo "orjson not available for Python 3.14t, skipping"
-    pip install mosaicml-streaming || echo "mosaicml-streaming not available for Python 3.14t, skipping"
-    pip install "zarr>=3.0" || echo "zarr>=3.0 not available for Python 3.14t, skipping"
+    pip install numpy cloudpickle pytest pytest-benchmark pytest-instafail \
+        pytest-rerunfailures pytest-timeout pytest-xdist redis mypy
+    # Optional test dependencies, which may have no wheels for this Python yet
+    for pkg in h5py orjson mosaicml-streaming "zarr>=3.0"; do
+        pip install "${pkg}" || echo "${pkg} not available for Python ${PYTHON_VERSION}, skipping"
+    done
 else
     # For regular Python, use conda
     echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"

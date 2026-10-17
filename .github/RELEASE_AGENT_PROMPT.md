@@ -78,6 +78,11 @@ import json, re, sys
 print(json.dumps(re.findall(r"Programming Language :: Python :: (3\.\d+)", sys.stdin.read())))')
 ```
 
+The classifiers can name a Python that stable torch has no wheels for yet,
+such as 3.15 before torch 2.15: its smoke tests fail at "Install PyTorch and
+the wheel". Leave such a version out of `python_versions` until stable torch
+has wheels for it, and say so in the message of step 6.
+
 **test-infra branch (`pytorch_release`).** Use the pytorch/test-infra branch
 of the latest stable torch:
 
