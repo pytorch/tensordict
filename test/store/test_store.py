@@ -22,6 +22,7 @@ from tensordict import (
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
+    TensorClass,
     TensorDict,
 )
 from tensordict.base import TensorDictBase
@@ -4908,8 +4909,98 @@ class _MyDataWithNonTensor:
     label: str
 
 
+class _SubclassData(TensorClass):
+    obs: torch.Tensor
+    reward: torch.Tensor
+
+
+class _NotATensorClass:
+    @classmethod
+    def _from_tensordict(cls, *args, **kwargs):
+        raise AssertionError("Non-TensorClass reconstruction must not be called")
+
+
 class TestTensorClassStore:
     """Tests for TensorClass round-trip through TensorDictStore."""
+
+    @pytest.fixture
+    def stored_metadata(self):
+        # Stub only I/O: from_store still resolves and wraps the real class.
+        with mock.patch(
+            "tensordict.store._store._read_stored_metadata",
+            return_value=(b"[2]", None, None),
+        ) as metadata:
+            yield metadata
+
+    @pytest.mark.parametrize("tc_type", [_MyData, _SubclassData])
+    @pytest.mark.parametrize(
+        "source", ["class", "path", "stored", "override_class", "override_path"]
+    )
+    def test_from_store_resolved_type(self, tc_type, source, stored_metadata):
+        path = f"{tc_type.__module__}.{tc_type.__name__}"
+        explicit = None
+        raw_stored = None
+        if source in ("class", "override_class"):
+            explicit = tc_type
+        elif source in ("path", "override_path"):
+            explicit = path
+        if source == "stored":
+            raw_stored = path.encode()
+        elif source.startswith("override"):
+            raw_stored = b"missing_module.UnusedClass"
+        stored_metadata.return_value = (b"[2]", None, raw_stored)
+        local = TensorDict({"obs": torch.zeros(2), "reward": torch.ones(2)}, [2])
+        constructor = mock.Mock(return_value=local)
+
+        result = TensorDictStore.from_store.__func__(
+            constructor, td_id="test", tensorclass_cls=explicit
+        )
+
+        assert type(result) is tc_type
+        assert result._tensordict is local
+        assert local._tensorclass_cls == path
+        assert torch.equal(result.obs, torch.zeros(2))
+        constructor.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "source,value",
+        [
+            (source, value)
+            for value in (int, len, _NotATensorClass)
+            for source in ("class", "path", "stored")
+            if source != "class" or isinstance(value, type)
+        ],
+    )
+    def test_from_store_rejects_invalid_type(self, source, value, stored_metadata):
+        path = f"{value.__module__}.{value.__name__}"
+        explicit = value if source == "class" else path
+        if source == "stored":
+            explicit = None
+            stored_metadata.return_value = (b"[2]", None, path.encode())
+        constructor = mock.Mock(return_value=TensorDict({}, [2]))
+        with mock.patch.object(_NotATensorClass, "_from_tensordict") as rebuild:
+            with pytest.raises(TypeError, match="Expected a TensorClass type"):
+                TensorDictStore.from_store.__func__(
+                    constructor, td_id="test", tensorclass_cls=explicit
+                )
+            rebuild.assert_not_called()
+
+    def test_from_store_rejects_imported_instance(self, stored_metadata, monkeypatch):
+        instance = _MyData(obs=torch.zeros(2), reward=torch.ones(2), batch_size=[2])
+        path = f"{__name__}._stored_instance"
+        monkeypatch.setattr(path, instance, raising=False)
+        stored_metadata.return_value = (b"[2]", None, path.encode())
+        with pytest.raises(TypeError, match="Expected a TensorClass type"):
+            TensorDictStore.from_store.__func__(
+                mock.Mock(return_value=TensorDict({}, [2])), td_id="test"
+            )
+
+    def test_from_store_without_resolved_type(self, stored_metadata):
+        local = TensorDict({}, [2])
+        result = TensorDictStore.from_store.__func__(
+            mock.Mock(return_value=local), td_id="test"
+        )
+        assert result is local
 
     def test_from_tensordict_stores_class_path(self, store_kwargs):
         tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])
