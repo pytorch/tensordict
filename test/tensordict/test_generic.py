@@ -8719,6 +8719,7 @@ class TestGeneric:
         assert isinstance(out.get("v"), nn.Parameter)
         assert set(params.keys(True)) == {"w", "sub", ("sub", "v")}
 
+    @pytest.mark.skipif(not _has_h5py, reason="h5py needed for persistent tensordicts")
     def test_rename_keys_persistent(self, tmp_path):
         td = PersistentTensorDict.from_dict(
             TensorDict(a=torch.zeros(3), batch_size=[3]), tmp_path / "file.h5"
