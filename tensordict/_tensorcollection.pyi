@@ -49,7 +49,6 @@ from tensordict.utils import (
     _strtobool as _strtobool,
     Buffer as Buffer,
     DeviceType as DeviceType,
-    implement_for as implement_for,
     IndexType as IndexType,
     KEY_SEPARATOR as KEY_SEPARATOR,
     lazy_legacy as lazy_legacy,
@@ -482,7 +481,17 @@ class TensorCollection:
     @classmethod
     def from_h5(cls, filename, mode: str = "r"): ...
     @classmethod
-    def from_zarr(cls, filename, mode: str = "r"): ...
+    def from_zarr(
+        cls,
+        filename,
+        *,
+        mode: str = "r",
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
+        allow_pickle: bool | None = None,
+    ): ...
     @classmethod
     def from_schema(
         cls,
@@ -1440,7 +1449,9 @@ class TensorCollection:
     ) -> Self: ...
     def to_struct_array(self) -> np.ndarray: ...
     def to_h5(self, filename, **kwargs) -> Any: ...
-    def to_zarr(self, filename, **kwargs) -> Any: ...
+    def to_zarr(
+        self, filename, *, allow_pickle: bool | None = None, **kwargs
+    ) -> Any: ...
     def to_store(
         self,
         *,

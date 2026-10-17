@@ -38,8 +38,8 @@ from typing import (
 )
 
 import numpy as np
+import pyvers
 import torch
-from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
 from tensordict._deprecation import (
     deprecated_attributes,
@@ -4002,6 +4002,10 @@ __getattr__ = deprecated_attributes(
         "convert_ellipsis_to_idx": (_indexing.convert_ellipsis_to_idx, None),
         "erase_cache": (_erase_cache_first, None),
         "get_json_backend": (_utils_key_json.get_json_backend, None),
+        # tensordict depends on pyvers only for this alias and for the
+        # implement_for aliases of tensordict and tensordict.tensordict: drop
+        # pyvers from pyproject.toml with them.
+        "implement_for": (pyvers.implement_for, "pyvers.implement_for"),
         "infer_size_impl": (_infer_size_impl, None),
         "int_generator": (_int_generator, None),
         "is_nested_key": (

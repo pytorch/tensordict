@@ -226,6 +226,7 @@ def from_zarr(
     batch_dims: int | None = None,
     batch_size: torch.Size | None = None,
     non_tensor_as_stack: bool = False,
+    allow_pickle: bool | None = None,
 ) -> "TensorDictBase":
     """Converts a zarr store to a TensorDict.
 
@@ -240,6 +241,7 @@ def from_zarr(
         batch_dims=batch_dims,
         batch_size=batch_size,
         non_tensor_as_stack=non_tensor_as_stack,
+        allow_pickle=allow_pickle,
     )
 
 

@@ -285,6 +285,16 @@ def _use_generator(generator: torch.Generator | None):
                 generator.set_state(torch.get_rng_state())
 
 
+def _rename_entries(
+    tensordict: TensorDictBase, renames: list[tuple[NestedKey, NestedKey]]
+) -> None:
+    # Read every value before writing any, so that keys swapping names do not
+    # overwrite each other
+    values = [tensordict.pop(old_key) for old_key, _ in renames]
+    for (_, new_key), value in zip(renames, values):
+        tensordict.set(new_key, value)
+
+
 def _get_joint_sample_and_log_prob(
     dist: D.Distribution,
 ) -> Callable[[torch.Size], tuple[Any, Tensor | TensorDictBase]] | None:
@@ -663,6 +673,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             )
         self._log_prob_key = log_prob_key
         self._log_prob_keys = log_prob_keys
+        # (default key, custom key) pairs, renamed by
+        # ProbabilisticTensorDictSequential.log_prob
+        self._custom_log_prob_keys = []
+        if log_prob_keys is not None and len(log_prob_keys) == len(self._out_keys):
+            for out_key, lp_key in zip(self._out_keys, log_prob_keys):
+                lp_key_expected = _add_suffix(out_key, "_log_prob")
+                if lp_key != lp_key_expected:
+                    self._custom_log_prob_keys.append((lp_key_expected, lp_key))
 
         self.default_interaction_type = InteractionType(default_interaction_type)
 
@@ -907,10 +925,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             return dist.log_prob(tensordict.get(self.out_keys[0]))
 
     def _update_td_lp(self, lp):
+        renames = []
         for out_key, lp_key in _zip_strict(self.dist_sample_keys, self.log_prob_keys):
             lp_key_expected = _add_suffix(out_key, "_log_prob")
             if lp_key != lp_key_expected:
-                lp.rename_key_(lp_key_expected, lp_key)
+                renames.append((lp_key_expected, lp_key))
+        if renames:
+            _rename_entries(lp, renames)
 
     @dispatch(auto_batch_size=False)
     @_set_skip_existing_None()
@@ -1002,8 +1023,19 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 for key in self.out_keys
                 if key not in self.log_prob_keys
             ]
-            log_prob = dist.log_prob(*out_tensors)
-            tensordict_out.set(self.log_prob_key, log_prob)
+            if isinstance(dist, CompositeDistribution) and not (
+                len(out_tensors) == 1 and is_tensor_collection(out_tensors[0])
+            ):
+                # A composite takes one tensordict of samples: score the
+                # samples in the input, as log_prob() does
+                log_prob = self.log_prob(tensordict, dist=dist)
+                if is_tensor_collection(log_prob):
+                    tensordict_out.update(log_prob)
+                else:
+                    tensordict_out.set(self.log_prob_key, log_prob)
+            else:
+                log_prob = dist.log_prob(*out_tensors)
+                tensordict_out.set(self.log_prob_key, log_prob)
             # raise RuntimeError(
             #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
             #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
@@ -1570,14 +1602,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 )
                 for item in mods
             ):
-                return type(self)(*mods, return_composite=self.return_composite)
+                return self._keep_options(
+                    type(self)(*mods, return_composite=self.return_composite)
+                )
             elif isinstance(
                 mods[-1],
                 (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
             ):
-                return type(self)(*mods)
+                return self._keep_options(type(self)(*mods))
             else:
-                return TensorDictSequential(*mods)
+                return self._keep_options(TensorDictSequential(*mods))
 
     _dist_sample = ProbabilisticTensorDictModule._dist_sample
     _draw_dist_sample = ProbabilisticTensorDictModule._draw_dist_sample
@@ -1661,6 +1695,25 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         for m in reversed(list(self._module_iter())):
             result.extend(getattr(m, "dist_sample_keys", []))
         return result
+
+    def _log_prob_renames(self) -> tuple[list, bool]:
+        # The (default key, custom key) pairs of the modules, and whether a
+        # module was built while composite_lp_aggregate() was True: such a
+        # module has no custom key, and its log_prob_keys may raise.
+        # The loop runs to the end: dynamo cannot close the module iterator.
+        renames = []
+        built_aggregated = False
+        for m in self._module_iter():
+            if isinstance(m, ProbabilisticTensorDictSequential):
+                sub_renames, sub_aggregated = m._log_prob_renames()
+            elif isinstance(m, ProbabilisticTensorDictModule):
+                sub_renames = getattr(m, "_custom_log_prob_keys", ())
+                sub_aggregated = m._composite_lp_aggreate_at_init
+            else:
+                continue
+            renames.extend(sub_renames)
+            built_aggregated = built_aggregated or sub_aggregated
+        return renames, built_aggregated
 
     @property
     def num_samples(self):
@@ -1797,6 +1850,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         If `self.return_composite` is ``True`` and the distribution is a :class:`~tensordict.nn.distributions.CompositeDistribution`,
         this method will return the log-probability of the entire composite distribution.
+        While :func:`~tensordict.nn.composite_lp_aggregate` is ``False``, each entry is at
+        the key where a forward call writes it, as listed in :attr:`log_prob_keys`.
 
         Otherwise, it will only consider the last probabilistic module in the sequence.
         In that case the intermediate entries are written into ``tensordict``,
@@ -1826,10 +1881,21 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return_composite = self.return_composite
         if return_composite and isinstance(dist, CompositeDistribution):
             # Check the values within the dist - if not set, choose defaults
-            return dist.log_prob(
+            lp = dist.log_prob(
                 tensordict,
                 **kwargs,
             )
+            if is_tensor_collection(lp):
+                renames, built_aggregated = self._log_prob_renames()
+                if renames and not built_aggregated:
+                    # Use the keys a forward call writes. A nested sequence
+                    # with return_composite=False adds only its last
+                    # distribution.
+                    present = set(lp.keys(True, True))
+                    _rename_entries(
+                        lp, [pair for pair in renames if pair[0] in present]
+                    )
+            return lp
         last_module: ProbabilisticTensorDictModule = self._last_module
         out = last_module.log_prob(tensordict_inp, dist=dist, **kwargs)
         if is_tensor_collection(out):

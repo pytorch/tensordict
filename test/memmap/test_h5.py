@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import itertools
+import pickle
 import warnings
 from pathlib import Path
 
@@ -37,6 +38,22 @@ except ImportError:
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Serialization:
+    @pytest.mark.parametrize("allow_pickle", [None, True, False])
+    def test_zarr_pickle_policy_does_not_change_h5(self, tmp_path, allow_pickle):
+        path = tmp_path / "policy.h5"
+        with h5py.File(path, "w") as file:
+            file.create_dataset("x", data=np.arange(2))
+            file.create_dataset("text", data=b"text")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td = PersistentTensorDict(filename=path, allow_pickle=allow_pickle)
+            assert td["text"] == b"text"
+            assert torch.equal(td["x"], torch.arange(2))
+            clone = td.clone(recurse=False)
+            assert clone["text"] == b"text"
+            clone.close()
+            td.close()
+
     @classmethod
     def worker(cls, cyberbliptronics, q1, q2):
         assert isinstance(cyberbliptronics, PersistentTensorDict)
@@ -1306,6 +1323,24 @@ def test_kwargs_is_deprecated(tmpdir):
     assert "kwargs" not in vars(loaded)
     assert loaded._dataset_kwargs == {"compression": "gzip"}
     assert (loaded["b", "c"] == 0).all()
+    td.close()
+    loaded.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_locked_after_nested_access(tmp_path):
+    # gh-2920: locking after reading a nested view left a weakref in the
+    # pickled state
+    td = PersistentTensorDict.from_dict(
+        TensorDict({"a": torch.randn(3), ("b", "c"): torch.randn(3)}, batch_size=[3]),
+        filename=tmp_path / "x.h5",
+    )
+    td["b"]
+    td.lock_()
+    loaded = pickle.loads(pickle.dumps(td))
+    assert loaded.is_locked
+    assert loaded["b"].is_locked
+    assert (loaded["b", "c"] == td["b", "c"]).all()
     td.close()
     loaded.close()
 

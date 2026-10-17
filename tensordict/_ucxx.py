@@ -25,6 +25,13 @@ _ucxx = None
 _NEW_SCHEMA_FLAG = b"\x00"
 _SAME_SCHEMA_FLAG = b"\x01"
 
+# Include all installed torch dtypes, including float8 and dtype aliases.
+_WIRE_DTYPES = {
+    f"torch.{name}": value
+    for name, value in vars(torch).items()
+    if isinstance(value, torch.dtype)
+}
+
 
 def _check_ucxx(func):
     @functools.wraps(func)
@@ -64,6 +71,41 @@ def _metadata_hash(metadata: dict) -> bytes:
     """Deterministic hash of consolidation metadata for schema comparison."""
     raw = json.dumps(metadata, sort_keys=True).encode("utf-8")
     return hashlib.sha256(raw).digest()
+
+
+def _can_recv_into(
+    td: TensorDictBase,
+    total_bytes: int,
+    device: torch.device,
+    schema_hash: bytes,
+) -> bool:
+    """Whether the consolidated storage of ``td`` matches the incoming schema."""
+    if not td.is_consolidated():
+        return False
+    storage = td._consolidated["storage"]
+    if device.type == "cpu":
+        device = torch.device("cpu")
+    elif device.type == "cuda" and device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
+    if storage.numel() != total_bytes or storage.device != device:
+        return False
+    try:
+        td_schema_hash = _metadata_hash(td._consolidated["metadata"])
+    except (TypeError, ValueError):
+        # Unserializable metadata cannot match metadata sent over JSON.
+        return False
+    return td_schema_hash == schema_hash
+
+
+def _decode_uncollated_key(key) -> tuple[str, ...]:
+    """Canonicalize a JSON-encoded NestedKey before checking uniqueness."""
+    if isinstance(key, str):
+        return (key,)
+    if isinstance(key, list) and key:
+        return tuple(part for item in key for part in _decode_uncollated_key(item))
+    raise ValueError(
+        "Invalid uncollated key: expected a string or nonempty nested path."
+    )
 
 
 def _tensor_to_numpy(tensor: torch.Tensor) -> np.ndarray:
@@ -157,7 +199,7 @@ async def send_tensordict(
         metadata = td_c._consolidated["metadata"]
         storage = td_c._consolidated["storage"]
 
-        meta_bytes = json.dumps(metadata, sort_keys=True).encode("utf-8")
+        meta_bytes = json.dumps(metadata).encode("utf-8")
         meta_len = struct.pack("<Q", len(meta_bytes))
 
         await endpoint.send(np.frombuffer(meta_len, dtype=np.uint8))
@@ -186,12 +228,14 @@ async def recv_tensordict(
 
     Args:
         endpoint: a UCXX endpoint object.
-        td: if provided and already consolidated, receives directly into
-            its storage buffer (in-place update). Otherwise a new TensorDict
-            is constructed.
+        td: if provided and consolidated with matching layout, storage size,
+            and device, receives directly into its storage buffer (in-place
+            update). Otherwise returns a new TensorDict without modifying ``td``.
 
     Keyword Args:
-        device: device on which to allocate the storage buffer. Defaults to CPU.
+        device: device on which to receive. If omitted, uses the storage
+            device of a consolidated ``td``, even when its layout does not
+            match. Otherwise defaults to CPU.
 
     Returns:
         The received TensorDict.
@@ -210,18 +254,21 @@ async def recv_tensordict(
     if total_bytes is None:
         total_bytes = _compute_total_bytes(metadata)
 
-    if td is not None and td.is_consolidated():
-        storage = td._consolidated["storage"]
-        if storage.is_cuda:
-            await endpoint.recv(storage)
-        else:
-            storage_np = _tensor_to_numpy(storage)
-            await endpoint.recv(storage_np)
-        return td
-
     effective_device = (
         torch.device(device) if device is not None else torch.device("cpu")
     )
+    if td is not None and td.is_consolidated():
+        storage = td._consolidated["storage"]
+        if device is None:
+            effective_device = storage.device
+        if _can_recv_into(td, total_bytes, effective_device, _metadata_hash(metadata)):
+            if storage.is_cuda:
+                await endpoint.recv(storage)
+            else:
+                storage_np = _tensor_to_numpy(storage)
+                await endpoint.recv(storage_np)
+            return td
+
     storage = torch.empty(total_bytes, dtype=torch.uint8, device=effective_device)
 
     if storage.is_cuda:
@@ -268,8 +315,8 @@ def _compute_total_bytes(metadata: dict) -> int:
     """Compute total storage bytes from consolidation metadata."""
     total = 0
     leaves = metadata.get("leaves", {})
-    for _dtype, _shape, _start, stop, _pad in leaves.values():
-        total = max(total, stop)
+    for leaf in leaves.values():
+        total = max(total, leaf[3])
     for _key, val in metadata.items():
         if isinstance(val, dict) and "cls" in val:
             total = max(total, _compute_total_bytes(val))
@@ -453,7 +500,7 @@ class TensorDictPipe:
             metadata_with_size = dict(metadata)
             metadata_with_size["_total_bytes"] = storage.numel()
             metadata_with_size["_device"] = str(storage.device)
-            meta_bytes = json.dumps(metadata_with_size, sort_keys=True).encode("utf-8")
+            meta_bytes = json.dumps(metadata_with_size).encode("utf-8")
             meta_len = struct.pack("<Q", len(meta_bytes))
 
             await self._endpoint.send(np.frombuffer(meta_len, dtype=np.uint8))
@@ -547,8 +594,8 @@ class TensorDictPipe:
                 effective_device = torch.device(sender_device)
             self._recv_storage_spec = (total_bytes, effective_device)
 
-            if td is not None and self._can_recv_into(
-                td, total_bytes, effective_device
+            if td is not None and _can_recv_into(
+                td, total_bytes, effective_device, self._recv_schema_hash
             ):
                 storage = td._consolidated["storage"]
                 if storage.is_cuda:
@@ -572,6 +619,9 @@ class TensorDictPipe:
             self._recv_td = result
             return result
 
+        if flag != _SAME_SCHEMA_FLAG:
+            raise RuntimeError(f"Unknown TensorDictPipe protocol flag: {flag!r}.")
+
         # SAME_SCHEMA_FLAG: receive into td if it has the layout of the last
         # schema, otherwise into the buffer of the previous receive. When td
         # is that buffer, the check cannot change the target, so skip it.
@@ -579,7 +629,7 @@ class TensorDictPipe:
         if td is not None and (
             td is self._recv_td
             or self._recv_storage_spec is None
-            or self._can_recv_into(td, *self._recv_storage_spec)
+            or _can_recv_into(td, *self._recv_storage_spec, self._recv_schema_hash)
         ):
             recv_target = td
         if recv_target is None or not recv_target.is_consolidated():
@@ -598,26 +648,6 @@ class TensorDictPipe:
 
         return recv_target
 
-    def _can_recv_into(
-        self,
-        td: TensorDictBase,
-        total_bytes: int,
-        device: torch.device,
-    ) -> bool:
-        """Whether the consolidated storage of ``td`` matches the incoming schema."""
-        if not td.is_consolidated():
-            return False
-        storage = td._consolidated["storage"]
-        if storage.numel() != total_bytes or storage.device != device:
-            return False
-        try:
-            schema_hash = _metadata_hash(td._consolidated["metadata"])
-        except (TypeError, ValueError):
-            # The metadata of td cannot be serialized, so it cannot match
-            # the metadata that the sender serialized.
-            return False
-        return schema_hash == self._recv_schema_hash
-
     async def _arecv_uncollated(
         self,
         td: TensorDictBase | None = None,
@@ -634,14 +664,41 @@ class TensorDictPipe:
         await self._endpoint.recv(header_buf)
         header = json.loads(bytes(header_buf))
 
+        if not isinstance(header, dict) or not all(
+            isinstance(header.get(field), list)
+            for field in ("keys", "dtypes", "shapes")
+        ):
+            raise ValueError(
+                "Invalid uncollated header: expected keys, dtypes, and shapes lists."
+            )
+        keys, dtype_names, shapes = header["keys"], header["dtypes"], header["shapes"]
+        if not len(keys) == len(dtype_names) == len(shapes):
+            raise ValueError("Invalid uncollated header: list lengths must match.")
+        keys = [_decode_uncollated_key(key) for key in keys]
+        key_set = set(keys)
+        if len(key_set) != len(keys):
+            raise ValueError("Invalid uncollated header: keys must be unique.")
+        if any(key[:i] in key_set for key in keys for i in range(1, len(key))):
+            raise ValueError(
+                "Invalid uncollated header: a leaf key cannot also have descendants."
+            )
+        dtypes = []
+        for dtype_name, shape in zip(dtype_names, shapes):
+            if not isinstance(dtype_name, str) or dtype_name not in _WIRE_DTYPES:
+                raise ValueError("Invalid uncollated header: unknown torch dtype.")
+            if not isinstance(shape, list) or any(
+                type(dim) is not int or dim < 0 for dim in shape
+            ):
+                raise ValueError(
+                    "Invalid uncollated header: dimensions must be nonnegative integers."
+                )
+            dtypes.append(_WIRE_DTYPES[dtype_name])
+
         effective_device = (
             torch.device(device) if device is not None else torch.device("cpu")
         )
         result = {}
-        for key, dtype_str, shape in zip(
-            header["keys"], header["dtypes"], header["shapes"]
-        ):
-            dtype = getattr(torch, dtype_str.replace("torch.", ""))
+        for key, dtype, shape in zip(keys, dtypes, shapes):
             numel = 1
             for s in shape:
                 numel *= s

@@ -1830,6 +1830,27 @@ class TestTDSequence:
         td = TensorDict(x=torch.tensor(0.0), y=torch.tensor(1.0))
         torch.testing.assert_close(selected(td)["out"], torch.tensor(6.0))
 
+    @pytest.mark.parametrize("named", [False, True])
+    def test_select_subsequence_keeps_options(self, named):
+        first = TensorDictModule(lambda a: a + 1, ["a"], ["b"])
+        second = TensorDictModule(lambda x: x + 1, ["x"], ["y"])
+        modules = {"first": first, "second": second} if named else [first, second]
+        seq = TensorDictSequential(modules, partial_tolerant=True, inplace=False)
+        subsequences = [seq.select_subsequence(out_keys=["b", "y"])]
+        # A nested sequence keeps its own options.
+        outer = TensorDictSequential(seq, TensorDictModule(lambda b: b, ["b"], ["c"]))
+        subsequences.append(outer.select_subsequence(out_keys=["c"])[0])
+        if not named:
+            subsequences.append(seq[:])
+        for sub in subsequences:
+            assert sub.partial_tolerant is True
+            assert sub.inplace is False
+            td = TensorDict(a=torch.zeros(2), batch_size=[2])  # no "x"
+            out = sub(td)
+            assert out is not td
+            assert set(out.keys()) == {"b"}
+            assert set(td.keys()) == {"a"}
+
     def test_ordered_dict_select_outkeys(self):
         ordered_dict = OrderedDict(
             layer0=TensorDictModule(
@@ -2398,6 +2419,81 @@ class TestTDSequence:
         torch.testing.assert_close(
             lp["sample0_log_prob"], Normal(out["loc0"], 1.0).log_prob(out["sample0"])
         )
+
+    @pytest.mark.parametrize("aggregate", [True, False])
+    @pytest.mark.parametrize("inner_return_composite", [None, True, False])
+    def test_probtdseq_log_prob_custom_keys(self, aggregate, inner_return_composite):
+        # log_prob() returns the keys a forward call writes, with the values
+        # it writes there.
+        with set_composite_lp_aggregate(aggregate):
+            prob_a = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["a"],
+                distribution_class=Normal,
+                return_log_prob=True,
+                log_prob_key="lp_a",
+            )
+            prob_b = ProbabilisticTensorDictModule(
+                in_keys={"loc": "a", "scale": "scale_b"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                return_log_prob=True,
+                log_prob_key="lp_b",
+            )
+            if inner_return_composite is None:
+                probs = [prob_a, prob_b]
+            else:
+                probs = [
+                    ProbabilisticTensorDictSequential(
+                        prob_a, prob_b, return_composite=inner_return_composite
+                    )
+                ]
+            seq = ProbabilisticTensorDictSequential(
+                TensorDictModule(
+                    lambda x: (x, x.exp(), 2 * x.exp()),
+                    in_keys=["x"],
+                    out_keys=["loc", "scale", "scale_b"],
+                ),
+                *probs,
+                return_composite=True,
+            )
+            assert set(seq.log_prob_keys) == {"lp_a", "lp_b"}
+            td = seq(TensorDict(x=torch.zeros(3), batch_size=[3]))
+            lp = seq.log_prob(td)
+            # A nested sequence with return_composite=False adds only the
+            # distribution of its last module.
+            expected = {"lp_b"} if inner_return_composite is False else {"lp_a", "lp_b"}
+            if aggregate:
+                torch.testing.assert_close(lp, sum(td[key] for key in expected))
+                return
+            assert set(lp.keys()) == expected
+            for key in expected:
+                torch.testing.assert_close(lp[key], td[key])
+
+    def test_probtdseq_log_prob_aggregate_changed_after_init(self):
+        # Modules built while composite_lp_aggregate() was True keep the
+        # default names when the sequence is scored with it False.
+        with set_composite_lp_aggregate(True):
+            seq = ProbabilisticTensorDictSequential(
+                ProbabilisticTensorDictModule(
+                    in_keys=["params"],
+                    out_keys=["a", "b"],
+                    distribution_class=CompositeDistribution,
+                    distribution_kwargs={
+                        "distribution_map": {"a": Normal, "b": Normal}
+                    },
+                    return_log_prob=True,
+                ),
+                return_composite=True,
+            )
+            params = TensorDict(
+                {k: {"loc": torch.zeros(3), "scale": torch.ones(3)} for k in "ab"},
+                batch_size=[3],
+            )
+            td = seq(TensorDict(params=params, batch_size=[3]))
+        with set_composite_lp_aggregate(False):
+            lp = seq.log_prob(td)
+        assert set(lp.keys()) == {"a_log_prob", "b_log_prob"}
 
     def test_probtdseq_nested_last_return_composite_false(self):
         # return_composite=False passes _requires_sample into the last module.
@@ -4077,6 +4173,33 @@ class TestProbabilisticTensorDictModule:
         assert isinstance(seq[0], ProbabilisticTensorDictModule)
         assert isinstance(seq[:2], ProbabilisticTensorDictSequential)
         assert isinstance(seq[-2:], ProbabilisticTensorDictSequential)
+
+    @pytest.mark.parametrize("return_composite", [False, True])
+    def test_prob_seq_subsequence_keeps_options(self, return_composite):
+        loc = TensorDictModule(lambda x: x + 1, ["x"], ["loc"])
+        prob0 = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample0"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        prob1 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "sample0"},
+            out_keys=["sample1"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        seq = ProbabilisticTensorDictSequential(
+            loc,
+            prob0,
+            prob1,
+            return_composite=return_composite,
+            partial_tolerant=True,
+            inplace=False,
+        )
+        for sub in (seq.select_subsequence(out_keys=["sample0"]), seq[1:], seq[:1]):
+            assert sub.partial_tolerant is True
+            assert sub.inplace is False
 
     @pytest.mark.skipif(IS_FB, reason="Not working within fbcode")
     def test_no_warning_single_key(self):
@@ -6487,6 +6610,98 @@ class TestCompositeDist:
             torch.testing.assert_close(log_prob, dist.log_prob(value))
 
     @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.RANDOM]
+    )
+    @pytest.mark.parametrize("partial", [False, True])
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_swapped_log_prob_keys(self, interaction, partial):
+        # Each custom key is the default key of the other sample.
+        params = TensorDict(
+            a={"loc": torch.zeros(3), "scale": torch.ones(3)},
+            b={"loc": torch.zeros(3), "scale": torch.full((3,), 10.0)},
+            batch_size=[3],
+        )
+        distribution_kwargs = {
+            "distribution_map": {"a": distributions.Normal, "b": distributions.Normal}
+        }
+        if partial:
+            # As TorchRL builds composites: the module does not see the map
+            distribution_class = functools.partial(
+                CompositeDistribution, **distribution_kwargs
+            )
+            distribution_kwargs = {}
+        else:
+            distribution_class = CompositeDistribution
+        module = ProbabilisticTensorDictModule(
+            in_keys=["params"],
+            out_keys=["a", "b"],
+            distribution_class=distribution_class,
+            distribution_kwargs=distribution_kwargs,
+            default_interaction_type=interaction,
+            return_log_prob=True,
+            log_prob_keys=["b_log_prob", "a_log_prob"],
+        )
+        sample = module(TensorDict(params=params, batch_size=[3]))
+        lp = module.log_prob(sample)
+        for out_key, lp_key in (("a", "b_log_prob"), ("b", "a_log_prob")):
+            expected = distributions.Normal(**params[out_key]).log_prob(sample[out_key])
+            torch.testing.assert_close(sample[lp_key], expected)
+            torch.testing.assert_close(lp[lp_key], expected)
+        assert set(lp.keys()) == {"a_log_prob", "b_log_prob"}
+
+    @pytest.mark.parametrize("aggregate", [True, False])
+    @pytest.mark.parametrize("partial", [False, True])
+    def test_prob_module_log_prob_keys_next_to_samples(self, aggregate, partial):
+        # The samples and their log-probabilities share the "act" sub-tensordict.
+        distribution_kwargs = {
+            "distribution_map": {"a": distributions.Normal, "b": distributions.Normal},
+            "name_map": {"a": ("act", "a"), "b": ("act", "b")},
+        }
+        if partial:
+            distribution_class = functools.partial(
+                CompositeDistribution, **distribution_kwargs
+            )
+            distribution_kwargs = {}
+        else:
+            distribution_class = CompositeDistribution
+        if aggregate:
+            # One out key holds both samples
+            out_keys = ["act"]
+            lp_kwargs = {"log_prob_key": ("act", "sample_log_prob")}
+        else:
+            out_keys = [("act", "a"), ("act", "b")]
+            lp_kwargs = {"log_prob_keys": [("act", "lp_a"), ("act", "lp_b")]}
+        with set_composite_lp_aggregate(aggregate):
+            module = ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=out_keys,
+                distribution_class=distribution_class,
+                distribution_kwargs=distribution_kwargs,
+                default_interaction_type=InteractionType.MODE,
+                return_log_prob=True,
+                **lp_kwargs,
+            )
+            params = TensorDict(
+                {k: {"loc": torch.zeros(3), "scale": torch.ones(3)} for k in "ab"},
+                batch_size=[3],
+            )
+            sample = module(TensorDict(params=params, batch_size=[3]))
+            lp = module.log_prob(sample)
+        expected = {
+            key: distributions.Normal(**params[key]).log_prob(sample["act", key])
+            for key in "ab"
+        }
+        if aggregate:
+            total = expected["a"] + expected["b"]
+            torch.testing.assert_close(sample["act", "sample_log_prob"], total)
+            torch.testing.assert_close(lp, total)
+        else:
+            for key in "ab":
+                torch.testing.assert_close(sample["act", f"lp_{key}"], expected[key])
+                torch.testing.assert_close(lp["act", f"lp_{key}"], expected[key])
+        torch.testing.assert_close(sample["act", "a"], torch.zeros(3))
+
+    @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
     @pytest.mark.parametrize("map_names", [True, False])
@@ -6819,6 +7034,102 @@ class TestCompositeDist:
         sample = module(params)
         assert "cont_log_prob" in sample.keys()
         assert ("nested", "cont_log_prob") in sample.keys(True)
+
+    # log_prob_keys require composite_lp_aggregate() to be False
+    @pytest.mark.parametrize(
+        "aggregate,custom_keys", [(True, False), (False, False), (False, True)]
+    )
+    @pytest.mark.parametrize("sample_keys", [["a"], ["a", "b"]])
+    @pytest.mark.parametrize("partial", [False, True])
+    def test_prob_module_seq_scores_preset_samples(
+        self, aggregate, custom_keys, sample_keys, partial
+    ):
+        # The prefix writes the samples, so the last module only scores them.
+        distribution_kwargs = {
+            "distribution_map": dict.fromkeys(sample_keys, distributions.Normal)
+        }
+        if partial:
+            distribution_class = functools.partial(
+                CompositeDistribution, **distribution_kwargs
+            )
+            distribution_kwargs = {}
+        else:
+            distribution_class = CompositeDistribution
+        with set_composite_lp_aggregate(aggregate):
+            prob = ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=sample_keys,
+                distribution_class=distribution_class,
+                distribution_kwargs=distribution_kwargs,
+                return_log_prob=True,
+                log_prob_keys=[f"lp_{key}" for key in sample_keys]
+                if custom_keys
+                else None,
+            )
+            out_keys = [
+                ("params", key, p) for key in sample_keys for p in ("loc", "scale")
+            ]
+            prefix = TensorDictModule(
+                lambda x: (x, x.exp()) * len(sample_keys) + (x + 1,) * len(sample_keys),
+                in_keys=["x"],
+                out_keys=out_keys + sample_keys,
+            )
+            seq = ProbabilisticTensorDictSequential(prefix, prob)
+            assert seq._requires_sample is False
+            td = TensorDict(x=torch.zeros(3), batch_size=[3])
+            expected = prob.log_prob(prefix(td.clone()))
+            out = seq(td)
+            for key in sample_keys:
+                torch.testing.assert_close(out[key], torch.ones(3))
+            if aggregate:
+                torch.testing.assert_close(out[prob.log_prob_key], expected)
+            else:
+                assert set(expected.keys()) == set(prob.log_prob_keys)
+                for key in prob.log_prob_keys:
+                    torch.testing.assert_close(out[key], expected[key])
+
+    @pytest.mark.parametrize("aggregate", [True, False])
+    def test_prob_module_scores_preset_samples_under_out_key(self, aggregate):
+        # The samples of both distributions are given under the one out key
+        # "act", which _requires_sample=False scores as a whole.
+        with set_composite_lp_aggregate(aggregate):
+            prob = ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=["act"],
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={
+                    "distribution_map": {
+                        "a": distributions.Normal,
+                        "b": distributions.Normal,
+                    }
+                },
+                return_log_prob=True,
+            )
+            params = TensorDict(
+                a={"loc": torch.zeros(3), "scale": torch.ones(3)},
+                b={"loc": torch.ones(3), "scale": torch.full((3,), 2.0)},
+                batch_size=[3],
+            )
+            act = TensorDict(a=torch.ones(3), b=torch.zeros(3), batch_size=[3])
+            out = prob(
+                TensorDict(params=params, act=act, batch_size=[3]),
+                _requires_sample=False,
+            )
+            expected = {
+                key: distributions.Normal(**params[key]).log_prob(act[key])
+                for key in "ab"
+            }
+            if aggregate:
+                torch.testing.assert_close(
+                    out["sample_log_prob"], expected["a"] + expected["b"]
+                )
+            else:
+                # The entries of the composite land under "act_log_prob"
+                for key in "ab":
+                    torch.testing.assert_close(
+                        out["act_log_prob", f"{key}_log_prob"], expected[key]
+                    )
+            assert (out["act"] == act).all()
 
 
 class TestAddStateIndependentNormalScale:

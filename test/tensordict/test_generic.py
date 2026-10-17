@@ -189,6 +189,20 @@ def device_fixture():
 _Pair = namedtuple("_Pair", ["x", "y"])
 
 
+def _leaf_storage(td, key):
+    # The storage behind a leaf. A lazy stack stacks its members' leaves into
+    # a new tensor at every read, so the data_ptr() of what it returns says
+    # nothing about whether a write kept the storage (it depends on the
+    # allocator reusing an address): compare the members' leaves instead.
+    if isinstance(td, LazyStackedTensorDict):
+        return tuple(_leaf_storage(member, key) for member in td.tensordicts)
+    key = (key,) if isinstance(key, str) else key
+    value = td.get(key[0])
+    if len(key) == 1:
+        return value.data_ptr()
+    return _leaf_storage(value, key[1:])
+
+
 class TestGeneric:
     # Generic, type-insensitive teests
 
@@ -12611,7 +12625,7 @@ class TestGeneric:
     @staticmethod
     def _update__plan_outcome(case, op):
         dest, source = TestGeneric._UPDATE__PLAN_CASES[case](TestGeneric._flat_td)
-        ptrs = {key: leaf.data_ptr() for key, leaf in dest.items(True, True)}
+        ptrs = {key: _leaf_storage(dest, key) for key in dest.keys(True, True)}
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             try:
@@ -12629,7 +12643,7 @@ class TestGeneric:
                 type(leaf).__name__,
                 leaf.tolist(),
                 leaf.requires_grad,
-                leaf.data_ptr() == ptrs[key],
+                _leaf_storage(dest, key) == ptrs[key],
             )
             if isinstance(leaf, torch.Tensor)
             else (type(leaf).__name__, leaf.tolist())
