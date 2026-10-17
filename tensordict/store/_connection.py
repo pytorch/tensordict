@@ -11,12 +11,16 @@ and :class:`~tensordict.store.LazyStackedTensorDictStore`.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import inspect
 import json
 import threading
 from typing import Any
 
 import torch
 from tensordict.store._utils import _decode_meta, _str_to_dtype
+
+_has_redis = importlib.util.find_spec("redis") is not None
 
 # Separator used for nested key paths in Redis keys
 _KEY_SEP = "."
@@ -55,27 +59,58 @@ def _connect_kwargs(
 def _client_settings(client) -> tuple | None:
     """Reads the server of a ``redis.asyncio.Redis`` client.
 
-    Returns ``(host, port, db, unix_socket_path, credentials)``, where
-    ``credentials`` holds the username and the password of the client, if it
-    has them. A copy of a store built with ``client`` (pickled or cloned)
-    connects with these. Returns ``None`` if ``client`` is ``None`` or does not
-    expose ``connection_pool.connection_kwargs`` (redis-py clients do).
+    Returns ``(host, port, db, unix_socket_path, options)``, where ``options``
+    holds credentials and standard Redis TLS settings. Copies (pickled or
+    cloned) and metadata readers connect with these. Custom connection-class
+    behavior beyond these settings is not reproduced. Returns ``None`` if the
+    client does not expose ``connection_pool.connection_kwargs``.
     """
     try:
         kwargs = client.connection_pool.connection_kwargs
     except AttributeError:
         return None
-    credentials = {
+    options = {
         name: kwargs[name]
         for name in ("username", "password")
         if kwargs.get(name) is not None
     }
+    if _has_redis:
+        import redis.asyncio as aioredis
+
+        connection_class = getattr(client.connection_pool, "connection_class", None)
+        if isinstance(connection_class, type) and issubclass(
+            connection_class, aioredis.SSLConnection
+        ):
+            # Redis selects SSLConnection via ssl=True, not connection_class.
+            # Pool/URL clients may omit defaults; keep those too, so caller
+            # kwargs cannot replace the client's verification policy.
+            options["ssl"] = True
+            options.update(
+                (name, kwargs.get(name, parameter.default))
+                for name, parameter in inspect.signature(
+                    aioredis.SSLConnection
+                ).parameters.items()
+                if name.startswith("ssl_")
+            )
+            options.update(
+                (name, value)
+                for name, value in kwargs.items()
+                if name.startswith("ssl_")
+            )
+            unsupported = (
+                options.keys() - inspect.signature(aioredis.Redis).parameters.keys()
+            )
+            if unsupported:
+                raise RuntimeError(
+                    "Cannot reproduce Redis TLS settings: "
+                    + ", ".join(sorted(unsupported))
+                )
     return (
         kwargs.get("host", "localhost"),
         kwargs.get("port", 6379),
         kwargs.get("db", 0),
         kwargs.get("path"),
-        credentials,
+        options,
     )
 
 
@@ -233,9 +268,9 @@ class _StoreConnection:
                     self._port,
                     self._db,
                     self._unix_socket_path,
-                    credentials,
+                    options,
                 ) = settings
-                self._redis_kwargs = {**self._redis_kwargs, **credentials}
+                self._redis_kwargs = {**self._redis_kwargs, **options}
         self._client = client
 
     def _run_sync(self, coro):

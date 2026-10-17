@@ -29,9 +29,9 @@ CPU-only machine, install PyTorch first. The `PyTorch Get Started page
 <https://pytorch.org/get-started/locally/>`__ gives the command for each
 build.
 
-The other runtime dependencies are ``numpy``, ``cloudpickle``, ``packaging``,
-``pyvers``, ``orjson`` before Python 3.13, and ``typing_extensions>=4.0`` on
-Python 3.10. ``pip`` and ``conda`` install them with tensordict.
+The other runtime dependencies are ``numpy``, ``cloudpickle``, ``pyvers``, and
+``typing_extensions>=4.0`` on Python 3.10. ``pip`` and ``conda`` install them
+with tensordict.
 
 Optional dependencies
 ---------------------
@@ -135,7 +135,7 @@ install them first:
 
 .. code-block:: bash
 
-   pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3" "typing_extensions>=4.0"
+   pip install numpy cloudpickle "pyvers>=0.2,<0.3" "typing_extensions>=4.0"
    pip install -e . --no-deps
 
 .. note::

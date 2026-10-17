@@ -102,17 +102,21 @@ def _resolve_tensorclass(
         resolve.
     """
     if isinstance(explicit, type):
-        return explicit
-    class_path: str | None = explicit
-    if class_path is None and raw_stored is not None:
-        class_path = (
-            raw_stored.decode() if isinstance(raw_stored, bytes) else raw_stored
-        )
-    if class_path is None:
-        return None
-    module_path, _, class_name = class_path.rpartition(".")
-    mod = importlib.import_module(module_path)
-    return getattr(mod, class_name)
+        resolved = explicit
+    else:
+        class_path: str | None = explicit
+        if class_path is None and raw_stored is not None:
+            class_path = (
+                raw_stored.decode() if isinstance(raw_stored, bytes) else raw_stored
+            )
+        if class_path is None:
+            return None
+        module_path, _, class_name = class_path.rpartition(".")
+        mod = importlib.import_module(module_path)
+        resolved = getattr(mod, class_name)
+    if not isinstance(resolved, type) or not _is_tensorclass(resolved):
+        raise TypeError(f"Expected a TensorClass type, got {resolved!r}")
+    return resolved
 
 
 def _iter_registry_keys(paths, include_nested, leaves_only):
@@ -2273,8 +2277,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         settings = _client_settings(kwargs.get("client"))
         if settings is not None:
             # the store is on the server of the client
-            host, port, db, unix_socket_path, credentials = settings
-            redis_kwargs = {**redis_kwargs, **credentials}
+            host, port, db, unix_socket_path, options = settings
+            redis_kwargs = {**redis_kwargs, **options}
         raw_bs, raw_dev, raw_tc = _read_stored_metadata(
             _connect_kwargs(host, port, db, unix_socket_path, redis_kwargs),
             prefix,

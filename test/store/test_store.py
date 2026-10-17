@@ -6,8 +6,10 @@
 import argparse
 import functools
 import importlib
+import inspect
 import io
 import pickle
+import ssl
 import uuid
 import warnings
 from unittest import mock
@@ -22,11 +24,12 @@ from tensordict import (
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
+    TensorClass,
     TensorDict,
 )
 from tensordict.base import TensorDictBase
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
-from tensordict.store._connection import _client_settings
+from tensordict.store._connection import _client_settings, _connect_kwargs
 from tensordict.store._lazy import _StoreStackElementView
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
@@ -2402,6 +2405,162 @@ def test_client_settings():
     host, port, db, path, credentials = _client_settings(client)
     assert (db, path, credentials) == (2, "/tmp/redis.sock", {})
     assert _client_settings(None) is None
+
+
+@pytest.mark.parametrize("transport", ["tcp", "unix", "custom", "opaque"])
+def test_client_settings_non_tls(transport):
+    """Address and credential reconstruction remains available for non-TLS clients."""
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis.asyncio as aioredis
+
+    class CustomConnection(aioredis.Connection):
+        pass
+
+    if transport == "opaque":
+        assert _client_settings(_ClientWithoutPool(aioredis.Redis())) is None
+        return
+    options = {"db": 2, "username": "u", "password": "p"}
+    if transport == "unix":
+        options["unix_socket_path"] = "/tmp/redis.sock"
+        client = aioredis.Redis(**options)
+        expected_class = aioredis.UnixDomainSocketConnection
+    elif transport == "custom":
+        client = aioredis.Redis(
+            connection_pool=aioredis.ConnectionPool(
+                connection_class=CustomConnection, **options
+            )
+        )
+        expected_class = aioredis.Connection
+    else:
+        client = aioredis.Redis(host="store.example", port=6381, **options)
+        expected_class = aioredis.Connection
+    reconstructed = aioredis.Redis(**_connect_kwargs(*_client_settings(client)))
+    pool = reconstructed.connection_pool
+    assert pool.connection_class is expected_class
+    assert _client_settings(reconstructed) == _client_settings(client)
+
+
+def test_client_unrepresentable_tls_settings():
+    """Unrepresentable TLS options are reported, not silently discarded."""
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis.asyncio as aioredis
+
+    class CustomSSLConnection(aioredis.SSLConnection):
+        def __init__(self, ssl_custom_option=True, **kwargs):
+            self.ssl_custom_option = ssl_custom_option
+            super().__init__(**kwargs)
+
+    client = aioredis.Redis(
+        connection_pool=aioredis.ConnectionPool(
+            connection_class=CustomSSLConnection, ssl_custom_option=True
+        )
+    )
+    with pytest.raises(
+        RuntimeError, match="Cannot reproduce Redis TLS settings: ssl_custom_option"
+    ):
+        _client_settings(client)
+
+
+@pytest.mark.parametrize("cls", [TensorDictStore, LazyStackedTensorDictStore])
+@pytest.mark.parametrize("origin", ["constructor", "url", "subclass"])
+@pytest.mark.parametrize("configured", [False, True])
+def test_client_tls_settings(cls, origin, configured, monkeypatch):
+    """Copies and metadata readers retain the supplied client's TLS settings."""
+    if not _has_redis:
+        pytest.skip("redis package not installed")
+    import redis.asyncio as aioredis
+
+    options = {}
+    if configured:
+        options = {
+            "ssl_keyfile": "client.key",
+            "ssl_certfile": "client.crt",
+            "ssl_cert_reqs": "required",
+            "ssl_ca_certs": "ca.crt",
+            "ssl_ca_data": "certificate data",
+            "ssl_ca_path": "certificates",
+            "ssl_check_hostname": False,
+            "ssl_min_version": ssl.TLSVersion.TLSv1_2,
+            "ssl_max_version": ssl.TLSVersion.TLSv1_3,
+            "ssl_ciphers": "ECDHE+AESGCM",
+            "ssl_password": "key-password",
+            "ssl_include_verify_flags": [ssl.VERIFY_X509_STRICT],
+            "ssl_exclude_verify_flags": [ssl.VERIFY_X509_TRUSTED_FIRST],
+        }
+        # Exercise the options supplied by the installed redis-py, including
+        # older releases that predate protocol bounds and verification flags.
+        parameters = inspect.signature(aioredis.Redis).parameters
+        options = {key: value for key, value in options.items() if key in parameters}
+    address = {
+        "host": "store.example",
+        "port": 6381,
+        "db": 3,
+        "username": "u",
+        "password": "p",
+    }
+    if origin == "constructor":
+        client = aioredis.Redis(ssl=True, **address, **options)
+    elif origin == "url":
+        client = aioredis.Redis.from_url("rediss://u:p@store.example:6381/3", **options)
+    else:
+
+        class CustomSSLConnection(aioredis.SSLConnection):
+            pass
+
+        client = aioredis.Redis(
+            connection_pool=aioredis.ConnectionPool(
+                connection_class=CustomSSLConnection, **address, **options
+            )
+        )
+    expected = {
+        name: options.get(name, parameter.default)
+        for name, parameter in inspect.signature(
+            aioredis.SSLConnection
+        ).parameters.items()
+        if name.startswith("ssl_")
+    }
+    clients = []
+    stacked = cls is LazyStackedTensorDictStore
+    metadata = (
+        [b"lazy_stack", b"2", b"0", b"[]", b""] if stacked else [b"[]", b"", None]
+    )
+
+    def pipeline(self, *args, **kwargs):
+        clients.append(self)
+        return mock.Mock(execute=mock.AsyncMock(return_value=metadata))
+
+    monkeypatch.setattr(aioredis.Redis, "pipeline", pipeline)
+    monkeypatch.setattr(cls, "to_tensordict", lambda self: {})
+    store = cls(
+        client=client,
+        **({"count": 2, "inner_batch_size": []} if stacked else {}),
+        # As with host and credentials, the supplied client takes precedence.
+        ssl=False,
+        ssl_cert_reqs="none",
+        ssl_check_hostname=not expected["ssl_check_hostname"],
+        username="ignored",
+        password="ignored",
+    )
+    copies = []
+    try:
+        copies.append(pickle.loads(pickle.dumps(store)))
+        copies.append(store.clone())
+        copies.append(store.clone(False))
+        copies.append(cls.from_store(td_id=store._td_id, client=client, ssl=False))
+        # Includes the temporary client used by _read_stored_metadata.
+        for reconstructed in [*(copy._client for copy in copies), *clients]:
+            pool = reconstructed.connection_pool
+            assert issubclass(pool.connection_class, aioredis.SSLConnection)
+            for name, value in {**address, **expected}.items():
+                if reconstructed is client and name not in pool.connection_kwargs:
+                    continue  # URL/pool clients can leave SSL defaults implicit.
+                assert pool.connection_kwargs[name] == value
+    finally:
+        for copy in copies:
+            copy.close()
+        store.close()
 
 
 class TestLazyStackedTensorDictStore:
@@ -4908,8 +5067,98 @@ class _MyDataWithNonTensor:
     label: str
 
 
+class _SubclassData(TensorClass):
+    obs: torch.Tensor
+    reward: torch.Tensor
+
+
+class _NotATensorClass:
+    @classmethod
+    def _from_tensordict(cls, *args, **kwargs):
+        raise AssertionError("Non-TensorClass reconstruction must not be called")
+
+
 class TestTensorClassStore:
     """Tests for TensorClass round-trip through TensorDictStore."""
+
+    @pytest.fixture
+    def stored_metadata(self):
+        # Stub only I/O: from_store still resolves and wraps the real class.
+        with mock.patch(
+            "tensordict.store._store._read_stored_metadata",
+            return_value=(b"[2]", None, None),
+        ) as metadata:
+            yield metadata
+
+    @pytest.mark.parametrize("tc_type", [_MyData, _SubclassData])
+    @pytest.mark.parametrize(
+        "source", ["class", "path", "stored", "override_class", "override_path"]
+    )
+    def test_from_store_resolved_type(self, tc_type, source, stored_metadata):
+        path = f"{tc_type.__module__}.{tc_type.__name__}"
+        explicit = None
+        raw_stored = None
+        if source in ("class", "override_class"):
+            explicit = tc_type
+        elif source in ("path", "override_path"):
+            explicit = path
+        if source == "stored":
+            raw_stored = path.encode()
+        elif source.startswith("override"):
+            raw_stored = b"missing_module.UnusedClass"
+        stored_metadata.return_value = (b"[2]", None, raw_stored)
+        local = TensorDict({"obs": torch.zeros(2), "reward": torch.ones(2)}, [2])
+        constructor = mock.Mock(return_value=local)
+
+        result = TensorDictStore.from_store.__func__(
+            constructor, td_id="test", tensorclass_cls=explicit
+        )
+
+        assert type(result) is tc_type
+        assert result._tensordict is local
+        assert local._tensorclass_cls == path
+        assert torch.equal(result.obs, torch.zeros(2))
+        constructor.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "source,value",
+        [
+            (source, value)
+            for value in (int, len, _NotATensorClass)
+            for source in ("class", "path", "stored")
+            if source != "class" or isinstance(value, type)
+        ],
+    )
+    def test_from_store_rejects_invalid_type(self, source, value, stored_metadata):
+        path = f"{value.__module__}.{value.__name__}"
+        explicit = value if source == "class" else path
+        if source == "stored":
+            explicit = None
+            stored_metadata.return_value = (b"[2]", None, path.encode())
+        constructor = mock.Mock(return_value=TensorDict({}, [2]))
+        with mock.patch.object(_NotATensorClass, "_from_tensordict") as rebuild:
+            with pytest.raises(TypeError, match="Expected a TensorClass type"):
+                TensorDictStore.from_store.__func__(
+                    constructor, td_id="test", tensorclass_cls=explicit
+                )
+            rebuild.assert_not_called()
+
+    def test_from_store_rejects_imported_instance(self, stored_metadata, monkeypatch):
+        instance = _MyData(obs=torch.zeros(2), reward=torch.ones(2), batch_size=[2])
+        path = f"{__name__}._stored_instance"
+        monkeypatch.setattr(path, instance, raising=False)
+        stored_metadata.return_value = (b"[2]", None, path.encode())
+        with pytest.raises(TypeError, match="Expected a TensorClass type"):
+            TensorDictStore.from_store.__func__(
+                mock.Mock(return_value=TensorDict({}, [2])), td_id="test"
+            )
+
+    def test_from_store_without_resolved_type(self, stored_metadata):
+        local = TensorDict({}, [2])
+        result = TensorDictStore.from_store.__func__(
+            mock.Mock(return_value=local), td_id="test"
+        )
+        assert result is local
 
     def test_from_tensordict_stores_class_path(self, store_kwargs):
         tc = _MyData(obs=torch.randn(5, 3), reward=torch.randn(5), batch_size=[5])

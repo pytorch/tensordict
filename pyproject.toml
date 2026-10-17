@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77", "wheel", "setuptools_scm"]
+requires = ["setuptools>=77", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
@@ -96,9 +96,7 @@ dependencies = [
     "torch>=2.13.0a0",
     "numpy",
     "cloudpickle",
-    "packaging",
-    # orjson fails to be installed in python 3.13t
-    'orjson ; python_version < "3.13"',
+    # only for tensordict's deprecated implement_for aliases
     "pyvers (>=0.2.0,<0.3.0)",
     # typedtensordict.py imports NotRequired from it on Python 3.10
     'typing_extensions>=4.0 ; python_version < "3.11"',
@@ -110,8 +108,9 @@ documentation = "https://docs.pytorch.org/tensordict/stable/"
 
 [project.optional-dependencies]
 tests = [
+    # test/compile/test_compile.py parses the torch version with it
+    "packaging",
     "pytest",
-    "pyyaml",
     "pytest-instafail",
     "pytest-rerunfailures",
     "pytest-benchmark",
