@@ -757,11 +757,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             _add_suffix(key, "_log_prob") for key in [*self._out_keys, *sample_keys]
         }
         default_keys.add("sample_log_prob")
+        lp_keys = log_prob_keys if log_prob_keys is not None else [log_prob_key]
         clashes = [
             (lp_key, sample_key)
+            # A key of another type, such as a list, fails at the first call
             for lp_key in map(
-                unravel_key,
-                log_prob_keys if log_prob_keys is not None else [log_prob_key],
+                unravel_key, (key for key in lp_keys if isinstance(key, (str, tuple)))
             )
             if lp_key not in default_keys
             for sample_key in sample_keys
