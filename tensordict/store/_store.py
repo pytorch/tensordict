@@ -2273,8 +2273,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         settings = _client_settings(kwargs.get("client"))
         if settings is not None:
             # the store is on the server of the client
-            host, port, db, unix_socket_path, credentials = settings
-            redis_kwargs = {**redis_kwargs, **credentials}
+            host, port, db, unix_socket_path, options = settings
+            redis_kwargs = {**redis_kwargs, **options}
         raw_bs, raw_dev, raw_tc = _read_stored_metadata(
             _connect_kwargs(host, port, db, unix_socket_path, redis_kwargs),
             prefix,
