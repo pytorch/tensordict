@@ -4316,6 +4316,20 @@ class TestGuardCount:
             assert batch_size == expected_batch_size
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
+    @pytest.mark.parametrize(
+        "index", [slice(None, None, -1), (slice(None), slice(2, 5, -1))]
+    )
+    def test_slice_dynamic_negative_step(self, index):
+        # gh-2889: a TensorDict without tensor leaves takes a negative step, and
+        # compiled gives the batch size that eager gives
+        def fn(td):
+            return td[index].batch_size
+
+        compiled = torch.compile(fn, backend="eager", dynamic=True, fullgraph=True)
+        for n in (5, 7, 9):
+            td = TensorDict({}, batch_size=[n, 6])
+            assert compiled(td) == fn(td)
+
     def test_clone_recurse_false_no_recompile(self):
         def fn(td):
             c = td.clone(recurse=False)

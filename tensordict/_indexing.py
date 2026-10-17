@@ -525,12 +525,13 @@ def _slice_length(index: slice, size: int) -> int:
     """The length of ``range(size)[index]``.
 
     ``slice.indices`` turns the bounds and ``size`` into ints, which fixes them
-    under torch.compile: a ``SymInt`` takes a formula instead, which needs a
-    positive step, as tensors do.
+    under torch.compile: a positive step takes a formula instead, which keeps
+    ``SymInt`` bounds symbolic.
     """
-    if not is_dynamo_compiling():
+    step = index.step
+    if not is_dynamo_compiling() or (step is not None and step < 0):
         return len(range(*index.indices(size)))
-    start, stop, step = index.start, index.stop, index.step
+    start, stop = index.start, index.stop
     if start is None:
         start = 0
     elif start < 0:
