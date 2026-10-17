@@ -3748,8 +3748,8 @@ class LazyStackedTensorDict(TensorDictBase):
             ((member, member_index, _),) = split.parts
             result = self.tensordicts[member]
             return result if member_index is None else result[member_index]
-        # not ``not split.parts``: under torch.compile, the truth value of the
-        # parts fixes the SymInt bounds of the slices that they hold
+        # test the length, not the truth value: under torch.compile, the truth
+        # value of the parts fixes the SymInt bounds of the slices they hold
         if len(split.parts) == 0:
             # e.g. an empty slice or mask along the stack dim. The result has a
             # dim of size 0 at the stack dim, or in the advanced block.
