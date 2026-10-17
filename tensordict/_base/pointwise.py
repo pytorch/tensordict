@@ -917,9 +917,15 @@ class _PointwiseOps:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
         else:
             raise ValueError(f"Expected dim of type int, got {type(dim)}.")
-        return self._fast_apply(
-            lambda x: torch.softmax(x, dim=dim, dtype=dtype),
-        )
+        return self._softmax(dim, dtype)
+
+    def _softmax(self, dim: int, dtype: torch.dtype | None) -> Self:
+        """Return the softmax of the leaves along the batch dim ``dim``.
+
+        Called by :meth:`softmax`, which has made ``dim`` non-negative. The
+        default applies :func:`torch.softmax` to each leaf.
+        """
+        return self._fast_apply(lambda x: torch.softmax(x, dim=dim, dtype=dtype))
 
     def log10(self) -> Self:
         """Computes the :func:`~torch.log10` value of each element of the TensorDict."""

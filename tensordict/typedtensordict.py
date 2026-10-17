@@ -1419,6 +1419,7 @@ _WRAP_DELEGATES = [
     "_transpose",
     "_permute",
     "_repeat",
+    "_softmax",
     "repeat_interleave",
     "contiguous",
     "masked_fill",
