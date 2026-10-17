@@ -83,6 +83,10 @@ def _can_recv_into(
     if not td.is_consolidated():
         return False
     storage = td._consolidated["storage"]
+    if device.type == "cpu":
+        device = torch.device("cpu")
+    elif device.type == "cuda" and device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
     if storage.numel() != total_bytes or storage.device != device:
         return False
     try:
@@ -671,8 +675,13 @@ class TensorDictPipe:
         if not len(keys) == len(dtype_names) == len(shapes):
             raise ValueError("Invalid uncollated header: list lengths must match.")
         keys = [_decode_uncollated_key(key) for key in keys]
-        if len(set(keys)) != len(keys):
+        key_set = set(keys)
+        if len(key_set) != len(keys):
             raise ValueError("Invalid uncollated header: keys must be unique.")
+        if any(key[:i] in key_set for key in keys for i in range(1, len(key))):
+            raise ValueError(
+                "Invalid uncollated header: a leaf key cannot also have descendants."
+            )
         dtypes = []
         for dtype_name, shape in zip(dtype_names, shapes):
             if not isinstance(dtype_name, str) or dtype_name not in _WIRE_DTYPES:

@@ -22,6 +22,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -30,6 +31,7 @@ from tensordict import TensorDict
 
 # Protocol helpers and classes are importable even without ucxx installed
 from tensordict._ucxx import (
+    _can_recv_into,
     _compute_total_bytes,
     _metadata_hash,
     _NEW_SCHEMA_FLAG,
@@ -288,6 +290,45 @@ class TestRoundtrip:
             assert result is not target
             torch.testing.assert_close(target.to_dict(), before.to_dict())
 
+    @pytest.mark.parametrize("stateless", [False, True])
+    @pytest.mark.parametrize("device", ["cpu", "cpu:0"])
+    def test_equivalent_cpu_destination(self, stateless, device):
+        td = TensorDict({"x": torch.arange(4.0)}, batch_size=[])
+        target = torch.zeros_like(td).consolidate(metadata=True)
+        ep = _FakeEndpoint()
+        if stateless:
+            asyncio.run(send_tensordict.__wrapped__(ep, td))
+            result = asyncio.run(recv_tensordict.__wrapped__(ep, target, device=device))
+        else:
+            asyncio.run(TensorDictPipe(ep).asend(td))
+            result = asyncio.run(TensorDictPipe(ep).arecv(target, device=device))
+        assert result is target
+        torch.testing.assert_close(target["x"], td["x"])
+
+    @pytest.mark.parametrize("current_index", [0, 1])
+    @pytest.mark.parametrize("storage_index", [0, 1])
+    @pytest.mark.parametrize("device", ["cuda", "cuda:0", "cuda:1"])
+    def test_cuda_destination_current_device(
+        self, current_index, storage_index, device, monkeypatch
+    ):
+        monkeypatch.setattr(torch.cuda, "current_device", lambda: current_index)
+        # Only the compatibility check needs a CUDA device; no GPU is allocated.
+        target = SimpleNamespace(
+            is_consolidated=lambda: True,
+            _consolidated={
+                "storage": SimpleNamespace(
+                    device=torch.device("cuda", storage_index), numel=lambda: 16
+                ),
+                "metadata": {},
+            },
+        )
+        expected_index = (
+            current_index if device == "cuda" else torch.device(device).index
+        )
+        assert _can_recv_into(target, 16, torch.device(device), _metadata_hash({})) == (
+            storage_index == expected_index
+        )
+
     @pytest.mark.parametrize("device", [None, "cpu", "meta"])
     @pytest.mark.parametrize("mismatch", [False, True])
     def test_stateless_destination_device(self, device, mismatch, monkeypatch):
@@ -349,6 +390,16 @@ class TestRoundtrip:
             {"keys": ["x", "y"], "dtypes": ["torch.float32"], "shapes": [[1], [1]]},
             {"keys": ["x", "y"], "dtypes": ["torch.float32"] * 2, "shapes": [[1]]},
             {"keys": ["x", "x"], "dtypes": ["torch.float32"] * 2, "shapes": [[1], [1]]},
+            {
+                "keys": ["a", ["a", "b"]],
+                "dtypes": ["torch.float32"] * 2,
+                "shapes": [[1], [1]],
+            },
+            {
+                "keys": [["a", "b"], "a"],
+                "dtypes": ["torch.float32"] * 2,
+                "shapes": [[1], [1]],
+            },
             {
                 "keys": ["x", ["x"]],
                 "dtypes": ["torch.float32"] * 2,
@@ -430,6 +481,25 @@ class TestRoundtrip:
         result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
         expected_key = "" if key == "" else "x" if key == ["x"] else ("nested", "x")
         torch.testing.assert_close(result[expected_key], torch.ones(2))
+
+    def test_uncollated_sibling_keys(self):
+        header = {
+            "keys": [["a", "b"], ["a", "c"]],
+            "dtypes": ["torch.float32"] * 2,
+            "shapes": [[1], [1]],
+        }
+        encoded = json.dumps(header).encode()
+        ep = _FakeEndpoint()
+        ep._buffers = [
+            struct.pack("<Q", len(encoded)),
+            encoded,
+            struct.pack("<f", 2.0),
+            struct.pack("<f", 3.0),
+        ]
+        result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        assert set(result.keys(True, True)) == {("a", "b"), ("a", "c")}
+        torch.testing.assert_close(result["a", "b"], torch.tensor([2.0]))
+        torch.testing.assert_close(result["a", "c"], torch.tensor([3.0]))
 
     def test_uncollated_scalar(self):
         header = {"keys": ["x"], "dtypes": ["torch.float32"], "shapes": [[]]}
