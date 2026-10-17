@@ -14,7 +14,7 @@ one object:
 ```python
 batch = TensorDict(
     {"image": images, "label": labels, "text": {"tokens": tokens, "mask": mask}},
-    batch_size=[32],
+    batch_size=[32],  # Optionally, TensorDicts can be batched
 )
 
 batch = batch.to("cuda")                      # moves every tensor, nested ones too
