@@ -356,9 +356,9 @@ def refresh_archive_checksums(archive_path: str | Path) -> Path:
     A tensordict loaded with ``TensorDict.load_memmap(path, mode="r+")``
     writes through to the archive without updating the CRC-32 that the zip
     format stores for each entry. :meth:`~tensordict.TensorDictBase.load_memmap`
-    itself never verifies checksums, so this is only needed before handing
-    the modified archive to tools that do (``unzip``, :mod:`zipfile`,
-    :func:`unpack_memmap`).
+    does not verify checksums of uncompressed memory-mapped leaves, so this
+    is only needed before handing the modified archive to tools that do
+    (``unzip``, :mod:`zipfile`, :func:`unpack_memmap`).
 
     Args:
         archive_path (str or Path): path to the archive to fix up.
@@ -545,6 +545,23 @@ class _ArchiveReader:
         if request is not None:
             self.prefetch_compressed(*request)
 
+    def _inflate(self, name: str, archive: memoryview) -> bytes:
+        entry = self.entries[name]
+        raw = archive[entry.offset : entry.offset + entry.compress_size]
+        inflater = zlib.decompressobj(wbits=-15)
+        error = f"Invalid deflated payload for entry {name!r} in {self.path}."
+        try:
+            # One extra byte detects oversized streams and keeps the limit
+            # positive for empty entries: zlib treats max_length=0 as unbounded.
+            data = inflater.decompress(raw, max_length=entry.size + 1)
+        except zlib.error as exc:
+            raise zipfile.BadZipFile(error) from exc
+        if len(data) != entry.size or not inflater.eof or inflater.unused_data:
+            raise zipfile.BadZipFile(error)
+        if zlib.crc32(data) != self._zf.getinfo(name).CRC:
+            raise zipfile.BadZipFile(f"Bad CRC-32 for file {name!r}")
+        return data
+
     def prefetch_compressed(self, scope: str, num_threads: int) -> None:
         """Decompresses deflated tensor entries under ``scope`` in parallel.
 
@@ -566,9 +583,7 @@ class _ArchiveReader:
         archive = memoryview(self.storage.numpy())
 
         def inflate(name):
-            entry = self.entries[name]
-            raw = archive[entry.offset : entry.offset + entry.compress_size]
-            return name, zlib.decompress(raw, wbits=-15)
+            return name, self._inflate(name, archive)
 
         with ThreadPoolExecutor(num_threads) as executor:
             for name, data in executor.map(inflate, names):
@@ -594,7 +609,10 @@ class _ArchiveReader:
             self._run_scheduled_prefetch()
             data = self._decompressed.pop(name, None)
             if data is None:
-                data = self.read_bytes(name)
+                if entry.compress_type == zipfile.ZIP_DEFLATED:
+                    data = self._inflate(name, memoryview(self.storage.numpy()))
+                else:
+                    data = self.read_bytes(name)
             if not data:
                 return torch.empty(0, dtype=dtype)
             return torch.frombuffer(bytearray(data), dtype=torch.uint8).view(dtype)
