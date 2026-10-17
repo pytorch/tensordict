@@ -1173,6 +1173,23 @@ class TestZarrSerialization:
         assert (ztd2["a"] == ztd["a"]).all()
         assert (ztd2["b", "c"] == ztd["b", "c"]).all()
 
+    def test_pickle_locked_after_nested_access(self, tmp_path):
+        # gh-2920: locking after reading a nested view left a weakref in the
+        # pickled state
+        td = TensorDict(
+            {"a": torch.randn(3), ("b", "c"): torch.randn(3), ("b", "s"): "text"},
+            batch_size=[3],
+        )
+        ztd = td.to_zarr(tmp_path / "s.zarr")
+        ztd["b"]
+        ztd.lock_()
+        ztd2 = pickle.loads(pickle.dumps(ztd))
+        assert ztd2.is_locked
+        assert ztd2["b"].is_locked
+        assert (ztd2["a"] == ztd["a"]).all()
+        assert (ztd2["b", "c"] == ztd["b", "c"]).all()
+        assert ztd2["b", "s"] == "text"
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrInterop:

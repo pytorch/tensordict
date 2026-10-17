@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import itertools
+import pickle
 import warnings
 from pathlib import Path
 
@@ -1322,6 +1323,24 @@ def test_kwargs_is_deprecated(tmpdir):
     assert "kwargs" not in vars(loaded)
     assert loaded._dataset_kwargs == {"compression": "gzip"}
     assert (loaded["b", "c"] == 0).all()
+    td.close()
+    loaded.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_locked_after_nested_access(tmp_path):
+    # gh-2920: locking after reading a nested view left a weakref in the
+    # pickled state
+    td = PersistentTensorDict.from_dict(
+        TensorDict({"a": torch.randn(3), ("b", "c"): torch.randn(3)}, batch_size=[3]),
+        filename=tmp_path / "x.h5",
+    )
+    td["b"]
+    td.lock_()
+    loaded = pickle.loads(pickle.dumps(td))
+    assert loaded.is_locked
+    assert loaded["b"].is_locked
+    assert (loaded["b", "c"] == td["b", "c"]).all()
     td.close()
     loaded.close()
 
