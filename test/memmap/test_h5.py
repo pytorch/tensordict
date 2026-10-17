@@ -37,6 +37,22 @@ except ImportError:
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Serialization:
+    @pytest.mark.parametrize("allow_pickle", [None, True, False])
+    def test_zarr_pickle_policy_does_not_change_h5(self, tmp_path, allow_pickle):
+        path = tmp_path / "policy.h5"
+        with h5py.File(path, "w") as file:
+            file.create_dataset("x", data=np.arange(2))
+            file.create_dataset("text", data=b"text")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td = PersistentTensorDict(filename=path, allow_pickle=allow_pickle)
+            assert td["text"] == b"text"
+            assert torch.equal(td["x"], torch.arange(2))
+            clone = td.clone(recurse=False)
+            assert clone["text"] == b"text"
+            clone.close()
+            td.close()
+
     @classmethod
     def worker(cls, cyberbliptronics, q1, q2):
         assert isinstance(cyberbliptronics, PersistentTensorDict)

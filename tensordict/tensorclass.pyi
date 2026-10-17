@@ -488,7 +488,17 @@ class TensorClass(_TensorClassInitArgs):
     @classmethod
     def from_h5(cls, filename, mode: str = "r") -> Self: ...
     @classmethod
-    def from_zarr(cls, filename, mode: str = "r") -> Self: ...
+    def from_zarr(
+        cls,
+        filename,
+        *,
+        mode: str = "r",
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        batch_size: torch.Size | None = None,
+        non_tensor_as_stack: bool = False,
+        allow_pickle: bool | None = None,
+    ) -> Self: ...
     @classmethod
     def from_schema(
         cls,
@@ -1537,7 +1547,9 @@ class TensorClass(_TensorClassInitArgs):
     ) -> Self: ...
     def to_struct_array(self) -> np.ndarray: ...
     def to_h5(self, filename: str, **kwargs) -> Any: ...
-    def to_zarr(self, filename: str, **kwargs) -> Any: ...
+    def to_zarr(
+        self, filename: str, *, allow_pickle: bool | None = None, **kwargs
+    ) -> Any: ...
     def to_store(
         self,
         *,
