@@ -25,6 +25,9 @@ Note that if a non-TensorDictModuleBase callable is used, its input and output k
 and thus will not affect the in_keys and out_keys attributes of the TensorDictSequential.
 Regular `dict` inputs will be converted to `OrderedDict` if necessary.
 A module registered under multiple names runs once for each name, in order.
+Named entries can also be replaced or deleted with `seq["name"]`, and
+assigning a new name appends the module. After an edit, `in_keys` and
+`out_keys` are recomputed from the modules.
 
 Keyword Arguments:
 
