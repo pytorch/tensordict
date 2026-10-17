@@ -26,9 +26,11 @@ Torch reads the elements of an index from the first dim on:
 
 from __future__ import annotations
 
+from types import EllipsisType
+
 import numpy as np
 import torch
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 
 # The kinds of index elements, see _read_element
 _INT = 0
@@ -100,12 +102,14 @@ def _read_element(element):
     as torch reads them. A NumPy bool scalar raises an ``IndexError``, as in
     torch with NumPy 2.3 and later.
     """
-    if element is None:
-        return _NONE, 0, element
-    if element is Ellipsis:
-        return _ELLIPSIS, 0, element
+    # The slice is read first, and Ellipsis by its type: under torch.compile,
+    # an ``is`` test on a slice fixes the bounds that it holds.
     if isinstance(element, slice):
         return _SLICE, 1, element
+    if element is None:
+        return _NONE, 0, element
+    if type(element) is EllipsisType:
+        return _ELLIPSIS, 0, element
     if isinstance(element, bool):
         return _BOOL, 0, element
     if isinstance(element, np.bool_):
@@ -208,7 +212,7 @@ def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
     """Replace the ``Ellipsis`` of ``index`` by the ``:`` that it stands for."""
     position = None
     for i, element in enumerate(index):
-        if element is Ellipsis:
+        if type(element) is EllipsisType:
             if position is not None:
                 raise RuntimeError("An index can only have one ellipsis at most.")
             position = i
@@ -216,7 +220,9 @@ def _expand_ellipsis(index: tuple, ndim: int) -> tuple:
         return index
     # the ellipsis covers the dims that the other index elements do not use
     ellipsis_length = ndim - sum(
-        _num_indexed_dims(element) for element in index if element is not Ellipsis
+        _num_indexed_dims(element)
+        for element in index
+        if type(element) is not EllipsisType
     )
     if ellipsis_length < 0:
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
@@ -371,7 +377,7 @@ def _getitem_batch_size(batch_size, index):
             return batch_size[1:]
         if isinstance(index, slice) and index == slice(None):
             return batch_size
-    elif index:
+    elif index != ():
         first = type(index[0])
         if first is int and type(index[-1]) is int and len(index) <= len(batch_size):
             # A tuple of ints in range removes the dims that it indexes. Its
@@ -516,5 +522,25 @@ def _advanced_ndim(kind, element):
 
 
 def _slice_length(index: slice, size: int) -> int:
-    """The length of ``range(size)[index]``."""
-    return len(range(*index.indices(size)))
+    """The length of ``range(size)[index]``.
+
+    ``slice.indices`` turns the bounds and ``size`` into ints, which fixes them
+    under torch.compile: a ``SymInt`` takes a formula instead, which needs a
+    positive step, as tensors do.
+    """
+    if not is_dynamo_compiling():
+        return len(range(*index.indices(size)))
+    start, stop, step = index.start, index.stop, index.step
+    if start is None:
+        start = 0
+    elif start < 0:
+        start = start + size
+    if stop is None:
+        stop = size
+    elif stop < 0:
+        stop = stop + size
+    if step is None:
+        step = 1
+    start = torch.sym_min(torch.sym_max(start, 0), size)
+    stop = torch.sym_min(torch.sym_max(stop, 0), size)
+    return (torch.sym_max(stop - start, 0) + step - 1) // step
