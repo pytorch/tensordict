@@ -9,6 +9,7 @@ import contextlib
 import functools
 import gc
 import importlib.util
+import io
 import json
 import os
 import pickle
@@ -7114,6 +7115,56 @@ class TestMemmapArchive:
         assert (
             TensorDict.load_memmap(tmp_path / "plaindir", num_threads=num_threads) == td
         ).all()
+
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    def test_archive_local_filename_mismatch(self, tmp_path, num_threads):
+        archive = tmp_path / "mismatch.tdz"
+        td = TensorDict({"a": torch.arange(4), "b": torch.ones(4)})
+        td.save(archive, compression="deflate")
+        with zipfile.ZipFile(archive) as zf:
+            offset = zf.getinfo("a.memmap").header_offset
+        raw = bytearray(archive.read_bytes())
+        raw[offset + 30] = ord("z")
+        archive.write_bytes(raw)
+        with zipfile.ZipFile(archive) as zf:
+            with pytest.raises(zipfile.BadZipFile, match="File name.*differ"):
+                zf.read("a.memmap")
+        with pytest.raises(zipfile.BadZipFile, match="File name.*differ"):
+            TensorDict.load_memmap(archive, num_threads=num_threads)
+
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    @pytest.mark.parametrize(
+        "layout", ["zip64", "descriptor", "prefixed", "utf8", "cp437"]
+    )
+    def test_archive_local_filename_layouts(self, tmp_path, num_threads, layout):
+        class UnseekableBuffer(io.BytesIO):
+            def seek(self, *args):
+                raise OSError("not seekable")
+
+        buffer = UnseekableBuffer() if layout == "descriptor" else io.BytesIO()
+        name = "é.memmap" if layout == "utf8" else "a.memmap"
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for entry_name in (name, "b.memmap"):
+                info = zipfile.ZipInfo(entry_name)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                with zf.open(info, "w", force_zip64=layout == "zip64") as entry:
+                    entry.write(b"1234")
+        raw = buffer.getvalue()
+        if layout == "prefixed":
+            raw = b"archive prefix" + raw
+        elif layout == "cp437":
+            raw = raw.replace(b"a.memmap", b"\x82.memmap")
+            name = "é.memmap"
+        archive = tmp_path / "layout.tdz"
+        archive.write_bytes(raw)
+        with zipfile.ZipFile(archive) as zf:
+            assert zf.read(name) == b"1234"
+            if layout == "descriptor":
+                assert zf.getinfo(name).flag_bits & 0x8
+        reader = _ArchiveReader(archive)
+        reader.schedule_compressed_prefetch("", num_threads)
+        for entry_name in (name, "b.memmap"):
+            assert reader.flat_view(entry_name, torch.uint8).tolist() == list(b"1234")
 
     @pytest.mark.parametrize("num_threads", [1, 2, 4])
     @pytest.mark.parametrize(

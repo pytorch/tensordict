@@ -492,6 +492,14 @@ class _ArchiveReader:
                         f"Corrupted local header for entry {name!r} in {self.path}."
                     )
                 name_len, extra_len = struct.unpack_from("<2H", header, 26)
+                local_name = f.read(name_len)
+                (flags,) = struct.unpack_from("<H", header, 6)
+                encoding = "utf-8" if flags & 0x800 else "cp437"
+                if local_name.decode(encoding) != info.orig_filename:
+                    raise zipfile.BadZipFile(
+                        f"File name in directory {info.orig_filename!r} and "
+                        f"header {local_name!r} differ."
+                    )
                 payload_offset = (
                     info.header_offset + _LOCAL_HEADER_SIZE + name_len + extra_len
                 )
