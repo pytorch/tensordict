@@ -2454,6 +2454,10 @@ class PersistentTensorDict(
         state["file"] = None
         state.update(backend_state)
         state["__lock_parents_weakrefs"] = None
+        # as TensorDictBase.__getstate__ does: the last op can hold weakrefs,
+        # and the cache is rebuilt on demand (gh-2920)
+        state["_last_op"] = None
+        state["_cache"] = None
         return state
 
     # Override: reopens the file, and reads the pickles of TensorDict 0.14.
