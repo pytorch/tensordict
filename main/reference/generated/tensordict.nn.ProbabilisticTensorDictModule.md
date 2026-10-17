@@ -148,6 +148,7 @@ given in the table above. Default is `False`.
 
 keys where to write the log_prob if `return_log_prob=True`.
 Defaults to '<sample_key_name>_log_prob', where <sample_key_name> is each of the `out_keys`.
+Custom keys replace these defaults, including for a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution).
 
 Note
 
