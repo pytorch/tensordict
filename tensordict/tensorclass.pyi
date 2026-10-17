@@ -52,7 +52,6 @@ from tensordict.utils import (
     _strtobool as _strtobool,
     Buffer as Buffer,
     DeviceType as DeviceType,
-    implement_for as implement_for,
     IndexType as IndexType,
     KEY_SEPARATOR as KEY_SEPARATOR,
     lazy_legacy as lazy_legacy,

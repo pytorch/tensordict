@@ -13,18 +13,18 @@ from typing import Any, Dict, List, Tuple
 
 import torch
 import torch.utils._pytree
+from pyvers import implement_for  # noqa: F401
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import is_tensor_collection
 from tensordict.persistent import PersistentTensorDict
 
-# implement_for and is_compiling stay importable from here for the deprecated
-# tensordict.implement_for and tensordict.is_compiling aliases of
-# tensordict/__init__.py, until 0.17.
+# implement_for (imported from pyvers above) and is_compiling stay importable
+# from here for the deprecated tensordict.implement_for and
+# tensordict.is_compiling aliases of tensordict/__init__.py, until 0.17.
 from tensordict.utils import (  # noqa: F401
     _is_tensorclass,
     _shape,
-    implement_for,
     is_compiling,
     is_non_tensor,
 )

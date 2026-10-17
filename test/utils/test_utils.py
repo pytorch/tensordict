@@ -744,6 +744,7 @@ def _deprecated_message_pattern(what, replacement):
             None,
         ),
         ("get_json_backend", tensordict._utils_key_json.get_json_backend, None),
+        ("implement_for", pyvers.implement_for, "pyvers.implement_for"),
         (
             "json_dumps",
             tensordict._utils_key_json.json_dumps,
