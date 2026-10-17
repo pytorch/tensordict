@@ -69,6 +69,11 @@ printf "* Installing tensordict\n"
 # the PyTorch build (stable vs nightly).
 python -m pip install -U packaging pyvers
 python -m pip install redis pandas pyarrow
+# Test with the newest NumPy for this Python, or with NUMPY_SPEC (such as "<2")
+# when the job sets it. mosaicml-streaming caps NumPy below 2.2, but the to_mds
+# tests pass with newer releases, so this overrides the cap.
+python -m pip install --upgrade "numpy${NUMPY_SPEC:-}"
+python -c "import numpy; print('Installed numpy', numpy.__version__)"
 python -m pip install -e . --no-deps
 
 # smoke test
