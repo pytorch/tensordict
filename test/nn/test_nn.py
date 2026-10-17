@@ -1684,6 +1684,83 @@ class TestTDSequence:
         result = seq(TensorDict(x=torch.tensor(1.0)))
         torch.testing.assert_close(result["x"], torch.tensor(expected))
 
+    @pytest.mark.parametrize("mapping", [dict, None])
+    def test_sequence_mutation_updates_keys(self, mapping):
+        a = TensorDictModule(lambda x: x + 1, ["x"], ["y"])
+        b = TensorDictModule(lambda y: y + 1, ["y"], ["z"])
+        if mapping is None:
+            seq = TensorDictSequential(a, b, inplace=False)
+            first, second = 0, 1
+        else:
+            seq = TensorDictSequential(mapping(a=a, b=b), inplace=False)
+            first, second = "a", "b"
+        seq[second] = TensorDictModule(lambda y: y * 10, ["y"], ["u"])
+        assert seq.in_keys == ["x"]
+        assert seq.out_keys == ["y", "u"]
+        result = seq(TensorDict(x=torch.tensor(1.0)))
+        assert set(result.keys()) == {"y", "u"}
+        torch.testing.assert_close(result["u"], torch.tensor(20.0))
+        del seq[first]
+        assert seq.in_keys == ["y"]
+        assert seq.out_keys == ["u"]
+        # a plain callable is wrapped, as in the constructor
+        seq = TensorDictSequential(a, b)
+        seq[1] = lambda td: td.set("w", td["y"] + 1)
+        torch.testing.assert_close(
+            seq(TensorDict(x=torch.tensor(1.0)))["w"], torch.tensor(3.0)
+        )
+
+    def test_sequence_mutation_keeps_selected_out_keys(self):
+        a = TensorDictModule(lambda x: x + 1, ["x"], ["y"])
+        b = TensorDictModule(lambda y: y + 1, ["y"], ["z"])
+        seq = TensorDictSequential(a, b, selected_out_keys=["z"])
+        with pytest.raises(ValueError, match="selected out_keys"):
+            seq[1] = TensorDictModule(lambda y: y * 10, ["y"], ["u"])
+        assert seq[1] is b
+        assert seq.out_keys == ["z"]
+        seq[0] = TensorDictModule(lambda x: x + 2, ["x"], ["y"])
+        assert seq.out_keys == ["z"]
+        result = seq(TensorDict(x=torch.tensor(1.0)))
+        assert "y" not in result
+        torch.testing.assert_close(result["z"], torch.tensor(4.0))
+        seq.reset_out_keys()
+        assert seq.out_keys == ["y", "z"]
+
+    @pytest.mark.parametrize("named", [True, False])
+    def test_prob_sequence_mutation_rebuilds_det_part(self, named):
+        def params(loc_shift):
+            return TensorDictModule(
+                lambda x: (x + loc_shift, torch.ones_like(x)),
+                ["x"],
+                ["loc", "scale"],
+            )
+
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=torch.distributions.Normal,
+        )
+        if named:
+            seq = ProbabilisticTensorDictSequential({"params": params(0), "prob": prob})
+            index = "params"
+        else:
+            seq = ProbabilisticTensorDictSequential(params(0), prob)
+            index = 0
+        seq[index] = params(100)
+        td = TensorDict(x=torch.ones(3), batch_size=[3])
+        with set_interaction_type(InteractionType.DETERMINISTIC):
+            torch.testing.assert_close(
+                seq(td.clone())["action"], torch.full((3,), 101.0)
+            )
+        torch.testing.assert_close(
+            seq.get_dist(td.clone()).mean, torch.full((3,), 101.0)
+        )
+        # the last module of a ProbabilisticTensorDictSequential stays probabilistic
+        last = "prob" if named else 1
+        with pytest.raises(TypeError, match="final module"):
+            seq[last] = params(0)
+        assert seq[last] is prob
+
     @pytest.mark.parametrize("mapping", [dict, OrderedDict])
     @pytest.mark.parametrize("key", ["x", ("nested", "x")])
     def test_named_sequence_shared_module(self, mapping, key):

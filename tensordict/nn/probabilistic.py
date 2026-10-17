@@ -1513,6 +1513,50 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         super().__init__(*modules, **kwargs)
         self.return_composite = return_composite
 
+    # Override: the constructor's checks, for the modules after an edit.
+    def _check_modules(self, modules: list[torch.nn.Module]) -> None:
+        super()._check_modules(modules)
+        if not modules:
+            raise ValueError(
+                "ProbabilisticTensorDictSequential must consist of zero or more "
+                "TensorDictModules followed by a ProbabilisticTensorDictModule"
+            )
+        if not self.return_composite and not isinstance(
+            modules[-1],
+            (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
+        ):
+            raise TypeError(
+                "The final module passed to ProbabilisticTensorDictSequential must be "
+                "an instance of ProbabilisticTensorDictModule or another "
+                "ProbabilisticTensorDictSequential (unless return_composite is set to ``True``)."
+            )
+
+    # Override: also rebuilds the deterministic part and the sampling flag,
+    # which the constructor caches.
+    def _refresh_keys(self) -> None:
+        super()._refresh_keys()
+        modules = list(self._module_iter())
+        if not any(
+            isinstance(
+                m, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
+            )
+            for m in modules
+        ):
+            self._requires_sample = False
+            self.__dict__["_det_part"] = None
+            return
+        _, out_keys = self._compute_in_and_out_keys(modules[:-1])
+        self._requires_sample = any(
+            key not in set(out_keys)
+            for key in getattr(modules[-1], "dist_sample_keys", [None])
+        )
+        if self._ordered_dict:
+            self.__dict__["_det_part"] = TensorDictSequential(
+                collections.OrderedDict(list(self.module.items())[:-1])
+            )
+        else:
+            self.__dict__["_det_part"] = TensorDictSequential(*modules[:-1])
+
     def __getitem__(self, index: int | slice | str) -> Self | TensorDictModuleBase:
         if isinstance(index, (int, str)):
             return self.module.__getitem__(index)
