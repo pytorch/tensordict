@@ -6314,6 +6314,51 @@ class TestCompositeDist:
         assert key_logprob1 in lp
 
     @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.RANDOM]
+    )
+    @pytest.mark.parametrize("nested_log_prob", [False, True])
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_custom_log_prob_keys(self, interaction, nested_log_prob):
+        params = TensorDict(
+            {
+                "a": {"loc": torch.zeros(3, 2), "scale": torch.ones(3, 2)},
+                ("nested", "b"): {
+                    "loc": torch.ones(3, 2),
+                    "scale": torch.ones(3, 2),
+                },
+            },
+            batch_size=[3],
+        )
+        sample_keys = ["a", ("nested", "b")]
+        log_prob_keys = (
+            [("scores", "a"), ("scores", "b")] if nested_log_prob else ["lp_a", "lp_b"]
+        )
+        module = ProbabilisticTensorDictModule(
+            in_keys=["params"],
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={
+                "distribution_map": dict.fromkeys(sample_keys, distributions.Normal)
+            },
+            default_interaction_type=interaction,
+            return_log_prob=True,
+            log_prob_keys=log_prob_keys,
+        )
+        td = TensorDict(params=params, batch_size=[3])
+        sample = module(td)
+        assert all(key in sample for key in module.out_keys)
+        assert "a_log_prob" not in sample
+        assert ("nested", "b_log_prob") not in sample
+        expected = module.log_prob(sample)
+        for key in log_prob_keys:
+            torch.testing.assert_close(sample[key], expected[key])
+
+        # Dispatch must return the same declared outputs, including both scores.
+        a, b, lp_a, lp_b = module(params=params)
+        for key, value, log_prob in zip(sample_keys, (a, b), (lp_a, lp_b)):
+            dist = distributions.Normal(**params[key])
+            torch.testing.assert_close(log_prob, dist.log_prob(value))
+
+    @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
     @pytest.mark.parametrize("map_names", [True, False])
