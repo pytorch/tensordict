@@ -1659,6 +1659,31 @@ class TestTDSequence:
         assert (td["y"] == 2).all()
         assert seq["layer0"] is layer0
 
+    @pytest.mark.parametrize("mapping", [dict, OrderedDict, None])
+    @pytest.mark.parametrize("operation", ["replace", "delete"])
+    def test_sequence_mutation(self, mapping, operation):
+        first = TensorDictModule(lambda x: x + 1, ["x"], ["x"])
+        second = TensorDictModule(lambda x: x * 2, ["x"], ["x"])
+        seq = (
+            TensorDictSequential(mapping(first=first, second=second))
+            if mapping is not None
+            else TensorDictSequential(first, second)
+        )
+        index = "first" if mapping is not None else 0
+        if operation == "replace":
+            replacement = TensorDictModule(lambda x: x + 3, ["x"], ["x"])
+            seq[index] = replacement
+            assert seq[index] is replacement
+            assert len(seq) == 2
+            expected = 8.0
+        else:
+            del seq[index]
+            assert len(seq) == 1
+            assert seq["second" if mapping is not None else 0] is second
+            expected = 2.0
+        result = seq(TensorDict(x=torch.tensor(1.0)))
+        torch.testing.assert_close(result["x"], torch.tensor(expected))
+
     @pytest.mark.parametrize("mapping", [dict, OrderedDict])
     @pytest.mark.parametrize("key", ["x", ("nested", "x")])
     def test_named_sequence_shared_module(self, mapping, key):

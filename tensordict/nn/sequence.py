@@ -57,6 +57,7 @@ class TensorDictSequential(TensorDictModule):
             and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
             Regular ``dict`` inputs will be converted to ``OrderedDict`` if necessary.
             A module registered under multiple names runs once for each name, in order.
+            Named entries can also be replaced or deleted with ``seq["name"]``.
 
     Keyword Args:
         partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
@@ -709,7 +710,7 @@ class TensorDictSequential(TensorDictModule):
     def __setitem__(
         self, index: int | slice | str, tensordict_module: TensorDictModuleBase
     ) -> None:
-        return self.module.__setitem__(idx=index, module=tensordict_module)
+        self.module[index] = tensordict_module
 
     def __delitem__(self, index: int | slice | str) -> None:
-        self.module.__delitem__(idx=index)
+        del self.module[index]
