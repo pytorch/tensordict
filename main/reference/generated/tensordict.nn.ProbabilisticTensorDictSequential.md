@@ -568,6 +568,7 @@ If none is provided, the module's `out_keys` are assumed.
 Returns:
 
 A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
+Modules in a named sequence keep their names, including nested sequences.
 
 Examples
 
