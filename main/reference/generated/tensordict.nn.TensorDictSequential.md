@@ -24,6 +24,7 @@ These can be instances of TensorDictModuleBase or any other function that matche
 Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
 and thus will not affect the in_keys and out_keys attributes of the TensorDictSequential.
 Regular `dict` inputs will be converted to `OrderedDict` if necessary.
+A module registered under multiple names runs once for each name, in order.
 
 Keyword Arguments:
 
