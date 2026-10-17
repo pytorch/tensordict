@@ -1830,6 +1830,27 @@ class TestTDSequence:
         td = TensorDict(x=torch.tensor(0.0), y=torch.tensor(1.0))
         torch.testing.assert_close(selected(td)["out"], torch.tensor(6.0))
 
+    @pytest.mark.parametrize("named", [False, True])
+    def test_select_subsequence_keeps_options(self, named):
+        first = TensorDictModule(lambda a: a + 1, ["a"], ["b"])
+        second = TensorDictModule(lambda x: x + 1, ["x"], ["y"])
+        modules = {"first": first, "second": second} if named else [first, second]
+        seq = TensorDictSequential(modules, partial_tolerant=True, inplace=False)
+        subsequences = [seq.select_subsequence(out_keys=["b", "y"])]
+        # A nested sequence keeps its own options.
+        outer = TensorDictSequential(seq, TensorDictModule(lambda b: b, ["b"], ["c"]))
+        subsequences.append(outer.select_subsequence(out_keys=["c"])[0])
+        if not named:
+            subsequences.append(seq[:])
+        for sub in subsequences:
+            assert sub.partial_tolerant is True
+            assert sub.inplace is False
+            td = TensorDict(a=torch.zeros(2), batch_size=[2])  # no "x"
+            out = sub(td)
+            assert out is not td
+            assert set(out.keys()) == {"b"}
+            assert set(td.keys()) == {"a"}
+
     def test_ordered_dict_select_outkeys(self):
         ordered_dict = OrderedDict(
             layer0=TensorDictModule(
@@ -4077,6 +4098,33 @@ class TestProbabilisticTensorDictModule:
         assert isinstance(seq[0], ProbabilisticTensorDictModule)
         assert isinstance(seq[:2], ProbabilisticTensorDictSequential)
         assert isinstance(seq[-2:], ProbabilisticTensorDictSequential)
+
+    @pytest.mark.parametrize("return_composite", [False, True])
+    def test_prob_seq_subsequence_keeps_options(self, return_composite):
+        loc = TensorDictModule(lambda x: x + 1, ["x"], ["loc"])
+        prob0 = ProbabilisticTensorDictModule(
+            in_keys=["loc"],
+            out_keys=["sample0"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        prob1 = ProbabilisticTensorDictModule(
+            in_keys={"loc": "sample0"},
+            out_keys=["sample1"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        seq = ProbabilisticTensorDictSequential(
+            loc,
+            prob0,
+            prob1,
+            return_composite=return_composite,
+            partial_tolerant=True,
+            inplace=False,
+        )
+        for sub in (seq.select_subsequence(out_keys=["sample0"]), seq[1:], seq[:1]):
+            assert sub.partial_tolerant is True
+            assert sub.inplace is False
 
     @pytest.mark.skipif(IS_FB, reason="Not working within fbcode")
     def test_no_warning_single_key(self):
