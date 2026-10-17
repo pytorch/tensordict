@@ -431,6 +431,7 @@ class TensorDictSequential(TensorDictModule):
 
         Returns:
             A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
+            Modules in a named sequence keep their names, including nested sequences.
 
         Examples:
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
@@ -583,8 +584,10 @@ class TensorDictSequential(TensorDictModule):
         if isinstance(self.module, nn.ModuleList):
             return type(self)(*modules)
         else:
-            keys = [key for key in self.module if self.module[key] in modules]
-            modules_dict = collections.OrderedDict(_zip_strict(keys, modules))
+            keys = list(self.module)
+            modules_dict = collections.OrderedDict(
+                (keys[i], module_list[i]) for i in id_to_keep
+            )
             return type(self)(modules_dict)
 
     def _run_module(
