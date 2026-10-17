@@ -432,6 +432,8 @@ class TensorDictSequential(TensorDictModule):
         Returns:
             A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
             Modules in a named sequence keep their names, including nested sequences.
+            The new sequence keeps ``partial_tolerant`` and ``inplace``.
+            Nested sequences keep their own options the same way.
 
         Examples:
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
@@ -582,13 +584,23 @@ class TensorDictSequential(TensorDictModule):
                 "No modules left after selection. Make sure that in_keys and out_keys are coherent."
             )
         if isinstance(self.module, nn.ModuleList):
-            return type(self)(*modules)
+            return self._keep_options(type(self)(*modules))
         else:
             keys = list(self.module)
             modules_dict = collections.OrderedDict(
                 (keys[i], module_list[i]) for i in id_to_keep
             )
-            return type(self)(modules_dict)
+            return self._keep_options(type(self)(modules_dict))
+
+    def _keep_options(self, sequence: TensorDictSequential) -> TensorDictSequential:
+        """Gives ``sequence``, built from some of this sequence's modules, the options of this sequence.
+
+        The options are set after construction, because subclasses do not all
+        take them as constructor arguments.
+        """
+        sequence.partial_tolerant = self.partial_tolerant
+        sequence.inplace = self.inplace
+        return sequence
 
     def _run_module(
         self,
@@ -707,7 +719,7 @@ class TensorDictSequential(TensorDictModule):
         if isinstance(index, (int, str)):
             return self.module.__getitem__(index)
         else:
-            return type(self)(*self.module.__getitem__(index))
+            return self._keep_options(type(self)(*self.module.__getitem__(index)))
 
     def __setitem__(
         self, index: int | slice | str, tensordict_module: TensorDictModuleBase

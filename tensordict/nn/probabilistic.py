@@ -1526,14 +1526,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 )
                 for item in mods
             ):
-                return type(self)(*mods, return_composite=self.return_composite)
+                return self._keep_options(
+                    type(self)(*mods, return_composite=self.return_composite)
+                )
             elif isinstance(
                 mods[-1],
                 (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
             ):
-                return type(self)(*mods)
+                return self._keep_options(type(self)(*mods))
             else:
-                return TensorDictSequential(*mods)
+                return self._keep_options(TensorDictSequential(*mods))
 
     _dist_sample = ProbabilisticTensorDictModule._dist_sample
     _draw_dist_sample = ProbabilisticTensorDictModule._draw_dist_sample
