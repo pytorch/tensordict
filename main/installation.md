@@ -17,7 +17,7 @@ python -c "import tensordict; print(tensordict.__version__)"
 
 tensordict is pure Python: it has no compiled extension. Each change is
 tested with PyTorch 2.13, the latest PyTorch release, and PyTorch nightly, on
-Python 3.10 to 3.14 and the free-threaded 3.14t.
+Python 3.10 to 3.15 and the free-threaded 3.14t and 3.15t.
 
 If PyTorch is not installed, `pip` installs the default build from PyPI
 with tensordict. If you need a specific build, for example for CUDA or for a
