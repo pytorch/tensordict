@@ -149,6 +149,9 @@ given in the table above. Default is `False`.
 keys where to write the log_prob if `return_log_prob=True`.
 Defaults to '<sample_key_name>_log_prob', where <sample_key_name> is each of the `out_keys`.
 Custom keys replace these defaults, including for a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution).
+With `return_log_prob=True`, a custom key equal to a sample key, inside one, or holding one raises a
+`ValueError` when `distribution_class` is a class (and, for a `CompositeDistribution`,
+`distribution_kwargs` holds its `distribution_map`).
 
 Note
 
@@ -157,7 +160,8 @@ This is only available when [`composite_lp_aggregate()`](tensordict.nn.composite
 
 key where to write the log_prob if `return_log_prob=True`.
 Defaults to 'sample_log_prob' when [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) is set to True
-or '<sample_key_name>_log_prob' otherwise.
+or '<sample_key_name>_log_prob' otherwise. A custom key that would overwrite a sample raises a
+`ValueError`, as for `log_prob_keys`.
 
 Note
 
