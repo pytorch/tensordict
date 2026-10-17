@@ -3,22 +3,17 @@ channels:
   - defaults
 dependencies:
   - pip
-  - protobuf
   - pip:
-    - hypothesis
-    - future
     - cloudpickle
     - pytest
     - pytest-benchmark
-    - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
     - pytest-timeout
     - pytest-xdist
-    - expecttest
     - h5py
     - orjson
-    - numpy<2.0.0
+    - numpy
     - mosaicml-streaming
     - mypy
     - pandas
