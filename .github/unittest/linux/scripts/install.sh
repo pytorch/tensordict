@@ -9,7 +9,7 @@ set -e
 set -v
 
 # Activate the environment
-if [ "${PYTHON_VERSION}" == "3.14t" ]; then
+if [[ "${PYTHON_VERSION}" == *t ]]; then
     source ./env/bin/activate
 else
     eval "$(./conda/bin/conda shell.bash hook)"
