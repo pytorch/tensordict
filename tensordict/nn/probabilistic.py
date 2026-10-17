@@ -17,9 +17,13 @@ import torch
 from tensordict._deprecation import deprecated, deprecated_attributes, warn_deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
-from tensordict.base import is_tensor_collection
+from tensordict.base import _is_inside, is_tensor_collection
 from tensordict.nn.common import dispatch, TensorDictModuleBase
-from tensordict.nn.distributions.composite import _add_suffix, CompositeDistribution
+from tensordict.nn.distributions.composite import (
+    _add_suffix,
+    _resolve_name_map,
+    CompositeDistribution,
+)
 from tensordict.nn.distributions.continuous import Delta
 from tensordict.nn.distributions.discrete import OneHotCategorical
 from tensordict.nn.distributions.truncated_normal import (
@@ -466,12 +470,16 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'<sample_key_name>_log_prob'`, where `<sample_key_name>` is each of the :attr:`out_keys`.
             Custom keys replace these defaults, including for a :class:`~tensordict.nn.distributions.CompositeDistribution`.
+            With ``return_log_prob=True``, a custom key equal to a sample key, inside one, or holding one raises a
+            ``ValueError`` when ``distribution_class`` is a class (and, for a ``CompositeDistribution``,
+            ``distribution_kwargs`` holds its ``distribution_map``).
 
             .. note:: This is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``False``.
 
         log_prob_key (NestedKey, optional): key where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'sample_log_prob'` when :func:`~tensordict.nn.composite_lp_aggregate` is set to `True`
-            or `'<sample_key_name>_log_prob'` otherwise.
+            or `'<sample_key_name>_log_prob'` otherwise. A custom key that would overwrite a sample raises a
+            ``ValueError``, as for ``log_prob_keys``.
 
             .. note:: When there is more than one sampled key, this is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``True``.
 
@@ -690,6 +698,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             distribution_class = _distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
         self.distribution_kwargs = distribution_kwargs
+        if return_log_prob:
+            self._check_log_prob_keys(log_prob_keys, log_prob_key)
         self.n_empirical_estimate = n_empirical_estimate
         self._dist = None
         if cache_dist:
@@ -723,6 +733,55 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             raise TypeError(
                 f"generator must be a torch.Generator, int, NestedKey, or None; "
                 f"got {type(generator).__name__}."
+            )
+
+    def _check_log_prob_keys(self, log_prob_keys, log_prob_key) -> None:
+        # A custom log-probability key at a sample key, inside one, or holding
+        # one would overwrite the sample. The sample keys are known only for a
+        # distribution class: a partial or a factory function is not checked.
+        distribution_class = self.distribution_class
+        if not isinstance(distribution_class, type):
+            return
+        if issubclass(distribution_class, CompositeDistribution):
+            distribution_map = self.distribution_kwargs.get("distribution_map")
+            if distribution_map is None:
+                return
+            sample_keys = list(
+                _resolve_name_map(
+                    self.distribution_kwargs.get("name_map"), distribution_map
+                ).values()
+            )
+        else:
+            sample_keys = self._out_keys
+        # The default keys behave as they always did
+        default_keys = {
+            _add_suffix(key, "_log_prob") for key in [*self._out_keys, *sample_keys]
+        }
+        default_keys.add("sample_log_prob")
+        lp_keys = log_prob_keys if log_prob_keys is not None else [log_prob_key]
+        clashes = [
+            (lp_key, sample_key)
+            # A key of another type, such as a list, fails at the first call
+            for lp_key in map(
+                unravel_key, (key for key in lp_keys if isinstance(key, (str, tuple)))
+            )
+            if lp_key not in default_keys
+            for sample_key in sample_keys
+            if lp_key == sample_key
+            or _is_inside(lp_key, sample_key)
+            or _is_inside(sample_key, lp_key)
+        ]
+        if clashes:
+            raise ValueError(
+                "A custom log-probability key cannot be a sample key, lie inside one "
+                "or hold one, since writing the log-probability would overwrite the "
+                "sample. "
+                "Got "
+                + ", ".join(
+                    f"log-probability key {lp_key!r} for sample key {sample_key!r}"
+                    for lp_key, sample_key in clashes
+                )
+                + "."
             )
 
     def __repr__(self):

@@ -11,6 +11,7 @@ import importlib
 import os
 import pathlib
 import pickle
+import re
 import threading
 import unittest
 import warnings
@@ -6700,6 +6701,86 @@ class TestCompositeDist:
                 torch.testing.assert_close(sample["act", f"lp_{key}"], expected[key])
                 torch.testing.assert_close(lp["act", f"lp_{key}"], expected[key])
         torch.testing.assert_close(sample["act", "a"], torch.zeros(3))
+
+    @pytest.mark.parametrize("aggregate", [True, False])
+    @pytest.mark.parametrize("where", ["equal", "inside", "parent"])
+    def test_prob_module_log_prob_key_clashes_with_sample(self, aggregate, where):
+        # A log-probability written there would overwrite the sample ("act", "a").
+        clash = {"equal": ("act", "a"), "inside": ("act", "a", "lp"), "parent": "act"}[
+            where
+        ]
+        distribution_kwargs = {
+            "distribution_map": {"a": distributions.Normal, "b": distributions.Normal},
+            "name_map": {"a": ("act", "a"), "b": ("act", "b")},
+        }
+        if aggregate:
+            out_keys = ["act"]
+            lp_kwargs = {"log_prob_key": clash}
+        else:
+            out_keys = [("act", "a"), ("act", "b")]
+            lp_kwargs = {"log_prob_keys": [clash, ("act", "lp_b")]}
+
+        def factory(*args, **kwargs):
+            return CompositeDistribution(*args, **distribution_kwargs, **kwargs)
+
+        with set_composite_lp_aggregate(aggregate):
+            kwargs = {"in_keys": ["params"], "out_keys": out_keys, **lp_kwargs}
+            with pytest.raises(ValueError, match=re.escape(repr(clash))):
+                ProbabilisticTensorDictModule(
+                    distribution_class=CompositeDistribution,
+                    distribution_kwargs=distribution_kwargs,
+                    return_log_prob=True,
+                    **kwargs,
+                )
+            # Without return_log_prob, nothing is written at the key
+            ProbabilisticTensorDictModule(
+                distribution_class=CompositeDistribution,
+                distribution_kwargs=distribution_kwargs,
+                **kwargs,
+            )
+            # The sample keys of a partial or a factory are not known
+            for distribution_class in (
+                functools.partial(CompositeDistribution, **distribution_kwargs),
+                factory,
+            ):
+                ProbabilisticTensorDictModule(
+                    distribution_class=distribution_class,
+                    return_log_prob=True,
+                    **kwargs,
+                )
+
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_default_log_prob_key_inside_sample(self):
+        # The default key ("dirich", "categ_log_prob") lies inside the sample
+        # "dirich", and is not checked.
+        kwargs = {
+            "in_keys": ["params"],
+            "out_keys": [("dirich", "categ")],
+            "distribution_class": CompositeDistribution,
+            "distribution_kwargs": {
+                "distribution_map": {
+                    "dirich": distributions.Dirichlet,
+                    "categ": distributions.Categorical,
+                }
+            },
+            "return_log_prob": True,
+        }
+        module = ProbabilisticTensorDictModule(**kwargs)
+        assert module.log_prob_keys == [("dirich", "categ_log_prob")]
+        ProbabilisticTensorDictModule(
+            log_prob_keys=[("dirich", "categ_log_prob")], **kwargs
+        )
+
+    @pytest.mark.parametrize("lp_key", ["action", ("action", "lp")])
+    def test_prob_module_single_dist_log_prob_key_clashes_with_sample(self, lp_key):
+        with pytest.raises(ValueError, match=re.escape(repr(lp_key))):
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=distributions.Normal,
+                return_log_prob=True,
+                log_prob_key=lp_key,
+            )
 
     @pytest.mark.parametrize(
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
