@@ -1819,11 +1819,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 + ((None,) if keepdim else ())
                 + tuple(element for _, element, _ in elements[position + 1 :])
             )
-            # the parts are added after the split is made, as for _MEMBER
+            # the parts are added after the split is made, as for _MEMBER, and
+            # with a loop: before Python 3.12 a list comprehension runs in a
+            # frame of its own, and Dynamo reads the member index it closes
+            # over as a constant
             split = _SplitIndex(_STACK, [], dim=dim, keepdim=keepdim)
-            split.parts.extend(
-                [(member, member_index, None) for member in range(num_members)[element]]
-            )
+            parts = split.parts
+            for member in range(num_members)[element]:
+                parts.append((member, member_index, None))
             return split
         # The advanced indices as integer indices, one for each dim they use.
         # A scalar bool is a mask of one dim, of size 1 or 0, that uses no dim.
