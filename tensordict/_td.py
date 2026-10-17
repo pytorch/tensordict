@@ -1394,6 +1394,26 @@ class TensorDict(TensorDictBase):
     def _contains_str(self, key: str) -> bool:
         return key in self._tensordict
 
+    # Override: perf: looks the key up in the dicts of the exact TensorDicts on
+    # its path, so that torch.compile guards on the key and not on the order of
+    # all the keys (#2892), and eager mode builds no keys view.
+    def _contains_key(self, key: NestedKey) -> bool:
+        if isinstance(key, str):
+            return key in self._tensordict
+        root = self._tensordict.get(key[0])
+        if root is None:
+            return False
+        if type(root) is not TensorDict:
+            # a tensor, a lazy stack, a tensorclass...: the keys view answers
+            return TensorDictBase._contains_key(self, key)
+        # the steps of _TensorDictKeysView.__contains__
+        leaf_td = root._get_tuple(key[1:-1], None) if len(key) > 2 else root
+        if type(leaf_td) is TensorDict:
+            return key[-1] in leaf_td._tensordict
+        if leaf_td is None or not _is_tensor_collection(type(leaf_td)):
+            return False
+        return key[-1] in leaf_td.keys()
+
     def _set_str(
         self,
         key: NestedKey,
@@ -1908,6 +1928,9 @@ class TensorDict(TensorDictBase):
         # _default_get, without going through the _get_tuple below.
         if cls._get_tuple is TensorDict._get_tuple:
             cls._get_tuple = TensorDictBase._get_tuple
+        # and ask their keys view in `key in td`
+        if cls._contains_key is TensorDict._contains_key:
+            cls._contains_key = TensorDictBase._contains_key
 
     # Override: reads the levels that are exact TensorDicts from their dicts,
     # without a _get_str and a _get_tuple call per level.

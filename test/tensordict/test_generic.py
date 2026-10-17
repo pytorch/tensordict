@@ -4251,6 +4251,46 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="NestedKey"):
             0 in td  # noqa: B015
 
+    def test_is_in_nested(self):
+        # A TensorDict answers `key in td` from its dicts (#2892), as its keys
+        # view does
+        class SubTD(TensorDict):
+            pass
+
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        member = TensorDict(q=torch.zeros(()), r=TensorDict(z=torch.zeros(())))
+        td = TensorDict(
+            a=TensorDict(b=TensorDict(c=torch.zeros(2)), t=torch.zeros(2)),
+            x=torch.zeros(2),
+            ls=lazy_stack([member, member.clone()]),
+            tc=TC(a=torch.zeros(2), batch_size=[2]),
+            sub=SubTD(b=TensorDict(c=torch.zeros(2)), batch_size=[2]),
+            batch_size=[2],
+        )
+        td.set_non_tensor("nt", "s")
+        present = ["x", ("x",), "a", ("a", "b"), ("a", "b", "c"), ("a", ("b", "c"))]
+        present += [("a", "t"), "nt", ("nt",), ("ls", "q"), ("ls", "r", "z")]
+        present += [("tc", "a"), ("sub", "b"), ("sub", "b", "c")]
+        missing = ["y", ("y",), ("y", "b"), ("a", "y"), ("a", "y", "c")]
+        # a path through a tensor or a non-tensor is not a key
+        missing += [("x", "y"), ("x", "y", "z"), ("a", "t", "u"), ("nt", "data")]
+        missing += [("a", "b", "c", "d"), ("ls", "w"), ("tc", "y"), ("sub", "y")]
+        keys = td.keys(True, is_leaf=is_leaf_nontensor)
+        for key in present:
+            assert key in td, key
+            assert key in keys, key
+        for key in missing:
+            assert key not in td, key
+            assert key not in keys, key
+        with pytest.raises(ValueError, match="'t' is a Tensor, not a tensordict"):
+            ("a", "t", "u", "v") in td  # noqa: B015
+        for key in [(), ((),), ("a", 1), 0, None, td]:
+            with pytest.raises(RuntimeError, match="NestedKey"):
+                key in td  # noqa: B015
+
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])

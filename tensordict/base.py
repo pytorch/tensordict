@@ -2231,15 +2231,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def __contains__(self, key: NestedKey) -> bool:  # type: ignore
         if isinstance(key, str):
-            return key in self.keys()
+            return self._contains_key(key)
         if isinstance(key, tuple):
             key = unravel_key(key)
             if not key:
                 raise RuntimeError(
                     "key must be a NestedKey (a str or a possibly tuple of str)."
                 )
-            return key in self.keys(True, is_leaf=_is_leaf_nontensor)
+            return self._contains_key(key)
         return self._contains_tensordict(key)
+
+    def _contains_key(self, key: NestedKey) -> bool:
+        """Answers ``key in self`` for a str or an unravelled tuple key.
+
+        Called by ``__contains__`` with a str key, or with the unravelled form
+        of a tuple key: a str for a tuple of one str, a tuple of two str or
+        more otherwise (an empty tuple raised before the call). Returns whether
+        ``key`` is in ``self.keys(True, is_leaf=_is_leaf_nontensor)``, without
+        reading the leaves; the default asks that keys view (``self.keys()``
+        for a str).
+        """
+        if isinstance(key, str):
+            return key in self.keys()
+        return key in self.keys(True, is_leaf=_is_leaf_nontensor)
 
     def _contains_tensordict(self, item: Any) -> bool:
         """Answers ``item in self`` for an ``item`` that is not a str or a tuple.
