@@ -455,6 +455,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             given in the table above. Default is ``False``.
         log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'<sample_key_name>_log_prob'`, where `<sample_key_name>` is each of the :attr:`out_keys`.
+            Custom keys replace these defaults, including for a :class:`~tensordict.nn.distributions.CompositeDistribution`.
 
             .. note:: This is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``False``.
 
@@ -982,8 +983,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     else:
                         if log_prob is None:
                             log_prob = dist.log_prob(out_tensors)
-                        out_tensors.update(log_prob)
                         self._update_td_lp(log_prob)
+                        out_tensors.update(log_prob)
                 tensordict_out.update(out_tensors)
             else:
                 if isinstance(out_tensors, Tensor):

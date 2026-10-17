@@ -39,6 +39,7 @@ from tensordict import (
 from tensordict._unbatched import _HAS_WRAPPER_SUBCLASS_FIX, UnbatchedTensor
 from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
+    CompositeDistribution,
     CudaGraphModule,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
@@ -2728,6 +2729,30 @@ class TestTC:
 
         assert type(func_td()) is type(func_c_td())
         assert type(func_mytd()) is type(func_c_mytd())
+
+
+@set_composite_lp_aggregate(False)
+def test_composite_custom_log_prob_keys():
+    module = Prob(
+        in_keys=["params"],
+        distribution_class=CompositeDistribution,
+        distribution_kwargs={
+            "distribution_map": {"action": torch.distributions.Normal}
+        },
+        default_interaction_type=InteractionType.MODE,
+        return_log_prob=True,
+        log_prob_keys=["lp"],
+    )
+    loc, scale = torch.zeros(2), torch.ones(2)
+    td = TensorDict(
+        params={"action": {"loc": loc, "scale": scale}},
+        lp=torch.full((2,), 123.0),
+        batch_size=[2],
+    )
+    result = torch.compile(module, fullgraph=True, backend="eager")(td)
+    expected = torch.distributions.Normal(loc, scale).log_prob(result["action"])
+    torch.testing.assert_close(result["lp"], expected)
+    assert "action_log_prob" not in result
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
