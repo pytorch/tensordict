@@ -1789,9 +1789,15 @@ class LazyStackedTensorDict(TensorDictBase):
             member_index = tuple(
                 element for i, (_, element, _) in enumerate(elements) if i != position
             )
-            return _SplitIndex(
-                _MEMBER, [(member % num_members, _whole_or_index(member_index), None)]
+            # Under torch.compile, Dynamo reads the arguments of a class call
+            # as constants if it can, which fixes the SymInt bounds of the
+            # slices of the member index: the parts are added after the split
+            # is made.
+            split = _SplitIndex(_MEMBER, [])
+            split.parts.append(
+                (member % num_members, _whole_or_index(member_index), None)
             )
+            return split
         advanced = [i for i, (kind, _, _) in enumerate(elements) if kind >= _INDEX]
         separated = bool(advanced) and any(
             kind in (_SLICE, _NONE)
@@ -1813,15 +1819,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 + ((None,) if keepdim else ())
                 + tuple(element for _, element, _ in elements[position + 1 :])
             )
-            return _SplitIndex(
-                _STACK,
-                [
-                    (member, member_index, None)
-                    for member in range(num_members)[element]
-                ],
-                dim=dim,
-                keepdim=keepdim,
-            )
+            # the parts are added after the split is made, as for _MEMBER, and
+            # with a loop: before Python 3.12 a list comprehension runs in a
+            # frame of its own, and Dynamo reads the member index it closes
+            # over as a constant
+            split = _SplitIndex(_STACK, [], dim=dim, keepdim=keepdim)
+            parts = split.parts
+            for member in range(num_members)[element]:
+                parts.append((member, member_index, None))
+            return split
         # The advanced indices as integer indices, one for each dim they use.
         # A scalar bool is a mask of one dim, of size 1 or 0, that uses no dim.
         components = {}
@@ -3745,7 +3751,9 @@ class LazyStackedTensorDict(TensorDictBase):
             ((member, member_index, _),) = split.parts
             result = self.tensordicts[member]
             return result if member_index is None else result[member_index]
-        if not split.parts:
+        # test the length, not the truth value: under torch.compile, the truth
+        # value of the parts fixes the SymInt bounds of the slices they hold
+        if len(split.parts) == 0:
             # e.g. an empty slice or mask along the stack dim. The result has a
             # dim of size 0 at the stack dim, or in the advanced block.
             empty_dim = split.dim
