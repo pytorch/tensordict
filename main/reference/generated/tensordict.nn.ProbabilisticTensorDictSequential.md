@@ -569,6 +569,8 @@ Returns:
 
 A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
 Modules in a named sequence keep their names, including nested sequences.
+The new sequence keeps `partial_tolerant` and `inplace`.
+Nested sequences keep their own options the same way.
 
 Examples
 
