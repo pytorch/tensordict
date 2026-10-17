@@ -57,6 +57,9 @@ class TensorDictSequential(TensorDictModule):
             and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
             Regular ``dict`` inputs will be converted to ``OrderedDict`` if necessary.
             A module registered under multiple names runs once for each name, in order.
+            Named entries can also be replaced or deleted with ``seq["name"]``, and
+            assigning a new name appends the module. After an edit, ``in_keys`` and
+            ``out_keys`` are recomputed from the modules.
 
     Keyword Args:
         partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
@@ -712,7 +715,51 @@ class TensorDictSequential(TensorDictModule):
     def __setitem__(
         self, index: int | slice | str, tensordict_module: TensorDictModuleBase
     ) -> None:
-        return self.module.__setitem__(idx=index, module=tensordict_module)
+        if callable(tensordict_module):
+            # wrap a plain callable as the constructor does
+            (tensordict_module,) = self._convert_modules([tensordict_module])
+        self._edit_modules(
+            lambda modules: modules.__setitem__(index, tensordict_module)
+        )
 
     def __delitem__(self, index: int | slice | str) -> None:
-        self.module.__delitem__(idx=index)
+        self._edit_modules(lambda modules: modules.__delitem__(index))
+
+    def _edit_modules(self, edit: Callable[[nn.Module], None]) -> None:
+        """Applies ``edit`` to the module container and updates the keys.
+
+        The edit is first tried on a copy of the container, so that an edit
+        that fails, or that :meth:`_check_modules` rejects, leaves the sequence
+        unchanged.
+        """
+        if isinstance(self.module, nn.ModuleDict):
+            candidate = nn.ModuleDict(collections.OrderedDict(self.module.items()))
+            edit(candidate)
+            modules = list(candidate.values())
+        else:
+            candidate = nn.ModuleList(list(self.module))
+            edit(candidate)
+            modules = list(candidate)
+        self._check_modules(modules)
+        edit(self.module)
+        self._refresh_keys()
+
+    def _check_modules(self, modules: list[nn.Module]) -> None:
+        """Raises if the sequence cannot hold ``modules`` after an edit."""
+        if self._select_before_return:
+            _, out_keys = self._compute_in_and_out_keys(modules)
+            missing = [key for key in self._out_keys_apparent if key not in out_keys]
+            if missing:
+                raise ValueError(
+                    f"The edit would remove the selected out_keys {missing}. Call "
+                    "reset_out_keys() before the edit, or select other keys."
+                )
+
+    def _refresh_keys(self) -> None:
+        """Recomputes ``in_keys`` and ``out_keys`` from the modules after an edit."""
+        in_keys, out_keys = self._compute_in_and_out_keys(list(self._module_iter()))
+        selected = self._out_keys_apparent if self._select_before_return else None
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        if selected is not None:
+            self._out_keys_apparent = selected
