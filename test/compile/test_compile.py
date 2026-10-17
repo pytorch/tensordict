@@ -4344,6 +4344,59 @@ class TestGuardCount:
             td = TensorDict({}, batch_size=[n, 6])
             assert compiled(td) == fn(td)
 
+    @pytest.mark.parametrize(
+        "variant",
+        ["start", "stop", "member", "stack_dim1", "nested", "in_tensordict", "stack"],
+    )
+    def test_slice_dynamic_lazy_stack(self, variant):
+        # gh-2896: a slice of a lazy stack along a dim of its members, with a
+        # symbolic bound, compiles once. A bound along the stack dim picks the
+        # members, so that slice compiles once for every bound.
+        def make():
+            members = [
+                TensorDict({"x": torch.randn(32, 3)}, batch_size=[32]) for _ in range(6)
+            ]
+            if variant == "stack_dim1":
+                return lazy_stack(members, 1)
+            if variant == "nested":
+                return lazy_stack([lazy_stack(members[:3]), lazy_stack(members[3:])])
+            td = lazy_stack(members)
+            if variant == "in_tensordict":
+                return TensorDict({"td": td}, batch_size=[6, 32])
+            return td
+
+        def fn(td, marker):
+            a = marker.shape[0]
+            if variant == "start":
+                out = td[:, a:]
+            elif variant == "stop":
+                out = td[:, :a]
+            elif variant == "member":
+                out = td[2, a:]
+            elif variant == "stack_dim1":
+                out = td[a:]
+            elif variant == "nested":
+                out = td[:, :, a:]
+            elif variant == "in_tensordict":
+                out = td[:, a:]["td"]
+            else:
+                out = td[a - 4 :]
+            return out.get("x").sum(), out.batch_size
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, dynamic=True, fullgraph=True)
+        for n in (5, 7, 9):
+            td = make()
+            marker = torch.zeros(n)
+            out, batch_size = compiled(td, marker)
+            expected, expected_batch_size = fn(td, marker)
+            torch.testing.assert_close(out, expected)
+            assert batch_size == expected_batch_size
+        expected_frames = 3 if variant == "stack" else 1
+        assert counter.frame_count == expected_frames, (
+            f"{counter.frame_count} frames, expected {expected_frames}"
+        )
+
     def test_clone_recurse_false_no_recompile(self):
         def fn(td):
             c = td.clone(recurse=False)
