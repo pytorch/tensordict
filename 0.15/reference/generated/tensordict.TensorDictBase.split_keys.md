@@ -19,7 +19,9 @@ If not specified and `strict=True`, an exception is raised.
 is missing. Defaults to `True`.
 - **reproduce_struct** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, all tensordict returned have
 the same tree structure as `self`, even if some sub-tensordicts
-contain no leaves.
+contain no leaves. Non-tensor entries are not copied: each
+one goes to the output whose key set names it, or to the last
+one, as with `reproduce_struct=False`.
 
 Note
 

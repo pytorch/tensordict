@@ -24,6 +24,7 @@ These can be instances of TensorDictModuleBase or any other function that matche
 Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
 and thus will not affect the in_keys and out_keys attributes of the TensorDictSequential.
 Regular `dict` inputs will be converted to `OrderedDict` if necessary.
+A module registered under multiple names runs once for each name, in order.
 
 Keyword Arguments:
 
@@ -32,7 +33,9 @@ If so, the only module that will be executed are those who can be executed given
 are present.
 Also, if the input tensordict is a lazy stack of tensordicts AND if partial_tolerant is [`True`](https://docs.python.org/3/builtins/constants.html#True) AND if the
 stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
-looking for those that have the required keys, if any. Defaults to False.
+looking for those that have the required keys, if any. The module's `out_keys` are then written
+into each of those sub-tensordicts, whether the module writes into its input or returns a new
+tensordict. Defaults to False.
 - **selected_out_keys** (*iterable**of**NestedKeys**,**optional*) - the list of out-keys to select. If not provided, all
 `out_keys` will be written.
 - **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - 
