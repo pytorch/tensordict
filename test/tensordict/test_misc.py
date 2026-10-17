@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import gc
 import importlib.util
+import json
 import os
 import platform
 import sys
@@ -19,12 +20,14 @@ import torch
 from tensordict import (
     LazyStackedTensorDict,
     make_tensordict,
+    pack_memmap,
     PersistentTensorDict,
     tensorclass,
     TensorDict,
     TypedTensorDict,
     UnbatchedTensor,
 )
+from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import is_tensor_collection
 from tensordict._torch_func import _POINTWISE_FUNCTIONS
 from tensordict.base import TensorDictBase
@@ -1618,6 +1621,158 @@ class TestLikeConstructors:
 
 
 class TestMemmap:
+    @pytest.mark.parametrize("archive", [False, True])
+    @pytest.mark.parametrize("device", ["cpu", "meta"])
+    @pytest.mark.parametrize(
+        "op,kwargs",
+        [
+            ("squeeze", {"dim": -2}),
+            ("squeeze", {}),
+            ("unsqueeze", {"dim": -1}),
+            ("view", {"size": [2, 3]}),
+            ("transpose", {"dim0": -3, "dim1": -1}),
+            ("permute", {"dims": [-1, -3, -2]}),
+        ],
+    )
+    @legacy_lazy_mode()
+    def test_saved_view_operation_roundtrip(
+        self, tmp_path, monkeypatch, archive, device, op, kwargs
+    ):
+        # The stdlib backend serializes the torch.Size emitted by legacy view().
+        monkeypatch.setattr("tensordict._utils_key_json._JSON_BACKEND", "json")
+        source = TensorDict(
+            {"x": torch.arange(24).reshape(2, 1, 3, 4)}, batch_size=[2, 1, 3]
+        )
+        view = getattr(source, op)(**kwargs)
+        assert isinstance(view, _CustomOpTensorDict)
+        path = tmp_path / "view"
+        view.memmap(path)
+        if archive:
+            path = pack_memmap(path, tmp_path / "view.tdz")
+        loaded = TensorDict.load_memmap(path, device=device, allow_pickle=False)
+        assert type(loaded) is type(view)
+        assert loaded.batch_size == view.batch_size
+        assert loaded["x"].shape == view["x"].shape
+        assert loaded["x"].device == torch.device(device)
+        if device == "cpu":
+            torch.testing.assert_close(loaded["x"], view["x"])
+            loaded.set_("x", torch.zeros_like(view["x"]))
+            assert not loaded._source["x"].any()
+
+    @pytest.mark.parametrize("archive", [False, True])
+    @pytest.mark.parametrize(
+        "shape,op,kwargs",
+        [
+            ([1, 2, 1], "squeeze", {"dim": (0, -1)}),
+            ([1, 2, 1], "squeeze", {"dim": ()}),
+            ([1, 2, 1], "squeeze", {}),
+            ([], "unsqueeze", {"dim": -1}),
+            ([1], "view", {"size": ()}),
+            ([2, 3], "view", {"size": (-1,)}),
+            ([0, 2], "view", {"size": (0,)}),
+            ([], "permute", {"dims": ()}),
+            ([2, 3], "permute", {"dims": (-1, -2)}),
+            ([2, 3], "transpose", {"dim0": -1, "dim1": -2}),
+        ],
+    )
+    def test_saved_view_operation_without_inverse(
+        self, tmp_path, archive, shape, op, kwargs
+    ):
+        source = TensorDict({"x": torch.ones(shape)}, batch_size=shape)
+        view = _CustomOpTensorDict(source, op, custom_op_kwargs=kwargs)
+        path = tmp_path / "view"
+        view.memmap(path)
+        if archive:
+            path = pack_memmap(path, tmp_path / "view.tdz")
+        loaded = TensorDict.load_memmap(path, allow_pickle=False)
+        assert type(loaded) is _CustomOpTensorDict
+        assert loaded.inv_op is None
+        assert loaded.batch_size == view.batch_size
+        torch.testing.assert_close(loaded["x"], view["x"])
+
+    @pytest.mark.parametrize("archive", [False, True])
+    @legacy_lazy_mode()
+    def test_saved_view_operation_pickle_policy(self, tmp_path, archive):
+        source = TensorDict({"x": torch.ones(2), "value": {1, 2}}, batch_size=[2])
+        view = source.unsqueeze(0)
+        path = tmp_path / "view"
+        view.memmap(path)
+        if archive:
+            path = pack_memmap(path, tmp_path / "view.tdz")
+        with pytest.raises(RuntimeError, match="allow_pickle=True"):
+            TensorDict.load_memmap(path, allow_pickle=False)
+        loaded = TensorDict.load_memmap(path, allow_pickle=True)
+        assert loaded._source["value"] == {1, 2}
+        torch.testing.assert_close(loaded["x"], view["x"])
+
+    @pytest.mark.parametrize("archive", [False, True])
+    @pytest.mark.parametrize(
+        "field,op",
+        [
+            (field, op)
+            for field in ("custom_op", "inv_op")
+            for op in ("clone", "zero_", "__getattribute__", "", [])
+        ]
+        + [("custom_op", None)],
+    )
+    @legacy_lazy_mode()
+    def test_saved_view_operation_rejects_name(
+        self, tmp_path, monkeypatch, archive, field, op
+    ):
+        path = tmp_path / "view"
+        TensorDict({"x": torch.ones(2)}, [2]).unsqueeze(0).memmap(path)
+        meta_path = path / "meta.json"
+        metadata = json.loads(meta_path.read_text())
+        metadata[field] = op
+        meta_path.write_text(json.dumps(metadata))
+        if archive:
+            path = pack_memmap(path, tmp_path / "view.tdz")
+
+        def unexpected_source_load(*args, **kwargs):
+            pytest.fail("Source loaded before saved view operation validation")
+
+        monkeypatch.setattr(TensorDict, "_load_memmap", unexpected_source_load)
+        with pytest.raises(ValueError, match="saved view operation"):
+            TensorDict.load_memmap(path)
+
+    @pytest.mark.parametrize("archive", [False, True])
+    @pytest.mark.parametrize("field", ["custom_op", "inv_op"])
+    @pytest.mark.parametrize(
+        "op,kwargs",
+        [
+            ("unsqueeze", {}),
+            ("unsqueeze", {"dim": True}),
+            ("squeeze", {"dim": None}),
+            ("squeeze", {"dim": [0, "1"]}),
+            ("view", {"size": [2.0]}),
+            ("view", {"dtype": "float32"}),
+            ("transpose", {"dim0": 0}),
+            ("transpose", {"dim0": 0, "dim1": 1, "other": 2}),
+            ("permute", {"dims": 0}),
+            ("permute", []),
+        ],
+    )
+    @legacy_lazy_mode()
+    def test_saved_view_operation_rejects_kwargs(
+        self, tmp_path, monkeypatch, archive, field, op, kwargs
+    ):
+        path = tmp_path / "view"
+        TensorDict({"x": torch.ones(2)}, [2]).unsqueeze(0).memmap(path)
+        meta_path = path / "meta.json"
+        metadata = json.loads(meta_path.read_text())
+        metadata[field] = op
+        metadata[field + "_kwargs"] = kwargs
+        meta_path.write_text(json.dumps(metadata))
+        if archive:
+            path = pack_memmap(path, tmp_path / "view.tdz")
+
+        def unexpected_source_load(*args, **kwargs):
+            pytest.fail("Source loaded before saved view operation validation")
+
+        monkeypatch.setattr(TensorDict, "_load_memmap", unexpected_source_load)
+        with pytest.raises(ValueError, match="saved view operation"):
+            TensorDict.load_memmap(path)
+
     @pytest.mark.parametrize("robust_key", [False, True])
     def test_memmap_robust_key_normal(self, robust_key, tmpdir):
         """Test robust_key parameter with normal keys."""

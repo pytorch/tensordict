@@ -5827,6 +5827,41 @@ class _CustomOpTensorDict(TensorDictBase):
         custom_op_kwargs = metadata.pop("custom_op_kwargs")
         inv_op_kwargs = metadata.pop("inv_op_kwargs")
 
+        # Saved lazy views may only dispatch shape operations, in either direction.
+        allowed_kwargs = {
+            "squeeze": {"dim"},
+            "unsqueeze": {"dim"},
+            "view": {"size"},
+            "transpose": {"dim0", "dim1"},
+            "permute": {"dims"},
+        }
+        for name, op, op_kwargs in (
+            ("custom_op", custom_op, custom_op_kwargs),
+            ("inv_op", inv_op, inv_op_kwargs),
+        ):
+            error = f"Invalid saved view operation in {name} or {name}_kwargs."
+            if not isinstance(op_kwargs, dict):
+                raise ValueError(error)
+            if name == "inv_op" and op is None:
+                continue
+            if not isinstance(op, str) or op not in allowed_kwargs:
+                raise ValueError(error)
+            if set(op_kwargs) != allowed_kwargs[op] and not (
+                op == "squeeze" and not op_kwargs
+            ):
+                raise ValueError(error)
+            for key, value in op_kwargs.items():
+                if key in ("size", "dims") or (
+                    op == "squeeze" and isinstance(value, (list, tuple))
+                ):
+                    values = value
+                else:
+                    values = (value,)
+                if not isinstance(values, (list, tuple)) or any(
+                    type(dim) is not int for dim in values
+                ):
+                    raise ValueError(error)
+
         source = TensorDict.load_memmap(prefix / "_source", **kwargs, non_blocking=True)
 
         return cls(
