@@ -90,6 +90,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
+    # CI runs the test suite on the free-threaded 3.14t and 3.15t, but tensordict
+    # does not document its thread safety yet: "2 - Beta" in the levels of
+    # https://py-free-threading.github.io/porting/
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
     "Development Status :: 4 - Beta"
 ]
 dependencies = [
