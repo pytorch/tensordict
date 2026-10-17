@@ -6703,10 +6703,12 @@ class TestCompositeDist:
         torch.testing.assert_close(sample["act", "a"], torch.zeros(3))
 
     @pytest.mark.parametrize("aggregate", [True, False])
-    @pytest.mark.parametrize("nested", [False, True])
-    def test_prob_module_log_prob_key_clashes_with_sample(self, aggregate, nested):
+    @pytest.mark.parametrize("where", ["equal", "inside", "parent"])
+    def test_prob_module_log_prob_key_clashes_with_sample(self, aggregate, where):
         # A log-probability written there would overwrite the sample ("act", "a").
-        clash = ("act", "a", "lp") if nested else ("act", "a")
+        clash = {"equal": ("act", "a"), "inside": ("act", "a", "lp"), "parent": "act"}[
+            where
+        ]
         distribution_kwargs = {
             "distribution_map": {"a": distributions.Normal, "b": distributions.Normal},
             "name_map": {"a": ("act", "a"), "b": ("act", "b")},

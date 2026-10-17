@@ -470,15 +470,16 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'<sample_key_name>_log_prob'`, where `<sample_key_name>` is each of the :attr:`out_keys`.
             Custom keys replace these defaults, including for a :class:`~tensordict.nn.distributions.CompositeDistribution`.
-            With ``return_log_prob=True``, a custom key equal to a sample key, or inside one, raises a ``ValueError``
-            when ``distribution_class`` is a class (and, for a ``CompositeDistribution``,
+            With ``return_log_prob=True``, a custom key equal to a sample key, inside one, or holding one raises a
+            ``ValueError`` when ``distribution_class`` is a class (and, for a ``CompositeDistribution``,
             ``distribution_kwargs`` holds its ``distribution_map``).
 
             .. note:: This is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``False``.
 
         log_prob_key (NestedKey, optional): key where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'sample_log_prob'` when :func:`~tensordict.nn.composite_lp_aggregate` is set to `True`
-            or `'<sample_key_name>_log_prob'` otherwise.
+            or `'<sample_key_name>_log_prob'` otherwise. A custom key that would overwrite a sample raises a
+            ``ValueError``, as for ``log_prob_keys``.
 
             .. note:: When there is more than one sampled key, this is only available when :func:`~tensordict.nn.composite_lp_aggregate` is set to ``True``.
 
@@ -735,8 +736,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             )
 
     def _check_log_prob_keys(self, log_prob_keys, log_prob_key) -> None:
-        # A custom log-probability key at a sample key, or inside one, would
-        # overwrite the sample. The sample keys are known only for a
+        # A custom log-probability key at a sample key, inside one, or holding
+        # one would overwrite the sample. The sample keys are known only for a
         # distribution class: a partial or a factory function is not checked.
         distribution_class = self.distribution_class
         if not isinstance(distribution_class, type):
@@ -766,12 +767,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             )
             if lp_key not in default_keys
             for sample_key in sample_keys
-            if lp_key == sample_key or _is_inside(lp_key, sample_key)
+            if lp_key == sample_key
+            or _is_inside(lp_key, sample_key)
+            or _is_inside(sample_key, lp_key)
         ]
         if clashes:
             raise ValueError(
-                "A custom log-probability key cannot be a sample key or lie inside "
-                "one, since writing the log-probability would overwrite the sample. "
+                "A custom log-probability key cannot be a sample key, lie inside one "
+                "or hold one, since writing the log-probability would overwrite the "
+                "sample. "
                 "Got "
                 + ", ".join(
                     f"log-probability key {lp_key!r} for sample key {sample_key!r}"
