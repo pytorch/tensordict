@@ -12,13 +12,15 @@ release without a deprecation cycle.
 Parameters:
 
 - **endpoint** - a UCXX endpoint object.
-- **td** - if provided and already consolidated, receives directly into
-its storage buffer (in-place update). Otherwise a new TensorDict
-is constructed.
+- **td** - if provided and consolidated with matching layout, storage size,
+and device, receives directly into its storage buffer (in-place
+update). Otherwise returns a new TensorDict without modifying `td`.
 
 Keyword Arguments:
 
-**device** - device on which to allocate the storage buffer. Defaults to CPU.
+**device** - device on which to receive. If omitted, uses the storage
+device of a consolidated `td`, even when its layout does not
+match. Otherwise defaults to CPU.
 
 Returns:
 

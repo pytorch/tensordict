@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev5994+g7cdc0dba0.d20261017)">
+<meta name="llm:version" content="main (0.15.0.dev5996+g5926a9736.d20261017)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5994+g7cdc0dba0.d20261017)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5996+g5926a9736.d20261017)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1652,13 +1652,15 @@ release without a deprecation cycle.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>endpoint</strong> – a UCXX endpoint object.</p></li>
-<li><p><strong>td</strong> – if provided and already consolidated, receives directly into
-its storage buffer (in-place update). Otherwise a new TensorDict
-is constructed.</p></li>
+<li><p><strong>td</strong> – if provided and consolidated with matching layout, storage size,
+and device, receives directly into its storage buffer (in-place
+update). Otherwise returns a new TensorDict without modifying <code class="docutils literal notranslate"><span class="pre">td</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>device</strong> – device on which to allocate the storage buffer. Defaults to CPU.</p>
+<dd class="field-even"><p><strong>device</strong> – device on which to receive. If omitted, uses the storage
+device of a consolidated <code class="docutils literal notranslate"><span class="pre">td</span></code>, even when its layout does not
+match. Otherwise defaults to CPU.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The received TensorDict.</p>
@@ -2022,7 +2024,7 @@ is constructed.</p></li>
        "headline": "recv_tensordict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - recv_tensordict",
        "url": "/reference/generated/tensordict._ucxx.recv_tensordict.html",
-       "articleBody": "recv_tensordict# async tensordict._ucxx.recv_tensordict(endpoint, td: TensorDictBase | None = None, *, device: device | str | None = None) \u2192 TensorDictBase# Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata). Warning recv_tensordict is experimental: its API can change in a minor release without a deprecation cycle. Parameters: endpoint \u2013 a UCXX endpoint object. td \u2013 if provided and already consolidated, receives directly into its storage buffer (in-place update). Otherwise a new TensorDict is constructed. Keyword Arguments: device \u2013 device on which to allocate the storage buffer. Defaults to CPU. Returns: The received TensorDict.",
+       "articleBody": "recv_tensordict# async tensordict._ucxx.recv_tensordict(endpoint, td: TensorDictBase | None = None, *, device: device | str | None = None) \u2192 TensorDictBase# Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata). Warning recv_tensordict is experimental: its API can change in a minor release without a deprecation cycle. Parameters: endpoint \u2013 a UCXX endpoint object. td \u2013 if provided and consolidated with matching layout, storage size, and device, receives directly into its storage buffer (in-place update). Otherwise returns a new TensorDict without modifying td. Keyword Arguments: device \u2013 device on which to receive. If omitted, uses the storage device of a consolidated td, even when its layout does not match. Otherwise defaults to CPU. Returns: The received TensorDict.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
