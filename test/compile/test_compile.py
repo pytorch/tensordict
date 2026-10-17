@@ -43,6 +43,7 @@ from tensordict.nn import (
     CudaGraphModule,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
+    ProbabilisticTensorDictSequential as ProbSeq,
     set_composite_lp_aggregate,
     set_interaction_type,
     TensorDictModule,
@@ -2753,6 +2754,42 @@ def test_composite_custom_log_prob_keys():
     expected = torch.distributions.Normal(loc, scale).log_prob(result["action"])
     torch.testing.assert_close(result["lp"], expected)
     assert "action_log_prob" not in result
+
+
+@pytest.mark.parametrize("fullgraph", [True, False])
+def test_composite_seq_log_prob_aggregate_changed_after_init(fullgraph):
+    # Modules built while composite_lp_aggregate() was True keep the default
+    # names when the sequence is scored with it False.
+    with set_composite_lp_aggregate(True):
+        seq = ProbSeq(
+            Prob(
+                in_keys=["params"],
+                out_keys=["a", "b"],
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={
+                    "distribution_map": {
+                        "a": torch.distributions.Normal,
+                        "b": torch.distributions.Normal,
+                    }
+                },
+                default_interaction_type=InteractionType.MODE,
+                return_log_prob=True,
+            ),
+            return_composite=True,
+        )
+        params = TensorDict(
+            {k: {"loc": torch.zeros(2), "scale": torch.ones(2)} for k in "ab"},
+            batch_size=[2],
+        )
+        td = seq(TensorDict(params=params, batch_size=[2]))
+    with set_composite_lp_aggregate(False):
+        expected = seq.log_prob(td)
+        result = torch.compile(
+            lambda t: seq.log_prob(t), fullgraph=fullgraph, backend="eager"
+        )(td)
+    assert set(result.keys()) == set(expected.keys()) == {"a_log_prob", "b_log_prob"}
+    for key in expected.keys():
+        torch.testing.assert_close(result[key], expected[key])
 
 
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
