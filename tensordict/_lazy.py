@@ -5116,7 +5116,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             else:
                 result = type(self)(
-                    *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
+                    *(td.movedim(dim1 - 1, dim0) for td in self.tensordicts),
                     stack_dim=dim1,
                     stack_dim_name=self._td_dim_name,
                 )
@@ -5129,7 +5129,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             else:
                 result = type(self)(
-                    *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
+                    *(td.movedim(dim0, dim1 - 1) for td in self.tensordicts),
                     stack_dim=dim0,
                     stack_dim_name=self._td_dim_name,
                 )
