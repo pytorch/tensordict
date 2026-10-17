@@ -401,6 +401,21 @@ zarr), `from_zarr` infers the batch size:
 torch.Size([500])
 ```
 
+Non-tensor values use JSON where possible and pickle otherwise. Pass
+`allow_pickle=False` to `from_zarr` (or to `PersistentTensorDict`) to
+reject pickled values before decoding them, or `allow_pickle=True` only
+for data you trust. The current default, `None`, still reads pickle but
+emits a `FutureWarning` when a pickled field is read, not when the store
+is opened. Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False`. Tensor and JSON entries are unaffected, as is HDF5.
+Unknown non-tensor encodings raise `ValueError`.
+
+`to_zarr` and `PersistentTensorDict.from_dict(..., backend="zarr")`
+create a new store and return a handle that trusts the values they just
+wrote, unless you pass `allow_pickle=False`. This policy is not stored in
+the zarr store: reopening with `from_zarr` uses that call's policy.
+Opening an existing store in append mode does not opt into pickle.
+
 By default, `to_zarr` writes each tensor as one chunk without compression.
 To read a few rows without reading the whole array, pass `chunks`, and read
 with [`get_at()`](reference/generated/tensordict.TensorDictBase.get_at.html#tensordict.TensorDictBase.get_at). To compress the chunks, pass

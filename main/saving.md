@@ -514,6 +514,15 @@ True
 >>> torch.optim.Adam(model.parameters()).load_state_dict(optim_sd)
 ```
 
+The zarr backend has a separate, additive `allow_pickle` read policy on
+`from_zarr` and `PersistentTensorDict`. `False` rejects pickle before
+decoding; `True` permits it for trusted data; the current default,
+`None`, reads it with a `FutureWarning` only when a pickled field is
+accessed. Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False` for zarr. This does not change the memory-mapped
+loader's 0.16 schedule. Tensor and JSON zarr entries need no opt-in.
+See [zarr](storage.html#storage-zarr) for the policy of newly written stores.
+
 tensordict also protects the paths that it writes:
 
 - If the path of a new leaf file is a symbolic link, tensordict raises an

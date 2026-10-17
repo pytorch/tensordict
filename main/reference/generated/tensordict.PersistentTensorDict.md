@@ -5,7 +5,7 @@ listed by task in [Methods by task](../td.html#api-tensordict-methods). This pag
 methods that `PersistentTensorDict` adds, and the overrides that have their own
 documentation.
 
-*class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
+*class*tensordict.PersistentTensorDict(***, *batch_size=None*, *filename=None*, *group=None*, *mode='r'*, *backend='h5'*, *device=None*, *validate_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
 
 Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, `_NoSelectExclude`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
@@ -69,6 +69,12 @@ dims equal the batch size, so that indexing the tensordict selects
 its rows. Otherwise it reads as one
 [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole array.
 Defaults to `False`.
+- **allow_pickle** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - zarr non-tensor read policy.
+`False` rejects pickle before decoding; `True` permits it for
+trusted data. `None` (default) permits it with a `FutureWarning`
+when read. Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False`. Tensor and JSON entries, and HDF5, are
+unaffected.
 - ****kwargs** - kwargs to be passed to `h5py.File.create_dataset()` (h5
 backend) or [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array) (zarr backend). With the
 zarr backend, arrays are stored as a single chunk without compression
@@ -122,7 +128,7 @@ Defaults to `False`.
 
 See [`flatten_keys()`](tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys).
 
-*classmethod*from_dict(*input_dict*, *filename*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, *backend: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'h5'*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
+*classmethod*from_dict(*input_dict*, *filename*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, *backend: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'h5'*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
 
 Converts a dictionary or a TensorDict to a h5 file or zarr store.
 
@@ -150,6 +156,11 @@ Defaults to `"h5"`.
 - **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - for a dict input without
 `batch_size`, the number of leading dims of the inferred
 batch size. Exclusive with `batch_size`.
+- **allow_pickle** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - zarr read policy for the
+returned handle. `None` (default) trusts the values just
+written, as does `True`. `False` rejects reads of pickled
+non-tensor values. Reopening uses the new call's policy.
+HDF5 is unaffected.
 - ****kwargs** - kwargs to be passed to `h5py.File.create_dataset()`
 (h5 backend) or [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array) (zarr backend).
 

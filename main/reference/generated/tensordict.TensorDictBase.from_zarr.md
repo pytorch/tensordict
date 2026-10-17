@@ -1,6 +1,6 @@
 # TensorDictBase.from_zarr
 
-*classmethod*TensorDictBase.from_zarr(*filename*, ***, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'r'*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+*classmethod*TensorDictBase.from_zarr(*filename*, ***, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'r'*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_tensor_as_stack: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
 Creates a PersistentTensorDict from a zarr store.
 
@@ -29,6 +29,12 @@ with one string per row, reads as a
 leading dims equal the batch size. Otherwise it reads as one
 [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole
 array. Defaults to `False`.
+- **allow_pickle** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - whether to decode pickled
+non-tensor values. `False` rejects them before decoding;
+`True` permits them only for data you trust. The default,
+`None`, permits them with a `FutureWarning` when read.
+Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False`. Tensor and JSON entries are unaffected.
 
 Returns:
 

@@ -566,7 +566,7 @@ Methods
 | [`TensorDictBase.from_h5`](generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5)(filename, *[, mode, ...]) | Creates a PersistentTensorDict from a h5 file. |
 | [`TensorDictBase.to_h5`](generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5)(filename, **kwargs) | Converts a tensordict to a PersistentTensorDict with the h5 backend. |
 | [`TensorDictBase.from_zarr`](generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr)(filename, *[, ...]) | Creates a PersistentTensorDict from a zarr store. |
-| [`TensorDictBase.to_zarr`](generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr)(filename, **kwargs) | Converts a tensordict to a PersistentTensorDict with the zarr backend. |
+| [`TensorDictBase.to_zarr`](generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr)(filename, *[, ...]) | Converts a tensordict to a PersistentTensorDict with the zarr backend. |
 | [`TensorDictBase.from_csv`](generated/tensordict.TensorDictBase.from_csv.html#tensordict.TensorDictBase.from_csv)(path, *[, ...]) | Creates a TensorDict from a CSV file. |
 | [`TensorDictBase.to_csv`](generated/tensordict.TensorDictBase.to_csv.html#tensordict.TensorDictBase.to_csv)(path, *[, separator]) | Writes this TensorDict to a CSV file. |
 | [`TensorDictBase.from_json`](generated/tensordict.TensorDictBase.from_json.html#tensordict.TensorDictBase.from_json)(path, *[, ...]) | Creates a TensorDict from a JSON file. |

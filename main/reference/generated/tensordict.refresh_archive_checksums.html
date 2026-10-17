@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev5990+gebe39ce9e.d20261017)">
+<meta name="llm:version" content="main (0.15.0.dev5995+gc92f5adbe.d20261017)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5990+gebe39ce9e.d20261017)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev5995+gc92f5adbe.d20261017)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1646,9 +1646,9 @@ document.write(`
 <p>A tensordict loaded with <code class="docutils literal notranslate"><span class="pre">TensorDict.load_memmap(path,</span> <span class="pre">mode=&quot;r+&quot;)</span></code>
 writes through to the archive without updating the CRC-32 that the zip
 format stores for each entry. <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>
-itself never verifies checksums, so this is only needed before handing
-the modified archive to tools that do (<code class="docutils literal notranslate"><span class="pre">unzip</span></code>, <a class="reference external" href="https://docs.python.org/3/library/zipfile.html#module-zipfile" title="(in Python v3.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">zipfile</span></code></a>,
-<a class="reference internal" href="tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>).</p>
+does not verify checksums of uncompressed memory-mapped leaves, so this
+is only needed before handing the modified archive to tools that do
+(<code class="docutils literal notranslate"><span class="pre">unzip</span></code>, <a class="reference external" href="https://docs.python.org/3/library/zipfile.html#module-zipfile" title="(in Python v3.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">zipfile</span></code></a>, <a class="reference internal" href="tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – path to the archive to fix up.</p>
@@ -2015,7 +2015,7 @@ the modified archive to tools that do (<code class="docutils literal notranslate
        "headline": "refresh_archive_checksums",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - refresh_archive_checksums",
        "url": "/reference/generated/tensordict.refresh_archive_checksums.html",
-       "articleBody": "refresh_archive_checksums# tensordict.refresh_archive_checksums(archive_path: str | Path) \u2192 Path# Recomputes the CRC-32 checksums of a memmap archive after in-place writes. A tensordict loaded with TensorDict.load_memmap(path, mode=\"r+\") writes through to the archive without updating the CRC-32 that the zip format stores for each entry. load_memmap() itself never verifies checksums, so this is only needed before handing the modified archive to tools that do (unzip, zipfile, unpack_memmap()). Parameters: archive_path (str or Path) \u2013 path to the archive to fix up. Returns: the path to the archive.",
+       "articleBody": "refresh_archive_checksums# tensordict.refresh_archive_checksums(archive_path: str | Path) \u2192 Path# Recomputes the CRC-32 checksums of a memmap archive after in-place writes. A tensordict loaded with TensorDict.load_memmap(path, mode=\"r+\") writes through to the archive without updating the CRC-32 that the zip format stores for each entry. load_memmap() does not verify checksums of uncompressed memory-mapped leaves, so this is only needed before handing the modified archive to tools that do (unzip, zipfile, unpack_memmap()). Parameters: archive_path (str or Path) \u2013 path to the archive to fix up. Returns: the path to the archive.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

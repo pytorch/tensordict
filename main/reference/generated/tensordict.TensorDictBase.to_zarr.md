@@ -1,6 +1,6 @@
 # TensorDictBase.to_zarr
 
-TensorDictBase.to_zarr(*filename*, ***kwargs*) → [Any](https://docs.python.org/3/library/typing.html#typing.Any)
+TensorDictBase.to_zarr(*filename*, ***, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [Any](https://docs.python.org/3/library/typing.html#typing.Any)
 
 Converts a tensordict to a PersistentTensorDict with the zarr backend.
 
@@ -21,6 +21,14 @@ have different ranks, `chunks` constrains the leading
 dimensions of each leaf and trailing dimensions are left whole
 (e.g. `chunks=(16,)` chunks every leaf along its first
 dimension in blocks of 16).
+
+Keyword Arguments:
+
+**allow_pickle** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - read policy for the returned
+handle. `None` (default) trusts the values just written, as
+does `True`. `False` rejects reads of pickled non-tensor
+values. Reopening the store with [`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) uses that
+call's policy, not the writer's.
 
 Returns:
 
