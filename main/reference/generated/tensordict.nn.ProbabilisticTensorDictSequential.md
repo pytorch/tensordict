@@ -376,6 +376,8 @@ Returns the log-probability of the input tensordict.
 
 If self.return_composite is `True` and the distribution is a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution),
 this method will return the log-probability of the entire composite distribution.
+While [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) is `False`, each entry is at
+the key where a forward call writes it, as listed in `log_prob_keys`.
 
 Otherwise, it will only consider the last probabilistic module in the sequence.
 In that case the intermediate entries are written into `tensordict`,
