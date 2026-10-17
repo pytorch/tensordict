@@ -19,7 +19,7 @@ hierarchy, and the places a new operation touches.
   version rises, so raise the minimum instead. If a branch is unavoidable (for
   instance a small workaround for a torch bug), use `pyvers.implement_for`, not
   a hand-rolled `if torch.__version__ >= …`. tensordict plans to drop pyvers
-  in 0.18, when its last deprecated `implement_for` alias goes.
+  in 0.17, when its deprecated `implement_for` aliases go.
 - No `print()` in library code. Use
   `from tensordict.utils import logger as tensordict_logger`.
 - Time with `tensordict.utils.timeit`, not `time.time()`.

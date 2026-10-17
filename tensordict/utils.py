@@ -3990,7 +3990,7 @@ torch.utils._pytree.register_pytree_node(
 )
 
 
-_deprecated_until_0_17 = deprecated_attributes(
+__getattr__ = deprecated_attributes(
     __name__,
     {
         "BufferLegacy": (_BufferLegacy, None),
@@ -4002,6 +4002,10 @@ _deprecated_until_0_17 = deprecated_attributes(
         "convert_ellipsis_to_idx": (_indexing.convert_ellipsis_to_idx, None),
         "erase_cache": (_erase_cache_first, None),
         "get_json_backend": (_utils_key_json.get_json_backend, None),
+        # tensordict depends on pyvers only for this alias and for the
+        # implement_for aliases of tensordict and tensordict.tensordict: drop
+        # pyvers from pyproject.toml with them.
+        "implement_for": (pyvers.implement_for, "pyvers.implement_for"),
         "infer_size_impl": (_infer_size_impl, None),
         "int_generator": (_int_generator, None),
         "is_nested_key": (
@@ -4024,21 +4028,4 @@ _deprecated_until_0_17 = deprecated_attributes(
         "unravel_keys": (_unravel_keys, "unravel_key or unravel_key_list"),
     },
     removal="0.17",
-    # __getattr__ below calls it, so the code that reads the name is one frame
-    # further up
-    stacklevel=3,
 )
-
-
-def __getattr__(name: str) -> Any:
-    if name == "implement_for":
-        # tensordict depends on pyvers only for this alias and for the
-        # implement_for aliases of tensordict and tensordict.tensordict, which
-        # go a release earlier: drop pyvers from pyproject.toml with this one.
-        warn_deprecated(
-            "tensordict.utils.implement_for",
-            removal="0.18",
-            replacement="pyvers.implement_for",
-        )
-        return pyvers.implement_for
-    return _deprecated_until_0_17(name)

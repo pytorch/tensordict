@@ -121,7 +121,6 @@ def deprecated_attributes(
     attributes: Mapping[str, tuple[Any, str | None]],
     *,
     removal: str,
-    stacklevel: int = 2,
 ) -> Callable[[str], Any]:
     """Returns a module ``__getattr__`` that serves deprecated attributes.
 
@@ -137,24 +136,13 @@ def deprecated_attributes(
 
     Keyword Args:
         removal (str): the release that removes the attributes.
-        stacklevel (int, optional): the frame that the warning points to, as in
-            :func:`warn_deprecated`, counted from the returned function. The
-            default, ``2``, points to the code that reads the attribute. A
-            module whose own ``__getattr__`` calls the returned function, for
-            instance to serve attributes that go in different releases,
-            passes ``3``.
     """
 
     def __getattr__(name: str) -> Any:
         if name not in attributes:
             raise AttributeError(f"module {module!r} has no attribute {name!r}")
         value, replacement = attributes[name]
-        warn_deprecated(
-            f"{module}.{name}",
-            removal=removal,
-            replacement=replacement,
-            stacklevel=stacklevel,
-        )
+        warn_deprecated(f"{module}.{name}", removal=removal, replacement=replacement)
         return value
 
     return __getattr__
