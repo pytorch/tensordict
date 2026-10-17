@@ -727,8 +727,8 @@ _DEPRECATED_UTILS_NAMES = {
 }
 
 
-def _deprecated_message_pattern(what, replacement):
-    message = f"{what} is deprecated and will be removed in TensorDict 0.17."
+def _deprecated_message_pattern(what, replacement, removal="0.17"):
+    message = f"{what} is deprecated and will be removed in TensorDict {removal}."
     if replacement is not None:
         message += f" Use {replacement} instead."
     return "^" + re.escape(message) + "$"
@@ -762,6 +762,20 @@ def test_utils_deprecated_names(name, private, replacement):
         value = getattr(tensordict.utils, name)
     assert record[0].filename == __file__
     assert value is private
+
+
+def test_utils_implement_for_is_deprecated():
+    # The last alias that keeps pyvers a dependency: it goes a release after the
+    # other deprecated names of tensordict.utils.
+    with pytest.warns(
+        DeprecationWarning,
+        match=_deprecated_message_pattern(
+            "tensordict.utils.implement_for", "pyvers.implement_for", removal="0.18"
+        ),
+    ) as record:
+        from tensordict.utils import implement_for
+    assert record[0].filename == __file__
+    assert implement_for is pyvers.implement_for
 
 
 def test_utils_deprecated_names_behave_as_before():
@@ -923,6 +937,20 @@ class TestDeprecationHelpers:
             AttributeError, match="module 'mod' has no attribute 'other'"
         ):
             module.other
+
+    def test_deprecated_attributes_called_by_module_getattr(self):
+        # A module __getattr__ that calls the result passes stacklevel=3, so the
+        # warning still points to the code that reads the attribute.
+        served = _deprecation.deprecated_attributes(
+            "mod", {"old": (1, None)}, removal="0.17", stacklevel=3
+        )
+        module = types.ModuleType("mod")
+        module.__getattr__ = lambda name: served(name)
+        with pytest.warns(
+            DeprecationWarning, match=r"^mod\.old is deprecated"
+        ) as record:
+            assert module.old == 1
+        assert record[0].filename == __file__
 
 
 def _version_tuple(version):

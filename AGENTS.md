@@ -15,8 +15,11 @@ hierarchy, and the places a new operation touches.
 
 ## Versioning, logging, timing
 
-- Dispatch on dependency versions with `from pyvers import implement_for` —
-  no hand-rolled `if torch.__version__ >= …`.
+- Avoid branching on dependency versions: such code is dead once the minimum
+  version rises, so raise the minimum instead. If a branch is unavoidable (for
+  instance a small workaround for a torch bug), use `pyvers.implement_for`, not
+  a hand-rolled `if torch.__version__ >= …`. tensordict plans to drop pyvers
+  in 0.18, when its last deprecated `implement_for` alias goes.
 - No `print()` in library code. Use
   `from tensordict.utils import logger as tensordict_logger`.
 - Time with `tensordict.utils.timeit`, not `time.time()`.

@@ -38,8 +38,8 @@ from typing import (
 )
 
 import numpy as np
+import pyvers
 import torch
-from pyvers import implement_for  # noqa: F401
 from tensordict import _indexing, _utils_key_json
 from tensordict._deprecation import (
     deprecated_attributes,
@@ -3990,7 +3990,7 @@ torch.utils._pytree.register_pytree_node(
 )
 
 
-__getattr__ = deprecated_attributes(
+_deprecated_until_0_17 = deprecated_attributes(
     __name__,
     {
         "BufferLegacy": (_BufferLegacy, None),
@@ -4024,4 +4024,21 @@ __getattr__ = deprecated_attributes(
         "unravel_keys": (_unravel_keys, "unravel_key or unravel_key_list"),
     },
     removal="0.17",
+    # __getattr__ below calls it, so the code that reads the name is one frame
+    # further up
+    stacklevel=3,
 )
+
+
+def __getattr__(name: str) -> Any:
+    if name == "implement_for":
+        # tensordict depends on pyvers only for this alias and for the
+        # implement_for aliases of tensordict and tensordict.tensordict, which
+        # go a release earlier: drop pyvers from pyproject.toml with this one.
+        warn_deprecated(
+            "tensordict.utils.implement_for",
+            removal="0.18",
+            replacement="pyvers.implement_for",
+        )
+        return pyvers.implement_for
+    return _deprecated_until_0_17(name)
