@@ -5143,6 +5143,27 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
+    def _softmax(self, dim: int, dtype: torch.dtype | None) -> Self:
+        """Run the softmax on each member, with ``dim`` shifted past the stack dim.
+
+        A softmax along the stack dim mixes the members, so it runs on the
+        stacked leaves and returns a dense tensordict.
+        """
+        if dim == self.stack_dim:
+            return self._fast_apply(
+                lambda x: torch.softmax(x, dim=dim, dtype=dtype),
+                batch_size=self.batch_size,
+                names=self._maybe_names(),
+            )
+        return LazyStackedTensorDict.lazy_stack(
+            [
+                td.softmax(dim if dim < self.stack_dim else dim - 1, dtype=dtype)
+                for td in self.tensordicts
+            ],
+            self.stack_dim,
+            stack_dim_name=self._td_dim_name,
+        )
+
     def _repeat(self, *repeats: int) -> TensorDictBase:
         repeats = list(repeats)
         r_dim = repeats.pop(self.stack_dim)

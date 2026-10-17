@@ -213,6 +213,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_expand(shape, names)` | `expand` | return expanded views | lazy, params, typed |
 | `_broadcast_to(shape)` | `broadcast_to` | return broadcast views, without names | NTS |
 | `_repeat_interleave(repeats, dim, output_size)` | `repeat_interleave` without `inplace` | repeat the elements along `dim` | lazy |
+| `_softmax(dim, dtype)` | `softmax` | return the softmax along the batch dim `dim` | lazy |
 | `_batch_op(fn, batch_size, names, *, index)` | `flip`, `roll`, `rot90`, `tile`, `narrow`, the default `_broadcast_to` | apply `fn` to each leaf, and set the lock, shared and memmap flags | NTS |
 | `_densify(layout)` | `densify` | replace the lazy stacks with dense entries | lazy, NTS |
 | `_compare(other, op, reflected_op, default)` | `==`, `!=`, `<`, `<=`, `>`, `>=`, `\|`, `^` | broadcast, pair the leaves by key, raise `KeyError` on mismatched keys | lazy, params, typed |

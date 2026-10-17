@@ -839,6 +839,22 @@ class TestLazyStackedTensorDict:
                 assert not value.requires_grad
         assert not stack["a"].requires_grad
 
+    @pytest.mark.parametrize("stack_dim", range(4))
+    def test_softmax_matches_dense(self, stack_dim):
+        dense = TensorDict(a=torch.randn(2, 3, 4, 5, 6), batch_size=[2, 3, 4, 5])
+        stack = lazy_stack(list(dense.unbind(stack_dim)), stack_dim)
+        for dim in range(-4, 4):
+            torch.testing.assert_close(
+                stack.softmax(dim).to_tensordict(), dense.softmax(dim)
+            )
+
+    def test_softmax_heterogeneous(self):
+        tds = [TensorDict(a=torch.randn(3, 2 + i), batch_size=[3]) for i in range(2)]
+        result = lazy_stack(tds, 1).softmax(0)
+        assert isinstance(result, LazyStackedTensorDict)
+        for td, td_result in zip(tds, result.tensordicts):
+            torch.testing.assert_close(td_result["a"], td["a"].softmax(0))
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("mask_dims", [2, 1, 0])
     def test_masked_fill_mask_shapes(self, stack_dim, mask_dims):

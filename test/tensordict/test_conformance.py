@@ -185,6 +185,8 @@ _OPS = {
         "(td > 0) | (td < 1)": lambda td: (td > 0) | (td < 1),
         "(td > 0) ^ (td < 1)": lambda td: (td > 0) ^ (td < 1),
         "clamp(-1, 1)": lambda td: td.clamp(-1, 1),
+        "softmax(0, dtype=float32)": lambda td: td.softmax(0, dtype=torch.float32),
+        "softmax(-2, dtype=float32)": lambda td: td.softmax(-2, dtype=torch.float32),
         "abs_()": _inplace(lambda td: td.abs_()),
         "add_(1)": _inplace(lambda td: td.add_(1)),
         "mul_(2)": _inplace(lambda td: td.mul_(2)),
