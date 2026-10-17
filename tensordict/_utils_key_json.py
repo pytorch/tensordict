@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import json
 
 __all__ = [
@@ -22,7 +21,10 @@ __all__ = [
 ]
 
 _JSON_BACKENDS = ("json", "orjson")
-_JSON_BACKEND = "orjson" if importlib.util.find_spec("orjson") is not None else "json"
+# orjson writes NaN and infinite floats as null, which load back as None, so
+# the standard json module writes the metadata unless set_json_backend("orjson")
+# is called (gh-2913)
+_JSON_BACKEND = "json"
 
 
 _FS_UNSAFE_CHARS = set('/<>:"|?*\\ \0%')
@@ -117,7 +119,11 @@ def json_dumps(data, **kwargs):
 
 
 def set_json_backend(backend):
-    """Set the JSON backend to use (either 'json' or 'orjson')."""
+    """Set the JSON backend to use (either 'json' or 'orjson').
+
+    The default is ``json``. ``orjson`` writes NaN and infinite floats in
+    non-tensor data as ``null``, so they load back as ``None``.
+    """
     global _JSON_BACKEND
 
     if backend not in _JSON_BACKENDS:

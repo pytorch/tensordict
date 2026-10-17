@@ -2478,6 +2478,32 @@ class TestNonTensorData:
         loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
         assert loaded.tolist() == make(old).tolist()
 
+    @pytest.mark.parametrize("route", ["save", "memmap", "memmap_", "consolidate"])
+    def test_save_non_finite_floats(self, tmp_path, route):
+        # gh-2913: NaN and infinite floats in non-tensor data load back as they were
+        td = TensorDict(
+            best_loss=NonTensorData(float("inf")),
+            low=NonTensorData(float("-inf")),
+            lr=NonTensorData(float("nan")),
+            config=NonTensorData({"lr": 1e-3, "best": float("inf")}),
+        )
+        if route == "save":
+            td.save(tmp_path)
+            loaded = TensorDict.load(tmp_path)
+        elif route == "memmap":
+            td.memmap(tmp_path)
+            loaded = TensorDict.load_memmap(tmp_path)
+        elif route == "memmap_":
+            td.memmap_(tmp_path)
+            loaded = TensorDict.load_memmap(tmp_path)
+        else:
+            td.consolidate(filename=tmp_path / "file.mmap")
+            loaded = TensorDict.from_consolidated(tmp_path / "file.mmap")
+        assert loaded["best_loss"] == float("inf")
+        assert loaded["low"] == float("-inf")
+        assert math.isnan(loaded["lr"])
+        assert loaded["config"] == {"lr": 1e-3, "best": float("inf")}
+
     @pytest.mark.parametrize("value", [{1, 2}, {"a": {1, 2}}, [{1, 2}]])
     def test_memmap_set_is_pickled(self, tmp_path, value):
         td = TensorDict(x=torch.zeros(3), batch_size=[3])
