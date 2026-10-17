@@ -23,6 +23,7 @@ import sys
 import textwrap
 import threading
 
+import numpy as np
 import pytest
 import torch
 from tensordict import TensorDict
@@ -33,6 +34,8 @@ from tensordict._ucxx import (
     _metadata_hash,
     _NEW_SCHEMA_FLAG,
     _SAME_SCHEMA_FLAG,
+    recv_tensordict,
+    send_tensordict,
     TensorDictPipe,
 )
 
@@ -109,6 +112,10 @@ class TestComputeTotalBytes:
         }
         assert _compute_total_bytes(meta) == 48
 
+    def test_six_field_leaf(self):
+        meta = {"leaves": {"<NJT_OFFSETS>x": ("torch.int64", [3], 32, 56, 0, 2)}}
+        assert _compute_total_bytes(meta) == 56
+
     def test_nested(self):
         meta = {
             "leaves": {"a": ("torch.float32", [4], 0, 16, 0)},
@@ -133,8 +140,6 @@ class _FakeEndpoint:
         self._recv_idx = 0
 
     async def send(self, buf):
-        import numpy as np
-
         if isinstance(buf, np.ndarray):
             self._buffers.append(bytes(buf))
         elif isinstance(buf, torch.Tensor):
@@ -143,9 +148,8 @@ class _FakeEndpoint:
             self._buffers.append(bytes(buf))
 
     async def recv(self, buf):
-        import numpy as np
-
         data = self._buffers[self._recv_idx]
+        assert buf.nbytes == len(data)
         self._recv_idx += 1
         if isinstance(buf, np.ndarray):
             buf[:] = np.frombuffer(data, dtype=buf.dtype)[: len(buf)]
@@ -214,6 +218,232 @@ class TestProtocolConsolidated:
 
 class TestRoundtrip:
     """Test full send → recv roundtrip with fake endpoint."""
+
+    @pytest.mark.parametrize("stateless", [False, True])
+    @pytest.mark.parametrize("lengths", [False, True])
+    @pytest.mark.parametrize("ragged_idx", [1, 2])
+    @pytest.mark.parametrize("offsets", [[0, 3, 8], [0], [0, 0, 0]])
+    def test_jagged_roundtrip(self, stateless, lengths, ragged_idx, offsets):
+        offsets = torch.tensor(offsets)
+        values = torch.arange(offsets[-1].item() * 2.0).reshape(-1, 2)
+        if ragged_idx == 2:
+            values = values.T.contiguous()
+        jagged = torch.nested.nested_tensor_from_jagged(
+            values,
+            offsets=offsets,
+            lengths=(offsets.diff() - 1).clamp_min(0) if lengths else None,
+            jagged_dim=ragged_idx,
+        )
+        td = TensorDict({"nested": {"x": jagged}}, batch_size=[])
+        ep = _FakeEndpoint()
+        if stateless:
+            asyncio.run(send_tensordict.__wrapped__(ep, td))
+            result = asyncio.run(recv_tensordict.__wrapped__(ep))
+        else:
+            asyncio.run(TensorDictPipe(ep).asend(td))
+            result = asyncio.run(TensorDictPipe(ep).arecv())
+        assert len(result["nested", "x"].unbind()) == len(jagged.unbind())
+        for actual, expected in zip(result["nested", "x"].unbind(), jagged.unbind()):
+            torch.testing.assert_close(actual, expected)
+        assert result["nested", "x"]._ragged_idx == ragged_idx
+
+    @pytest.mark.parametrize("stateless", [False, True])
+    @pytest.mark.parametrize("data", [{}, {"x": torch.empty(0)}, {"nested": {}}])
+    def test_consolidated_empty_roundtrip(self, stateless, data):
+        td = TensorDict(data, batch_size=[])
+        ep = _FakeEndpoint()
+        if stateless:
+            asyncio.run(send_tensordict.__wrapped__(ep, td))
+            result = asyncio.run(recv_tensordict.__wrapped__(ep))
+        else:
+            asyncio.run(TensorDictPipe(ep).asend(td))
+            result = asyncio.run(TensorDictPipe(ep).arecv())
+        torch.testing.assert_close(result.to_dict(), td.to_dict())
+
+    @pytest.mark.parametrize(
+        "mismatch", [None, "key", "dtype", "shape", "batch", "size"]
+    )
+    def test_stateless_destination_layout(self, mismatch):
+        td = TensorDict({"x": torch.arange(4.0)}, batch_size=[4])
+        target = TensorDict(
+            {
+                "y" if mismatch == "key" else "x": torch.zeros(
+                    (2, 2) if mismatch == "shape" else 4,
+                    dtype=torch.int32 if mismatch == "dtype" else torch.float32,
+                )
+            },
+            batch_size=[] if mismatch in ("batch", "shape") else [4],
+        ).consolidate(metadata=True)
+        if mismatch == "size":
+            target._consolidated["storage"] = torch.zeros(24, dtype=torch.uint8)
+        before = target.clone()
+        ep = _FakeEndpoint()
+        asyncio.run(send_tensordict.__wrapped__(ep, td))
+        result = asyncio.run(recv_tensordict.__wrapped__(ep, target))
+        torch.testing.assert_close(result["x"], td["x"])
+        assert result.batch_size == td.batch_size
+        if mismatch is None:
+            assert result is target
+        else:
+            assert result is not target
+            torch.testing.assert_close(target.to_dict(), before.to_dict())
+
+    @pytest.mark.parametrize("device", [None, "cpu", "meta"])
+    @pytest.mark.parametrize("mismatch", [False, True])
+    def test_stateless_destination_device(self, device, mismatch, monkeypatch):
+        td = TensorDict({"x": torch.arange(4.0)}, batch_size=[])
+        target = TensorDict(
+            {"y" if mismatch else "x": torch.zeros(4)}, batch_size=[]
+        ).consolidate(metadata=True, device="meta")
+        ep = _FakeEndpoint()
+        asyncio.run(send_tensordict.__wrapped__(ep, td))
+        # A meta target lets this CPU-only test observe device selection without
+        # allocating GPU storage. Replace its receive view with a CPU buffer.
+        views = []
+        allocations = []
+        torch_empty = torch.empty
+
+        def allocate(*args, **kwargs):
+            allocations.append(kwargs.get("device"))
+            return torch_empty(*args, **kwargs)
+
+        def receive_view(storage):
+            views.append(storage)
+            return np.empty(storage.numel(), dtype=np.uint8)
+
+        monkeypatch.setattr(torch, "empty", allocate)
+        monkeypatch.setattr("tensordict._ucxx._tensor_to_numpy", receive_view)
+        result = asyncio.run(recv_tensordict.__wrapped__(ep, target, device=device))
+        reuse = not mismatch and device != "cpu"
+        expected_device = torch.device("cpu" if device == "cpu" else "meta")
+        assert (result is target) == reuse
+        assert views[0].device == expected_device
+        assert allocations == ([] if reuse else [expected_device])
+        assert set(result.keys()) == {"x"}
+        assert set(target.keys()) == {"y" if mismatch else "x"}
+
+    @pytest.mark.parametrize("flag", [b"\x02", b"\xff"])
+    @pytest.mark.parametrize("handshake", [False, True])
+    def test_unknown_flag_does_not_receive_payload(self, flag, handshake):
+        ep = _FakeEndpoint()
+        receiver = TensorDictPipe(ep)
+        if handshake:
+            asyncio.run(TensorDictPipe(ep).asend(TensorDict(x=torch.ones(2))))
+            cached = asyncio.run(receiver.arecv())
+            before = cached.clone()
+        ep._buffers.extend([flag, bytes(8)])
+        with pytest.raises(RuntimeError, match="Unknown.*flag"):
+            asyncio.run(receiver.arecv())
+        assert ep._recv_idx == len(ep._buffers) - 1
+        if handshake:
+            torch.testing.assert_close(cached.to_dict(), before.to_dict())
+
+    @pytest.mark.parametrize(
+        "header",
+        [
+            [],
+            {},
+            {"keys": "xy", "dtypes": ["torch.float32"] * 2, "shapes": [[1], [1]]},
+            {"keys": ["x"], "dtypes": "torch.float32", "shapes": [[1]]},
+            {"keys": ["x"], "dtypes": ["torch.float32"], "shapes": {"x": [1]}},
+            {"keys": ["x", "y"], "dtypes": ["torch.float32"], "shapes": [[1], [1]]},
+            {"keys": ["x", "y"], "dtypes": ["torch.float32"] * 2, "shapes": [[1]]},
+            {"keys": ["x", "x"], "dtypes": ["torch.float32"] * 2, "shapes": [[1], [1]]},
+            {
+                "keys": ["x", ["x"]],
+                "dtypes": ["torch.float32"] * 2,
+                "shapes": [[1], [1]],
+            },
+            {
+                "keys": [["x", "y"], ["x", ["y"]]],
+                "dtypes": ["torch.float32"] * 2,
+                "shapes": [[1], [1]],
+            },
+        ]
+        + [
+            {"keys": ["x", key], "dtypes": ["torch.float32"] * 2, "shapes": [[1], [1]]}
+            for key in (1, None, [], ["x", 1], ["x", []])
+        ]
+        + [
+            {
+                "keys": ["x", "y"],
+                "dtypes": ["torch.float32", dtype],
+                "shapes": [[1], [1]],
+            }
+            for dtype in ("torch.empty", "torch.not_a_dtype", None, [])
+        ]
+        + [
+            {
+                "keys": ["x", "y"],
+                "dtypes": ["torch.float32"] * 2,
+                "shapes": [[1], shape],
+            }
+            for shape in ([-1], [True], [1.5], ["1"], None, 1)
+        ],
+    )
+    def test_uncollated_invalid_header_before_payload(self, header, monkeypatch):
+        encoded = json.dumps(header).encode()
+        ep = _FakeEndpoint()
+        ep._buffers = [struct.pack("<Q", len(encoded)), encoded]
+
+        def unexpected_allocation(*args, **kwargs):
+            pytest.fail("allocated a payload before validating the entire header")
+
+        monkeypatch.setattr(torch, "empty", unexpected_allocation)
+        monkeypatch.setattr(torch, "tensor", unexpected_allocation)
+        with pytest.raises(ValueError, match="uncollated"):
+            asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        assert ep._recv_idx == 2
+
+    @pytest.mark.parametrize(
+        "dtype",
+        [
+            torch.float32,
+            torch.int64,
+            torch.bool,
+            torch.bfloat16,
+            torch.complex64,
+            torch.float8_e4m3fn,
+            torch.float8_e5m2,
+        ],
+    )
+    @pytest.mark.parametrize("shape", [(2,), (0, 2)])
+    def test_uncollated_roundtrip(self, dtype, shape):
+        td = TensorDict({"x": torch.ones(shape).to(dtype)}, batch_size=[])
+        ep = _FakeEndpoint()
+        asyncio.run(TensorDictPipe(ep, consolidated=False).asend(td))
+        result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        assert result["x"].dtype == dtype
+        assert result["x"].shape == shape
+        torch.testing.assert_close(result["x"].float(), td["x"].float())
+
+    @pytest.mark.parametrize("key", ["", ["x"], ["nested", "x"], ["nested", ["x"]]])
+    def test_uncollated_nested_keys(self, key):
+        header = {"keys": [key], "dtypes": ["torch.float32"], "shapes": [[2]]}
+        encoded = json.dumps(header).encode()
+        ep = _FakeEndpoint()
+        ep._buffers = [
+            struct.pack("<Q", len(encoded)),
+            encoded,
+            np.ones(2, dtype=np.float32).tobytes(),
+        ]
+        result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        expected_key = "" if key == "" else "x" if key == ["x"] else ("nested", "x")
+        torch.testing.assert_close(result[expected_key], torch.ones(2))
+
+    def test_uncollated_scalar(self):
+        header = {"keys": ["x"], "dtypes": ["torch.float32"], "shapes": [[]]}
+        encoded = json.dumps(header).encode()
+        ep = _FakeEndpoint()
+        ep._buffers = [struct.pack("<Q", len(encoded)), encoded, struct.pack("<f", 2.0)]
+        result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        torch.testing.assert_close(result["x"], torch.tensor(2.0))
+
+    def test_uncollated_empty(self):
+        ep = _FakeEndpoint()
+        asyncio.run(TensorDictPipe(ep, consolidated=False).asend(TensorDict({}, [])))
+        result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        assert not result.keys()
 
     def test_consolidated_roundtrip(self):
         td = TensorDict(
