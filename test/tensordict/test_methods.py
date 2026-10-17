@@ -9,6 +9,7 @@ import contextlib
 import functools
 import gc
 import importlib.util
+import io
 import json
 import os
 import pickle
@@ -20,6 +21,7 @@ import sys
 import sysconfig
 import warnings
 import zipfile
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -7072,8 +7074,9 @@ class TestMemmapArchive:
         with zipfile.ZipFile(archive) as zf:
             assert all(not name.endswith(".tdz") for name in zf.namelist())
 
-    @pytest.mark.parametrize("compression", ["deflate", "lzma"])
-    def test_archive_compression(self, tmp_path, compression):
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    @pytest.mark.parametrize("compression", ["deflate", "bzip2", "lzma"])
+    def test_archive_compression(self, tmp_path, compression, num_threads):
         td = TensorDict(
             {"a": torch.zeros(1000, dtype=torch.uint8), "b": {"c": torch.zeros(100)}},
             batch_size=[],
@@ -7083,10 +7086,11 @@ class TestMemmapArchive:
         td.save(stored)
         td.save(compressed, compression=compression)
         assert compressed.stat().st_size < stored.stat().st_size
-        assert (TensorDict.load_memmap(compressed) == td).all()
+        assert (TensorDict.load_memmap(compressed, num_threads=num_threads) == td).all()
 
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
     @pytest.mark.parametrize("subpath", [None, "b"])
-    def test_archive_compressed_parallel_load(self, tmp_path, subpath):
+    def test_archive_compressed_parallel_load(self, tmp_path, subpath, num_threads):
         td = TensorDict(
             {
                 "a": torch.randn(100, 10),
@@ -7096,20 +7100,177 @@ class TestMemmapArchive:
         )
         archive = tmp_path / "comp.tdz"
         td.save(archive, compression="deflate")
-        loaded = TensorDict.load_memmap(archive, subpath=subpath, num_threads=4)
+        loaded = TensorDict.load_memmap(
+            archive, subpath=subpath, num_threads=num_threads
+        )
         expected = td if subpath is None else td.get(subpath)
         assert (loaded == expected).all()
         # num_threads is a no-op on uncompressed archives and directories
         td.save(tmp_path / "plain.tdz")
         assert (
-            TensorDict.load_memmap(tmp_path / "plain.tdz", num_threads=4) == td
+            TensorDict.load_memmap(tmp_path / "plain.tdz", num_threads=num_threads)
+            == td
         ).all()
         td.memmap(tmp_path / "plaindir")
         assert (
-            TensorDict.load_memmap(tmp_path / "plaindir", num_threads=4) == td
+            TensorDict.load_memmap(tmp_path / "plaindir", num_threads=num_threads) == td
         ).all()
 
-    def test_archive_compressed_metadata_only_load(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    def test_archive_local_filename_mismatch(self, tmp_path, num_threads):
+        archive = tmp_path / "mismatch.tdz"
+        td = TensorDict({"a": torch.arange(4), "b": torch.ones(4)})
+        td.save(archive, compression="deflate")
+        with zipfile.ZipFile(archive) as zf:
+            offset = zf.getinfo("a.memmap").header_offset
+        raw = bytearray(archive.read_bytes())
+        raw[offset + 30] = ord("z")
+        archive.write_bytes(raw)
+        with zipfile.ZipFile(archive) as zf:
+            with pytest.raises(zipfile.BadZipFile, match="File name.*differ"):
+                zf.read("a.memmap")
+        with pytest.raises(zipfile.BadZipFile, match="File name.*differ"):
+            TensorDict.load_memmap(archive, num_threads=num_threads)
+
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    @pytest.mark.parametrize(
+        "layout", ["zip64", "descriptor", "prefixed", "utf8", "cp437"]
+    )
+    def test_archive_local_filename_layouts(self, tmp_path, num_threads, layout):
+        class UnseekableBuffer(io.BytesIO):
+            def seek(self, *args):
+                raise OSError("not seekable")
+
+        buffer = UnseekableBuffer() if layout == "descriptor" else io.BytesIO()
+        name = "é.memmap" if layout == "utf8" else "a.memmap"
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for entry_name in (name, "b.memmap"):
+                info = zipfile.ZipInfo(entry_name)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                with zf.open(info, "w", force_zip64=layout == "zip64") as entry:
+                    entry.write(b"1234")
+        raw = buffer.getvalue()
+        if layout == "prefixed":
+            raw = b"archive prefix" + raw
+        elif layout == "cp437":
+            raw = raw.replace(b"a.memmap", b"\x82.memmap")
+            name = "é.memmap"
+        archive = tmp_path / "layout.tdz"
+        archive.write_bytes(raw)
+        with zipfile.ZipFile(archive) as zf:
+            assert zf.read(name) == b"1234"
+            if layout == "descriptor":
+                assert zf.getinfo(name).flag_bits & 0x8
+        reader = _ArchiveReader(archive)
+        reader.schedule_compressed_prefetch("", num_threads)
+        for entry_name in (name, "b.memmap"):
+            assert reader.flat_view(entry_name, torch.uint8).tolist() == list(b"1234")
+
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    @pytest.mark.parametrize(
+        "corruption",
+        [
+            "zero_size",
+            "smaller_size",
+            "larger_size",
+            "truncated",
+            "missing",
+            "empty_missing",
+            "invalid",
+            "trailing",
+            "crc",
+        ],
+    )
+    def test_archive_deflate_payload_validation(
+        self, tmp_path, num_threads, corruption
+    ):
+        archive = tmp_path / "invalid.tdz"
+        payload = b"" if corruption == "empty_missing" else b"a" * 32
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("a.memmap", payload)
+            zf.writestr("b.memmap", b"b" * 32)
+        with zipfile.ZipFile(archive) as zf:
+            info = zf.getinfo("a.memmap")
+            central = zf.start_dir
+        raw = bytearray(archive.read_bytes())
+        if corruption in ("zero_size", "smaller_size", "larger_size"):
+            size = {"zero_size": 0, "smaller_size": 31, "larger_size": 128}[corruption]
+            struct.pack_into("<I", raw, central + 24, size)
+            # Keep the CRC consistent with the declared prefix, not the stream.
+            struct.pack_into("<I", raw, central + 16, zlib.crc32(payload[:size]))
+        elif corruption in ("truncated", "missing", "empty_missing", "trailing"):
+            size = {
+                "truncated": info.compress_size - 1,
+                "missing": 0,
+                "empty_missing": 0,
+                "trailing": info.compress_size + 1,
+            }[corruption]
+            struct.pack_into("<I", raw, central + 20, size)
+        elif corruption == "invalid":
+            raw[self._payload_offsets(archive)["a.memmap"]] = 0x07
+        else:
+            struct.pack_into("<I", raw, central + 16, info.CRC ^ 1)
+        archive.write_bytes(raw)
+
+        reader = _ArchiveReader(archive)
+        reader.schedule_compressed_prefetch("", num_threads)
+        with pytest.raises(zipfile.BadZipFile, match="a.memmap"):
+            reader.flat_view("a.memmap", torch.uint8)
+
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    @pytest.mark.parametrize("size", [0, 32])
+    def test_archive_deflate_bounded(self, tmp_path, monkeypatch, num_threads, size):
+        archive = tmp_path / "bounded.tdz"
+        td = TensorDict(
+            {key: torch.zeros(size, dtype=torch.uint8) for key in ("a", "b")}
+        )
+        td.save(archive, compression="deflate")
+        # TensorDict omits empty payload files; add valid empty streams to
+        # exercise the reader's zero-size limit independently of that shortcut.
+        if not size:
+            with zipfile.ZipFile(archive, "a", compression=zipfile.ZIP_DEFLATED) as zf:
+                for key in ("a", "b"):
+                    zf.writestr(f"{key}.memmap", b"")
+        decompressobj = zlib.decompressobj
+        limits = []
+
+        class CheckedDecompressor:
+            def __init__(self, *args, **kwargs):
+                self.inner = decompressobj(*args, **kwargs)
+
+            def decompress(self, data, max_length=0):
+                assert 0 < max_length <= size + 1
+                limits.append(max_length)
+                return self.inner.decompress(data, max_length)
+
+            def __getattr__(self, name):
+                return getattr(self.inner, name)
+
+        def fail_unbounded(*args, **kwargs):
+            pytest.fail("unbounded decompression")
+
+        monkeypatch.setattr(zlib, "decompressobj", CheckedDecompressor)
+        monkeypatch.setattr(zlib, "decompress", fail_unbounded)
+        loaded = TensorDict.load_memmap(archive, num_threads=num_threads)
+        assert (loaded == td).all()
+        # TensorDict can skip reading empty leaves; exercise their streams too.
+        limits.clear()
+        reader = _ArchiveReader(archive)
+        reader.schedule_compressed_prefetch("", num_threads)
+        for key in ("a", "b"):
+            torch.testing.assert_close(
+                reader.flat_view(f"{key}.memmap", torch.uint8), td[key]
+            )
+        assert len(limits) == 2
+        # Loaded compressed leaves remain writable without changing the archive.
+        before = archive.read_bytes()
+        loaded["a"].fill_(1)
+        assert archive.read_bytes() == before
+
+    @pytest.mark.parametrize("num_threads", [1, 2, 4])
+    def test_archive_compressed_metadata_only_load(
+        self, tmp_path, monkeypatch, num_threads
+    ):
         td = TensorDict({"a": torch.randn(10), "b": torch.randn(10)}, batch_size=[])
         archive = tmp_path / "compressed.tdz"
         td.save(archive, compression="deflate")
@@ -7118,10 +7279,11 @@ class TestMemmapArchive:
             pytest.fail("compressed payloads were prefetched")
 
         monkeypatch.setattr(_ArchiveReader, "prefetch_compressed", fail_prefetch)
-        meta = TensorDict.load_memmap(archive, device="meta", num_threads=4)
+        monkeypatch.setattr(_ArchiveReader, "_inflate", fail_prefetch)
+        meta = TensorDict.load_memmap(archive, device="meta", num_threads=num_threads)
         assert meta["a"].device.type == "meta"
         with FakeTensorMode():
-            fake = TensorDict.load_memmap(archive, num_threads=4)
+            fake = TensorDict.load_memmap(archive, num_threads=num_threads)
         assert isinstance(fake["a"], FakeTensor)
 
     def test_archive_compression_requires_archive(self, tmp_path):
