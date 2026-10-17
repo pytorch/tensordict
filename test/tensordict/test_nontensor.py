@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import collections
 import ctypes
+import faulthandler
 import importlib.util
 import math
 import operator
@@ -2300,6 +2301,8 @@ class TestNonTensorData:
 
     @staticmethod
     def _run_worker(td, val1, update):
+        # print the child's Python stack if it dies on a signal (#2669)
+        faulthandler.enable()
         set_list_to_stack(True).set()
         # Update in place
         if update == "setitem":
@@ -2991,6 +2994,8 @@ class TestNonTensorData:
             assert td["i"] == 0
 
     def _update_stack(self, td):
+        # print the child's Python stack if it dies on a signal (#2669)
+        faulthandler.enable()
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
 
     @pytest.mark.slow
