@@ -732,6 +732,38 @@ def test_setitem_non_tensor_rows(benchmark, big_non_tensor_td):
     benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=2, rounds=20)
 
 
+@pytest.mark.parametrize("value_device", [None, "cpu"])
+@pytest.mark.parametrize(
+    "store_device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA not available"
+            ),
+        ),
+    ],
+)
+def test_setitem_rows_store_with_device(benchmark, value_device, store_device):
+    # a batch of CPU leaves written into a storage with a device, as a replay
+    # buffer extend does: a batch without a device is not copied first
+    store = TensorDict(
+        obs=torch.zeros(10_000, 17),
+        next={"obs": torch.zeros(10_000, 17), "reward": torch.zeros(10_000, 1)},
+        batch_size=[10_000],
+        device=store_device,
+    )
+    data = TensorDict(
+        obs=torch.randn(256, 17),
+        next={"obs": torch.randn(256, 17), "reward": torch.randn(256, 1)},
+        batch_size=[256],
+        device=value_device,
+    )
+    index = torch.arange(256, device=store_device) + 100
+    benchmark(store.__setitem__, index, data)
+
+
 @pytest.mark.parametrize("index", ["tensor", "mask"])
 def test_getitem_non_tensor_rows(benchmark, index):
     # 32 rows of a 256-row string entry, as verl selects a mini-batch

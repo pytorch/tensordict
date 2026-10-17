@@ -540,6 +540,27 @@ def _holds_leaves_of(td: TensorDictBase, other: TensorDictBase) -> bool:
     return True
 
 
+def _leaves_on(td: TensorDictBase, device: torch.device) -> bool:
+    """Returns whether each tensor of the ``TensorDict`` ``td`` is on ``device`` already.
+
+    So are the tensors of its nested ``TensorDict`` instances; non-tensor data
+    holds no tensor. Any other nested collection gives ``False``. A tensor on
+    another device is left to ``td.to(device)``, which copies all the leaves
+    before anything is written: on CUDA, copies from pageable memory issued
+    between the writes would wait for each write.
+    """
+    for item in td._tensordict.values():
+        if isinstance(item, Tensor):
+            if item.device != device:
+                return False
+        elif type(item) is type(td):
+            if not _leaves_on(item, device):
+                return False
+        elif not is_non_tensor(item):
+            return False
+    return True
+
+
 def _pair_dense_leaves(
     dests: dict, sources: dict, vals: list, other_vals: list
 ) -> bool:
@@ -2927,12 +2948,26 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
+            # the device the entries of value are moved to as they are written
+            move_to = None
             if isinstance(value, dict):
                 value = self.from_dict_instance(
                     value, batch_size=indexed_bs, device=self.device
                 )
             elif value.device != self.device:
-                value = value.to(self.device)
+                from tensordict._td import TensorDict
+
+                if (
+                    value.device is None
+                    and type(value) is TensorDict
+                    and _leaves_on(value, self.device)
+                ):
+                    # the tensors of a value without a device are often on
+                    # self.device already: write them as they are, rather
+                    # than a moved copy of the whole tree
+                    move_to = self.device
+                else:
+                    value = value.to(self.device)
                 # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
                 if value.shape == indexed_bs[-len(value.shape) :]:
@@ -2953,6 +2988,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys = set(self.keys())
             subtd = None
             for value_key, item in value.items():
+                if (
+                    move_to is not None
+                    and not isinstance(item, Tensor)
+                    and (type(item) is not TensorDict or value_key not in keys)
+                ):
+                    # non-tensor data and a nested TensorDict under a new key
+                    # get the device of self, as in value.to(move_to); their
+                    # tensors are on it already. A nested TensorDict at an
+                    # existing key gets it from the entry it is written into.
+                    item = item.to(move_to)
                 if value_key in keys:
                     self._set_at_str(
                         value_key, item, index, validated=True, non_blocking=False
