@@ -56,6 +56,7 @@ class TensorDictSequential(TensorDictModule):
             Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
             and thus will not affect the `in_keys` and `out_keys` attributes of the TensorDictSequential.
             Regular ``dict`` inputs will be converted to ``OrderedDict`` if necessary.
+            A module registered under multiple names runs once for each name, in order.
 
     Keyword Args:
         partial_tolerant (bool, optional): if True, the input tensordict can miss some of the input keys.
@@ -615,7 +616,7 @@ class TensorDictSequential(TensorDictModule):
 
     def _module_iter(self):
         if isinstance(self.module, nn.ModuleDict):
-            yield from self.module.children()
+            yield from self.module.values()
         else:
             yield from self.module
 
