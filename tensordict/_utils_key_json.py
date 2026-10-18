@@ -114,14 +114,18 @@ def _json_dumps(data, **kwargs):
 
 
 def json_dumps(data, **kwargs):
-    """Unified JSON serialization function that works with both json and orjson backends."""
+    """Serializes ``data`` to JSON with the backend that :func:`set_json_backend` selects.
+
+    Returns a str with ``json``, and bytes with ``orjson``. The ``separators``
+    argument is ignored by ``orjson``.
+    """
     return _json_dumps(data, **kwargs)
 
 
 def set_json_backend(backend):
-    """Set the JSON backend to use (either 'json' or 'orjson').
+    """Sets the JSON backend that tensordict uses: ``"json"`` or ``"orjson"``.
 
-    The default is ``json``. ``orjson`` writes NaN and infinite floats in
+    The default is ``"json"``. ``orjson`` writes NaN and infinite floats in
     non-tensor data as ``null``, so they load back as ``None``.
     """
     global _JSON_BACKEND
@@ -133,5 +137,5 @@ def set_json_backend(backend):
 
 
 def get_json_backend():
-    """Get the current JSON backend."""
+    """Returns the module of the current JSON backend (``json`` or ``orjson``)."""
     return importlib.import_module(_JSON_BACKEND)

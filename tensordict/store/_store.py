@@ -47,6 +47,11 @@ from tensordict.utils import (
 
 _has_redis = importlib.util.find_spec("redis", None) is not None
 
+#: The type of the ``backend`` argument of the stores, ``"redis"`` or ``"dragonfly"``.
+#:
+#: The value is a label, kept in the store and shown by its ``repr``. Every
+#: server speaks the Redis protocol, so it does not change how the store
+#: connects.
 STORE_BACKENDS = Literal["redis", "dragonfly"]
 
 if TYPE_CHECKING:
@@ -262,7 +267,7 @@ class _StoreTDKeysView(_TensorDictKeysView):
 
 
 class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
-    """A TensorDict whose entries live on a Redis-compatible server.
+    """A tensordict whose entries live on a Redis-compatible server.
 
     Supports `Redis <https://redis.io>`_, `Dragonfly <https://dragonflydb.io>`_,
     `KeyDB <https://docs.keydb.dev>`_, and any other Redis-wire-compatible server.
@@ -273,9 +278,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     that ``keys()`` and ``shape`` do not download the data. See
     :ref:`storage` for a guide.
 
-    Each read or write blocks until the server answers. Internally, the client
-    is a ``redis.asyncio.Redis`` client that runs on a background event loop,
-    so that one call can send many commands in one round-trip.
+    Each read or write blocks until the server answers. One call sends its
+    commands to the server in one round-trip.
 
     .. rubric:: Lifecycle and limits
 
@@ -303,60 +307,60 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
       connect only to a server that you trust.
 
     Keyword Args:
-        backend (str): Name of the server backend.  Accepted values include
-            ``"redis"`` (default), ``"dragonfly"``, ``"keydb"``, or any
-            other string. It is a label, kept in the object and shown by
-            ``repr``. All servers use the same wire protocol, so the value
-            does not change how the store connects.
-        host (str): Server hostname. Defaults to ``"localhost"``.
-        port (int): Server port. Defaults to ``6379``.
-        db (int): Database number. Defaults to ``0``.
-        unix_socket_path (str, optional): Path to a Unix domain socket, for a
+        backend (str, optional): a label for the kind of server, kept in the
+            store and shown by its ``repr``, for example ``"redis"``,
+            ``"dragonfly"`` or ``"keydb"``. Every server speaks the same
+            protocol, so the value does not change how the store connects.
+            Defaults to ``"redis"``.
+        host (str, optional): the host name of the server. Defaults to
+            ``"localhost"``.
+        port (int, optional): the port of the server. Defaults to ``6379``.
+        db (int, optional): the database number on the server. Defaults to
+            ``0``.
+        unix_socket_path (str, optional): the path of a Unix socket, for a
             server on the same machine. If set, ``host`` and ``port`` are
-            ignored.
-        prefix (str, optional): A namespace prefix for all keys.
-            Defaults to ``"tensordict"``.
-        batch_size (torch.Size or compatible): The TensorDict batch size.
-            Defaults to ``torch.Size(())``.
-        device (torch.device or compatible, optional): Target device for
-            retrieved tensors. Defaults to ``None`` (CPU).
-        client: An existing ``redis.asyncio.Redis`` client instance. If
-            provided, ``host``/``port``/``db``/``unix_socket_path`` are ignored.
-        td_id (str, optional): A unique identifier for this TensorDict in the
-            store.  Defaults to a new UUID.  Pass an existing ID to reconnect
-            to previously stored data. The constructor does not read the
-            stored batch size: use :meth:`from_store` to reconnect.
-        cache_metadata (bool): If ``True`` (default), cache tensor metadata
-            locally to reduce round-trips.
-        **redis_kwargs: Additional keyword arguments passed to
-            ``redis.asyncio.Redis``.
+            ignored. Defaults to ``None``.
+        prefix (str, optional): the namespace of the keys of the store on the
+            server. Defaults to ``"tensordict"``.
+        batch_size (torch.Size or list of int, optional): the batch size of
+            the store: the leading dimensions that all its entries share.
+            Defaults to ``None``, which gives ``torch.Size([])``.
+        device (torch.device, str or int, optional): the device of the
+            tensors that reads return. The server holds CPU bytes. Defaults to
+            ``None``: reads return CPU tensors, and the store has no device.
+        client (redis.asyncio.Redis, optional): an existing client. If given,
+            ``host``, ``port``, ``db`` and ``unix_socket_path`` are ignored.
+            Defaults to ``None``, which creates a client.
+        td_id (str, optional): the identifier of the store on the server.
+            Defaults to ``None``, which creates a new UUID. The constructor
+            does not read the batch size of an existing store: use
+            :meth:`from_store` to reconnect.
+        cache_metadata (bool, optional): if ``True``, keeps the shape and
+            dtype of each entry in the process, to save round-trips to the
+            server. Defaults to ``True``.
+        **redis_kwargs: passed to ``redis.asyncio.Redis``.
+
+    Raises:
+        ModuleNotFoundError: if the ``redis`` package is not installed
+            (``pip install redis``).
 
     Examples:
         The example needs a Redis server on ``localhost:6379``.
 
         >>> import torch
         >>> from tensordict.store import TensorDictStore
-        >>> # Redis backend (default)
-        >>> td = TensorDictStore(batch_size=[100])
-        >>> td["obs"] = torch.randn(100, 84)
-        >>> td["obs"].shape  # fetched from the store
+        >>> td = TensorDictStore(batch_size=[100])  # doctest: +SKIP
+        >>> td["obs"] = torch.zeros(100, 84)  # doctest: +SKIP
+        >>> td["obs"].shape  # doctest: +SKIP
         torch.Size([100, 84])
-        >>> local_td = td.to_tensordict()
-        >>> type(local_td).__name__
+        >>> type(td.to_tensordict()).__name__  # doctest: +SKIP
         'TensorDict'
-        >>> td.clear_redis()  # delete the data on the server
-        >>> td.close()
+        >>> td.clear_redis()  # doctest: +SKIP
+        >>> td.close()  # doctest: +SKIP
 
-        To connect to a Dragonfly server (same wire protocol as Redis) on
-        another host, pass its address, for example
+        To connect to a Dragonfly server on another host, pass its address,
+        for example
         ``TensorDictStore(backend="dragonfly", host="dragonfly-host", batch_size=[100])``.
-
-    .. note::
-        Requires ``redis`` package: ``pip install redis``.
-
-    .. note::
-        Tensors are stored as CPU contiguous bytes.  The ``device`` attribute
-        controls the device tensors are cast to upon retrieval.
     """
 
     _td_dim_names = None
@@ -1854,9 +1858,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         "TensorDictStore.to_local()", removal="0.17", replacement="to_tensordict()"
     )
     def to_local(self) -> TensorDict:
-        """Pull the entire Redis-backed dict into local RAM.
-
-        Alias for :meth:`to_tensordict`.
+        """Returns a :class:`~tensordict.TensorDict` with a copy of the data of the store.
 
         .. deprecated:: 0.15
             Use :meth:`to_tensordict` instead.
@@ -1883,36 +1885,44 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         names: Sequence[str] | None = None,
         **kwargs,
     ):
-        """Create a TensorDictStore from a dictionary or TensorDict.
+        """Returns a new store that holds the entries of a dict or a tensordict.
 
         Args:
-            input_dict: A dictionary or TensorDict to store.
+            input_dict (dict or TensorDictBase): the entries to write to the
+                server.
 
         Keyword Args:
-            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
-                A label only (see :class:`TensorDictStore`).
-            host (str): Server hostname. Defaults to ``"localhost"``.
-            port (int): Server port. Defaults to ``6379``.
-            db (int): Database number. Defaults to ``0``.
-            unix_socket_path (str, optional): Unix socket path. If set,
-                ``host`` and ``port`` are ignored.
-            prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            auto_batch_size (bool): if ``True``, a dict ``input_dict`` without
-                ``batch_size`` gives the store the largest leading shape that
-                all its entries share, as
-                :meth:`~tensordict.TensorDict.auto_batch_size_` gives.
-                Defaults to ``False``.
-            batch_size: Explicit batch_size. Defaults to the batch size of
-                ``input_dict`` if it is a TensorDict. For a dict, defaults to
-                ``[]``, or to the inferred batch size with
-                ``auto_batch_size=True``.
-            device: Target device for tensor retrieval.
-            batch_dims (int, optional): for a dict ``input_dict`` without
-                ``batch_size``, the number of leading dims of the inferred batch
-                size; implies ``auto_batch_size=True``. Exclusive with
-                ``batch_size``.
-            names (list of str, optional): the dimension names of the store.
-            **kwargs: Additional connection kwargs.
+            backend (str, optional): a label for the kind of server, as in
+                :class:`TensorDictStore`. Defaults to ``"redis"``.
+            host (str, optional): the host name of the server. Defaults to
+                ``"localhost"``.
+            port (int, optional): the port of the server. Defaults to ``6379``.
+            db (int, optional): the database number on the server. Defaults
+                to ``0``.
+            unix_socket_path (str, optional): the path of a Unix socket, for a
+                server on the same machine. If set, ``host`` and ``port`` are
+                ignored. Defaults to ``None``.
+            prefix (str, optional): the namespace of the keys of the store on
+                the server. Defaults to ``"tensordict"``.
+            auto_batch_size (bool, optional): if ``True`` and ``input_dict``
+                is a dict without ``batch_size``, sets the batch size to the
+                largest leading shape that all the entries share. Defaults to
+                ``False``.
+            batch_size (torch.Size or list of int, optional): the batch size
+                of the store. Defaults to ``None``, which takes the batch size
+                of a tensordict ``input_dict``, and ``[]`` (or the inferred
+                batch size with ``auto_batch_size=True``) for a dict.
+            device (torch.device, str or int, optional): the device of the
+                tensors that reads return, as in :class:`TensorDictStore`.
+                Defaults to ``None``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions; giving it turns
+                ``auto_batch_size`` on. Exclusive with ``batch_size``.
+                Defaults to ``None``.
+            names (list of str, optional): the names of the batch dimensions,
+                one per dimension. Defaults to ``None``.
+            **kwargs: passed to the :class:`TensorDictStore` constructor, such
+                as ``client`` or ``td_id``, and options of the Redis client.
 
         Returns:
             A new TensorDictStore.
@@ -1922,11 +1932,11 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
             >>> import torch
             >>> from tensordict.store import TensorDictStore
-            >>> store = TensorDictStore.from_dict({"a": torch.zeros(5, 3)}, batch_size=[5])
-            >>> store.batch_size
+            >>> store = TensorDictStore.from_dict({"a": torch.zeros(5, 3)}, batch_size=[5])  # doctest: +SKIP
+            >>> store.batch_size  # doctest: +SKIP
             torch.Size([5])
-            >>> store.clear_redis()
-            >>> store.close()
+            >>> store.clear_redis()  # doctest: +SKIP
+            >>> store.close()  # doctest: +SKIP
         """
         batch_size = _normalize_from_dict_args(
             input_dict, batch_size=batch_size, batch_dims=batch_dims
@@ -1977,32 +1987,40 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         device=None,
         **kwargs,
     ) -> TensorDictStore:
-        """Upload a TensorDict to a key-value store.
-
-        Creates a new :class:`TensorDictStore` and copies all tensor data from
-        the provided TensorDict into the store.
-
-        Args:
-            td (TensorDictBase): The source TensorDict whose data will be
-                stored.
-
-        Keyword Args:
-            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
-            host (str): Server hostname. Defaults to ``"localhost"``.
-            port (int): Server port. Defaults to ``6379``.
-            db (int): Database number. Defaults to ``0``.
-            unix_socket_path (str, optional): Unix socket path.
-            prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            device (torch.device, optional): Device override for retrieved
-                tensors. If ``None``, uses the source TensorDict's device.
-            **kwargs: Extra connection kwargs.
-
-        Returns:
-            A new TensorDictStore backed by the uploaded data.
+        """Returns a new store that holds a copy of the data of ``td``.
 
         A :class:`~tensordict.LazyStackedTensorDict` gives a
-        :class:`~tensordict.store.LazyStackedTensorDictStore`, which keeps the
-        entries of different shapes.
+        :class:`~tensordict.store.LazyStackedTensorDictStore`, which keeps
+        entries of different shapes. For a tensorclass, the store records its
+        class, so that :meth:`from_store` returns an instance of it.
+
+        Args:
+            td (TensorDictBase): the tensordict or tensorclass to copy to the
+                server.
+
+        Keyword Args:
+            backend (str, optional): a label for the kind of server, as in
+                :class:`TensorDictStore`. Defaults to ``"redis"``.
+            host (str, optional): the host name of the server. Defaults to
+                ``"localhost"``.
+            port (int, optional): the port of the server. Defaults to ``6379``.
+            db (int, optional): the database number on the server. Defaults
+                to ``0``.
+            unix_socket_path (str, optional): the path of a Unix socket, for a
+                server on the same machine. If set, ``host`` and ``port`` are
+                ignored. Defaults to ``None``.
+            prefix (str, optional): the namespace of the keys of the store on
+                the server. Defaults to ``"tensordict"``.
+            device (torch.device, str or int, optional): the device of the
+                tensors that reads return. Defaults to ``None``, which takes
+                the device of ``td``.
+            **kwargs: passed to the :class:`TensorDictStore` constructor, such
+                as ``client`` or ``td_id``, and options of the Redis client.
+
+        Returns:
+            A :class:`TensorDictStore`, or a
+            :class:`~tensordict.store.LazyStackedTensorDictStore` for a lazy
+            stack.
 
         Examples:
             The example needs a Redis server on ``localhost:6379``. For a
@@ -2011,12 +2029,12 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             >>> import torch
             >>> from tensordict import TensorDict
             >>> from tensordict.store import TensorDictStore
-            >>> local = TensorDict({"obs": torch.randn(10, 84)}, [10])
-            >>> remote = TensorDictStore.from_tensordict(local)
-            >>> remote["obs"].shape
+            >>> local = TensorDict(obs=torch.zeros(10, 84), batch_size=[10])
+            >>> remote = TensorDictStore.from_tensordict(local)  # doctest: +SKIP
+            >>> remote["obs"].shape  # doctest: +SKIP
             torch.Size([10, 84])
-            >>> remote.clear_redis()
-            >>> remote.close()
+            >>> remote.clear_redis()  # doctest: +SKIP
+            >>> remote.close()  # doctest: +SKIP
         """
         if device is None:
             device = td.device
@@ -2080,13 +2098,12 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         device=None,
         **kwargs,
     ) -> TensorDictStore:
-        """Creates a store with zero-filled entries of known shapes, without sending any data from Python.
+        """Returns a new store with zero-filled entries of the given shapes and dtypes.
 
-        Creates a new :class:`TensorDictStore` and registers each key in
-        ``schema`` with its shape and dtype. The server allocates each entry
-        with ``SETRANGE`` and fills it with zeros. No tensor data goes through
-        the Python process, but the server allocates the full size in its
-        memory at once.
+        Each key of ``schema`` is registered with its shape and dtype. The
+        server allocates each entry with ``SETRANGE`` and fills it with zeros.
+        No tensor data goes through the Python process, but the server
+        allocates the full size in its memory at once.
 
         Use it for a replay buffer or another shared buffer whose schema you
         know before you fill it.
@@ -2097,25 +2114,35 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         split the entry.
 
         Args:
-            schema: Mapping from field name (a str, or a tuple of str for a
-                nested entry) to ``(element_shape, dtype)``.
-                ``element_shape`` is the per-element shape (excluding
-                ``batch_size``).  The full stored shape is
-                ``[*batch_size, *element_shape]``.
+            schema (dict): maps each key (a str, or a tuple of str for a
+                nested entry) to ``(feature_shape, dtype)``, where
+                ``feature_shape`` is the shape after the batch dimensions. The
+                entry has shape ``[*batch_size, *feature_shape]``.
 
         Keyword Args:
-            batch_size: Overall batch size of the store.
-            backend (str): Store backend.  Defaults to ``"redis"``.
-            host (str): Server hostname.  Defaults to ``"localhost"``.
-            port (int): Server port.  Defaults to ``6379``.
-            db (int): Database number.  Defaults to ``0``.
-            unix_socket_path (str, optional): Unix socket path.
-            prefix (str): Key namespace.  Defaults to ``"tensordict"``.
-            device: Device override for retrieved tensors.
-            **kwargs: Extra connection kwargs passed to the Redis client.
+            batch_size (torch.Size or list of int, optional): the batch size
+                of the store. Defaults to ``None``, which gives
+                ``torch.Size([])``.
+            backend (str, optional): a label for the kind of server, as in
+                :class:`TensorDictStore`. Defaults to ``"redis"``.
+            host (str, optional): the host name of the server. Defaults to
+                ``"localhost"``.
+            port (int, optional): the port of the server. Defaults to ``6379``.
+            db (int, optional): the database number on the server. Defaults
+                to ``0``.
+            unix_socket_path (str, optional): the path of a Unix socket, for a
+                server on the same machine. If set, ``host`` and ``port`` are
+                ignored. Defaults to ``None``.
+            prefix (str, optional): the namespace of the keys of the store on
+                the server. Defaults to ``"tensordict"``.
+            device (torch.device, str or int, optional): the device of the
+                tensors that reads return, as in :class:`TensorDictStore`.
+                Defaults to ``None``.
+            **kwargs: passed to the :class:`TensorDictStore` constructor, such
+                as ``client`` or ``td_id``, and options of the Redis client.
 
         Returns:
-            A new ``TensorDictStore`` with pre-allocated (zero-filled) keys.
+            A new :class:`TensorDictStore` whose entries are zeros.
 
         Examples:
             The example needs a Redis server on ``localhost:6379``. The
@@ -2124,25 +2151,25 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
             >>> import torch
             >>> from tensordict import TensorDict
             >>> from tensordict.store import TensorDictStore
-            >>> store = TensorDictStore.from_schema(
+            >>> store = TensorDictStore.from_schema(  # doctest: +SKIP
             ...     {"obs": ([84, 84, 3], torch.uint8),
             ...      "action": ([4], torch.float32),
             ...      "reward": ([], torch.float32)},
             ...     batch_size=[1000],
             ... )
-            >>> store["obs"].shape
+            >>> store["obs"].shape  # doctest: +SKIP
             torch.Size([1000, 84, 84, 3])
-            >>> store[0] = TensorDict(
+            >>> store[0] = TensorDict(  # doctest: +SKIP
             ...     obs=torch.ones(84, 84, 3, dtype=torch.uint8),
             ...     action=torch.ones(4),
             ...     reward=torch.ones(()),
             ...     batch_size=[],
             ... )
-            >>> store["action"][:2]
+            >>> store["action"][:2]  # doctest: +SKIP
             tensor([[1., 1., 1., 1.],
                     [0., 0., 0., 0.]])
-            >>> store.clear_redis()
-            >>> store.close()
+            >>> store.clear_redis()  # doctest: +SKIP
+            >>> store.close()  # doctest: +SKIP
         """
         # Read the schema before the store writes anything, so that an invalid
         # entry leaves nothing on the server. A nested key is stored under its
@@ -2214,61 +2241,65 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         tensorclass_cls: type | str | None = None,
         **kwargs,
     ) -> TensorDictStore:
-        """Connect to an existing TensorDictStore on a remote server.
+        """Returns a store connected to data that another store wrote to the server.
 
-        This is the cross-node entry point: one process stores data with
-        :meth:`from_tensordict` (or regular ``__setitem__``), and another
-        process on any machine that can reach the same server reconstructs
-        the handle by passing the same ``td_id``.
+        One process writes the data, with :meth:`from_tensordict` or with
+        ``td[key] = value``; another process, on any machine that reaches the
+        server, passes the same ``td_id`` to connect to it. The batch size and
+        the device are read from the server.
 
-        Batch size and device are read from the metadata already persisted
-        in the store by the original writer.
-
-        If the original writer was a TensorClass instance, the class path
-        is stored automatically. On retrieval, the TensorClass is
-        reconstructed by importing the class. You can also pass
-        ``tensorclass_cls`` explicitly to override or skip the auto-import.
+        If the writer was a tensorclass, the server holds the path of its
+        class, and the result is an instance of that class, which must be
+        importable. ``tensorclass_cls`` overrides it.
 
         Keyword Args:
-            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
-            host (str): Server hostname. Defaults to ``"localhost"``.
-            port (int): Server port. Defaults to ``6379``.
-            db (int): Database number. Defaults to ``0``.
-            unix_socket_path (str, optional): Unix socket path.
-            prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            td_id (str): The unique identifier of the TensorDict to reconnect
-                to. Obtain this from a previously created instance via
-                ``td._td_id`` (a private attribute: there is no public
-                accessor), or read it in its ``repr``.
-            device (torch.device, optional): Device override for retrieved
-                tensors. If ``None``, uses the device stored in the server.
-            tensorclass_cls (type | str | None): TensorClass to wrap the
-                result with.  If a class, used directly via
-                ``cls._from_tensordict``.  If a string, interpreted as a
-                fully-qualified class path (``"module.ClassName"``) and
-                imported.  If ``None`` (default), the class path stored in
-                the server (if any) is used automatically.
-            **kwargs: Extra keyword arguments for the constructor, such as
-                ``cache_metadata``, and connection kwargs for the Redis client.
+            backend (str, optional): a label for the kind of server, as in
+                :class:`TensorDictStore`. Defaults to ``"redis"``.
+            host (str, optional): the host name of the server. Defaults to
+                ``"localhost"``.
+            port (int, optional): the port of the server. Defaults to ``6379``.
+            db (int, optional): the database number on the server. Defaults
+                to ``0``.
+            unix_socket_path (str, optional): the path of a Unix socket, for a
+                server on the same machine. If set, ``host`` and ``port`` are
+                ignored. Defaults to ``None``.
+            prefix (str, optional): the namespace of the keys of the store on
+                the server. Defaults to ``"tensordict"``.
+            td_id (str): the identifier of the store to connect to. A store
+                shows it in its ``repr``, and holds it in the private attribute
+                ``_td_id``; there is no public accessor.
+            device (torch.device, str or int, optional): the device of the
+                tensors that reads return. Defaults to ``None``, which uses the
+                device stored on the server.
+            tensorclass_cls (type or str, optional): the tensorclass to wrap
+                the result in, as a class or as a path ``"module.ClassName"``
+                to import. Defaults to ``None``, which uses the class stored on
+                the server, if any.
+            **kwargs: passed to the :class:`TensorDictStore` constructor, such
+                as ``client`` or ``cache_metadata``, and options of the Redis
+                client.
 
         Returns:
-            A TensorDictStore (or TensorClass wrapping one) connected to the
-            existing data.
+            A :class:`TensorDictStore`, or a tensorclass that wraps one.
+
+        Raises:
+            KeyError: if the server has no store with this ``td_id`` under
+                ``prefix``.
 
         Examples:
-            On node A (writer)::
+            The example needs a Redis server on ``localhost:6379``. The
+            second store could be in another process.
 
-                td = TensorDictStore(host="my-server", batch_size=[100])
-                td["obs"] = torch.randn(100, 84)
-                print(td._td_id)  # e.g. "a1b2c3d4-..."
-
-            On node B (reader)::
-
-                td = TensorDictStore.from_store(
-                    host="my-server",
-                    td_id="a1b2c3d4-...",
-                )
-                td["obs"]  # fetched from the shared store
+            >>> import torch
+            >>> from tensordict.store import TensorDictStore
+            >>> writer = TensorDictStore(batch_size=[100])  # doctest: +SKIP
+            >>> writer["obs"] = torch.zeros(100, 84)  # doctest: +SKIP
+            >>> reader = TensorDictStore.from_store(td_id=writer._td_id)  # doctest: +SKIP
+            >>> reader.batch_size, reader["obs"].shape  # doctest: +SKIP
+            (torch.Size([100]), torch.Size([100, 84]))
+            >>> writer.clear_redis()  # doctest: +SKIP
+            >>> writer.close()  # doctest: +SKIP
+            >>> reader.close()  # doctest: +SKIP
         """
         # ``client`` and ``cache_metadata`` go to the constructor only.
         redis_kwargs = {
@@ -2448,16 +2479,19 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def flatten_keys(self, separator=KEY_SEPARATOR, inplace=False, is_leaf=None):
-        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+        """Returns a local copy of the store whose nested keys are joined by ``separator``.
 
-        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+        The data is read from the server with :meth:`to_tensordict`, and the
+        store is not changed.
 
         Args:
-            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
-            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
-                Defaults to ``False``.
-            is_leaf (callable, optional): see
-                :meth:`~tensordict.TensorDictBase.flatten_keys`.
+            separator (str, optional): the string that joins the parts of a
+                nested key. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a
+                ``ValueError``. Defaults to ``False``.
+            is_leaf (Callable, optional): see
+                :meth:`~tensordict.TensorDictBase.flatten_keys`. Defaults to
+                ``None``.
 
         See :meth:`~tensordict.TensorDictBase.flatten_keys`.
         """

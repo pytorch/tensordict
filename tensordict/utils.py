@@ -238,7 +238,16 @@ _DTYPE_TO_STR_DTYPE = {
 }
 _DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
 
+#: The type of the indices that a tensordict accepts in ``td[index]``.
+#:
+#: An int, a slice, ``None``, a tensor (of indices or a boolean mask), a list,
+#: or a tuple of these, as for a tensor; a str or a tuple of str is a key.
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+
+#: The type of the ``device`` arguments.
+#:
+#: A :class:`torch.device`, a str such as ``"cpu"`` or ``"cuda:0"``, or the index
+#: of a CUDA device.
 DeviceType = Union[torch.device, str, int]
 
 # The default separator of flatten_keys and unflatten_keys. The defaults are
@@ -299,22 +308,33 @@ def expand_as_right(
     tensor: torch.Tensor | TensorDictBase,
     dest: torch.Tensor | TensorDictBase,
 ) -> torch.Tensor | TensorDictBase:
-    """Expand a tensor on the right to match another tensor shape.
+    """Expands a tensor on the right to the shape of ``dest``.
+
+    Broadcasting adds dimensions on the left; this function adds them on the
+    right instead, then expands every dimension of size one. The leading
+    dimensions of ``tensor`` must match those of ``dest`` or be of size one.
+    The result is a view of ``tensor``, as with :meth:`torch.Tensor.expand`.
 
     Args:
-        tensor: tensor to be expanded
-        dest: tensor providing the target shape
+        tensor (torch.Tensor or TensorDictBase): the tensor to expand.
+        dest (torch.Tensor or TensorDictBase): the tensor whose shape the
+            result takes. For a tensordict, the shape is its batch size.
 
     Returns:
-         a tensor with shape matching the dest input tensor shape.
+        A view of ``tensor`` with the shape of ``dest``.
+
+    Raises:
+        RuntimeError: if ``dest`` has fewer dimensions than ``tensor``, or if
+            their leading dimensions do not match.
 
     Examples:
         >>> import torch
         >>> from tensordict.utils import expand_as_right
-        >>> tensor = torch.zeros(3,4)
-        >>> dest = torch.zeros(3,4,5)
-        >>> print(expand_as_right(tensor, dest).shape)
-        torch.Size([3, 4, 5])
+        >>> x = torch.arange(3)
+        >>> expand_as_right(x, torch.zeros(3, 2))
+        tensor([[0, 0],
+                [1, 1],
+                [2, 2]])
 
     """
     if dest.ndimension() < tensor.ndimension():
@@ -338,21 +358,29 @@ def expand_as_right(
 
 
 def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
-    """Expand a tensor on the right to match a desired shape.
+    """Expands a tensor on the right to ``shape``.
+
+    Broadcasting adds dimensions on the left; this function adds them on the
+    right instead, then expands every dimension of size one. The leading
+    dimensions of ``tensor`` must match ``shape`` or be of size one. The
+    result is a view of ``tensor``, as with :meth:`torch.Tensor.expand`.
 
     Args:
-        tensor: tensor to be expanded
-        shape: target shape
+        tensor (torch.Tensor): the tensor to expand.
+        shape (torch.Size or sequence of int): the shape of the result.
 
     Returns:
-         a tensor with shape matching the target shape.
+        A view of ``tensor`` with shape ``shape``.
 
     Examples:
         >>> import torch
         >>> from tensordict.utils import expand_right
-        >>> tensor = torch.zeros(3,4)
-        >>> shape = (3,4,5)
-        >>> print(expand_right(tensor, shape).shape)
+        >>> x = torch.arange(3)
+        >>> expand_right(x, (3, 2))
+        tensor([[0, 0],
+                [1, 1],
+                [2, 2]])
+        >>> expand_right(torch.zeros(3, 4), (3, 4, 5)).shape
         torch.Size([3, 4, 5])
 
     """
@@ -605,6 +633,12 @@ class timeit:
 
     @staticmethod
     def print(prefix=None):  # noqa: T202
+        """Logs the mean and total time of each name, at the ``INFO`` level.
+
+        Args:
+            prefix (str, optional): a string put before each line. Defaults
+                to ``None``.
+        """
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
@@ -618,6 +652,7 @@ class timeit:
 
     @staticmethod
     def erase():
+        """Resets the count and the times of every name to zero."""
         for k in timeit._REG:
             timeit._REG[k] = [0.0, 0.0, 0]
 
@@ -664,7 +699,22 @@ def _is_lis_of_list_of_bools(index, first_level=True):
 
 
 def is_tensorclass(obj: type | Any) -> bool:
-    """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
+    """Returns ``True`` if ``obj`` is a tensorclass type or an instance of one.
+
+    Args:
+        obj (type or object): the class or the object to check.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, is_tensorclass, tensorclass
+        >>> @tensorclass
+        ... class Data:
+        ...     x: torch.Tensor
+        >>> is_tensorclass(Data), is_tensorclass(Data(x=torch.zeros(2)))
+        (True, True)
+        >>> is_tensorclass(TensorDict())
+        False
+    """
     cls = obj if isinstance(obj, type) else type(obj)
     return _is_tensorclass(cls)
 
@@ -1670,29 +1720,60 @@ def assert_close(
     msg: str = "",
     prefix: NestedKey = (),
 ) -> bool:
-    """Asserts that two tensordicts, `actual` and `expected`, are element-wise equal within a tolerance for all entries.
+    """Asserts that two tensordicts have the same keys and close values.
 
-    This function checks if the elements of the `actual` tensor are close to the corresponding elements
-    of the `expected` tensordict, within a relative tolerance (`rtol`) and an absolute tolerance (`atol`).
+    Each pair of tensors is compared with :func:`torch.testing.assert_close`,
+    which also checks that the dtypes, shapes and devices match. Nested
+    tensordicts are compared entry by entry, and two lazy stacks are compared
+    stack by stack. Non-tensor data is not compared. Tensorclasses are
+    accepted.
 
-    It is similar to the :func:`~torch.testing.assert_close` function in PyTorch, but with tensordicts inputs.
+    ``assert_allclose_td`` is another name for this function.
 
     Args:
-        actual (T): The tensordict containing actual values.
-        expected (T): The tensordict containing expected values.
-        rtol (float | None, optional): The relative tolerance parameter. Default is None.
-        atol (float | None, optional): The absolute tolerance parameter. Default is None.
-        equal_nan (bool, optional): If True, ``NaNs`` will be considered equal to ``NaNs``. Default is ``True``.
-        intersection (bool, optional): If True, only the intersection of the two tensordicts will be compared.
-            Default is ``False``.
-        msg (str, optional): An optional message to include in the assertion error if the check fails.
-        prefix (NestedKey, optional): a prefix to add to the key for error messages.
+        actual (TensorDictBase): the tensordict to check.
+        expected (TensorDictBase): the tensordict with the expected values.
+        rtol (float, optional): the relative tolerance. Defaults to ``None``,
+            which uses the default of :func:`torch.testing.assert_close` for
+            the dtype.
+        atol (float, optional): the absolute tolerance. Defaults to ``None``,
+            which uses the default of :func:`torch.testing.assert_close` for
+            the dtype.
+        equal_nan (bool, optional): if ``True``, two ``NaN`` values are equal.
+            Defaults to ``True``.
+        intersection (bool, optional): if ``True``, compares only the keys
+            that both tensordicts have. If ``False``, different key sets
+            raise a ``KeyError``. Defaults to ``False``.
+        msg (str, optional): a message appended to the error message.
+            Defaults to ``""``.
+        prefix (NestedKey, optional): a key prepended to the keys in the error
+            messages. Defaults to ``()``.
 
     Returns:
-        bool: True if the tensors are close within the specified tolerances, raise an exception otherwise.
+        ``True`` if the check passes.
 
     Raises:
-        AssertionError: If the tensordicts are not close within the specified tolerances.
+        TypeError: if ``actual`` or ``expected`` is not a tensordict or a
+            tensorclass.
+        KeyError: if the keys differ and ``intersection=False``.
+        AssertionError: if two values are not close. The message names the
+            key and the root mean squared error.
+        RuntimeError: if the shapes of two tensors cannot be broadcast
+            together.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, assert_close
+        >>> a = TensorDict(x=torch.zeros(3), y=torch.ones(3))
+        >>> assert_close(a, a.clone())
+        True
+        >>> b = TensorDict(x=torch.full((3,), 0.01), y=torch.ones(3))
+        >>> assert_close(a, b, atol=0.1, rtol=0)
+        True
+        >>> assert_close(a, b)
+        Traceback (most recent call last):
+            ...
+        AssertionError: key ('x',) does not match, got mse = 0.0100
 
     """
     from tensordict.base import _is_tensor_collection
@@ -2445,12 +2526,32 @@ def _prune_selected_keys(keys_to_update, prefix):
 
 
 class TensorDictFuture:
-    """A custom future class for TensorDict multithreaded operations.
+    """A tensordict that is still being written by background threads.
+
+    :meth:`~tensordict.TensorDictBase.memmap`,
+    :meth:`~tensordict.TensorDictBase.memmap_`,
+    :meth:`~tensordict.TensorDictBase.memmap_like`,
+    :meth:`~tensordict.TensorDictBase.save` and
+    :meth:`~tensordict.TensorDictBase.consolidate` return one when called
+    with ``return_early=True`` and ``num_threads > 1``. Call :meth:`result`
+    to wait for the writes and get the tensordict. You do not build one
+    yourself.
 
     Args:
-        futures (list of futures): a list of concurrent.futures.Future objects to wait for.
-        resulting_td (TensorDictBase): instance that will result from the futures
-            completing.
+        futures (list of concurrent.futures.Future): the writes to wait for.
+        resulting_td (TensorDictBase): the tensordict that :meth:`result`
+            returns.
+
+    Examples:
+        >>> import tempfile
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     future = td.memmap(path, num_threads=2, return_early=True)
+        ...     result = future.result()
+        ...     print(result.is_memmap(), result["b"].tolist())
+        True [1.0, 1.0, 1.0]
 
     """
 
@@ -2459,9 +2560,9 @@ class TensorDictFuture:
         self.resulting_td = resulting_td
 
     def result(self):
-        """Wait and returns the resulting tensordict.
+        """Waits for the writes to finish and returns the tensordict.
 
-        Raises the first error of the futures, if any.
+        If a write failed, raises the first error of the writes.
         """
         concurrent.futures.wait(self.futures)
         for future in self.futures:
@@ -2523,16 +2624,33 @@ def _is_json_serializable(item):
 
 
 def print_directory_tree(path, indent="", display_metadata=True) -> str:
-    """Prints the directory tree starting from the specified path.
+    """Logs the tree of files and directories under ``path``.
+
+    Each line is logged at the ``INFO`` level with the tensordict logger
+    (:data:`tensordict.utils.logger`) and the tree is returned as a string.
+    The entries of a directory are in the order of :func:`os.listdir`.
 
     Args:
-        path (str): The path of the directory to print.
-        indent (str): The current indentation level for formatting.
-        display_metadata (bool): if ``True``, metadata of the dir will be
-            displayed too.
+        path (str): the directory (or file) to show.
+        indent (str, optional): the string put before each line of the tree;
+            each level adds four spaces to it. Defaults to ``""``.
+        display_metadata (bool, optional): if ``True``, the first line gives
+            the total size of the files under ``path``. Defaults to ``True``.
 
     Returns:
-        the string printed with the logger.
+        The lines that were logged, joined by newlines.
+
+    Examples:
+        >>> import tempfile
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.utils import print_directory_tree
+        >>> td = TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3])
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     _ = td.memmap(path)
+        ...     tree = print_directory_tree(path, display_metadata=False)
+        >>> sorted(line.strip() for line in tree.splitlines()[1:])
+        ['a.memmap', 'b.memmap', 'meta.json']
 
     """
     string = []
@@ -2582,43 +2700,43 @@ def isin(
     key: NestedKey,
     dim: int = 0,
 ) -> Tensor:
-    """Tests if each element of ``key`` in input ``dim`` is also present in the reference.
+    """Returns which elements of ``input`` along ``dim`` are also in ``reference``.
 
-    This function returns a boolean tensor of length  ``input.batch_size[dim]`` that is ``True`` for elements in
-    the entry ``key`` that are also present in the ``reference``. This function assumes that both ``input`` and
-    ``reference`` have the same batch size and contain the specified entry, otherwise an error will be raised.
+    The entry ``key`` is cut into slices along ``dim``. An element of
+    ``input`` is in ``reference`` if its slice is equal to one of the slices
+    of ``reference[key]``. The two tensordicts must have the same number of
+    batch dimensions, and the shapes of the two entries must match except
+    along ``dim``.
 
     Args:
-        input (TensorDictBase): Input TensorDict.
-        reference (TensorDictBase): Target TensorDict against which to test.
-        key (Nestedkey): The key to test.
-        dim (int, optional): The dimension along which to test. Defaults to ``0``.
+        input (TensorDictBase): the tensordict to test.
+        reference (TensorDictBase): the tensordict to look in.
+        key (NestedKey): the key of the tensor to compare. It must hold a
+            tensor in both tensordicts.
+        dim (int, optional): the batch dimension along which to compare.
+            Defaults to ``0``.
 
     Returns:
-        out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is ``True`` for elements in
-            the ``input`` ``key`` tensor that are also present in the ``reference``.
+        A boolean tensor of length ``input.batch_size[dim]``.
+
+    Raises:
+        KeyError: if ``key`` is missing or is not a tensor in either
+            tensordict.
+        ValueError: if the numbers of batch dimensions differ, or if ``dim``
+            is not a batch dimension.
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.utils import isin
         >>> td = TensorDict(
-        ...     {
-        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
-        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
-        ...     },
+        ...     x=torch.tensor([[1, 2], [3, 4], [1, 2], [5, 6]]),
+        ...     y=torch.arange(4),
         ...     batch_size=[4],
         ... )
-        >>> td_ref = TensorDict(
-        ...     {
-        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
-        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
-        ...     },
-        ...     batch_size=[3],
-        ... )
-        >>> in_reference = isin(td, td_ref, key="tensor1")
-        >>> expected_in_reference = torch.tensor([True, True, True, False])
-        >>> torch.testing.assert_close(in_reference, expected_in_reference)
+        >>> reference = TensorDict(x=torch.tensor([[1, 2], [5, 6]]), batch_size=[2])
+        >>> isin(td, reference, key="x")
+        tensor([ True, False,  True,  True])
     """
     # Get the data
     reference_tensor = reference.get(key)
@@ -2681,48 +2799,43 @@ def remove_duplicates(
     *,
     return_indices: bool = False,
 ) -> TensorDictBase:
-    """Removes indices duplicated in `key` along the specified dimension.
+    """Returns a tensordict without the elements whose ``key`` value repeats an earlier one.
 
-    This method detects duplicate elements in the tensor associated with the specified `key` along the specified
-    `dim` and removes elements in the same indices in all other tensors within the TensorDict. It is expected for
-    `dim` to be one of the dimensions within the batch size of the input TensorDict to ensure consistency in all
-    tensors. Otherwise, an error will be raised.
+    The entry ``key`` is cut into slices along ``dim``. For each group of
+    equal slices, the first element is kept, and the same indices are kept in
+    every other entry. The result is sorted by the value of ``key``, not in
+    the original order, and its entries are new tensors.
 
     Args:
-        input (TensorDictBase): The TensorDict containing potentially duplicate elements.
-        key (NestedKey): The key of the tensor along which duplicate elements should be identified and removed. It
-            must be one of the leaf keys within the TensorDict, pointing to a tensor and not to another TensorDict.
-        dim (int, optional): The dimension along which duplicate elements should be identified and removed. It must be one of
-            the dimensions within the batch size of the input TensorDict. Defaults to ``0``.
-        return_indices (bool, optional): If ``True``, the indices of the unique elements in the input tensor will be
-            returned as well. Defaults to ``False``.
+        input (TensorDictBase): the tensordict to deduplicate.
+        key (NestedKey): the key of the tensor that defines duplicates. It
+            must hold a tensor, not a tensordict.
+        dim (int, optional): the batch dimension along which to look for
+            duplicates. Defaults to ``0``.
+
+    Keyword Args:
+        return_indices (bool, optional): if ``True``, also returns, for each
+            element of ``input`` along ``dim``, the index of its value in the
+            result. Defaults to ``False``.
 
     Returns:
-        output (TensorDictBase): input tensordict with the indices corrsponding to duplicated elements
-            in tensor `key` along dimension `dim` removed.
-        unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
-            input tensordict for the specified `key` along the specified `dim`. Only provided if `return_indices` is True.
+        The deduplicated tensordict, or a tuple of the tensordict and the
+        indices if ``return_indices=True``.
+
+    Raises:
+        KeyError: if ``key`` is missing or does not hold a tensor.
+        ValueError: if ``dim`` is not a batch dimension.
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.utils import remove_duplicates
-        >>> td = TensorDict(
-        ...     {
-        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
-        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
-        ...     },
-        ...     batch_size=[4],
-        ... )
-        >>> output_tensordict = remove_duplicates(td, key="tensor1", dim=0)
-        >>> expected_output = TensorDict(
-        ...     {
-        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
-        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
-        ...     },
-        ...     batch_size=[3],
-        ... )
-        >>> assert (output_tensordict == expected_output).all()
+        >>> td = TensorDict(x=torch.tensor([7, 1, 7, 3]), y=torch.arange(4), batch_size=[4])
+        >>> out, indices = remove_duplicates(td, key="x", return_indices=True)
+        >>> out["x"], out["y"]
+        (tensor([1, 3, 7]), tensor([1, 3, 0]))
+        >>> indices
+        tensor([2, 0, 2, 1])
     """
     tensor = input.get(key)
 
@@ -2823,7 +2936,21 @@ class _add_batch_dim_pre_hook:
 
 
 def is_non_tensor(data) -> bool:
-    """Checks if an item is a non-tensor."""
+    """Returns ``True`` if ``data`` is non-tensor data or a stack of non-tensor data.
+
+    Args:
+        data (object): the object to check, for example a value read from a
+            tensordict with :meth:`~tensordict.TensorDictBase.get`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import NonTensorData, TensorDict, is_non_tensor
+        >>> td = TensorDict(x=torch.zeros(2), name=NonTensorData("a"))
+        >>> is_non_tensor(td.get("name")), is_non_tensor(td.get("x"))
+        (True, False)
+        >>> td["name"]
+        'a'
+    """
     return _is_non_tensor(type(data))
 
 
@@ -3107,11 +3234,14 @@ def _make_dtype_promotion(func):
             return self._fast_apply(todtype, propagate_lock=True)
         return _cast_filtered(self, todtype, cast_filter, propagate_lock=True)
 
-    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``.
+    new_func.__doc__ = rf"""Returns a tensordict whose tensor leaves are cast to ``{str(dtype)}``.
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
     return new_func
 
@@ -3225,7 +3355,7 @@ def is_bool(*args) -> bool:
 
 
 def unravel_key_to_tuple(key: NestedKey) -> tuple[str, ...]:
-    """Unravel a nested key into a flat tuple of str.
+    """Unravels a nested key into a flat tuple of str.
 
     Unlike :func:`~tensordict.unravel_key`, a str key gives a one-element
     tuple, and an invalid key gives ``()`` instead of raising.
@@ -3234,7 +3364,7 @@ def unravel_key_to_tuple(key: NestedKey) -> tuple[str, ...]:
         key (NestedKey): the key to unravel.
 
     Returns:
-        a flat tuple of str, or ``()`` if ``key`` is not a valid nested key.
+        A flat tuple of str, or ``()`` if ``key`` is not a valid nested key.
 
     Examples:
         >>> from tensordict import unravel_key_to_tuple
@@ -3294,10 +3424,21 @@ def _append_key_parts(key: tuple, result: list) -> bool:
 
 
 def unravel_key(key):
-    """Unravel a nested key.
+    """Unravels a nested key into a str or a flat tuple of str.
 
-    A tuple with a part that is neither a str nor a tuple of str unravels to
-    ``()``. A key that is neither a str nor a tuple raises a ``RuntimeError``.
+    Nested tuples are flattened, and a tuple with a single str gives that
+    str, so equal keys compare equal: ``unravel_key(("a",)) == "a"``. A tuple
+    with a part that is neither a str nor a tuple of str unravels to ``()``.
+    See :ref:`keys`.
+
+    Args:
+        key (NestedKey): the key to unravel.
+
+    Returns:
+        A str, a flat tuple of at least two str, or ``()``.
+
+    Raises:
+        RuntimeError: if ``key`` is neither a str nor a tuple.
 
     Examples:
         >>> from tensordict import unravel_key
@@ -3350,7 +3491,7 @@ def unravel_key_list(keys):
         keys (list or tuple of NestedKey): the keys to unravel.
 
     Returns:
-        a list of keys: strings, or flat tuples of strings.
+        A list of the unraveled keys (strings, or flat tuples of strings).
 
     Raises:
         TypeError: if ``keys`` is not a list or a tuple.
@@ -3490,16 +3631,38 @@ def _infer_size_impl(shape: List[int], numel: int) -> List[int]:
 
 
 def parse_tensor_dict_string(s: str):
-    """Parse a TensorDict repr to a TensorDict.
+    """Builds a :class:`~tensordict.TensorDict` from its printed form.
 
-    .. note::
-        This functions is intended to be used for debugging, to reproduce a tensordict
-        given its printed version, and should not be used in real applications.
+    It is a debugging tool: it rebuilds a tensordict with the keys, shapes,
+    dtypes, devices and batch sizes of a printed one, so that you can
+    reproduce a tensordict from a log. The values are not in the repr, so
+    every tensor of the result is filled with zeros.
+
+    Args:
+        s (str): the repr of a tensordict, as printed with the default print
+            options (see :func:`~tensordict.set_printoptions`).
+
+    Returns:
+        A new :class:`~tensordict.TensorDict`.
 
     Raises:
         ValueError: if a field is not a ``Tensor`` or a ``TensorDict`` printed
             with the default print options, or if ``s`` is the repr of a lazy
             stack with exclusive keys.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, parse_tensor_dict_string
+        >>> td = TensorDict(
+        ...     obs=torch.ones(3, 4),
+        ...     next=TensorDict(done=torch.ones(3, 1, dtype=torch.bool)),
+        ...     batch_size=[3],
+        ... )
+        >>> rebuilt = parse_tensor_dict_string(repr(td))
+        >>> rebuilt["next", "done"].dtype, rebuilt.batch_size
+        (torch.bool, torch.Size([3]))
+        >>> rebuilt["obs"].sum()
+        tensor(0.)
 
     """
     from tensordict import TensorDict
@@ -3904,9 +4067,14 @@ class LinkedList(list):
     """A list of the values of a non-tensor entry that writes item assignments back to the tensordict.
 
     ``td[key]`` returns a :class:`LinkedList` when the entry is a
-    :class:`~tensordict.NonTensorStack`. Setting an item
-    (``values[0] = "z"``) writes the value to the tensordict. ``append`` and
-    ``extend`` change the list only, and unlink it from the tensordict.
+    :class:`~tensordict.NonTensorStack`, and so does
+    :meth:`~tensordict.TensorDictBase.tolist` with ``as_linked_list=True``.
+    Setting an item (``values[0] = "z"``) writes the value to the tensordict.
+    The methods that change the length of the list (``append``, ``extend``,
+    ``insert``, ``pop``, ``remove``, ``clear`` and ``del``) change the list
+    only, and unlink it from the tensordict: later item assignments no longer
+    write back. A :class:`LinkedList` compares equal to a list with the same
+    items.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -3930,26 +4098,32 @@ class LinkedList(list):
             td[key] = value
 
     def append(self, object: Any) -> None:
+        """Appends ``object`` to the list and unlinks the list from the tensordict."""
         self._td = lambda: None
         return super().append(object)
 
     def extend(self, object: Any) -> None:
+        """Extends the list with the items of ``object`` and unlinks it from the tensordict."""
         self._td = lambda: None
         return super().extend(object)
 
     def insert(self, index: int, object: Any) -> None:
+        """Inserts ``object`` before ``index`` and unlinks the list from the tensordict."""
         self._td = lambda: None
         return super().insert(index, object)
 
     def pop(self, index: int = -1) -> Any:
+        """Removes and returns the item at ``index`` and unlinks the list from the tensordict."""
         self._td = lambda: None
         return super().pop(index)
 
     def remove(self, value: Any) -> None:
+        """Removes the first item equal to ``value`` and unlinks the list from the tensordict."""
         self._td = lambda: None
         return super().remove(value)
 
     def clear(self) -> None:
+        """Removes every item and unlinks the list from the tensordict."""
         self._td = lambda: None
         return super().clear()
 

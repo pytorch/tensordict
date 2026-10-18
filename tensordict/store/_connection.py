@@ -397,7 +397,7 @@ class _StoreConnection:
     # ---- lifecycle ----
 
     def close(self):
-        """Close the Redis connection and stop the background event loop.
+        """Closes the connection to the server and stops the background event loop.
 
         The data stays on the server: reconnect with :meth:`from_store`, or
         delete it with :meth:`clear_redis` before you close. After
@@ -427,7 +427,7 @@ class _StoreConnection:
             self._owns_loop = False
 
     def clear_redis(self):
-        """Delete all keys associated with this TensorDict from Redis.
+        """Deletes all the keys of this store from the server.
 
         This removes all tensor data, metadata, the key registry and the
         metadata of the store, such as its batch size and the stored

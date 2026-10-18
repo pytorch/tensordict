@@ -586,17 +586,19 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
     # raises in 0.17 as on the parent store.
     @_as_context_manager()
     def flatten_keys(self, separator=KEY_SEPARATOR, inplace=False, is_leaf=None):
-        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+        """Returns a local copy of the element whose nested keys are joined by ``separator``.
 
-        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+        The data is read from the server with :meth:`~tensordict.TensorDictBase.to_tensordict`.
 
         Args:
-            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
+            separator (str, optional): the string that joins the parts of a
+                nested key. Defaults to ``"."``.
             inplace (bool, optional): ignored; a new tensordict is always returned.
                 ``True`` is deprecated, and will raise a ``ValueError`` in 0.17,
                 as on the parent store. Defaults to ``False``.
-            is_leaf (callable, optional): see
-                :meth:`~tensordict.TensorDictBase.flatten_keys`.
+            is_leaf (Callable, optional): see
+                :meth:`~tensordict.TensorDictBase.flatten_keys`. Defaults to
+                ``None``.
 
         See :meth:`~tensordict.TensorDictBase.flatten_keys`.
         """
@@ -690,35 +692,45 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         Write with the full key, ``store.set(("nested", "b"), ...)``, or with
         :meth:`update`.
 
-    Stores each leaf key as a single concatenated blob in the store,
-    regardless of how many stack elements there are.  For *N* elements and
-    *K* leaf keys this uses only *O(K)* keys (plus offset tables for
-    heterogeneous shapes).
+    Each leaf key is one string on the server for the whole stack, with a
+    table of offsets when the shapes of the elements differ, so the number of
+    keys on the server does not grow with the number of elements.
 
-    Two storage modes are supported:
-
-    * Homogeneous: all stack elements have the same shape per key.
-      Byte offsets are computed arithmetically (no offset table stored).
-    * Heterogeneous: element shapes can differ per key.  An offset
-      table (packed int64 array of *N+1* byte offsets) is stored alongside
-      the data blob, and per-element shapes are persisted in the metadata
-      hash.
+    The constructor makes an empty stack of ``count`` elements of batch size
+    ``inner_batch_size``. To copy a lazy stack to the server, use
+    :meth:`from_lazy_stack`.
 
     Keyword Args:
-        backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
-        host (str): Server hostname.  Defaults to ``"localhost"``.
-        port (int): Server port.  Defaults to ``6379``.
-        db (int): Database number.  Defaults to ``0``.
-        unix_socket_path (str, optional): Unix domain socket path.
-        prefix (str): Key namespace.  Defaults to ``"tensordict"``.
-        count (int): Number of stack elements (*N*). Required.
-        stack_dim (int): Dimension along which the stack was performed.
-        inner_batch_size (Sequence[int]): Batch size of each element. Required.
-        device (torch.device, optional): Device for retrieved tensors.
-        client: Existing ``redis.asyncio.Redis`` client.
-        td_id (str, optional): UUID for reconnecting to existing data.
-        cache_metadata (bool): Cache (shape, dtype) locally.
-        **redis_kwargs: Extra connection keyword arguments.
+        backend (str, optional): a label for the kind of server, as in
+            :class:`~tensordict.store.TensorDictStore`. Defaults to
+            ``"redis"``.
+        host (str, optional): the host name of the server. Defaults to
+            ``"localhost"``.
+        port (int, optional): the port of the server. Defaults to ``6379``.
+        db (int, optional): the database number on the server. Defaults
+            to ``0``.
+        unix_socket_path (str, optional): the path of a Unix socket, for a
+            server on the same machine. If set, ``host`` and ``port`` are
+            ignored. Defaults to ``None``.
+        prefix (str, optional): the namespace of the keys of the store on
+            the server. Defaults to ``"tensordict"``.
+        count (int): the number of elements of the stack.
+        stack_dim (int, optional): the dimension of the stack in the batch
+            size. Defaults to ``0``.
+        inner_batch_size (sequence of int): the batch size of each element.
+        device (torch.device, str or int, optional): the device of the tensors
+            that reads return. Defaults to ``None``: reads return CPU tensors,
+            and the store has no device.
+        client (redis.asyncio.Redis, optional): an existing client. If given,
+            ``host``, ``port``, ``db`` and ``unix_socket_path`` are ignored.
+            Defaults to ``None``, which creates a client.
+        td_id (str, optional): the identifier of the store on the server.
+            Defaults to ``None``, which creates a new UUID. To reconnect to an
+            existing store, use :meth:`from_store`.
+        cache_metadata (bool, optional): if ``True``, keeps the shape and
+            dtype of each entry in the process, to save round-trips to the
+            server. Defaults to ``True``.
+        **redis_kwargs: passed to ``redis.asyncio.Redis``.
 
     Examples:
         The example needs a Redis server on ``localhost:6379``.
@@ -727,16 +739,16 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         >>> from tensordict import TensorDict, lazy_stack
         >>> from tensordict.store import TensorDictStore
         >>> local = lazy_stack([TensorDict(x=torch.zeros(3)), TensorDict(x=torch.zeros(5))])
-        >>> store = TensorDictStore.from_tensordict(local)
-        >>> type(store).__name__
+        >>> store = TensorDictStore.from_tensordict(local)  # doctest: +SKIP
+        >>> type(store).__name__  # doctest: +SKIP
         'LazyStackedTensorDictStore'
-        >>> store[0]["x"].shape, store[1]["x"].shape
+        >>> store[0]["x"].shape, store[1]["x"].shape  # doctest: +SKIP
         (torch.Size([3]), torch.Size([5]))
-        >>> store[1] = TensorDict(x=torch.ones(5))
-        >>> store[1]["x"]
+        >>> store[1] = TensorDict(x=torch.ones(5))  # doctest: +SKIP
+        >>> store[1]["x"]  # doctest: +SKIP
         tensor([1., 1., 1., 1., 1.])
-        >>> store.clear_redis()
-        >>> store.close()
+        >>> store.clear_redis()  # doctest: +SKIP
+        >>> store.close()  # doctest: +SKIP
     """
 
     _td_dim_names = None
@@ -2154,7 +2166,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         replacement="to_tensordict()",
     )
     def to_local(self) -> TensorDict:
-        """Pulls the whole store into a local ``TensorDict``.
+        """Returns a local copy of the data of the store.
 
         .. deprecated:: 0.15
             Use :meth:`to_tensordict` instead.
@@ -2177,28 +2189,51 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         device=None,
         **kwargs,
     ) -> LazyStackedTensorDictStore:
-        """Upload a :class:`LazyStackedTensorDict` to a key-value store.
+        """Returns a new store that holds a copy of the data of a lazy stack.
 
-        Data is sent in chunks of 10,000 elements, so that the full stack is
-        not materialized in memory.
+        The data is sent in chunks of 10,000 elements, so that the full stack
+        is not built in memory at once.
 
         Args:
-            lazy_td (LazyStackedTensorDict): The source lazy stack.
+            lazy_td (LazyStackedTensorDict): the lazy stack to copy to the
+                server.
 
         Keyword Args:
-            backend (str): Store backend (``"redis"``, ``"dragonfly"``, etc.).
-                A label only.
-            host (str): Server hostname. Defaults to ``"localhost"``.
-            port (int): Server port. Defaults to ``6379``.
-            db (int): Database number. Defaults to ``0``.
-            unix_socket_path (str, optional): Unix socket path. If set,
-                ``host`` and ``port`` are ignored.
-            prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            device: Device override for retrieved tensors.
-            **kwargs: Extra connection keyword arguments.
+            backend (str, optional): a label for the kind of server, as in
+                :class:`~tensordict.store.TensorDictStore`. Defaults to
+                ``"redis"``.
+            host (str, optional): the host name of the server. Defaults to
+                ``"localhost"``.
+            port (int, optional): the port of the server. Defaults to ``6379``.
+            db (int, optional): the database number on the server. Defaults
+                to ``0``.
+            unix_socket_path (str, optional): the path of a Unix socket, for a
+                server on the same machine. If set, ``host`` and ``port`` are
+                ignored. Defaults to ``None``.
+            prefix (str, optional): the namespace of the keys of the store on
+                the server. Defaults to ``"tensordict"``.
+            device (torch.device, str or int, optional): the device of the
+                tensors that reads return. Defaults to ``None``, which takes
+                the device of ``lazy_td``.
+            **kwargs: passed to the constructor, such as ``client`` or
+                ``td_id``, and options of the Redis client.
 
-        Returns:
-            A :class:`LazyStackedTensorDictStore` backed by the uploaded data.
+        Raises:
+            TypeError: if ``lazy_td`` is not a
+                :class:`~tensordict.LazyStackedTensorDict`.
+
+        Examples:
+            The example needs a Redis server on ``localhost:6379``.
+
+            >>> import torch
+            >>> from tensordict import TensorDict, lazy_stack
+            >>> from tensordict.store import LazyStackedTensorDictStore
+            >>> local = lazy_stack([TensorDict(x=torch.zeros(2)), TensorDict(x=torch.zeros(4))])
+            >>> store = LazyStackedTensorDictStore.from_lazy_stack(local)  # doctest: +SKIP
+            >>> store.batch_size, store[1]["x"].shape  # doctest: +SKIP
+            (torch.Size([2]), torch.Size([4]))
+            >>> store.clear_redis()  # doctest: +SKIP
+            >>> store.close()  # doctest: +SKIP
         """
         from tensordict._lazy import LazyStackedTensorDict
 
@@ -2247,28 +2282,55 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         device=None,
         **kwargs,
     ) -> LazyStackedTensorDictStore:
-        """Reconnect to an existing LazyStackedTensorDictStore on a server.
+        """Returns a store connected to a lazy stack that another store wrote to the server.
 
         Reads the number of elements, the stack dimension, the batch size of
         the elements and the device from the server.
 
         Keyword Args:
-            backend (str): Store backend. A label only.
-            host (str): Server hostname. Defaults to ``"localhost"``.
-            port (int): Server port. Defaults to ``6379``.
-            db (int): Database number. Defaults to ``0``.
-            unix_socket_path (str, optional): Unix socket path. If set,
-                ``host`` and ``port`` are ignored.
-            prefix (str): Key namespace. Defaults to ``"tensordict"``.
-            td_id (str): The identifier of the store to reconnect to, from
-                the private attribute ``_td_id`` of the writer or from its
-                ``repr``. Required.
-            device (torch.device, optional): Device override for retrieved
-                tensors. If ``None``, uses the device stored on the server.
-            **kwargs: Extra connection keyword arguments.
+            backend (str, optional): a label for the kind of server, as in
+                :class:`~tensordict.store.TensorDictStore`. Defaults to
+                ``"redis"``.
+            host (str, optional): the host name of the server. Defaults to
+                ``"localhost"``.
+            port (int, optional): the port of the server. Defaults to ``6379``.
+            db (int, optional): the database number on the server. Defaults
+                to ``0``.
+            unix_socket_path (str, optional): the path of a Unix socket, for a
+                server on the same machine. If set, ``host`` and ``port`` are
+                ignored. Defaults to ``None``.
+            prefix (str, optional): the namespace of the keys of the store on
+                the server. Defaults to ``"tensordict"``.
+            td_id (str): the identifier of the store to connect to. A store
+                shows it in its ``repr``, and holds it in the private attribute
+                ``_td_id``; there is no public accessor.
+            device (torch.device, str or int, optional): the device of the
+                tensors that reads return. Defaults to ``None``, which uses the
+                device stored on the server.
+            **kwargs: passed to the constructor, such as ``client`` or
+                ``cache_metadata``, and options of the Redis client.
 
         Returns:
             A :class:`LazyStackedTensorDictStore` connected to the existing data.
+
+        Raises:
+            KeyError: if the server has no lazy stack with this ``td_id``.
+
+        Examples:
+            The example needs a Redis server on ``localhost:6379``. The
+            second store could be in another process.
+
+            >>> import torch
+            >>> from tensordict import TensorDict, lazy_stack
+            >>> from tensordict.store import LazyStackedTensorDictStore
+            >>> local = lazy_stack([TensorDict(x=torch.zeros(2)), TensorDict(x=torch.zeros(4))])
+            >>> writer = LazyStackedTensorDictStore.from_lazy_stack(local)  # doctest: +SKIP
+            >>> reader = LazyStackedTensorDictStore.from_store(td_id=writer._td_id)  # doctest: +SKIP
+            >>> reader[1]["x"].shape  # doctest: +SKIP
+            torch.Size([4])
+            >>> writer.clear_redis()  # doctest: +SKIP
+            >>> writer.close()  # doctest: +SKIP
+            >>> reader.close()  # doctest: +SKIP
         """
         # ``client`` and ``cache_metadata`` go to the constructor only.
         redis_kwargs = {
@@ -2329,7 +2391,11 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         device=None,
         **kwargs,
     ):
-        """Not directly supported — use :meth:`from_lazy_stack` instead."""
+        """Raises a ``NotImplementedError``: build the store with :meth:`from_lazy_stack`.
+
+        The arguments are those of :meth:`~tensordict.TensorDictBase.from_dict`,
+        and are not used.
+        """
         raise NotImplementedError(
             f"{cls.__name__}.from_dict is not supported. "
             "Use LazyStackedTensorDictStore.from_lazy_stack(lazy_td, ...) instead."
@@ -2575,16 +2641,19 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     # later calls would miss writes from other processes. inplace=True raises.
     @_as_context_manager()
     def flatten_keys(self, separator=KEY_SEPARATOR, inplace=False, is_leaf=None):
-        """Returns an in-memory copy where the nested keys are joined by ``separator``.
+        """Returns a local copy of the store whose nested keys are joined by ``separator``.
 
-        The content is first loaded with :meth:`~tensordict.TensorDictBase.to_tensordict`.
+        The data is read from the server with :meth:`to_tensordict`, and the
+        store is not changed.
 
         Args:
-            separator (str, optional): the separator between the nested items. Defaults to ``"."``.
-            inplace (bool, optional): must be ``False``; ``True`` raises a ``ValueError``.
-                Defaults to ``False``.
-            is_leaf (callable, optional): see
-                :meth:`~tensordict.TensorDictBase.flatten_keys`.
+            separator (str, optional): the string that joins the parts of a
+                nested key. Defaults to ``"."``.
+            inplace (bool, optional): must be ``False``; ``True`` raises a
+                ``ValueError``. Defaults to ``False``.
+            is_leaf (Callable, optional): see
+                :meth:`~tensordict.TensorDictBase.flatten_keys`. Defaults to
+                ``None``.
 
         See :meth:`~tensordict.TensorDictBase.flatten_keys`.
         """
