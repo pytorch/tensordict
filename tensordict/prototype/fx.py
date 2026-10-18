@@ -28,7 +28,7 @@ class TDGraphModule(nn.Module):
     :class:`torch.fx.GraphModule`.
 
     This class is a prototype: its API can change without a deprecation
-    period.
+    period. See :func:`symbolic_trace` for an example.
 
     Args:
         graph_module (torch.fx.GraphModule): the traced graph.
@@ -50,6 +50,18 @@ class TDGraphModule(nn.Module):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
+        """Runs the graph on ``tensordict`` and writes the outputs at ``out_keys``.
+
+        Args:
+            tensordict (TensorDictBase): the input tensordict.
+            tensordict_out (TensorDictBase, optional): the tensordict to write
+                the outputs into. Defaults to ``None``, which writes them into
+                ``tensordict``.
+            **kwargs: passed to the graph.
+
+        Returns:
+            The tensordict that holds the outputs.
+        """
         outputs = self._gm(tensordict, **kwargs)
         # One output is the tensor itself. A tuple or a list is several outputs.
         # Iterating a tensor walks dim 0, so zip would not pair out_keys with
@@ -87,16 +99,19 @@ def symbolic_trace(td_module: TensorDictModuleBase) -> TDGraphModule:
     :class:`~torch.nn.Module` that :func:`torch.fx.symbolic_trace` can trace,
     and a :class:`~tensordict.nn.TensorDictSequential` of such modules. A
     module that wraps a plain function or a lambda raises a ``RuntimeError``
-    ("Unsupported type ... passed for root!"). Other module types, such as
-    :class:`~tensordict.nn.ProbabilisticTensorDictModule`, raise a
-    ``TypeError``.
+    ("Unsupported type ... passed for root!").
 
     Args:
         td_module (TensorDictModuleBase): the module to trace.
 
     Returns:
-        a :class:`TDGraphModule` with the same inputs and outputs as
+        A :class:`TDGraphModule` with the same inputs and outputs as
         ``td_module``.
+
+    Raises:
+        TypeError: if ``td_module`` is not a
+            :class:`~tensordict.nn.TensorDictModule` or a
+            :class:`~tensordict.nn.TensorDictSequential`.
 
     Examples:
         >>> import torch

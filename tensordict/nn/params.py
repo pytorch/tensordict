@@ -387,33 +387,33 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     ``parameters()`` therefore does not see bfloat16 entries. Pass
     ``no_convert=True`` to register all tensors as buffers.
 
+    .. warning:: TensorDictParams wraps the TensorDict that you pass,
+        without a copy, and turns its leaves into parameters and
+        buffers in place. It registers the leaves that are present at
+        construction. If you later add or replace an entry of the
+        original TensorDict, indexing the TensorDictParams shows the
+        new value, but :meth:`.parameters` and :meth:`~.buffers` keep
+        the old one. Write through the TensorDictParams, or pass
+        ``lock=True``.
+
     Args:
-        parameters (TensorDictBase or dict): The tensordict to represent as parameters. Values are converted to
-            parameters unless `no_convert=True`. If a `dict` is provided, it is wrapped in a `TensorDict` instance.
-            Keyword arguments can also be used.
+        parameters (TensorDictBase or dict, optional): the tensordict to wrap.
+            A ``dict`` is wrapped in a :class:`~tensordict.TensorDict` first.
+            Exclusive with ``**kwargs``. Defaults to ``None``.
 
     Keyword Args:
-        no_convert (bool): If `True`, no conversion to `nn.Parameter` occurs and all non-parameter, non-buffer tensors
-            will be converted to a :class:`~torch.nn.Buffer` instance.
-            If ``False``, float16, float32 and float64 tensors are converted to
-            :class:`~torch.nn.Parameter`, and tensors of all other dtypes to
-            :class:`~torch.nn.Buffer` instances. Tensors that already are
-            parameters or buffers stay as they are.
-            Defaults to `False`.
-        lock (bool): If `True`, the tensordict hosted by `TensorDictParams` is locked, preventing modifications and
-            potentially impacting performance when `unlock_()` is required.
-            Defaults to `False`.
-
-            .. warning:: TensorDictParams wraps the TensorDict that you pass,
-                without a copy, and turns its leaves into parameters and
-                buffers in place. It registers the leaves that are present at
-                construction. If you later add or replace an entry of the
-                original TensorDict, indexing the TensorDictParams shows the
-                new value, but :meth:`.parameters` and :meth:`~.buffers` keep
-                the old one. Write through the TensorDictParams, or pass
-                ``lock=True``.
-
-        **kwargs: Key-value pairs to populate the `TensorDictParams`. Exclusive with the `parameters` input.
+        no_convert (bool, optional): if ``True``, tensors that are not
+            parameters or buffers become :class:`~torch.nn.Buffer` instances.
+            If ``False``, float16, float32 and float64 tensors become
+            :class:`~torch.nn.Parameter`, and tensors of all other dtypes
+            become buffers. Tensors that already are parameters or buffers
+            stay as they are. Defaults to ``False``.
+        lock (bool, optional): if ``True``, locks the wrapped tensordict (see
+            :ref:`keys-locking`), so that entries can no longer be added to it
+            or removed from it directly. Writes through the TensorDictParams
+            still work. Defaults to ``False``.
+        **kwargs: the entries of the tensordict, as ``key=value`` pairs, when
+            ``parameters`` is not given. Exclusive with ``parameters``.
 
     Examples:
         >>> import torch
@@ -453,7 +453,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         ['params.0.weight', 'params.0.bias', 'params.1.weight', 'params.1.bias']
         >>> # The wrapper supports assignment, and values are converted to Parameters
         >>> m.params['other'] = torch.randn(3)
-        >>> assert isinstance(m.params['other'], nn.Parameter)
+        >>> isinstance(m.params['other'], nn.Parameter)
+        True
         >>> # A bfloat16 entry becomes a buffer
         >>> m.params['half'] = torch.zeros(3, dtype=torch.bfloat16)
         >>> [name for name, _ in m.named_buffers()]
@@ -568,7 +569,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return self
 
     def register_get_post_hook(self, hook):
-        """Register a hook to be called after any get operation on leaf tensors.
+        """Registers a hook that is called after each read of a leaf.
 
         Args:
             hook (Callable): called as ``hook(tensordict_params, value)``

@@ -43,11 +43,13 @@ OutputTensorClass = TypeVar("OutputTensorClass", bound=TensorClass)
 
 
 class TensorClassModuleWrapper(TensorDictModuleBase):
-    """Wrapper class for TensorClassModuleBase objects.
+    """Wraps a :class:`TensorClassModuleBase` so that it takes and returns a tensordict.
 
-    The wrapper takes a TensorDict, converts it to the input TensorClass of the
-    module, calls the module, and converts the output TensorClass back to a
-    TensorDict. :meth:`TensorClassModuleBase.as_td_module` returns one.
+    The wrapper converts the input tensordict to the input class of the
+    module, calls the module, and converts the output tensorclass back to a
+    TensorDict. Its ``in_keys`` and ``out_keys`` are the fields of the input
+    and output classes, with nested keys for nested tensorclasses.
+    :meth:`TensorClassModuleBase.as_td_module` returns one.
 
     The wrapper returns a new TensorDict that holds only the output fields. It
     does not write into the input. In a
@@ -56,7 +58,8 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
     outputs.
 
     Args:
-        module (TensorClassModuleBase): The TensorClassModuleBase instance to wrap.
+        module (TensorClassModuleBase): the module to wrap. Its input and
+            output types must be tensorclasses.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -95,16 +98,16 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
 
     @dispatch(auto_batch_size=False)
     def forward(self, tensordict: TensorDict, *args, **kwargs) -> TensorDict:
-        """Forward pass converting TensorDict to TensorClass and back.
+        """Converts ``tensordict`` to the input class, calls the module, and returns its output as a TensorDict.
 
         Args:
-            tensordict (TensorDict): Input tensordict. Its entries that are not
-                fields of the input class are ignored.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
+            tensordict (TensorDictBase): the input tensordict. Its entries that
+                are not fields of the input class are ignored.
+            *args: ignored.
+            **kwargs: ignored.
 
         Returns:
-            TensorDict: Output tensordict.
+            A new TensorDict with the fields of the output tensorclass.
 
         """
         input_type = self.tc_module.input_type
@@ -122,22 +125,23 @@ OutputClass = TypeVar("OutputClass", bound=Union[TensorClass, Tensor])
 
 
 class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
-    """A TensorClassModuleBase is a base class for modules that operate on TensorClass instances.
+    """Base class of the modules that take and return a tensorclass.
 
-    TensorClassModuleBase subclasses provide a type-safe way to define modules that work with TensorClass
-    inputs and outputs. The class automatically extracts input and output type information from the
-    generic type parameters.
+    Subclass ``TensorClassModuleBase[InputClass, OutputClass]``, where each
+    type is a :class:`~tensordict.TensorClass` subclass or
+    :class:`torch.Tensor`, and implement :meth:`forward`. A type checker
+    then knows the type of the input and output, and can report a wrong
+    field name. The class reads both types from the subscript: a subclass
+    without it has no ``input_type`` and ``output_type``.
 
-    The module can be converted to a TensorDictModule using the :meth:`as_td_module`
-    method, allowing it to be used in TensorDict-based workflows.
-
-    Type Parameters:
-        InputClass: The input type, must be a TensorClass or Tensor.
-        OutputClass: The output type, must be a TensorClass or Tensor.
+    When both types are tensorclasses, :meth:`as_td_module` returns a
+    module that takes and returns a tensordict, for example to put the
+    module in a :class:`~tensordict.nn.TensorDictSequential`. See
+    :ref:`tensorclass-guide`.
 
     Attributes:
-        input_type (type[InputClass]): The input type class.
-        output_type (type[OutputClass]): The output type class.
+        input_type (type): the input type, ``InputClass``.
+        output_type (type): the output type, ``OutputClass``.
 
     Examples:
         >>> from tensordict.tensorclass import TensorClass
@@ -160,8 +164,8 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
         ...
         >>> module = AddModule()
         >>> input_tc = InputTC(a=torch.tensor([1.0]), b=torch.tensor([2.0]), batch_size=[1])
-        >>> output = module(input_tc)
-        >>> assert output.result == torch.tensor([3.0])
+        >>> module(input_tc).result
+        tensor([3.])
 
     """
 
@@ -169,7 +173,7 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
     output_type: type[OutputClass]
 
     def __init_subclass__(cls) -> None:
-        """Initialize subclass by extracting type information from generic parameters."""
+        """Reads ``input_type`` and ``output_type`` from the subscript of the base class."""
         super().__init_subclass__()
         for base in cls.__orig_bases__:  # type:ignore[attr-defined]
             origin = get_origin(base)
@@ -184,45 +188,32 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
 
     @abstractmethod
     def forward(self, x: InputClass) -> OutputClass:
-        """Forward pass of the module.
+        """Computes the output of the module. Subclasses implement it.
 
         Args:
-            x (InputClass): Input instance.
+            x (InputClass): the input.
 
         Returns:
-            OutputClass: Output instance.
+            An instance of ``OutputClass``.
 
         """
         ...
 
     def __call__(self, x: InputClass) -> OutputClass:
-        """Call the module's forward method.
-
-        Args:
-            x (InputClass): Input instance.
-
-        Returns:
-            OutputClass: Output instance.
-
-        """
+        """Calls the module on ``x``, with the hooks of :class:`torch.nn.Module`, and returns its output."""
         return cast("OutputClass", super().__call__(x))
 
     def as_td_module(self) -> TensorClassModuleWrapper:
-        """Convert this module to a module that takes and returns a TensorDict.
+        """Returns a :class:`TensorClassModuleWrapper` of the module, which takes and returns a tensordict.
 
-        This method wraps the TensorClassModuleBase in a
-        :class:`TensorClassModuleWrapper`, a
-        :class:`~tensordict.nn.TensorDictModuleBase` subclass. Its ``in_keys``
-        and ``out_keys`` are the fields of the input and output classes. It
-        returns a new TensorDict with only the output fields (see
+        The wrapper is a :class:`~tensordict.nn.TensorDictModuleBase`. Its
+        ``in_keys`` and ``out_keys`` are the fields of the input and output
+        classes. It returns a new TensorDict with only the output fields (see
         :class:`TensorClassModuleWrapper`).
 
-        Returns:
-            TensorClassModuleWrapper: A wrapper that converts between TensorDict
-                and TensorClass representations.
-
         Raises:
-            ValueError: If either input_type or output_type is not a TensorClass.
+            ValueError: if ``input_type`` or ``output_type`` is not a
+                tensorclass.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -243,8 +234,8 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
             >>> module = MyModule()
             >>> td_module = module.as_td_module()
             >>> td = TensorDict({"x": torch.ones(3)}, batch_size=[3])
-            >>> result = td_module(td)
-            >>> assert (result["y"] == 2).all()
+            >>> td_module(td)["y"]
+            tensor([2., 2., 2.])
 
         """
         if not (

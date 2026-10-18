@@ -16,7 +16,7 @@ __all__ = ["EnsembleModule"]
 
 
 class EnsembleModule(TensorDictModuleBase):
-    """Module that wraps a module and repeats it to form an ensemble.
+    """Runs ``num_copies`` copies of a module, each with its own parameters, on the same input.
 
     The constructor makes ``num_copies`` sets of parameters, each one reset
     with the ``reset_parameters`` method of the submodules. It stacks them in
@@ -30,8 +30,9 @@ class EnsembleModule(TensorDictModuleBase):
     which the call does not use.
 
     Args:
-        module (nn.Module): The nn.module to duplicate and wrap.
-        num_copies (int): The number of copies of module to make.
+        module (TensorDictModuleBase): the module to copy. Its ``in_keys`` and
+            ``out_keys`` become those of the ensemble.
+        num_copies (int): the number of copies.
         expand_input (bool, optional): if ``True``, every copy receives the
             same input. If ``False``, the input must already have a leading
             dimension of size ``num_copies``, and copy ``i`` receives entry
@@ -59,22 +60,21 @@ class EnsembleModule(TensorDictModuleBase):
 
     To chain EnsembleModules, set ``expand_input=False`` on the second one and on those after it.
 
-    Examples:
         >>> import torch
         >>> from tensordict.nn import TensorDictModule, TensorDictSequential, EnsembleModule
         >>> from tensordict import TensorDict
-        >>> module = TensorDictModule(torch.nn.Linear(2,3), in_keys=['bork'], out_keys=['dork'])
-        >>> next_module = TensorDictModule(torch.nn.Linear(3,1), in_keys=['dork'], out_keys=['spork'])
+        >>> module = TensorDictModule(torch.nn.Linear(2,3), in_keys=['x'], out_keys=['hidden'])
+        >>> next_module = TensorDictModule(torch.nn.Linear(3,1), in_keys=['hidden'], out_keys=['y'])
         >>> e0 = EnsembleModule(module, num_copies=4, expand_input=True)
         >>> e1 = EnsembleModule(next_module, num_copies=4, expand_input=False)
         >>> seq = TensorDictSequential(e0, e1)
-        >>> data = TensorDict({'bork': torch.randn(5,2)}, batch_size=[5])
+        >>> data = TensorDict({'x': torch.randn(5,2)}, batch_size=[5])
         >>> seq(data)
         TensorDict(
             fields={
-                bork: Tensor(shape=torch.Size([4, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
-                dork: Tensor(shape=torch.Size([4, 5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                spork: Tensor(shape=torch.Size([4, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                hidden: Tensor(shape=torch.Size([4, 5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                x: Tensor(shape=torch.Size([4, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                y: Tensor(shape=torch.Size([4, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([4, 5]),
             device=None,
             is_shared=False)
@@ -105,19 +105,30 @@ class EnsembleModule(TensorDictModuleBase):
             return self.module(input)
 
     def forward(self, tensordict: TensorDict) -> TensorDict:
+        """Calls every copy on ``tensordict`` and returns the outputs, stacked along a new first dimension."""
         return self.vmapped_forward(tensordict, self.params_td)
 
     def reset_parameters_recursive(
         self, parameters: TensorDictBase = None
     ) -> TensorDictBase:
-        """Resets the parameters of all the copies of the module.
+        """Resets the values of ``parameters`` in place, with one set of values per copy of the module.
+
+        The constructor calls it to give each copy its own initial values. To
+        reset the parameters of the ensemble, pass ``ensemble.params_td``.
 
         Args:
-            parameters (TensorDict): A TensorDict of parameters for self.module. The batch dimension(s) of the tensordict
-                denote the number of module copies to reset.
+            parameters (TensorDictBase): the parameters of ``module``, with
+                the structure of :meth:`~tensordict.TensorDict.from_module`.
+                Each index of the batch dimensions is one copy.
 
         Returns:
-            A TensorDict of pointers to the reset parameters.
+            A lazy stack of the reset parameters, with the batch size of
+            ``parameters``, or for an empty batch size what
+            :meth:`~tensordict.nn.TensorDictModuleBase.reset_parameters_recursive`
+            of ``module`` returns.
+
+        Raises:
+            ValueError: if ``parameters`` is ``None``.
         """
         if parameters is None:
             raise ValueError(
