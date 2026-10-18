@@ -817,6 +817,17 @@ class TestPointwiseOps:
         assert (td["a"] == getattr(torch.zeros(2, 2), torch_op)(other)).all()
         assert (td["u"] == getattr(torch.zeros(3, 2), torch_op)(other)).all()
 
+    @pytest.mark.parametrize("op", ["lerp", "addcmul", "addcdiv", "clamp"])
+    def test_empty_tensordict_and_tensor_operands(self, op):
+        # An empty tensordict gives an empty result, whatever the keys of a
+        # tensordict operand (#2963 changes only tensordicts with leaves)
+        td = TensorDict(batch_size=[2])
+        result = getattr(td, op)(
+            TensorDict(a=torch.ones(2), batch_size=[2]), torch.ones(2)
+        )
+        assert result.is_empty()
+        assert result.batch_size == td.batch_size
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensor(self, shape):
         torch.manual_seed(0)

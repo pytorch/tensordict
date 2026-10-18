@@ -780,8 +780,11 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         stack_dim=stack_dim,
                         stack_dim_name=self_expand._td_dim_name,
                     )
-                if n_other > 1 and any(
-                    _is_tensor_collection(type(other)) for other in others_map
+                if (
+                    n_other > 1
+                    and any(_is_tensor_collection(type(o)) for o in others_map)
+                    # an empty tensordict returns an empty result, as before
+                    and not self_expand.is_empty()
                 ):
                     if op == "clamp":
                         # clamp rejects a tensordict bound next to a tensor one
