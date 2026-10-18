@@ -892,6 +892,8 @@ class TensorDictModule(TensorDictModuleBase):
             will be used to populate the output tensordict (ie. the keys present
             in ``out_keys`` should be present in the dictionary returned by the
             ``module`` forward method).
+            Dictionary outputs stay matched by key when :meth:`select_out_keys`
+            filters or reorders the outputs.
         in_keys (NestedKey, list of NestedKey, or dict): the entries that the
             module reads from the input tensordict. If a list, the values are
             passed as positional arguments, in this order. If a dict, the values
@@ -1317,13 +1319,15 @@ class TensorDictModule(TensorDictModuleBase):
                 type(tensors_out) is not Tensor
                 and type(tensors_out) is not tuple
                 and isinstance(tensors_out, (dict, TensorDictBase))
-                and all(key in tensors_out for key in self.out_keys)
+                and all(key in tensors_out for key in self.out_keys_source)
             ):
                 if isinstance(tensors_out, dict):
                     keys = unravel_key_list(list(tensors_out.keys()))
                     values = tensors_out.values()
                     tensors_out = dict(_zip_strict(keys, values))
-                tensors_out = tuple(tensors_out.get(key) for key in self.out_keys)
+                tensors_out = tuple(
+                    tensors_out.get(key) for key in self.out_keys_source
+                )
             if not isinstance(tensors_out, tuple):
                 tensors_out = (tensors_out,)
             tensordict_out = self._write_to_tensordict(
