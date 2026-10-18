@@ -7678,6 +7678,46 @@ class TestGeneric:
         assert collate(td) is td
         assert collate([]) == []
 
+    @pytest.mark.parametrize("batch_dims", [1, 2])
+    @pytest.mark.parametrize("pad_dim", [2, -2])
+    @pytest.mark.parametrize("padding_side", ["right", "left"])
+    @pytest.mark.parametrize("masks_key", ["masks", ("valid", "masks")])
+    def test_pad_sequence_feature_dim_masks(
+        self, batch_dims, pad_dim, padding_side, masks_key
+    ):
+        batch_size = [2, 3][:batch_dims]
+        samples = [
+            TensorDict(
+                {
+                    "keys": torch.full((2, 3, length, 4), float(length)),
+                    ("nested", "values"): torch.full((2, 3, length, 5), float(length)),
+                },
+                batch_size=batch_size,
+            )
+            for length in (2, 5)
+        ]
+        padded = pad_sequence(
+            samples,
+            pad_dim=pad_dim,
+            return_mask=True if masks_key == "masks" else masks_key,
+            padding_side=padding_side,
+        )
+        valid = [True] * 2 + [False] * 3
+        if padding_side == "left":
+            valid.reverse()
+        expected = (
+            torch.tensor([valid, [True] * 5])
+            .reshape(2, *([1] * batch_dims), 5)
+            .expand(2, *batch_size, 5)
+        )
+        masks = padded.get(masks_key)
+        for key in samples[0].keys(True, True):
+            torch.testing.assert_close(masks.get(key), expected)
+        self._assert_unpadded(
+            unpad_sequence(padded.exclude(masks_key), masks, pad_dim=pad_dim),
+            samples,
+        )
+
     def test_pad_sequence_padding_side(self):
         # https://github.com/pytorch/tensordict/issues/2808
         d1 = TensorDict(
