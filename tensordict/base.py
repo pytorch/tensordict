@@ -6574,11 +6574,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Adds an empty nested tensordict at ``key``, and returns ``self``.
 
         The new tensordict has the batch size, device and names of the
-        tensordict. An existing entry at ``key`` is replaced. For a tuple key,
-        the tensordicts already on the path keep their entries: ``("a", "b")``
-        adds ``"b"`` to an existing ``td["a"]``. A missing level, an entry on
-        the path that is not a tensordict, or a locked tensordict on the path
-        is replaced by a new empty tensordict.
+        tensordict it is added to. An existing entry at ``key`` is replaced.
+        For a tuple key, the tensordicts already on the path keep their
+        entries: ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. A
+        missing level, an entry on the path that is not a tensordict, or a
+        locked tensordict on the path is replaced by a new empty tensordict.
 
         Args:
             key (NestedKey): the key of the new tensordict.

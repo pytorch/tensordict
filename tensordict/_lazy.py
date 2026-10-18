@@ -1748,6 +1748,14 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
+    def _create_nested_tuple(self, key):
+        if len(key) == 1:
+            return super()._create_nested_tuple(key)
+        # Each member keeps or replaces its own entry at key[0]: reading it
+        # from the stack would stack entries of different types or locks.
+        for td in self.tensordicts:
+            td._create_nested_tuple(key)
+
     def _unbatched_member_values(self, value: Tensor) -> list[Tensor]:
         """The ``UnbatchedTensor`` ``value`` for each member, as ``unbind`` gives it.
 

@@ -1884,10 +1884,36 @@ class TestGeneric:
         td = lazy_stack([TensorDict(a={"x": torch.zeros(())}) for _ in range(2)])
         td.create_nested(("a", "b"))
         assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
-        # A key that only some members hold is replaced in every member.
+        # A key that only some members hold keeps its entries in those members.
         td = lazy_stack([TensorDict(a={"x": torch.zeros(())}), TensorDict()])
         td.create_nested(("a", "b"))
-        assert set(td.keys(True)) == {"a", ("a", "b")}
+        assert set(td[0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1].keys(True)) == {"a", ("a", "b")}
+        # A tensor in one member and a tensordict in the other.
+        td = lazy_stack(
+            [TensorDict(a={"x": torch.zeros(())}), TensorDict(a=torch.zeros(()))]
+        )
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1].keys(True)) == {"a", ("a", "b")}
+        # A locked tensordict in one member is replaced in that member only.
+        locked = TensorDict(x=torch.zeros(())).lock_()
+        td = lazy_stack([TensorDict(a=locked), TensorDict(a={"x": torch.zeros(())})])
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "b")}
+        assert set(td[1].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        # A stack along another dim keeps its batch size.
+        td = lazy_stack(
+            [TensorDict(a={"x": torch.zeros(3)}, batch_size=[3]) for _ in range(2)], 1
+        )
+        td.create_nested(("a", "b", "c"))
+        assert td["a", "b", "c"].batch_size == (3, 2)
+        assert set(td.keys(True)) == {
+            "a",
+            ("a", "x"),
+            ("a", "b"),
+            ("a", "b", "c"),
+        }
 
     @pytest.mark.skipif(
         not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu"
