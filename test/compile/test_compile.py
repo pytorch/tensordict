@@ -1765,6 +1765,19 @@ class TestTTD:
         b = torch.randn(3)
         torch.testing.assert_close(fn(a, b), fn_c(a, b))
 
+    def test_empty_batch_size(self, mode):
+        # sets the batch size and names of a TypedTensorDict built in the graph
+        def fn(td):
+            return td.empty(batch_size=[3], names=["x"])
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3, 2), b=torch.ones(3, 2), batch_size=[3, 2])
+        out = fn_c(data)
+        assert type(out) is _TTDState
+        assert out.batch_size == torch.Size([3])
+        assert out.names == ["x"]
+        assert out._source.batch_size == torch.Size([3])
+
     def test_optional_default(self, mode):
         def add_optional(td):
             if td.b is None:
@@ -2102,6 +2115,14 @@ class TestTTDDynamoCompatibility:
     corresponding workaround can be simplified.
     """
 
+    @pytest.mark.xfail(
+        TORCH_VERSION < version.parse("2.12.0"),
+        strict=True,
+        reason=(
+            "The Dynamo of torch 2.11 cannot trace frozenset - dict.keys(): "
+            "TypedTensorDict.__init__ uses frozenset.difference(dict) instead."
+        ),
+    )
     def test_frozenset_sub_dict_keys(self):
         """frozenset - dict.keys() should be traceable by Dynamo."""
         required = frozenset({"a", "b"})
