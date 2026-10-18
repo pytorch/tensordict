@@ -2031,7 +2031,12 @@ def _init_wrapper(
                         continue
                     if key in self_dict:
                         value = self_dict[key]
-                        delattr_(key)
+                        try:
+                            delattr_(key)
+                        except AttributeError:
+                            # The field of a tensor_only class is a property
+                            # without a deleter.
+                            del self_dict[key]
                     elif key in td_dict or key in init_none_fields or key in non_td:
                         continue
                     elif field.default is None and not type(self)._is_non_tensor:

@@ -7277,6 +7277,21 @@ class TestCustomInit:
             data.x = x
 
     @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_dict_write(self, tensor_only):
+        # A field written straight into the instance __dict__ moves into the
+        # tensordict too, also when the field is a property (tensor_only).
+        class Data(TensorClass, tensor_only=tensor_only):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                self.__dict__["x"] = x * 2
+
+        x = torch.ones(2)
+        data = Data(x, batch_size=[2])
+        torch.testing.assert_close(data.x, x * 2)
+        assert "x" not in data.__dict__
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
     def test_custom_init_super_frozen(self, tensor_only):
         class Base(TensorClass, frozen=True, tensor_only=tensor_only):
             x: torch.Tensor
