@@ -2832,6 +2832,26 @@ def test_composite_seq_log_prob_aggregate_changed_after_init(fullgraph):
         torch.testing.assert_close(result[key], expected[key])
 
 
+@pytest.mark.parametrize("output_type", [dict, TensorDict])
+@pytest.mark.parametrize("selected", [[0], [1, 0]])
+def test_tdmodule_dict_output_selected(output_type, selected):
+    out_keys = [("result", "b"), ("result", "c")]
+
+    def func(x):
+        return output_type({out_keys[0]: x + 1, out_keys[1]: x * 10})
+
+    module = Mod(func, in_keys=["x"], out_keys=out_keys)
+    selected = [out_keys[index] for index in selected]
+    module.select_out_keys(*selected)
+    compiled = torch.compile(module, fullgraph=True, backend="eager")
+    x = torch.arange(3.0)
+    result = compiled(TensorDict(x=x, batch_size=[3]))
+    assert set(result.keys(True, True)) == {"x", *selected}
+    expected = {out_keys[0]: x + 1, out_keys[1]: x * 10}
+    for key in selected:
+        torch.testing.assert_close(result[key], expected[key])
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):

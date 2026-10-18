@@ -1487,6 +1487,50 @@ class TestTDModule:
         out = module(TensorDict({"a": torch.randn(3)}, []))
         assert (out["b"] == out["a"]).all()
 
+    @pytest.mark.parametrize("output_type", [dict, TensorDict])
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("selected", [["b"], ["c", "b"], []])
+    @pytest.mark.parametrize("call", ["tensordict", "positional", "keyword", "out"])
+    def test_tdmodule_dict_output_selected(self, output_type, nested, selected, call):
+        out_keys = [("result", key) if nested else key for key in ("b", "c")]
+        selected = [("result", key) if nested else key for key in selected]
+
+        def func(x):
+            return output_type({out_keys[0]: x + 1, out_keys[1]: x * 10})
+
+        module = TensorDictModule(func, in_keys=["x"], out_keys=out_keys)
+        module.select_out_keys(*selected)
+        assert module.out_keys_source == out_keys
+        x = torch.arange(3.0)
+        expected = {out_keys[0]: x + 1, out_keys[1]: x * 10}
+        if call in ("tensordict", "out"):
+            td = TensorDict(x=x, batch_size=[3])
+            if call == "out":
+                out = TensorDict(batch_size=[3])
+                result = module(td, tensordict_out=out)
+                assert result is out
+                expected_keys = set(selected)
+                assert set(td.keys()) == {"x"}
+            else:
+                result = module(td)
+                assert result is td
+                expected_keys = {"x", *selected}
+            assert set(result.keys(True, True)) == expected_keys
+            for key in selected:
+                torch.testing.assert_close(result[key], expected[key])
+        else:
+            result = module(x) if call == "positional" else module(x=x)
+            expected_values = tuple(expected[key] for key in selected)
+            if len(expected_values) == 1:
+                expected_values = expected_values[0]
+            torch.testing.assert_close(result, expected_values)
+
+        module.reset_out_keys()
+        result = module(TensorDict(x=x, batch_size=[3]))
+        assert module.out_keys == out_keys
+        for key in out_keys:
+            torch.testing.assert_close(result[key], expected[key])
+
     @set_list_to_stack(True)
     def test_tdmodule_inplace(self):
         tdm = TensorDictModule(
