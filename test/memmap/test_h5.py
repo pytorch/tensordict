@@ -941,25 +941,28 @@ def test_inplace_read_only_warns(tmp_path):
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 @pytest.mark.parametrize("file_state", ["closed", "read_only"])
 @pytest.mark.parametrize(
-    "write",
+    "write,read_only_error",
     [
-        lambda td: td.__setitem__("new", torch.ones(2)),
-        lambda td: td.__setitem__("x", torch.ones(2)),
-        lambda td: td.set(("n", "new"), torch.ones(2)),
-        lambda td: td.update({"new": torch.ones(2)}),
-        lambda td: td.update({"x": torch.ones(2)}),
-        lambda td: td.set("x", torch.ones(2), inplace=True),
+        (lambda td: td.__setitem__("new", torch.ones(2)), ValueError),
+        (lambda td: td.__setitem__("x", torch.ones(2)), OSError),
+        (lambda td: td.set(("n", "new"), torch.ones(2)), ValueError),
+        (lambda td: td.set(("q", "r", "s"), torch.ones(2)), ValueError),
+        (lambda td: td.update({"new": torch.ones(2)}), ValueError),
+        # replacing an entry of a read-only file fails to delete the old one
+        (lambda td: td.update({"x": torch.ones(2)}), KeyError),
+        (lambda td: td.set("x", torch.ones(2), inplace=True), OSError),
     ],
     ids=[
         "setitem_new",
         "setitem",
         "set_nested_new",
+        "set_nested_deep_new",
         "update_new",
         "update",
         "set_inplace",
     ],
 )
-def test_write_that_cannot_be_made_raises(tmp_path, file_state, write):
+def test_write_that_cannot_be_made_raises(tmp_path, file_state, write, read_only_error):
     # #2964: these writes went silently missing from the file
     path = tmp_path / "file.h5"
     td = TensorDict(x=torch.zeros(2), n=TensorDict(y=torch.zeros(2)), batch_size=[2])
@@ -967,8 +970,9 @@ def test_write_that_cannot_be_made_raises(tmp_path, file_state, write):
     h5td.close()
     if file_state == "read_only":
         h5td = PersistentTensorDict.from_h5(path)
-    # h5py's error; replacing an entry of a read-only file raises a KeyError
-    with pytest.raises((ValueError, OSError, KeyError)):
+    # h5py's error; a closed file rejects every write with a ValueError
+    error = ValueError if file_state == "closed" else read_only_error
+    with pytest.raises(error):
         write(h5td)
     h5td.close()
     h5td = PersistentTensorDict.from_h5(path)
