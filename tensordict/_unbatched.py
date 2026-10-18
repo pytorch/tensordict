@@ -491,6 +491,11 @@ else:
                 # Gradients are rewrapped below, so they stay unbatched.
                 if func == torch.Tensor._base.__get__:
                     return result
+                # An int, returned before the type tests: the Dynamo of torch
+                # 2.11 cannot type-check it, and a graph break inside this
+                # block recurses without end.
+                if func == torch.Tensor.data_ptr:
+                    return result
                 if isinstance(result, torch.Tensor):
                     out = result.as_subclass(cls)
                     if batch_size is not None:
