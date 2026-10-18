@@ -2776,13 +2776,20 @@ class TestTensorClass:
             assert data2.z == data.z
             assert data2.batch_size == data.batch_size
 
-    def test_pickle_tensor_only_while_compiling(self):
+    def test_pickle_tensor_only_while_compiling(self, monkeypatch):
         # torch.compile sets this process-wide flag for as long as it compiles,
         # so other threads, such as a DataLoader's pin-memory thread, see it.
         data = MyDataTensorOnly(X=torch.ones(3, 4), batch_size=[3])
         payload = pickle.dumps(data)
-        with torch.compiler._compile_session_context():
+        if hasattr(torch.compiler, "_compile_session_context"):
+            with torch.compiler._compile_session_context():
+                data2 = pickle.loads(payload)
+        else:
+            # Before torch 2.13, only torch.export sets the flag
+            monkeypatch.setattr(torch.compiler, "_is_compiling_flag", True)
+            assert torch.compiler.is_compiling()
             data2 = pickle.loads(payload)
+            monkeypatch.undo()
         assert isinstance(data2, MyDataTensorOnly)
         assert (data2.X == data.X).all()
         assert data2.batch_size == data.batch_size

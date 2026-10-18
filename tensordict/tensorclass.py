@@ -1566,6 +1566,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     for name, method in operators.items():
         if name not in own_operators and not (_is_non_tensor and name == "__repr__"):
             setattr(cls, name, method)
+    if _is_non_tensor:
+        cls._patch_operators()
 
     if not hasattr(cls, "_new_unsafe"):
         cls._new_unsafe = classmethod(_new_unsafe)
@@ -2015,12 +2017,21 @@ def _init_wrapper(
                 self_dict = self.__dict__
                 td_dict = self._tensordict._tensordict
                 non_td = self._non_tensordict
-                init_none_fields = self_dict.pop("_init_none_fields", ())
+                # The Dynamo of torch 2.11 can neither pop from the __dict__ of
+                # an instance nor call object.__delattr__, but it traces
+                # super().__delattr__ that resolves to object.__delattr__.
+                delattr_ = super(type(self).__mro__[-2], self).__delattr__
+                if "_init_none_fields" in self_dict:
+                    init_none_fields = self_dict["_init_none_fields"]
+                    delattr_("_init_none_fields")
+                else:
+                    init_none_fields = ()
                 for key, field in type(self).__dataclass_fields__.items():
                     if key not in required_fields:
                         continue
                     if key in self_dict:
-                        value = self_dict.pop(key)
+                        value = self_dict[key]
+                        delattr_(key)
                     elif key in td_dict or key in init_none_fields or key in non_td:
                         continue
                     elif field.default is None and not type(self)._is_non_tensor:
@@ -3253,9 +3264,12 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
             not self._shadow
             and (
                 key in SET_ATTRIBUTES
+                # Check the fields first: once a compiled function has
+                # modified a dict, the Dynamo of torch 2.12 cannot read
+                # type(self).__dict__ (a mappingproxy).
                 or (
-                    key in type(self).__dict__
-                    and key not in getattr(self, "__expected_keys__", set())
+                    key not in getattr(self, "__expected_keys__", set())
+                    and key in type(self).__dict__
                 )
             )
         )
@@ -5863,11 +5877,14 @@ class NonTensorDataBase(TensorClass):
             del _tensordict["data"]
             _non_tensordict["data"] = data_inner
 
-        # TODO: this will probably fail with dynamo at some point, + it's terrible.
-        #  Make sure it's patched properly at init time
-        old_eq = type(self).__eq__
+    @classmethod
+    def _patch_operators(cls):
+        # _tensorclass calls this when it builds the class. The first instance
+        # did it before, but the Dynamo of torch 2.11 and 2.12 cannot set a
+        # class attribute, so a class first instantiated in a compiled
+        # function failed.
+        old_eq = cls.__eq__
         if old_eq is _eq:
-            # Patch only the first time a class is created
 
             @functools.wraps(_eq)
             def __eq__(self, other):
@@ -5904,9 +5921,9 @@ class NonTensorDataBase(TensorClass):
                 #     )
                 return old_eq(self, other)
 
-            type(self).__eq__ = __eq__
+            cls.__eq__ = __eq__
 
-            _ne = type(self).__ne__
+            _ne = cls.__ne__
 
             @functools.wraps(_ne)
             def __ne__(self, other):
@@ -5943,9 +5960,9 @@ class NonTensorDataBase(TensorClass):
                 #     )
                 return _ne(self, other)
 
-            type(self).__ne__ = __ne__
+            cls.__ne__ = __ne__
 
-            _xor = type(self).__xor__
+            _xor = cls.__xor__
 
             @functools.wraps(_xor)
             def __xor__(self, other):
@@ -5962,9 +5979,9 @@ class NonTensorDataBase(TensorClass):
                     )
                 return _xor(self, other)
 
-            type(self).__xor__ = __xor__
+            cls.__xor__ = __xor__
 
-            _or = type(self).__or__
+            _or = cls.__or__
 
             @functools.wraps(_or)
             def __or__(self, other):
@@ -5981,7 +5998,7 @@ class NonTensorDataBase(TensorClass):
                     )
                 return _or(self, other)
 
-            type(self).__or__ = __or__
+            cls.__or__ = __or__
 
     def __call__(self, *args, **kwargs):
         """Calling a NonTensorDataBase falls back to a call of its data."""

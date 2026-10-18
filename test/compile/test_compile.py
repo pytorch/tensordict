@@ -4327,7 +4327,24 @@ class TestTCCustomInitCompile:
         torch.testing.assert_close(out, inp * 3)
         assert batch_size == torch.Size([3])
 
-    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize(
+        "tensor_only",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.xfail(
+                    version.parse("2.12.0") <= TORCH_VERSION < version.parse("2.13.0"),
+                    strict=True,
+                    reason=(
+                        "The Dynamo of torch 2.12 guards the setter of a property "
+                        "(a field of a tensor_only class) that object.__setattr__ "
+                        "calls through type(property).__set__, a slot wrapper."
+                    ),
+                ),
+            ),
+        ],
+    )
     def test_custom_init_frozen(self, tensor_only):
         class Data(TensorClass, frozen=True, tensor_only=tensor_only):
             x: torch.Tensor
