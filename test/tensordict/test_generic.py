@@ -7797,6 +7797,21 @@ class TestGeneric:
             if return_mask:
                 assert padded["masks", "x"].all()
 
+    def test_pad_sequence_different_batch_dims_out(self):
+        # https://github.com/pytorch/tensordict/issues/2938
+        # with out=, the result has out's batch, so an entry longer than the
+        # first sample's batch is padded into it, as on main
+        s0 = TensorDict({"a": torch.ones(2, 3)}, [2, 3])
+        s1 = TensorDict({"a": torch.ones(2, 5)}, [2])
+        for pad_dim in (1, -1):
+            padded = pad_sequence(
+                [s0, s1], pad_dim=pad_dim, out=TensorDict(batch_size=[2, 2])
+            )
+            assert padded.batch_size == (2, 2)
+            assert padded["a"].shape == (2, 2, 5)
+            assert padded["a"][0, :, :3].all() and not padded["a"][0, :, 3:].any()
+            assert padded["a"][1].all()
+
     def test_pad_sequence_masks_padded_once(self):
         # https://github.com/pytorch/tensordict/issues/2939
         samples = [

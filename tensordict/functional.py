@@ -650,8 +650,8 @@ def pad_sequence(
             result is padded too. A negative ``pad_dim`` counts from the last
             dimension of each entry. If it lands on a batch dimension of some
             entries and on another dimension of others, the batch size is not
-            padded, and no entry may be longer along it than the batch of the
-            first sample. Defaults to ``0``.
+            padded, and, unless ``out`` is given, no entry may be longer along
+            it than the batch of the first sample. Defaults to ``0``.
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
             Non-tensor entries are not filled with ``padding_value``: when the padded
             dim is a batch dimension of the output, they keep their values at the
@@ -685,8 +685,8 @@ def pad_sequence(
             shapes differ in a dimension other than ``pad_dim``.
         ValueError: if ``padding_side`` is neither ``"left"`` nor ``"right"``,
             or if a negative ``pad_dim`` lands on a batch dimension of some
-            entries and on another dimension of others, and an entry is longer
-            along it than the batch of the first sample.
+            entries and on another dimension of others, and, with no ``out``,
+            an entry is longer along it than the batch of the first sample.
         IndexError: if ``pad_dim`` is out of range for an entry.
 
     Examples:
@@ -796,7 +796,7 @@ def pad_sequence(
         # pad_dim lands on a batch dim of some entries and on another dim of
         # others, so the batch cannot be padded. That is fine if no entry is
         # longer than the first sample's batch along a batch dim.
-        if pad_dim < 0 and longer_entry is not None:
+        if pad_dim < 0 and longer_entry is not None and out is None:
             raise ValueError(
                 f"pad_dim={pad_dim} counts from the last dim of each entry and "
                 f"lands on batch dims {sorted(leaf_batch_pad_dims)}"
