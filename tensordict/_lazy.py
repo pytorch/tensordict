@@ -1748,6 +1748,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
+    # Override: each member keeps or replaces its own entry on the path.
     def _create_nested_tuple(self, key):
         if len(key) == 1:
             return super()._create_nested_tuple(key)

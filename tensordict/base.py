@@ -6608,6 +6608,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out
 
     def _create_nested_tuple(self, key):
+        """Adds an empty nested tensordict at the tuple ``key``.
+
+        ``create_nested`` calls it with the key unravelled to a non-empty tuple.
+        The hook must put a new empty tensordict at the last level, keep each
+        unlocked tensordict already on the path with its entries, and replace
+        a missing level, an entry that is not a tensordict, or a locked
+        tensordict on the path with a new empty tensordict. It returns nothing.
+        """
         if len(key) > 1:
             # Keep an existing tensordict on the path with its entries. Any
             # other entry, or a locked tensordict, is replaced.
