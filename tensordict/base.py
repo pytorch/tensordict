@@ -2856,8 +2856,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # )
         if istuple and any(type(idx) is EllipsisType for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
+        # The bounds are tested one by one: the Dynamo of torch 2.11 and 2.12
+        # fixes the bounds of a slice that it compares with slice(None).
         if len(index) <= len(self.batch_size) and all(
-            isinstance(idx, slice) and idx == slice(None) for idx in index
+            isinstance(idx, slice)
+            and idx.start is None
+            and idx.stop is None
+            and idx.step is None
+            for idx in index
         ):
             return self
 

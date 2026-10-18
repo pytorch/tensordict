@@ -2776,13 +2776,20 @@ class TestTensorClass:
             assert data2.z == data.z
             assert data2.batch_size == data.batch_size
 
-    def test_pickle_tensor_only_while_compiling(self):
+    def test_pickle_tensor_only_while_compiling(self, monkeypatch):
         # torch.compile sets this process-wide flag for as long as it compiles,
         # so other threads, such as a DataLoader's pin-memory thread, see it.
         data = MyDataTensorOnly(X=torch.ones(3, 4), batch_size=[3])
         payload = pickle.dumps(data)
-        with torch.compiler._compile_session_context():
+        if hasattr(torch.compiler, "_compile_session_context"):
+            with torch.compiler._compile_session_context():
+                data2 = pickle.loads(payload)
+        else:
+            # Before torch 2.13, only torch.export sets the flag
+            monkeypatch.setattr(torch.compiler, "_is_compiling_flag", True)
+            assert torch.compiler.is_compiling()
             data2 = pickle.loads(payload)
+            monkeypatch.undo()
         assert isinstance(data2, MyDataTensorOnly)
         assert (data2.X == data.X).all()
         assert data2.batch_size == data.batch_size
@@ -7268,6 +7275,21 @@ class TestCustomInit:
         assert data.is_locked
         with pytest.raises(dataclasses.FrozenInstanceError):
             data.x = x
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_custom_init_dict_write(self, tensor_only):
+        # A field written straight into the instance __dict__ moves into the
+        # tensordict too, also when the field is a property (tensor_only).
+        class Data(TensorClass, tensor_only=tensor_only):
+            x: torch.Tensor
+
+            def __init__(self, x):
+                self.__dict__["x"] = x * 2
+
+        x = torch.ones(2)
+        data = Data(x, batch_size=[2])
+        torch.testing.assert_close(data.x, x * 2)
+        assert "x" not in data.__dict__
 
     @pytest.mark.parametrize("tensor_only", [False, True])
     def test_custom_init_super_frozen(self, tensor_only):

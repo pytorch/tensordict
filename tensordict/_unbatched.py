@@ -491,6 +491,11 @@ else:
                 # Gradients are rewrapped below, so they stay unbatched.
                 if func == torch.Tensor._base.__get__:
                     return result
+                # An int, returned before the type tests: the Dynamo of torch
+                # 2.11 cannot type-check it, and a graph break inside this
+                # block recurses without end.
+                if func == torch.Tensor.data_ptr:
+                    return result
                 if isinstance(result, torch.Tensor):
                     out = result.as_subclass(cls)
                     if batch_size is not None:
@@ -520,8 +525,12 @@ else:
             cls, list_of_non_tensor, dim: int = 0, raise_if_non_unique=False
         ):
             first = list_of_non_tensor[0]
-            ptr = first.data_ptr()
-            if any(other.data_ptr() != ptr for other in list_of_non_tensor[1:]):
+            # Compare identities before data pointers: the Dynamo of torch 2.11
+            # and 2.12 cannot trace data_ptr() on this subclass or compare its
+            # results, and torch.stack([td, td]) passes the same entry twice.
+            others = [other for other in list_of_non_tensor[1:] if other is not first]
+            ptr = first.data_ptr() if others else None
+            if any(other.data_ptr() != ptr for other in others):
                 warnings.warn(
                     "Stacking UnbatchedTensors with different data storage. "
                     "Only the first element's data will be kept. "

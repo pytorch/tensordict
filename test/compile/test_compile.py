@@ -940,6 +940,25 @@ class TestTD:
             assert (r["a"] == e["a"]).all()
             assert (r["u"] == e["u"]).all()
 
+    def test_stack_distinct_unbatched(self, mode):
+        # Stacking distinct unbatched entries compares their data pointers,
+        # which breaks the graph. With the fallback UnbatchedTensor (torch
+        # 2.13 and older), the Dynamo of torch 2.11 recursed without end there.
+        def make(value):
+            return TensorDict(
+                a=torch.full((3, 2), value),
+                u=UnbatchedTensor(torch.full((5,), value)),
+                batch_size=[3],
+            )
+
+        fn_c = torch.compile(lambda x, y: torch.stack([x, y], 0), mode=mode)
+        with pytest.warns(UserWarning, match="different data storage"):
+            result = fn_c(make(0.0), make(1.0))
+        assert result.batch_size == (2, 3)
+        assert (result["a"][1] == 1).all()
+        assert isinstance(result["u"], UnbatchedTensor)
+        assert (result["u"] == 0).all()
+
     @pytest.mark.parametrize("named", [False, True])
     def test_apply_is_leaf(self, named, mode):
         # With is_leaf=is_leaf_nontensor, fn is called on the non-tensor entry
@@ -1746,6 +1765,19 @@ class TestTTD:
         b = torch.randn(3)
         torch.testing.assert_close(fn(a, b), fn_c(a, b))
 
+    def test_empty_batch_size(self, mode):
+        # sets the batch size and names of a TypedTensorDict built in the graph
+        def fn(td):
+            return td.empty(batch_size=[3], names=["x"])
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        data = _TTDState(a=torch.zeros(3, 2), b=torch.ones(3, 2), batch_size=[3, 2])
+        out = fn_c(data)
+        assert type(out) is _TTDState
+        assert out.batch_size == torch.Size([3])
+        assert out.names == ["x"]
+        assert out._source.batch_size == torch.Size([3])
+
     def test_optional_default(self, mode):
         def add_optional(td):
             if td.b is None:
@@ -2083,6 +2115,14 @@ class TestTTDDynamoCompatibility:
     corresponding workaround can be simplified.
     """
 
+    @pytest.mark.xfail(
+        TORCH_VERSION < version.parse("2.12.0"),
+        strict=True,
+        reason=(
+            "The Dynamo of torch 2.11 cannot trace frozenset - dict.keys(): "
+            "TypedTensorDict.__init__ uses frozenset.difference(dict) instead."
+        ),
+    )
     def test_frozenset_sub_dict_keys(self):
         """frozenset - dict.keys() should be traceable by Dynamo."""
         required = frozenset({"a", "b"})
@@ -4287,7 +4327,24 @@ class TestTCCustomInitCompile:
         torch.testing.assert_close(out, inp * 3)
         assert batch_size == torch.Size([3])
 
-    @pytest.mark.parametrize("tensor_only", [False, True])
+    @pytest.mark.parametrize(
+        "tensor_only",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.xfail(
+                    version.parse("2.12.0") <= TORCH_VERSION < version.parse("2.13.0"),
+                    strict=True,
+                    reason=(
+                        "The Dynamo of torch 2.12 guards the setter of a property "
+                        "(a field of a tensor_only class) that object.__setattr__ "
+                        "calls through type(property).__set__, a slot wrapper."
+                    ),
+                ),
+            ),
+        ],
+    )
     def test_custom_init_frozen(self, tensor_only):
         class Data(TensorClass, frozen=True, tensor_only=tensor_only):
             x: torch.Tensor

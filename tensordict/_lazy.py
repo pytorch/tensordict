@@ -533,7 +533,15 @@ class _SplitIndex(NamedTuple):
 
 def _whole_or_index(index: tuple) -> tuple | None:
     """``None`` if ``index`` keeps all of a tensordict, else ``index``."""
-    if all(isinstance(element, slice) and element == slice(None) for element in index):
+    # The bounds are tested one by one: the Dynamo of torch 2.11 and 2.12 fixes
+    # the bounds of a slice that it compares with slice(None).
+    if all(
+        isinstance(element, slice)
+        and element.start is None
+        and element.stop is None
+        and element.step is None
+        for element in index
+    ):
         return None
     return index
 
