@@ -3455,6 +3455,19 @@ class TestSelectOutKeys:
             ):
                 mod2 = mod.select_out_keys(out_d_key)
 
+    def test_tdmodule_wrap_selected(self, out_d_key, unpack):
+        if not unpack:
+            pytest.skip("select_out_keys only accepts unpacked keys")
+        module = TensorDictModule(
+            lambda x, y: (x + 2, y + 2, x),
+            in_keys=["a", "b"],
+            out_keys=["c", "d", "e"],
+        )
+        module.select_out_keys(*out_d_key)
+        mod = TensorDictModuleWrapper(module)
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert set(td.keys()) == {"a", "b", *unravel_key_list(out_d_key)}
+
     def test_tdmodule_wrap_dispatch(self, out_d_key, unpack):
         mod = TensorDictModuleWrapper(
             TensorDictModule(

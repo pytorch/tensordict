@@ -1460,9 +1460,12 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
     def __init__(self, td_module: TensorDictModuleBase) -> None:
         super().__init__()
         self.td_module = td_module
-        if len(self.td_module._forward_hooks):
-            for pre_hook in self.td_module._forward_hooks:
-                self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
+        for hook_id, hook in self.td_module._forward_hooks.items():
+            self.register_forward_hook(
+                hook,
+                with_kwargs=hook_id in self.td_module._forward_hooks_with_kwargs,
+                always_call=hook_id in self.td_module._forward_hooks_always_called,
+            )
 
     @property
     def out_keys(self):
