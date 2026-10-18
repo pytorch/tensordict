@@ -1602,10 +1602,14 @@ class _PointwiseOps:
             \text{out}_i = \text{start}_i + \text{weight}_i \times (\text{end}_i - \text{start}_i)
 
         Args:
-            end (TensorDictBase): the end points, paired with the tensordict
-                key by key. It must have every key of the tensordict.
-            weight (TensorDictBase or float): the interpolation weight: a
-                number for all the leaves, or a tensordict paired key by key.
+            end (TensorDictBase or torch.Tensor): the end points. A tensordict
+                is paired with the tensordict key by key and must have all its
+                keys. A tensor is aligned with the batch dimensions of each
+                leaf and expanded over its feature dimensions.
+            weight (TensorDictBase, torch.Tensor or float): the interpolation
+                weight: a number for all the leaves, or a tensordict or a
+                tensor paired like ``end``. One of ``end`` and ``weight`` can
+                be a tensordict and the other a tensor.
 
         Examples:
             >>> import torch
@@ -1652,7 +1656,7 @@ class _PointwiseOps:
     @_write_back_inplace
     def lerp_(
         self,
-        end: TensorDictBase | torch.Tensor | float,
+        end: TensorDictBase | torch.Tensor,
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """Interpolates linearly from every leaf to ``end`` in place and returns ``self``.
@@ -1660,10 +1664,14 @@ class _PointwiseOps:
         The in-place version of :meth:`~.lerp`.
 
         Args:
-            end (TensorDictBase): the end points, paired with the tensordict
-                key by key. It must have every key of the tensordict.
-            weight (TensorDictBase or float): the interpolation weight: a
-                number for all the leaves, or a tensordict paired key by key.
+            end (TensorDictBase or torch.Tensor): the end points. A tensordict
+                is paired with the tensordict key by key and must have all its
+                keys. A tensor is aligned with the batch dimensions of each
+                leaf and expanded over its feature dimensions.
+            weight (TensorDictBase, torch.Tensor or float): the interpolation
+                weight: a number for all the leaves, or a tensordict or a
+                tensor paired like ``end``. One of ``end`` and ``weight`` can
+                be a tensordict and the other a tensor.
         """
         if (isinstance(end, Tensor) and end.ndim) or (
             isinstance(weight, Tensor) and weight.ndim
@@ -1710,7 +1718,8 @@ class _PointwiseOps:
                 keys. A tensor is aligned with the batch dimensions of each leaf
                 and expanded over its feature dimensions.
             other2 (TensorDictBase or torch.Tensor): the denominator, paired
-                like ``other1``.
+                like ``other1``. One of ``other1`` and ``other2`` can be a
+                tensordict and the other a tensor.
             value (Number, optional): the multiplier for
                 :math:`\text{other1} / \text{other2}`. Defaults to ``1``.
 
@@ -1803,7 +1812,8 @@ class _PointwiseOps:
                 have all its keys. A tensor is aligned with the batch dimensions
                 of each leaf and expanded over its feature dimensions.
             other2 (TensorDictBase or torch.Tensor): the second factor, paired
-                like ``other1``.
+                like ``other1``. One of ``other1`` and ``other2`` can be a
+                tensordict and the other a tensor.
 
         Keyword Args:
             value (Number, optional): the multiplier for

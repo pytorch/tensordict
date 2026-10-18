@@ -780,6 +780,30 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         stack_dim=stack_dim,
                         stack_dim_name=self_expand._td_dim_name,
                     )
+                if n_other > 1 and any(
+                    _is_tensor_collection(type(other)) for other in others_map
+                ):
+                    if op == "clamp":
+                        # clamp rejects a tensordict bound next to a tensor one
+                        return func(self, *others, *args, **kwargs)
+                    # pair the tensordict operands by key, expand the tensors
+                    is_tensor = [
+                        isinstance(other, torch.Tensor) for other in others_map
+                    ]
+                    return _apply_pointwise(
+                        self_expand,
+                        lambda x, *xs: leaf_op(
+                            x,
+                            *[
+                                expand_as_right(other, x) if flag else other
+                                for other, flag in zip(xs, is_tensor)
+                            ],
+                            *args,
+                            **kwargs,
+                        ),
+                        others_map,
+                        inplace,
+                    )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,

@@ -621,6 +621,35 @@ class TestPointwiseOps:
         assert type(result) is type(td)
         assert_allclose_td(result, expected)
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("tensor_first", [False, True])
+    @pytest.mark.parametrize(
+        "op", ["lerp", "lerp_", "addcmul", "addcmul_", "addcdiv", "addcdiv_"]
+    )
+    def test_tensordict_and_tensor_operands(self, op, tensor_first, lazy):
+        # A tensordict operand is paired by key and a tensor operand is
+        # broadcast to the batch dims, also when they come together (#2963)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 2),
+            nested=TensorDict(b=torch.randn(3, 2, 4), batch_size=[3, 2]),
+            batch_size=[3, 2],
+        )
+        other_td = td.apply(lambda x: torch.rand_like(x) + 1)
+        other = torch.rand(3, 2) + 1
+        other_as_td = td.apply(lambda x: expand_as_right(other, x))
+        args = [other, other_td]
+        expected_args = [other_as_td, other_td]
+        if not tensor_first:
+            args, expected_args = args[::-1], expected_args[::-1]
+        expected = getattr(td.clone(), op)(*expected_args)
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        result = getattr(td, op)(*args)
+        if op.endswith("_"):
+            assert result is td
+        assert_allclose_td(result, expected)
+
     def test_clamp_min_default(self):
         # Create two tds with different key sets
         td0 = TensorDict(a=2, b=2, c=2)
@@ -714,7 +743,7 @@ class TestPointwiseOps:
         td = TensorDict(a=torch.zeros(2), batch_size=[2])
         with pytest.raises(ValueError, match="isn't implemented"):
             td.clamp(None, None, out=td.clone())
-        for bound in (1.0, torch.tensor(1.0)):
+        for bound in (1.0, torch.tensor(1.0), torch.ones(2)):
             with pytest.raises(ValueError, match="Mixed tensordict"):
                 td.clamp(td, bound)
             with pytest.raises(ValueError, match="Mixed tensordict"):
