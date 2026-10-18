@@ -174,6 +174,12 @@ nightly. Other versions can word them differently.
        ``Unexpected type in sourceless builder``.
      - Build the subsequence once, outside, and call it inside.
 
+PyTorch 2.11 and 2.12 also break the graph on ``state_dict()``, as 2.14 does
+(`pytorch/pytorch#201124 <https://github.com/pytorch/pytorch/issues/201124>`_).
+On PyTorch 2.12, building a frozen ``tensor_only`` tensorclass whose custom
+``__init__`` calls ``object.__setattr__`` raises ``InternalTorchDynamoError``
+inside a compiled function: build it outside.
+
 torch.func
 ----------
 

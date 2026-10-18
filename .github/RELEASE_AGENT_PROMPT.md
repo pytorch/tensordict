@@ -458,6 +458,10 @@ changes only the version and the `sha256` of `recipe/recipe.yaml`. Its PR is
 enough unless the release changes another entry of the recipe, such as a
 dependency or its bounds in `pyproject.toml`.
 
+The first release that requires `torch>=2.11.0a0` instead of `torch>=2.13.0a0`
+changes such a bound: open a PR on the feedstock that changes the run
+requirement `pytorch >=2.13` to `pytorch >=2.11`.
+
 0.15.0 needs a recipe change. The feedstock still has the C++ recipe of the
 0.14 line, with `pytorch` in its host requirements, so every build requires
 the pytorch minor version it was built with: all 0.14.x builds need

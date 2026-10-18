@@ -115,7 +115,7 @@ Install
 
    pip install tensordict
 
-tensordict needs Python 3.10+ and PyTorch 2.13+. :ref:`installation` covers
+tensordict needs Python 3.10+ and PyTorch 2.11+. :ref:`installation` covers
 nightly builds, the optional dependencies, conda-forge, and source installs.
 
 Where to go
