@@ -30,11 +30,11 @@ written.
 a `"masks"` entry. If `return_mask` is a nested key (a string
 or a tuple of strings), the masks are stored under that key. The
 masks entry is a tensordict with the structure of the stacked
-tensordict. Each of its entries is the mask of the valid values,
-of size `torch.Size([stack_len, *new_shape])`, where
-`new_shape[pad_dim]` is the largest size and the rest of
-`new_shape` matches the shape of the input entries. Not
-available for tensorclass inputs. Use
+tensordict. Each of its entries is the mask of the valid values.
+If `pad_dim` is a batch dimension, the mask has the output's
+batch size. Otherwise, its shape is the output's batch size
+followed by the padded length, regardless of the feature
+dimension's position. Not available for tensorclass inputs. Use
 [`unpad_sequence()`](tensordict.unpad_sequence.html#tensordict.unpad_sequence) to turn the result back into
 the variable-length samples.
 - **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - `"right"` puts the padding after the
