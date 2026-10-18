@@ -525,25 +525,30 @@ def _slice_length(index: slice, size: int) -> int:
     """The length of ``range(size)[index]``.
 
     ``slice.indices`` turns the bounds and ``size`` into ints, which fixes them
-    under torch.compile: a positive step takes a formula instead, which keeps
-    ``SymInt`` bounds symbolic.
+    under torch.compile, and the Dynamo of torch 2.11 and 2.12 does not trace
+    it: a formula takes its place there, which keeps ``SymInt`` bounds
+    symbolic.
     """
-    step = index.step
-    if not is_dynamo_compiling() or (step is not None and step < 0):
+    if not is_dynamo_compiling():
         return len(range(*index.indices(size)))
-    start, stop = index.start, index.stop
+    start, stop, step = index.start, index.stop, index.step
+    if step is None:
+        step = 1
+    # slice.indices clips the bounds to [0, size] for a positive step, and to
+    # [-1, size - 1] for a negative one
+    lower, upper = (0, size) if step > 0 else (-1, size - 1)
     if start is None:
-        start = 0
+        start = lower if step > 0 else upper
     elif start < 0:
         start = start + size
     if stop is None:
-        stop = size
+        stop = upper if step > 0 else lower
     elif stop < 0:
         stop = stop + size
-    if step is None:
-        step = 1
     # Builtin min and max: Dynamo calls torch.sym_min and torch.sym_max for
     # SymInts, and the Dynamo of torch 2.11 fails on torch.sym_max of two ints.
-    start = min(max(start, 0), size)
-    stop = min(max(stop, 0), size)
+    start = min(max(start, lower), upper)
+    stop = min(max(stop, lower), upper)
+    if step < 0:
+        start, stop, step = stop, start, -step
     return (max(stop - start, 0) + step - 1) // step
