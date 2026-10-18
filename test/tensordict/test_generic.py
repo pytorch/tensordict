@@ -7718,6 +7718,116 @@ class TestGeneric:
             samples,
         )
 
+    @pytest.mark.parametrize("batch_dims", [1, 2])
+    @pytest.mark.parametrize("padding_side", ["right", "left"])
+    def test_pad_sequence_negative_batch_pad_dim(self, batch_dims, padding_side):
+        # https://github.com/pytorch/tensordict/issues/2938
+        samples = []
+        for length in (2, 5):
+            batch_size = [2, length][-batch_dims:]
+            samples.append(
+                TensorDict(
+                    {
+                        "x": torch.randn(*batch_size, 4),
+                        ("n", "y"): torch.randn(*batch_size, 3),
+                    },
+                    batch_size=batch_size,
+                )
+            )
+        padded = pad_sequence(
+            samples, pad_dim=-2, return_mask=True, padding_side=padding_side
+        )
+        expected = pad_sequence(
+            samples,
+            pad_dim=batch_dims - 1,
+            return_mask=True,
+            padding_side=padding_side,
+        )
+        assert padded.batch_size == expected.batch_size == (2, *[2, 5][-batch_dims:])
+        assert (padded == expected).all()
+        self._assert_unpadded(unpad_sequence(padded, pad_dim=-2), samples)
+
+    def test_pad_sequence_negative_pad_dim_mixed_ranks(self):
+        # https://github.com/pytorch/tensordict/issues/2938
+        # pad_dim=-1 is the batch dim of "done" and a feature dim of "x": with
+        # equal batch sizes, only "x" needs padding
+        samples = [
+            TensorDict(
+                {"done": torch.ones(3, dtype=torch.bool), "x": torch.ones(3, n)}, [3]
+            )
+            for n in (2, 5)
+        ]
+        padded = pad_sequence(samples, pad_dim=-1, return_mask=True)
+        assert padded.batch_size == (2, 3)
+        assert (padded["done"] == 1).all()
+        assert padded["x"].shape == (2, 3, 5)
+        assert padded["masks", "done"].shape == (2, 3)
+        assert padded["masks", "x"][0, 0].tolist() == [True] * 2 + [False] * 3
+        self._assert_unpadded(unpad_sequence(padded, pad_dim=-1), samples)
+        # pad_dim=-2 is batch dim 0 of "a" and batch dim 1 of "b"
+        samples = [
+            TensorDict({"a": torch.randn(3, 3), "b": torch.randn(3, 3, 4)}, [3, 3])
+            for _ in range(2)
+        ]
+        padded = pad_sequence(samples, pad_dim=-2)
+        assert (padded == torch.stack(samples)).all()
+        # with different batch sizes, no padding is consistent with every entry
+        samples = [
+            TensorDict({"done": torch.ones(n), "x": torch.ones(n, 4)}, [n])
+            for n in (2, 5)
+        ]
+        with pytest.raises(ValueError, match="the batch cannot be padded"):
+            pad_sequence(samples, pad_dim=-1)
+        assert pad_sequence(samples, pad_dim=0).batch_size == (2, 5)
+        with pytest.raises(IndexError, match="pad_dim=-2 is out of range"):
+            pad_sequence(samples, pad_dim=-2)
+
+    @pytest.mark.parametrize("pad_dim", [1, -1])
+    @pytest.mark.parametrize("return_mask", [False, True])
+    def test_pad_sequence_different_batch_dims(self, pad_dim, return_mask):
+        # https://github.com/pytorch/tensordict/issues/2938
+        # dim 1 of "x" is a feature dim of a and a batch dim of b: the batch
+        # is not padded, and the result keeps the first sample's batch
+        a = TensorDict({"x": torch.arange(12.0).view(3, 4)}, [3])
+        b = TensorDict({"x": torch.arange(12.0).view(3, 4) + 100}, [3, 4])
+        for samples in ([a, b], [b, a]):
+            padded = pad_sequence(samples, pad_dim=pad_dim, return_mask=return_mask)
+            assert padded.batch_size == (2, *samples[0].batch_size)
+            assert (padded["x"] == torch.stack([td["x"] for td in samples])).all()
+            if return_mask:
+                assert padded["masks", "x"].all()
+
+    def test_pad_sequence_different_batch_dims_out(self):
+        # https://github.com/pytorch/tensordict/issues/2938
+        # with out=, the result has out's batch, so an entry longer than the
+        # first sample's batch is padded into it, as on main
+        s0 = TensorDict({"a": torch.ones(2, 3)}, [2, 3])
+        s1 = TensorDict({"a": torch.ones(2, 5)}, [2])
+        for pad_dim in (1, -1):
+            padded = pad_sequence(
+                [s0, s1], pad_dim=pad_dim, out=TensorDict(batch_size=[2, 2])
+            )
+            assert padded.batch_size == (2, 2)
+            assert padded["a"].shape == (2, 2, 5)
+            assert padded["a"][0, :, :3].all() and not padded["a"][0, :, 3:].any()
+            assert padded["a"][1].all()
+
+    def test_pad_sequence_masks_padded_once(self):
+        # https://github.com/pytorch/tensordict/issues/2939
+        samples = [
+            TensorDict({"a": torch.ones(n), ("b", "c"): torch.ones(n, 2)}, [n])
+            for n in range(1, 6)
+        ]
+        with mock.patch(
+            "torch.nn.utils.rnn.pad_sequence", wraps=torch.nn.utils.rnn.pad_sequence
+        ) as padder:
+            padded = pad_sequence(samples, return_mask=True)
+        # one call per entry and one per mask, whatever the number of samples
+        assert padder.call_count == 4
+        assert padded["masks", "b", "c"].tolist() == [
+            [True] * n + [False] * (5 - n) for n in range(1, 6)
+        ]
+
     def test_pad_sequence_padding_side(self):
         # https://github.com/pytorch/tensordict/issues/2808
         d1 = TensorDict(
