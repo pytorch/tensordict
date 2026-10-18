@@ -13,9 +13,10 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
-import contextlib
 import numbers
 import operator
+from collections.abc import Callable
+from functools import wraps
 from typing import Any, TYPE_CHECKING
 
 import tensordict.base as _td_base
@@ -56,6 +57,26 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
         # same keys in the same order, the common case: no reordering
         return values
     return other._values_list(True, True, sorting_keys=keys)
+
+
+def _clamp_into_out(clamp: Callable) -> Callable:
+    """Makes ``clamp(..., out=out)`` copy the result of ``clamp(...)`` into the leaves of ``out``.
+
+    The bounds go on as they come: ``_maybe_broadcast_other`` broadcasts only
+    the positional ones.
+    """
+
+    @wraps(clamp)
+    def wrapper(self, *args, out=None, **kwargs):
+        if out is None:
+            return clamp(self, *args, **kwargs)
+        if all(bound is None for bound in (*args, *kwargs.values())):
+            raise ValueError(
+                "clamp() with min/max=None isn't implemented with specified output."
+            )
+        return out.update_(clamp(self, *args, **kwargs))
+
+    return wrapper
 
 
 class _PointwiseOps:
@@ -2608,6 +2629,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_clamp_into_out
     @_maybe_broadcast_other("clamp", 2)
     def clamp(
         self,
@@ -2637,13 +2659,14 @@ class _PointwiseOps:
 
         Keyword Args:
             out (TensorDictBase, optional): the tensordict to write the result
-                into. Passing it currently raises an error: a ``ValueError``
-                when ``min`` or ``max`` is ``None``, a ``TypeError`` otherwise.
-                Defaults to ``None``.
+                into, and the one returned. The result is copied into its
+                leaves, so ``out`` must have the keys and shapes of the
+                result. Defaults to ``None``.
 
         Raises:
             ValueError: if one of ``min`` and ``max`` is a tensordict and the
-                other is not.
+                other is not, or if ``out`` is given and both ``min`` and
+                ``max`` are ``None``.
 
         Examples:
             >>> import torch
@@ -2654,17 +2677,10 @@ class _PointwiseOps:
             >>> td.clamp(max=0.0)["x"]
             tensor([-2.,  0.,  0.])
         """
+        # _clamp_into_out takes out: it never reaches this point
         if min is None:
-            if out is not None:
-                raise ValueError(
-                    "clamp() with min/max=None isn't implemented with specified output."
-                )
             return self.clamp_max(max)
         if max is None:
-            if out is not None:
-                raise ValueError(
-                    "clamp() with min/max=None isn't implemented with specified output."
-                )
             return self.clamp_min(min)
 
         is_tc_min = is_tensor_collection(min)
@@ -2675,26 +2691,11 @@ class _PointwiseOps:
                 "Mixed tensordict and non-tensordict min/max values are not authorized."
             )
 
-        if out is None:
-            if is_tc_min and is_tc_max:
-                return self._fast_apply(
-                    lambda x, low, high: x.clamp(low, high), min, max, default=None
-                )
-            return self._fast_apply(lambda x: x.clamp(min, max))
         if is_tc_min and is_tc_max:
-            result = self._fast_apply(
-                lambda x, y, low, high: x.clamp(low, high, out=y),
-                out,
-                min,
-                max,
-                default=None,
+            return self._fast_apply(
+                lambda x, low, high: x.clamp(low, high), min, max, default=None
             )
-        else:
-            result = self._fast_apply(
-                lambda x, y: x.clamp(min, max, out=y), out, default=None
-            )
-        with out.unlock_() if out.is_locked else contextlib.nullcontext():
-            return out.update(result)
+        return self._fast_apply(lambda x: x.clamp(min, max))
 
     @_write_back_inplace
     @_maybe_broadcast_other("pow_")

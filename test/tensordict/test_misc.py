@@ -658,6 +658,68 @@ class TestPointwiseOps:
         with pytest.raises(RuntimeError, match="must match the size"):
             getattr(td, name)(other)
 
+    @pytest.mark.parametrize("kind", ["dense", "lazy", "locked", "torch", "keyword"])
+    @pytest.mark.parametrize(
+        "bounds",
+        [
+            "number,number",
+            "number,None",
+            "None,number",
+            "0d,0d",
+            "batch,batch",
+            "batch,None",
+            "td,td",
+            "None,td",
+        ],
+    )
+    def test_clamp_out(self, bounds, kind):
+        # clamp copies its result into the leaves of out and returns it (#2961)
+        def make_td():
+            return TensorDict(
+                a=torch.tensor([[-2.0, 0.5], [1.0, 3.0]]),
+                nested=TensorDict(b=torch.tensor([0.2, -1.0]), batch_size=[2]),
+                batch_size=[2],
+            )
+
+        values = {
+            "number": (0.0, 1.0),
+            "None": (None, None),
+            "0d": (torch.tensor(0.0), torch.tensor(1.0)),
+            "batch": (torch.tensor([0.0, 0.5]), torch.tensor([1.0, 2.0])),
+            "td": (make_td() * 0, make_td() * 0 + 1),
+        }
+        low, high = (values[name][i] for i, name in enumerate(bounds.split(",")))
+        td = make_td()
+        out = make_td().zero_()
+        if kind == "lazy":
+            td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+            out = LazyStackedTensorDict(*out.unbind(0), stack_dim=0)
+        args, kwargs = (low, high), {}
+        if kind == "keyword":
+            args, kwargs = (), {"min": low, "max": high}
+        expected = td.clamp(*args, **kwargs)
+        tds = out.tensordicts if kind == "lazy" else [out]
+        data_ptrs = [x.data_ptr() for t in tds for x in t.values(True, True)]
+        if kind == "locked":
+            out.lock_()
+        if kind == "torch":
+            result = torch.clamp(td, *args, **kwargs, out=out)
+        else:
+            result = td.clamp(*args, **kwargs, out=out)
+        assert result is out
+        assert [x.data_ptr() for t in tds for x in t.values(True, True)] == data_ptrs
+        assert_allclose_td(out, expected)
+
+    def test_clamp_out_errors(self):
+        td = TensorDict(a=torch.zeros(2), batch_size=[2])
+        with pytest.raises(ValueError, match="isn't implemented"):
+            td.clamp(None, None, out=td.clone())
+        for bound in (1.0, torch.tensor(1.0)):
+            with pytest.raises(ValueError, match="Mixed tensordict"):
+                td.clamp(td, bound)
+            with pytest.raises(ValueError, match="Mixed tensordict"):
+                td.clamp(bound, td, out=td.clone())
+
     @pytest.mark.parametrize("op", ["maximum", "minimum"])
     @pytest.mark.parametrize("other_type", ["tensordict", "float", "tensor"])
     def test_maximum_minimum_unbatched(self, op, other_type):
