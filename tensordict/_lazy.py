@@ -708,16 +708,16 @@ class LazyStackedTensorDict(TensorDictBase):
         *tensordicts (TensorDictBase): the tensordicts to stack.
 
     Keyword Args:
-        stack_dim (int): the dimension of the batch size along which the
+        stack_dim (int, optional): the dimension of the batch size along which the
             tensordicts are stacked. It must be between ``-td.ndim - 1`` and
             ``td.ndim``, where ``td`` is one of the inputs. Defaults to ``0``.
-        hook_out (callable, optional): a callable to execute after :meth:`~.get`.
+        hook_out (Callable, optional): a callable to execute after :meth:`~.get`.
 
             .. deprecated:: 0.15
                 ``hook_out`` belongs to the :func:`~torch.vmap` support of lazy
                 stacks and has no replacement.
 
-        hook_in (callable, optional): a callable to execute before :meth:`~.set`.
+        hook_in (Callable, optional): a callable to execute before :meth:`~.set`.
 
             .. deprecated:: 0.15
                 ``hook_in`` belongs to the :func:`~torch.vmap` support of lazy
@@ -730,11 +730,11 @@ class LazyStackedTensorDict(TensorDictBase):
             constructor raises a ``RuntimeError``.
         device (torch.device, optional): the device of an empty stack. If
             tensordicts are given, the stack takes the device of the first
-            one and ignores this argument.
+            one and ignores this argument. Defaults to ``None``.
         names (list of str, optional): the dimension names of an empty stack.
             If tensordicts are given, the names come from them, and this
-            argument is ignored with a ``FutureWarning``. To name the dims of
-            such a stack, pass ``stack_dim_name``, or set ``names`` on the
+            argument is ignored with a ``FutureWarning``. To name the dimensions
+            of such a stack, pass ``stack_dim_name``, or set ``names`` on the
             stack. Starting with TensorDict 0.17, the default will change to
             applying these names to the stack.
         stack_dim_name (str, optional): the name of the stack dimension.
@@ -746,14 +746,13 @@ class LazyStackedTensorDict(TensorDictBase):
     Examples:
         >>> import torch
         >>> from tensordict import LazyStackedTensorDict, TensorDict
-        >>> tds = [TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
-        ...     for _ in range(10)]
+        >>> tds = [TensorDict(a=torch.zeros(3, 4), batch_size=[3]) for _ in range(10)]
         >>> td_stack = LazyStackedTensorDict.lazy_stack(tds, -1)
-        >>> print(td_stack.shape)
+        >>> td_stack.shape
         torch.Size([3, 10])
-        >>> print(td_stack.get("a").shape)
+        >>> td_stack.get("a").shape
         torch.Size([3, 10, 4])
-        >>> print(td_stack[:, 0] is tds[0])
+        >>> td_stack[:, 0] is tds[0]
         True
 
         Inputs with different batch sizes give ``-1`` in the batch size:
@@ -1136,21 +1135,26 @@ class LazyStackedTensorDict(TensorDictBase):
         that list.
 
         Args:
-            input_dict (list of dicts, or dict of dicts): the data of each
+            input_dict (list of dict, or dict of dict): the data of each
                 stacked tensordict.
             *other: passed to :meth:`tensordict.TensorDict.from_dict`.
 
         Keyword Args:
-            auto_batch_size (bool, optional): if ``True``, the batch size of
-                each tensordict is computed from its data. Defaults to
-                ``False``.
-            batch_size (torch.Size, optional): the batch size of each stacked
-                tensordict.
-            device (torch.device, optional): the device of each stacked
-                tensordict.
-            batch_dims (int, optional): with ``auto_batch_size``, the number of
-                batch dimensions to keep.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                of each tensordict to the largest leading shape that all its
+                entries share. Defaults to ``False``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                each stacked tensordict, without the stack dimension. Defaults
+                to ``None``, which gives each tensordict the batch size ``[]``
+                unless its batch size is set automatically.
+            device (torch.device, str or int, optional): the device of each
+                stacked tensordict. Defaults to ``None``, which keeps each leaf
+                where it is.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions of each tensordict. Defaults to
+                ``None``.
             stack_dim_name (str, optional): the name of the stack dimension.
+                Defaults to ``None``.
             stack_dim (int, optional): the stack dimension. Defaults to ``0``.
             names (list of str, optional): the names of the dimensions of the
                 result, stack dimension included. Exclusive with
@@ -1165,7 +1169,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 use ``stack_dim_name`` instead.
 
         Returns:
-            a :class:`~tensordict.LazyStackedTensorDict`.
+            A :class:`~tensordict.LazyStackedTensorDict`.
 
         Examples:
             >>> import torch
@@ -1271,11 +1275,34 @@ class LazyStackedTensorDict(TensorDictBase):
         names: list[str] | None = None,
         lazy: bool | None = None,
     ) -> Self:
-        """Builds a lazy stack from a list of dicts.
+        """Builds a lazy stack from a list of dicts, one tensordict per dict.
 
-        Same as :meth:`from_dict` with a list. ``lazy`` is ignored: the result
-        is always a lazy stack. See
-        :meth:`tensordict.TensorDictBase.from_list` for the other arguments.
+        Same as :meth:`from_dict` with a list, stacked along dimension ``0``.
+        The dicts can have different keys and entry shapes.
+
+        Args:
+            input (list of dict): the data of each stacked tensordict.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                of each tensordict to the largest leading shape that all its
+                entries share. Defaults to ``None``, which turns it on when
+                ``batch_dims`` is given.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                each stacked tensordict, without the stack dimension. Defaults
+                to ``None``, which gives each tensordict the batch size ``[]``
+                unless its batch size is set automatically.
+            device (torch.device, str or int, optional): the device of each
+                stacked tensordict. Defaults to ``None``, which keeps each leaf
+                where it is.
+            batch_dims (int, optional): the maximum number of batch dimensions
+                of each tensordict when the batch size is set automatically.
+                Defaults to ``None``.
+            names (list of str, optional): the names of the dimensions of the
+                result, stack dimension first. See :meth:`from_dict`. Defaults
+                to ``None``.
+            lazy (bool, optional): ignored: the result is always a lazy stack.
+                Defaults to ``None``.
 
         Examples:
             >>> import torch
@@ -1434,12 +1461,22 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: gives -1 for the dims where the shapes of the members differ.
     def get_item_shape(self, key):
-        """Gets the shape of an item in the lazy stack.
+        """Returns the shape of an entry of the lazy stack, with ``-1`` where the members differ.
 
-        Heterogeneous dimensions are returned as -1.
+        The shape of a tensor entry is read from the members without stacking
+        them. Other entries are read with :meth:`get`, which stacks them.
 
-        The shape of a tensor entry is read from the members. Other entries
-        are read with :meth:`get`, which stacks them.
+        Args:
+            key (NestedKey): the key of the entry.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
+            >>> td = LazyStackedTensorDict(
+            ...     TensorDict(a=torch.zeros(3)), TensorDict(a=torch.zeros(4))
+            ... )
+            >>> td.get_item_shape("a")
+            torch.Size([2, -1])
         """
         leaf = self._plain_leaf(key)
         if leaf is not None:
@@ -2442,7 +2479,7 @@ class LazyStackedTensorDict(TensorDictBase):
         layout: torch.layout | None = None,
         padding_value: float | int | bool = 0.0,
     ) -> Self:  # noqa: D417
-        """Stacks tensordicts in a LazyStackedTensorDict.
+        """Stacks tensordicts into a lazy stack.
 
         The result keeps each input as a separate tensordict, so the inputs
         can have different keys, entry shapes and batch sizes. See
@@ -2454,45 +2491,43 @@ class LazyStackedTensorDict(TensorDictBase):
         an instance of that class that holds a lazy stack. If ``items`` holds
         tensors, they are stacked with :func:`torch.stack`, unless one of
         ``as_list``, ``as_padded_tensor`` or ``as_nested_tensor`` is set.
+        These arguments, ``layout``, ``padding_side`` and ``padding_value``
+        apply only to a list of tensors. To read padded or nested entries from
+        a lazy stack of tensordicts, pass them to :meth:`get` instead.
 
         Args:
-            items (Sequence of TensorDictBase instances): the tensordicts to
-                stack. It must not be empty, or a ``RuntimeError`` is raised.
-            dim (int, optional): the dim along which to perform the lazy stack.
-                Defaults to 0. A ``dim`` below ``-batch_dims - 1`` warns and
-                wraps around once more (and raises if it is still out of
-                range). Starting with TensorDict 0.17, the default will change
-                to raising an ``IndexError``, as for a tensor.
+            items (Sequence of TensorDictBase): the tensordicts to stack. It
+                must not be empty, or a ``RuntimeError`` is raised.
+            dim (int, optional): the dimension along which to stack. Defaults
+                to ``0``. A ``dim`` below ``-batch_dims - 1`` warns and wraps
+                around once more (and raises if it is still out of range).
+                Starting with TensorDict 0.17, the default will change to
+                raising an ``IndexError``, as for a tensor.
 
         Keyword Args:
             device (torch.device, optional): not used: the stack takes the
                 device of the first item.
-            out (TensorDictBase, optional): a `LazyStackedTensorDict` where to write the data.
-                Its batch size must be the stacked batch size.
-            stack_dim_name (str, optional): a name for the stacked dimension.
+            out (TensorDictBase, optional): a lazy stack to write the data
+                into. Its batch size must be the stacked batch size. Defaults
+                to ``None``.
+            stack_dim_name (str, optional): the name of the stack dimension.
+                Defaults to ``None``.
             strict_shape (bool, optional): if ``True``, the batch sizes of the
                 items must be equal, or a ``RuntimeError`` is raised.
                 Defaults to ``False``.
-
-        The following keyword arguments apply only when ``items`` is a list of
-        tensors. With tensordicts, they have no effect. To read padded or
-        nested entries from a lazy stack of tensordicts, pass them to
-        :meth:`get` instead.
-
-        Keyword Args:
-            as_list (bool, optional): if ``True``, the tensors are returned
-                as a list.
+            as_list (bool, optional): tensors only. If ``True``, the tensors
+                are returned as a list.
                 Exclusive with ``as_padded_tensor`` and ``as_nested_tensor``.
                 Defaults to ``False``.
-            as_padded_tensor (bool, optional): if ``True``, the tensors are
-                padded to the largest shape and stacked into one tensor: each
+            as_padded_tensor (bool, optional): tensors only. If ``True``, the
+                tensors are padded to the largest shape and stacked into one tensor: each
                 dim is padded to its largest size. ``padding_value`` sets the
                 padding value and ``padding_side`` sets the side of every
                 padded dim.
                 Exclusive with ``as_list`` and ``as_nested_tensor``.
                 Defaults to ``False``.
-            as_nested_tensor (bool, optional): if ``True``, the tensors are
-                returned as a nested tensor (:mod:`torch.nested`). ``layout``
+            as_nested_tensor (bool, optional): tensors only. If ``True``, the
+                tensors are returned as a nested tensor (:mod:`torch.nested`). ``layout``
                 sets its layout. Tensors that are nested tensors themselves
                 raise a ``ValueError``, as a nested tensor has a single nested
                 level.
@@ -2501,11 +2536,14 @@ class LazyStackedTensorDict(TensorDictBase):
             layout (torch.layout, optional): the layout of the nested tensor
                 when ``as_nested_tensor=True``: ``torch.jagged`` or
                 ``torch.strided``. Defaults to ``torch.jagged``.
-            padding_side (str): The side of padding. Must be `"left"` or `"right"`. Defaults to `"right"`.
-            padding_value (scalar or bool, optional): The padding value. Defaults to 0.0.
+            padding_side (str, optional): the side to pad with
+                ``as_padded_tensor``: ``"left"`` or ``"right"``. Defaults to
+                ``"right"``.
+            padding_value (float, int or bool, optional): the padding value
+                with ``as_padded_tensor``. Defaults to ``0.0``.
 
         Returns:
-            a :class:`~tensordict.LazyStackedTensorDict`, or a tensorclass
+            A :class:`~tensordict.LazyStackedTensorDict`, or a tensorclass
             instance if ``items`` holds tensorclass instances.
 
         Examples:
@@ -2620,7 +2658,7 @@ class LazyStackedTensorDict(TensorDictBase):
         out: T | None = None,
         strict: bool = False,
     ) -> Self:
-        """Stacks tensordicts densely if possible, or onto a LazyStackedTensorDict otherwise.
+        """Stacks tensordicts densely if possible, or into a lazy stack otherwise.
 
         Use this function when the inputs usually match, but can differ. If
         every item has the same keys and the same entry shapes, the result is
@@ -2636,13 +2674,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 0.17, the default will change to raising an ``IndexError``,
                 as for a tensor.
             out (TensorDictBase, optional): a tensordict to write the result
-                into.
+                into. Defaults to ``None``.
             strict (bool, optional): used only with ``out``. If ``True``,
                 ``out`` must have the same keys as the items, or a
                 ``RuntimeError`` is raised. Defaults to ``False``.
 
         Returns:
-            a :class:`~tensordict.TensorDict` (or the tensorclass of the
+            A :class:`~tensordict.TensorDict` (or the tensorclass of the
             items) if the items can be stacked densely, a
             :class:`~tensordict.LazyStackedTensorDict` otherwise.
 
@@ -2830,7 +2868,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *,
         layout: torch.layout | None = None,
     ) -> CompatibleType:
-        """Returns a nested tensor when stacking cannot be achieved.
+        """Returns an entry of the lazy stack as a nested tensor.
 
         .. deprecated:: 0.15
             Use ``get(key, as_nested_tensor=True)`` instead. It differs in three
@@ -2845,16 +2883,14 @@ class LazyStackedTensorDict(TensorDictBase):
 
         Args:
             key (NestedKey): the entry to nest.
-            default (Any, optional): the default value to return in case the key
-                isn't in all sub-tensordicts.
-
-                .. note::
-                    In case the default is a tensor, this method will attempt
-                    the construction of a nestedtensor with it. Otherwise, the default
-                    value will be returned.
+            default (Any, optional): the value for the tensordicts that lack
+                ``key``. If it is a tensor, it is nested with the entries of
+                the other tensordicts. Otherwise, it is returned as is.
+                Without a default, a missing key raises a ``KeyError``.
 
         Keyword Args:
-            layout (torch.layout, optional): the layout for the nested tensor.
+            layout (torch.layout, optional): the layout of the nested tensor.
+                Defaults to ``None``, which builds a ``torch.strided`` one.
 
         Examples:
             >>> import torch
@@ -3158,7 +3194,8 @@ class LazyStackedTensorDict(TensorDictBase):
         """Returns the keys of the lazy stack, like :meth:`keys`.
 
         .. deprecated:: 0.15
-            Use :meth:`keys` instead.
+            Use :meth:`keys` instead, which takes the same arguments. Will be
+            removed in TensorDict 0.17.
         """
         return LazyStackedTensorDict.keys(
             self,
@@ -3170,7 +3207,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: stacks the non-tensor leaves that every member holds.
     def non_tensor_items(self, include_nested: bool = False):
-        """Returns all non-tensor leaves, maybe recursively."""
+        """Returns the non-tensor leaves as ``(key, value)`` pairs, each stacked across the members.
+
+        Only the keys that every member holds are listed. If
+        ``include_nested`` is ``True``, the nested tensordicts are searched as
+        well.
+        """
         items = self.tensordicts[0].non_tensor_items(include_nested=include_nested)
         if not items:
             return ()
@@ -4779,15 +4821,35 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @_lock_blocked
     def insert(self, index: int, tensordict: T) -> None:
-        """Insert a TensorDict into the stack at the specified index.
+        """Inserts a tensordict into the lazy stack at ``index``, like :meth:`list.insert`.
 
-        Analogous to list.insert. The inserted TensorDict must have compatible
-        batch_size and device. Insertion is in-place, nothing is returned.
+        The lazy stack is changed in place and its batch size grows by one
+        along the stack dimension. The new tensordict is stored as is, not
+        copied.
 
         Args:
-            index (int): The index at which the new TensorDict should be inserted.
-            tensordict (TensorDictBase): The TensorDict to be inserted into the stack.
+            index (int): the position of the new tensordict along the stack
+                dimension.
+            tensordict (TensorDictBase): the tensordict to insert. It must have
+                the device of the other members and as many batch dimensions.
+                Its sizes must match theirs, except where the batch size of
+                the lazy stack is ``-1``.
 
+        Raises:
+            TypeError: if ``tensordict`` is not a tensordict.
+            ValueError: if the device of ``tensordict`` differs from that of
+                the members, or if its batch size does not fit the lazy stack.
+            RuntimeError: if the lazy stack is locked.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import LazyStackedTensorDict, TensorDict
+            >>> td = LazyStackedTensorDict(TensorDict(a=torch.zeros(3)))
+            >>> td.insert(0, TensorDict(a=torch.ones(3)))
+            >>> td.batch_size
+            torch.Size([2])
+            >>> td[0]["a"]
+            tensor([1., 1., 1.])
         """
         if not isinstance(tensordict, TensorDictBase):
             raise TypeError(
@@ -4828,20 +4890,27 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @_lock_blocked
     def append(self, tensordict: T) -> None:
-        """Append a TensorDict onto the stack.
+        """Appends a tensordict to the lazy stack, like :meth:`list.append`.
 
-        Analogous to list.append. The appended TensorDict must have compatible
-        batch_size and device. The append operation is in-place, nothing is returned.
+        Same as :meth:`insert` at the end of the stack.
 
         Args:
-            tensordict (TensorDictBase): The TensorDict to be appended onto the stack.
-
+            tensordict (TensorDictBase): the tensordict to append. It must have
+                the device of the other members and as many batch dimensions.
+                Its sizes must match theirs, except where the batch size of
+                the lazy stack is ``-1``.
         """
         self.insert(len(self.tensordicts), tensordict)
 
     @_lock_blocked
     def extend(self, tensordict: list[T] | T) -> None:
-        """Extends the lazy stack with new tensordicts."""
+        """Appends several tensordicts to the lazy stack, like :meth:`list.extend`.
+
+        Args:
+            tensordict (list of TensorDictBase or TensorDictBase): the
+                tensordicts to append. A tensordict is unbound along the stack
+                dimension and its parts are appended.
+        """
         if _is_tensor_collection(type(tensordict)):
             tensordict = tensordict.unbind(self.stack_dim)
         # a generator would otherwise be used up by the type check

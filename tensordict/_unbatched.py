@@ -237,7 +237,7 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
     # or as_subclass() calls appear in the FX graph.
 
     class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):
-        """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
+        """A tensor entry that has no batch dimensions and that batch operations leave unchanged.
 
         .. warning::
             ``UnbatchedTensor`` is experimental: its API can change in a minor
@@ -249,31 +249,12 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
         that starts with the batch size. An :class:`UnbatchedTensor` can have
         any shape. See :ref:`unbatched-tensor`.
 
-        When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
-        squeeze, transpose, etc.) on the parent TensorDict leave the payload of
-        this tensor unchanged. Data operations (arithmetic, clone, to, etc.) work
-        through standard PyTorch tensor dispatch.
-
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict, UnbatchedTensor
-            >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
-            >>> td_reshaped = td.reshape((1, 2))
-            >>> td_reshaped["a"].shape
-            torch.Size([3, 4])
-            >>> td_reshaped["a"].data_ptr() == td["a"].data_ptr()
-            True
-            >>> td[0]["a"].shape
-            torch.Size([3, 4])
-
-            Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
-            TensorDict returns a usable tensor directly:
-
-            >>> val = td["a"]
-            >>> isinstance(val, torch.Tensor)
-            True
-            >>> isinstance(val, UnbatchedTensor)
-            True
+        In a tensordict, the shape operations of the tensordict (indexing,
+        ``reshape``, ``unsqueeze``, ``squeeze``, ``transpose``...) return the
+        unbatched entry with its data and shape unchanged. Other operations
+        (arithmetic, ``clone``, ``to``...) apply to it as to any tensor, and
+        return an :class:`UnbatchedTensor`. It is a :class:`torch.Tensor`
+        subclass, so ``td["a"]`` can be used as a tensor.
 
         An :class:`UnbatchedTensor` has these constraints:
 
@@ -285,10 +266,29 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
           unbatched entries: the batch size comes from the other entries.
 
         Args:
-            data (torch.Tensor or tensor-like): payload tensor.
-            batch_size (torch.Size compatible, optional): TensorDict-facing
-                batch-size metadata used by ``torch.vmap``. The payload shape is
-                left unchanged.
+            data (torch.Tensor or array-like): the payload. Data that is not a
+                tensor is converted with :func:`torch.as_tensor`.
+            batch_size (torch.Size or list of int, optional): the batch size
+                of the tensordict that holds the tensor, read by
+                :func:`torch.vmap`. A tensordict sets it when the tensor is
+                stored, so you rarely pass it. It does not change the shape
+                of the payload. Defaults to ``None``, which gives ``[]``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, UnbatchedTensor
+            >>> td = TensorDict(
+            ...     a=UnbatchedTensor(torch.zeros(3, 4)), b=torch.zeros(2, 3), batch_size=[2]
+            ... )
+            >>> td[0]["a"].shape
+            torch.Size([3, 4])
+            >>> td_reshaped = td.reshape(1, 2)
+            >>> td_reshaped["a"].shape
+            torch.Size([3, 4])
+            >>> td_reshaped["a"].data_ptr() == td["a"].data_ptr()
+            True
+            >>> isinstance(td["a"], torch.Tensor)
+            True
 
         """
 
@@ -369,9 +369,11 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
             return cls._wrap_result(result, batch_size)
 
         def data_ptr(self):
+            """Returns the address of the first element of the payload, as :meth:`torch.Tensor.data_ptr`."""
             return self._data.data_ptr()
 
         def untyped_storage(self):
+            """Returns the storage of the payload, as :meth:`torch.Tensor.untyped_storage`."""
             return self._data.untyped_storage()
 
         def __repr__(self):
@@ -406,7 +408,7 @@ else:
     # (DisableTorchFunctionSubclass enter/exit + as_subclass) under Dynamo.
 
     class UnbatchedTensor(_UnbatchedTensorMixin, torch.Tensor):  # type: ignore[no-redef]
-        """A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.
+        """A tensor entry that has no batch dimensions and that batch operations leave unchanged.
 
         .. warning::
             ``UnbatchedTensor`` is experimental: its API can change in a minor
@@ -418,31 +420,12 @@ else:
         that starts with the batch size. An :class:`UnbatchedTensor` can have
         any shape. See :ref:`unbatched-tensor`.
 
-        When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
-        squeeze, transpose, etc.) on the parent TensorDict leave the payload of
-        this tensor unchanged. Data operations (arithmetic, clone, to, etc.) work
-        through standard PyTorch tensor dispatch.
-
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict, UnbatchedTensor
-            >>> td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,))
-            >>> td_reshaped = td.reshape((1, 2))
-            >>> td_reshaped["a"].shape
-            torch.Size([3, 4])
-            >>> td_reshaped["a"].data_ptr() == td["a"].data_ptr()
-            True
-            >>> td[0]["a"].shape
-            torch.Size([3, 4])
-
-            Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
-            TensorDict returns a usable tensor directly:
-
-            >>> val = td["a"]
-            >>> isinstance(val, torch.Tensor)
-            True
-            >>> isinstance(val, UnbatchedTensor)
-            True
+        In a tensordict, the shape operations of the tensordict (indexing,
+        ``reshape``, ``unsqueeze``, ``squeeze``, ``transpose``...) return the
+        unbatched entry with its data and shape unchanged. Other operations
+        (arithmetic, ``clone``, ``to``...) apply to it as to any tensor, and
+        return an :class:`UnbatchedTensor`. It is a :class:`torch.Tensor`
+        subclass, so ``td["a"]`` can be used as a tensor.
 
         An :class:`UnbatchedTensor` has these constraints:
 
@@ -454,10 +437,29 @@ else:
           unbatched entries: the batch size comes from the other entries.
 
         Args:
-            data (torch.Tensor or tensor-like): payload tensor.
-            batch_size (torch.Size compatible, optional): TensorDict-facing
-                batch-size metadata used by ``torch.vmap``. The payload shape is
-                left unchanged.
+            data (torch.Tensor or array-like): the payload. Data that is not a
+                tensor is converted with :func:`torch.as_tensor`.
+            batch_size (torch.Size or list of int, optional): the batch size
+                of the tensordict that holds the tensor, read by
+                :func:`torch.vmap`. A tensordict sets it when the tensor is
+                stored, so you rarely pass it. It does not change the shape
+                of the payload. Defaults to ``None``, which gives ``[]``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict, UnbatchedTensor
+            >>> td = TensorDict(
+            ...     a=UnbatchedTensor(torch.zeros(3, 4)), b=torch.zeros(2, 3), batch_size=[2]
+            ... )
+            >>> td[0]["a"].shape
+            torch.Size([3, 4])
+            >>> td_reshaped = td.reshape(1, 2)
+            >>> td_reshaped["a"].shape
+            torch.Size([3, 4])
+            >>> td_reshaped["a"].data_ptr() == td["a"].data_ptr()
+            True
+            >>> isinstance(td["a"], torch.Tensor)
+            True
 
         """
 

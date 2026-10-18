@@ -15,17 +15,14 @@ class _NestedKeyMeta(abc.ABCMeta):
 
 
 class NestedKey(metaclass=_NestedKeyMeta):
-    """An abstract class for nested keys.
+    """The type of the keys of a tensordict: a string, or a tuple of strings for a nested entry.
 
-    Nested keys are the generic key type accepted by TensorDict.
+    A nested key is either a string or a non-empty tuple of nested keys.
+    ``td["a", "b"]`` and ``td[("a", "b")]`` read the entry ``"b"`` of the
+    nested tensordict ``"a"``. Nested tuples are flattened: ``("a", ("b",))``
+    is the same key as ``("a", "b")``. See :ref:`keys`.
 
-    A nested key is either a string or a non-empty tuple of NestedKeys
-    instances. ``td["a", "b"]`` and ``td[("a", "b")]`` read the entry ``"b"``
-    of the nested tensordict ``"a"``. Nested tuples are flattened:
-    ``("a", ("b",))`` is the same key as ``("a", "b")``. See :ref:`keys`.
-
-    The NestedKey class supports instance checks. Use it in type hints and
-    in ``isinstance`` checks.
+    Use :class:`NestedKey` in type hints and in ``isinstance`` checks.
 
     Examples:
         >>> from tensordict import NestedKey, TensorDict

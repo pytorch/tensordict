@@ -45,7 +45,7 @@ def from_module(
     use_state_dict: bool = False,
     filter_empty: bool = True,
 ):
-    """Puts the parameters and buffers of a module in a tensordict.
+    """Returns a locked tensordict that holds the parameters and buffers of a module.
 
     Same as :meth:`tensordict.TensorDict.from_module`, except for the default
     of ``lock``: this function locks the result by default, and the method
@@ -53,7 +53,7 @@ def from_module(
     module themselves, not copies. Submodules become nested tensordicts.
 
     Args:
-        module (nn.Module): the module to get the parameters from.
+        module (torch.nn.Module): the module to get the parameters from.
         as_module (bool, optional): if ``True``, a
             :class:`~tensordict.nn.TensorDictParams` instance is returned,
             which can be used to store parameters within a
@@ -70,7 +70,7 @@ def from_module(
             ``True``.
 
     Returns:
-        a :class:`~tensordict.TensorDict`, or a
+        A :class:`~tensordict.TensorDict`, or a
         :class:`~tensordict.nn.TensorDictParams` if ``as_module=True``.
 
     Examples:
@@ -111,7 +111,7 @@ def from_modules(
     example.
 
     Args:
-        *modules (nn.Module): the modules to get the parameters from.
+        *modules (torch.nn.Module): the modules to get the parameters from.
 
     Keyword Args:
         as_module (bool, optional): if ``True``, a
@@ -130,7 +130,7 @@ def from_modules(
             Ignored when ``lazy_stack=True``. Defaults to ``False``.
 
     Returns:
-        a :class:`~tensordict.TensorDict` with batch size ``[len(modules)]``,
+        A :class:`~tensordict.TensorDict` with batch size ``[len(modules)]``,
         a :class:`~tensordict.LazyStackedTensorDict` if ``lazy_stack=True``,
         or a :class:`~tensordict.nn.TensorDictParams` if ``as_module=True``.
 
@@ -163,7 +163,7 @@ def from_pytree(
     auto_batch_size: bool = False,
     batch_dims: int | None = None,
 ):
-    """Converts a pytree to a TensorDict instance.
+    """Converts a pytree (nested lists, tuples and dicts of tensors) to a tensordict.
 
     Lists, tuples, named tuples and dicts become nested tensordicts, and
     non-tensor entries record their types, so
@@ -172,18 +172,20 @@ def from_pytree(
     details.
 
     Args:
-        pytree: the pytree to convert.
+        pytree (Any): the pytree to convert.
 
     Keyword Args:
-        batch_size (torch.Size, optional): the batch size of the result.
-        auto_batch_size (bool, optional): if ``True``, the batch size is the
-            largest leading shape that all leaves share. Defaults to
+        batch_size (torch.Size or list of int, optional): the batch size of
+            the result. Defaults to ``None``, which gives ``[]`` unless
+            ``auto_batch_size`` is ``True``.
+        auto_batch_size (bool, optional): if ``True``, sets the batch size to
+            the largest leading shape that all the leaves share. Defaults to
             ``False``.
-        batch_dims (int, optional): used with ``auto_batch_size``: the
-            number of batch dimensions to keep.
+        batch_dims (int, optional): with ``auto_batch_size``, the maximum
+            number of batch dimensions. Defaults to ``None``.
 
     Returns:
-        a :class:`~tensordict.TensorDict`.
+        A :class:`~tensordict.TensorDict`.
 
     Examples:
         >>> import torch
@@ -221,16 +223,17 @@ def stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
         input (sequence of TensorDictBase or tensorclass instances): the
             tensordicts to stack.
         dim (int, optional): the new dimension. Defaults to ``0``. A ``dim`` outside
-            ``[-batch_dims - 1, batch_dims]`` warns, and is used on the dims
+            ``[-batch_dims - 1, batch_dims]`` warns, and is used on the dimensions
             of the leaves. Starting with TensorDict 0.17, the default will
             change to raising an ``IndexError``, as for a tensor.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to write the result
-            into. Its batch size must be the stacked batch size.
+            into. Its batch size must be the stacked batch size. Defaults to
+            ``None``.
 
     Returns:
-        a :class:`~tensordict.TensorDict` whose batch size is
+        A :class:`~tensordict.TensorDict` whose batch size is
         ``batch_size[:dim] + [len(input)] + batch_size[dim:]``. Tensorclass
         inputs give an instance of their class. If every input is a
         :class:`~tensordict.LazyStackedTensorDict`, the result is a
@@ -252,7 +255,7 @@ def stack(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
 
 
 def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T":
-    """Stacks tensordicts in a :class:`~tensordict.LazyStackedTensorDict`.
+    """Stacks tensordicts into a lazy stack (:class:`~tensordict.LazyStackedTensorDict`).
 
     The result keeps each input as a separate tensordict, so the inputs can
     have different keys, entry shapes and batch sizes. Use it for data whose
@@ -260,7 +263,7 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T"
     function with :func:`~tensordict.stack` and
     :func:`~tensordict.maybe_dense_stack`. Same as
     :meth:`tensordict.LazyStackedTensorDict.lazy_stack`, which takes the same
-    arguments.
+    arguments and documents the ones for lists of tensors.
 
     Args:
         input (sequence of TensorDictBase or tensorclass instances): the
@@ -275,14 +278,16 @@ def lazy_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T"
 
     Keyword Args:
         out (TensorDictBase, optional): a lazy stack to write the result
-            into. Its batch size must be the stacked batch size.
-        stack_dim_name (str, optional): a name for the stacked dimension.
+            into. Its batch size must be the stacked batch size. Defaults to
+            ``None``.
+        stack_dim_name (str, optional): the name of the stack dimension.
+            Defaults to ``None``.
         strict_shape (bool, optional): if ``True``, the batch sizes of the
             inputs must be equal, or a ``RuntimeError`` is raised. Defaults
             to ``False``.
 
     Returns:
-        a :class:`~tensordict.LazyStackedTensorDict`. Tensorclass inputs give
+        A :class:`~tensordict.LazyStackedTensorDict`. Tensorclass inputs give
         an instance of their class that holds a lazy stack.
 
     Examples:
@@ -325,10 +330,10 @@ def cat(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to write the result
-            into.
+            into. Defaults to ``None``.
 
     Returns:
-        a :class:`~tensordict.TensorDict`. Tensorclass inputs give an
+        A :class:`~tensordict.TensorDict`. Tensorclass inputs give an
         instance of their class. If every input is a
         :class:`~tensordict.LazyStackedTensorDict`, the result is a
         :class:`~tensordict.LazyStackedTensorDict`.
@@ -349,7 +354,7 @@ def cat(input: Sequence["T"], dim: int = 0, *, out=None) -> "T":
 
 
 def maybe_dense_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs) -> "T":
-    """Stacks tensordicts densely if possible, or in a lazy stack otherwise.
+    """Stacks tensordicts densely if possible, or into a lazy stack otherwise.
 
     Use it when the inputs usually match, but can differ. If every input has
     the same keys, entry shapes and batch size, the result is the dense
@@ -362,18 +367,18 @@ def maybe_dense_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs)
         input (sequence of TensorDictBase or tensorclass instances): the
             tensordicts to stack.
         dim (int, optional): the new dimension. Defaults to ``0``. A ``dim`` outside
-            ``[-batch_dims - 1, batch_dims]`` warns, and is used on the dims
+            ``[-batch_dims - 1, batch_dims]`` warns, and is used on the dimensions
             of the leaves. Starting with TensorDict 0.17, the default will
             change to raising an ``IndexError``, as for a tensor.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to write the result
-            into.
+            into. Defaults to ``None``.
         strict (bool, optional): used only with ``out``. If ``True``, ``out``
             must have the same keys as the inputs. Defaults to ``False``.
 
     Returns:
-        a :class:`~tensordict.TensorDict` (or the tensorclass of the inputs)
+        A :class:`~tensordict.TensorDict` (or the tensorclass of the inputs)
         if the inputs can be stacked densely, a
         :class:`~tensordict.LazyStackedTensorDict` otherwise.
 
@@ -393,7 +398,7 @@ def maybe_dense_stack(input: Sequence["T"], dim: int = 0, *, out=None, **kwargs)
 
 
 def fromkeys(keys: list[NestedKey], value: Any = 0):
-    """Creates a tensordict from a list of keys and a single value.
+    """Creates a tensordict with the same value for every key, like :meth:`dict.fromkeys`.
 
     Same as :meth:`tensordict.TensorDict.fromkeys`, and as :meth:`dict.fromkeys`
     for a dict. The batch size of the result is ``[]``.
@@ -401,11 +406,11 @@ def fromkeys(keys: list[NestedKey], value: Any = 0):
     Args:
         keys (list of NestedKey): the keys of the new tensordict. A tuple of
             strings creates a nested entry.
-        value (compatible type, optional): the value of every entry. Defaults
-            to ``0``.
+        value (torch.Tensor, number or Any, optional): the value of every
+            entry. Defaults to ``0``.
 
     Returns:
-        a :class:`~tensordict.TensorDict`.
+        A :class:`~tensordict.TensorDict`.
 
     Examples:
         >>> import tensordict
@@ -418,7 +423,7 @@ def fromkeys(keys: list[NestedKey], value: Any = 0):
 
 
 def from_consolidated(filename):
-    """Reconstructs a tensordict from a consolidated file.
+    """Reconstructs a tensordict from a file written by ``consolidate(filename=...)``.
 
     A consolidated file is the single file that
     :meth:`~tensordict.TensorDictBase.consolidate` writes when you pass it a
@@ -432,7 +437,7 @@ def from_consolidated(filename):
         filename (str or Path): the path of the file.
 
     Returns:
-        a :class:`~tensordict.TensorDict`. Its entries are views into one
+        A :class:`~tensordict.TensorDict`. Its entries are views into one
         storage that is read from the file.
 
     Examples:
@@ -472,18 +477,23 @@ def load(
     Args:
         prefix (str or Path): the directory, or the ``.tdz`` archive file,
             that holds the saved tensordict.
-        device (torch.device, optional): if given, the data is cast to that
-            device. With ``"meta"``, no file is read.
+        device (torch.device, str or int, optional): if given, the data is
+            cast to that device. With ``"meta"``, no file is read. Defaults
+            to ``None``.
         non_blocking (bool, optional): if ``True``, the cast to ``device``
             is not followed by a synchronization. Defaults to ``False``.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to load the data into.
-        robust_key (bool, optional): must match the value used to save.
-            Defaults to ``True``.
+            Defaults to ``None``.
+        robust_key (bool, optional): if ``True``, reads the percent-encoded
+            file names that :func:`~tensordict.save` writes by default, and
+            falls back to the legacy names of keys that are safe file names.
+            If ``False``, reads the legacy layout only. Defaults to ``True``.
         subpath (NestedKey or str, optional): the nested tensordict to load,
             as a nested key (``("module", "0")``) or a ``"/"``-separated path
-            (``"module/0"``). Only that subtree is read.
+            (``"module/0"``). Only that subtree is read. Defaults to
+            ``None``, which loads the whole tensordict.
         mode (str, optional): ``"r"`` maps the files copy-on-write (in-place
             writes stay in memory), ``"r+"`` maps them shared (in-place writes
             reach the files). See :meth:`tensordict.TensorDict.load_memmap`
@@ -493,10 +503,11 @@ def load(
             data. Defaults to ``0``.
         allow_pickle (bool, optional): if ``True``, non-tensor entries that
             were pickled are unpickled. Only load pickles from trusted
-            sources.
+            sources. If ``False``, pickled entries raise a ``RuntimeError``. Defaults
+            to ``None``, which unpickles them with a ``FutureWarning``.
 
     Returns:
-        the saved tensordict, of the class it had when it was saved. Its
+        The saved tensordict, of the class it had when it was saved. Its
         leaves are :class:`~tensordict.MemoryMappedTensor` instances.
 
     Examples:
@@ -537,7 +548,7 @@ def load_memmap(
     num_threads: int = 0,
     allow_pickle: bool | None = None,
 ) -> TensorCollection:
-    """Loads a memory-mapped tensordict from disk.
+    """Loads a tensordict that :func:`~tensordict.memmap` or :func:`~tensordict.save` wrote.
 
     Same as :func:`~tensordict.load`, and as
     :meth:`tensordict.TensorDict.load_memmap`, which holds the full text of
@@ -547,18 +558,23 @@ def load_memmap(
     Args:
         prefix (str or Path): the directory, or the ``.tdz`` archive file,
             that holds the saved tensordict.
-        device (torch.device, optional): if given, the data is cast to that
-            device. With ``"meta"``, no file is read.
+        device (torch.device, str or int, optional): if given, the data is
+            cast to that device. With ``"meta"``, no file is read. Defaults
+            to ``None``.
         non_blocking (bool, optional): if ``True``, the cast to ``device``
             is not followed by a synchronization. Defaults to ``False``.
 
     Keyword Args:
         out (TensorDictBase, optional): a tensordict to load the data into.
-        robust_key (bool, optional): must match the value used to save.
-            Defaults to ``True``.
+            Defaults to ``None``.
+        robust_key (bool, optional): if ``True``, reads the percent-encoded
+            file names that :func:`~tensordict.save` writes by default, and
+            falls back to the legacy names of keys that are safe file names.
+            If ``False``, reads the legacy layout only. Defaults to ``True``.
         subpath (NestedKey or str, optional): the nested tensordict to load,
             as a nested key (``("module", "0")``) or a ``"/"``-separated path
-            (``"module/0"``). Only that subtree is read.
+            (``"module/0"``). Only that subtree is read. Defaults to
+            ``None``, which loads the whole tensordict.
         mode (str, optional): ``"r"`` maps the files copy-on-write (in-place
             writes stay in memory), ``"r+"`` maps them shared (in-place writes
             reach the files). See :meth:`tensordict.TensorDict.load_memmap`
@@ -568,10 +584,11 @@ def load_memmap(
             data. Defaults to ``0``.
         allow_pickle (bool, optional): if ``True``, non-tensor entries that
             were pickled are unpickled. Only load pickles from trusted
-            sources.
+            sources. If ``False``, pickled entries raise a ``RuntimeError``. Defaults
+            to ``None``, which unpickles them with a ``FutureWarning``.
 
     Returns:
-        the saved tensordict, of the class it had when it was saved. Its
+        The saved tensordict, of the class it had when it was saved. Its
         leaves are :class:`~tensordict.MemoryMappedTensor` instances.
 
     Examples:
@@ -612,7 +629,7 @@ def save(
     archive: bool | None = None,
     compression: str | int | None = None,
 ) -> TensorCollection:
-    """Saves a tensordict to disk, as memory-mapped files.
+    """Saves a tensordict to disk, and returns a memory-mapped copy of it.
 
     Same as :func:`~tensordict.memmap`, and as
     :meth:`~tensordict.TensorDictBase.memmap`, which holds the full text of
@@ -625,8 +642,8 @@ def save(
     Args:
         data (TensorDictBase or tensorclass instance): the tensordict to save.
         prefix (str, optional): the directory to write to, or a file name that
-            ends with ``".tdz"``. If ``None``, the tensors are written to
-            anonymous shared memory and nothing is saved to disk.
+            ends with ``".tdz"``. Defaults to ``None``, which writes the
+            tensors to anonymous shared memory and saves nothing to disk.
         copy_existing (bool, optional): if ``False``, an entry that is already
             memory-mapped to a file outside ``prefix`` raises an error. If
             ``True``, it is copied. Defaults to ``False``.
@@ -634,8 +651,9 @@ def save(
     Keyword Args:
         num_threads (int, optional): the number of threads that write the
             files. Defaults to ``0``.
-        return_early (bool, optional): if ``True`` and ``num_threads > 0``,
-            a future of the result is returned. Defaults to ``False``.
+        return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+            returns a :class:`~tensordict.utils.TensorDictFuture` at once, while
+            the threads write the files. Defaults to ``False``.
         share_non_tensor (bool, optional): if ``True``, non-tensor entries are
             shared between the processes of a node. Defaults to ``False``.
         robust_key (bool, optional): if ``True``, keys that hold path
@@ -653,7 +671,7 @@ def save(
             entries load without a copy.
 
     Returns:
-        a new, locked tensordict whose leaves are
+        A new, locked tensordict whose leaves are
         :class:`~tensordict.MemoryMappedTensor` instances backed by the
         saved files. ``data`` itself is not changed.
 
@@ -695,7 +713,7 @@ def memmap(
     archive: bool | None = None,
     compression: str | int | None = None,
 ) -> TensorCollection:
-    """Writes all tensors onto memory-mapped tensors in a new tensordict.
+    """Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
     Same as :func:`~tensordict.save`, and as
     :meth:`~tensordict.TensorDictBase.memmap`, which holds the full text of
@@ -707,8 +725,8 @@ def memmap(
     Args:
         data (TensorDictBase or tensorclass instance): the tensordict to write.
         prefix (str, optional): the directory to write to, or a file name that
-            ends with ``".tdz"``. If ``None``, the tensors are written to
-            anonymous shared memory.
+            ends with ``".tdz"``. Defaults to ``None``, which writes the
+            tensors to anonymous shared memory and saves nothing to disk.
         copy_existing (bool, optional): if ``False``, an entry that is already
             memory-mapped to a file outside ``prefix`` raises an error. If
             ``True``, it is copied. Defaults to ``False``.
@@ -716,8 +734,9 @@ def memmap(
     Keyword Args:
         num_threads (int, optional): the number of threads that write the
             files. Defaults to ``0``.
-        return_early (bool, optional): if ``True`` and ``num_threads > 0``,
-            a future of the result is returned. Defaults to ``False``.
+        return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+            returns a :class:`~tensordict.utils.TensorDictFuture` at once, while
+            the threads write the files. Defaults to ``False``.
         share_non_tensor (bool, optional): if ``True``, non-tensor entries are
             shared between the processes of a node. Defaults to ``False``.
         existsok (bool, optional): if ``False``, a tensor file that already
@@ -737,7 +756,7 @@ def memmap(
             entries load without a copy.
 
     Returns:
-        a new, locked tensordict whose leaves are
+        A new, locked tensordict whose leaves are
         :class:`~tensordict.MemoryMappedTensor` instances.
 
     Examples:
