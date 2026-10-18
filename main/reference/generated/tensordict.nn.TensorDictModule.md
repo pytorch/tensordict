@@ -22,6 +22,8 @@ In the latter case, the output keys of the `TensorDictModule`
 will be used to populate the output tensordict (ie. the keys present
 in `out_keys` should be present in the dictionary returned by the
 `module` forward method).
+Dictionary outputs stay matched by key when `select_out_keys()`
+filters or reorders the outputs.
 - **in_keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*, or*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the entries that the
 module reads from the input tensordict. If a list, the values are
 passed as positional arguments, in this order. If a dict, the values
