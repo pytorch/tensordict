@@ -396,6 +396,28 @@ def _skip_shared_member(app, what, name, obj, skip, options):
     return None
 
 
+# Napoleon resolves the types of the ``Keyword Args:`` entries with the ``obj``
+# role, which also matches methods: ``reduce (bool, optional)`` linked to the
+# ``TensorDictBase.bool`` cast, and ``int``, ``float``, ``type``, ``bytes`` and
+# ``set`` to the methods of the same name. Resolve the builtin type names with
+# the ``class`` role, as the ``Args:`` entries do, so that intersphinx sends
+# them to the Python docs.
+_BUILTIN_TYPE_NAMES = frozenset(
+    {"bool", "int", "float", "complex", "str", "bytes", "type", "set"}
+    | {"dict", "list", "tuple", "object"}
+)
+
+
+def _builtin_types_as_classes(app, doctree):
+    for node in doctree.findall(addnodes.pending_xref):
+        if (
+            node.get("refdomain") == "py"
+            and node.get("reftype") == "obj"
+            and node.get("reftarget") in _BUILTIN_TYPE_NAMES
+        ):
+            node["reftype"] = "class"
+
+
 def _find_class(path: str):
     for candidate in (path, "tensordict." + path):
         module_name, _, attr = candidate.rpartition(".")
@@ -581,6 +603,7 @@ def setup(app):
     app.connect("html-page-context", _keep_sidebar, priority=600)
     app.connect("autodoc-process-signature", _process_signature)
     app.connect("autodoc-skip-member", _skip_shared_member)
+    app.connect("doctree-read", _builtin_types_as_classes)
     app.connect("missing-reference", _resolve_shared_method)
     app.connect("env-updated", _alias_shared_methods)
     app.connect("build-finished", _unflag_fontawesome_js)
