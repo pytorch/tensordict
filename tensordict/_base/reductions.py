@@ -93,15 +93,28 @@ class _Reductions:
     """Reductions over the batch dimensions or the leaves."""
 
     def all(self, dim: int | None = None) -> bool | TensorCollection:
-        """Checks if all values are True/non-null in the tensordict.
+        """Returns whether every element of every leaf is ``True`` (nonzero).
 
         Args:
-            dim (int, optional): if ``None``, returns a boolean indicating
-                whether all tensors return `tensor.all() == True`
-                If integer, all is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
+            dim (int, optional): a batch dimension to reduce. If given, returns a
+                new tensordict of boolean leaves without that dimension. A negative
+                ``dim`` counts from the end of the batch dimensions. Defaults to
+                ``None``, which checks every element and returns a ``bool``.
 
+        Returns:
+            A ``bool``, or a new tensordict if ``dim`` is given.
+
+        Raises:
+            RuntimeError: if ``dim`` is not a batch dimension.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[True, False], [True, True]]), batch_size=[2, 2])
+            >>> td.all()
+            False
+            >>> td.all(dim=1)["a"]
+            tensor([False,  True])
         """
         TensorDict = _td_base._TENSORDICT_TYPE
 
@@ -121,15 +134,28 @@ class _Reductions:
         return all(value.all() for value in self._reduction_parts())
 
     def any(self, dim: int | None = None) -> bool | TensorCollection:
-        """Checks if any value is True/non-null in the tensordict.
+        """Returns whether any element of any leaf is ``True`` (nonzero).
 
         Args:
-            dim (int, optional): if ``None``, returns a boolean indicating
-                whether all tensors return `tensor.any() == True`.
-                If integer, all is called upon the dimension specified if
-                and only if this dimension is compatible with
-                the tensordict shape.
+            dim (int, optional): a batch dimension to reduce. If given, returns a
+                new tensordict of boolean leaves without that dimension. A negative
+                ``dim`` counts from the end of the batch dimensions. Defaults to
+                ``None``, which checks every element and returns a ``bool``.
 
+        Returns:
+            A ``bool``, or a new tensordict if ``dim`` is given.
+
+        Raises:
+            RuntimeError: if ``dim`` is not a batch dimension.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[False, False], [True, False]]), batch_size=[2, 2])
+            >>> td.any()
+            True
+            >>> td.any(dim=1)["a"]
+            tensor([False,  True])
         """
         TensorDict = _td_base._TENSORDICT_TYPE
 
@@ -194,12 +220,43 @@ class _Reductions:
         *,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the minimum values of all elements in the input tensordict.
+        """Returns the minimum of every leaf, over all its elements or along a batch dimension.
 
-        Same as :meth:`~.min` with ``return_indices=False``. A tuple ``dim``
-        reduces only its first dim. Starting with TensorDict 0.17, the default
-        will change to reducing every dim of the tuple, as :func:`torch.amin`
-        does.
+        Like :meth:`~.min` with ``return_indices=False``: the result holds the
+        values only.
+
+        Args:
+            dim (int, optional): the batch dimension to reduce. A negative ``dim``
+                counts from the end of the batch dimensions. A tuple reduces only
+                its first dimension and is not checked against the batch dimensions.
+                Starting with TensorDict 0.17, the default will change to reducing
+                every dimension of the tuple, as :func:`torch.amin` does. Defaults
+                to ``None``, which reduces every element of each leaf, and the
+                result has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimension is
+                kept with size 1. Defaults to ``False``.
+
+        Keyword Args:
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With ``dim``, the leaves are concatenated along ``dim``
+                first, so they must have the same number of dimensions. With feature
+                dimensions, a negative ``dim`` counts from the end of each leaf.
+                Starting with TensorDict 0.17, the default will change to counting
+                it from the end of the batch dimensions, as with ``reduce=False``.
+                Defaults to ``False``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[1.0, 5.0], [3.0, 2.0]]), batch_size=[2])
+            >>> td.amin()["a"]
+            tensor(1.)
+            >>> td.amin(dim=0)["a"]
+            tensor([1., 2.])
         """
         return self._cast_reduction(
             reduction_name="amin",
@@ -238,87 +295,56 @@ class _Reductions:
         reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the minimum values of all elements in the input tensordict.
+        """Returns the minimum of every leaf, over all its elements or along a batch dimension.
+
+        Without ``dim``, the result is a tensordict of scalar leaves. With ``dim``,
+        as with :func:`torch.min`, the result is a named tuple of two tensordicts of
+        the same structure, ``values`` and ``indices``.
 
         Args:
-            dim (int, optional): if ``None``, returns a dimensionless
-                tensordict containing the min value of all leaves (if this can be computed).
-                If integer, `min` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                A tuple reduces only its first dim; passing one is deprecated
-                and will be removed in TensorDict 0.17.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, optional): the batch dimension to reduce. A negative ``dim``
+                counts from the end of the batch dimensions. A tuple reduces only
+                its first dimension; passing one is deprecated and will be removed
+                in TensorDict 0.17. Defaults to ``None``, which reduces every
+                element of each leaf, and the result has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimension is
+                kept with size 1. Needs an int ``dim``. Defaults to ``False``.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            return_indices (bool, optional): :func:`~torch.min` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
-                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
-                are returned. Defaults to ``True``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With ``dim``, the leaves are concatenated along ``dim``
+                first, so they must have the same number of dimensions. With feature
+                dimensions, a negative ``dim`` counts from the end of each leaf.
+                Starting with TensorDict 0.17, the default will change to counting
+                it from the end of the batch dimensions, as with ``reduce=False``.
+                Defaults to ``False``.
+            return_indices (bool, optional): if ``False`` and ``dim`` is given,
+                returns only the values tensordict. Defaults to ``True``.
+
+        Returns:
+            A new tensordict, or a named tuple ``(values, indices)`` of
+            tensordicts when ``dim`` is given and ``return_indices=True``. With
+            ``reduce=True``, a tensor, or what :func:`torch.min` returns when
+            ``dim`` is given.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
+            ...     b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            ...     batch_size=(3, 4),
             ... )
-            >>> td.min(dim=0)
-            torch.return_types.min(
-            values=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False),
-            indices=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                        batch_size=torch.Size([4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False))
-            >>> td.min()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.min(dim=0).values.batch_size
+            torch.Size([4])
+            >>> td.min(dim=0).indices["b", "c"].dtype
+            torch.int64
+            >>> td.min()["a"].shape
+            torch.Size([])
             >>> td.min(reduce=True)
-            tensor(-3.1537)
-
+            tensor(-2.8891)
         """
         result = self._cast_reduction(
             reduction_name="min",
@@ -372,12 +398,43 @@ class _Reductions:
         *,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the maximum values of all elements in the input tensordict.
+        """Returns the maximum of every leaf, over all its elements or along a batch dimension.
 
-        Same as :meth:`~.max` with ``return_indices=False``. A tuple ``dim``
-        reduces only its first dim. Starting with TensorDict 0.17, the default
-        will change to reducing every dim of the tuple, as :func:`torch.amax`
-        does.
+        Like :meth:`~.max` with ``return_indices=False``: the result holds the
+        values only.
+
+        Args:
+            dim (int, optional): the batch dimension to reduce. A negative ``dim``
+                counts from the end of the batch dimensions. A tuple reduces only
+                its first dimension and is not checked against the batch dimensions.
+                Starting with TensorDict 0.17, the default will change to reducing
+                every dimension of the tuple, as :func:`torch.amax` does. Defaults
+                to ``None``, which reduces every element of each leaf, and the
+                result has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimension is
+                kept with size 1. Defaults to ``False``.
+
+        Keyword Args:
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With ``dim``, the leaves are concatenated along ``dim``
+                first, so they must have the same number of dimensions. With feature
+                dimensions, a negative ``dim`` counts from the end of each leaf.
+                Starting with TensorDict 0.17, the default will change to counting
+                it from the end of the batch dimensions, as with ``reduce=False``.
+                Defaults to ``False``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[1.0, 5.0], [3.0, 2.0]]), batch_size=[2])
+            >>> td.amax()["a"]
+            tensor(5.)
+            >>> td.amax(dim=0)["a"]
+            tensor([3., 5.])
         """
         return self._cast_reduction(
             reduction_name="amax",
@@ -416,87 +473,56 @@ class _Reductions:
         reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the maximum values of all elements in the input tensordict.
+        """Returns the maximum of every leaf, over all its elements or along a batch dimension.
+
+        Without ``dim``, the result is a tensordict of scalar leaves. With ``dim``,
+        as with :func:`torch.max`, the result is a named tuple of two tensordicts of
+        the same structure, ``values`` and ``indices``.
 
         Args:
-            dim (int, optional): if ``None``, returns a dimensionless
-                tensordict containing the max value of all leaves (if this can be computed).
-                If integer, `max` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                A tuple reduces only its first dim; passing one is deprecated
-                and will be removed in TensorDict 0.17.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, optional): the batch dimension to reduce. A negative ``dim``
+                counts from the end of the batch dimensions. A tuple reduces only
+                its first dimension; passing one is deprecated and will be removed
+                in TensorDict 0.17. Defaults to ``None``, which reduces every
+                element of each leaf, and the result has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimension is
+                kept with size 1. Needs an int ``dim``. Defaults to ``False``.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            return_indices (bool, optional): :func:`~torch.max` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
-                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
-                are returned. Defaults to ``True``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With ``dim``, the leaves are concatenated along ``dim``
+                first, so they must have the same number of dimensions. With feature
+                dimensions, a negative ``dim`` counts from the end of each leaf.
+                Starting with TensorDict 0.17, the default will change to counting
+                it from the end of the batch dimensions, as with ``reduce=False``.
+                Defaults to ``False``.
+            return_indices (bool, optional): if ``False`` and ``dim`` is given,
+                returns only the values tensordict. Defaults to ``True``.
+
+        Returns:
+            A new tensordict, or a named tuple ``(values, indices)`` of
+            tensordicts when ``dim`` is given and ``return_indices=True``. With
+            ``reduce=True``, a tensor, or what :func:`torch.max` returns when
+            ``dim`` is given.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
+            ...     b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            ...     batch_size=(3, 4),
             ... )
-            >>> td.max(dim=0)
-            torch.return_types.max(
-            values=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False),
-            indices=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                        batch_size=torch.Size([4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False))
-            >>> td.max()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.max(dim=0).values.batch_size
+            torch.Size([4])
+            >>> td.max(dim=0).indices["b", "c"].dtype
+            torch.int64
+            >>> td.max()["a"].shape
+            torch.Size([])
             >>> td.max(reduce=True)
             tensor(4.1015)
-
         """
         result = self._cast_reduction(
             reduction_name="max",
@@ -551,77 +577,37 @@ class _Reductions:
         reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the cumulative minimum values of all elements in the input tensordict.
+        """Returns the cumulative minimum of every leaf along a batch dimension.
+
+        As with :func:`torch.cummin`, the result is a named tuple of two
+        tensordicts, ``values`` and ``indices``, with the structure and the batch
+        size of the tensordict.
 
         Args:
-            dim (int): integer representing the dimension along which to perform the cummin operation.
-                A tuple uses only its first dim; passing one is deprecated
-                and will be removed in TensorDict 0.17.
+            dim (int): the batch dimension along which to compute it. A negative
+                ``dim`` counts from the end of the batch dimensions. A tuple uses
+                only its first dimension; passing one is deprecated and will be
+                removed in TensorDict 0.17.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            return_indices (bool, optional): :func:`~torch.cummin` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
-                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
-                are returned. Defaults to ``True``.
+            reduce (bool, optional): if ``True``, concatenates the leaves along
+                ``dim``, which requires them to have the same number of dimensions,
+                and returns what :func:`torch.cummin` returns for the result. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            return_indices (bool, optional): if ``False``, returns only the values
+                tensordict. Defaults to ``True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
-            >>> _ = torch.manual_seed(0)
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.cummin(dim=0)
-            torch.return_types.cummin(
-            values=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False),
-            indices=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                        batch_size=torch.Size([3, 4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False))
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.cummin(reduce=True, dim=0)
-            torch.return_types.cummin(...)
-
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([3.0, 1.0, 2.0]), batch_size=[3])
+            >>> td.cummin(dim=0).values["a"]
+            tensor([3., 1., 1.])
+            >>> td.cummin(dim=0).indices["a"]
+            tensor([0, 1, 1])
         """
         result = self._cast_reduction(
             reduction_name="cummin",
@@ -674,77 +660,37 @@ class _Reductions:
         reduce: bool | None = None,
         return_indices: bool = True,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the cumulative maximum values of all elements in the input tensordict.
+        """Returns the cumulative maximum of every leaf along a batch dimension.
+
+        As with :func:`torch.cummax`, the result is a named tuple of two
+        tensordicts, ``values`` and ``indices``, with the structure and the batch
+        size of the tensordict.
 
         Args:
-            dim (int): integer representing the dimension along which to perform the cummax operation.
-                A tuple uses only its first dim; passing one is deprecated
-                and will be removed in TensorDict 0.17.
+            dim (int): the batch dimension along which to compute it. A negative
+                ``dim`` counts from the end of the batch dimensions. A tuple uses
+                only its first dimension; passing one is deprecated and will be
+                removed in TensorDict 0.17.
 
         Keyword Args:
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            return_indices (bool, optional): :func:`~torch.cummax` returns a named tuple with values and indices
-                when the ``dim`` argument is passed. The ``TensorDict`` equivalent of this is to return a named tuple
-                with ``values`` and ``indices`` tensordicts of identical structure. If ``False``, only the values
-                are returned. Defaults to ``True``.
+            reduce (bool, optional): if ``True``, concatenates the leaves along
+                ``dim``, which requires them to have the same number of dimensions,
+                and returns what :func:`torch.cummax` returns for the result. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            return_indices (bool, optional): if ``False``, returns only the values
+                tensordict. Defaults to ``True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
-            >>> _ = torch.manual_seed(0)
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.cummax(dim=0)
-            torch.return_types.cummax(
-            values=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False),
-            indices=TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},
-                        batch_size=torch.Size([3, 4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False))
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.cummax(reduce=True, dim=0)
-            torch.return_types.cummax(...)
-
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([1.0, 3.0, 2.0]), batch_size=[3])
+            >>> td.cummax(dim=0).values["a"]
+            tensor([1., 3., 3.])
+            >>> td.cummax(dim=0).indices["a"]
+            tensor([0, 1, 1])
         """
         result = self._cast_reduction(
             reduction_name="cummax",
@@ -812,126 +758,72 @@ class _Reductions:
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the mean value of all elements in the input tensordict.
+        """Returns the mean of every leaf, over all its elements or along batch dimensions.
 
         Args:
-            dim (int, tuple of int, str, optional): if ``None``, returns a dimensionless
-                tensordict containing the mean value of all leaves (if this can be computed).
-                If integer or tuple of integers, `mean` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, tuple of int or str, optional): the batch dimensions to
+                reduce. A negative ``dim`` counts from the end of the batch
+                dimensions. ``"feature"`` reduces the feature dimensions of each
+                leaf instead, and the result keeps the batch size. Defaults to
+                ``None``, which reduces every element of each leaf, and the result
+                has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Without a
+                ``dim``, pass ``dim=None`` to use it. Defaults to ``False``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is cast to dtype before the operation is performed.
-                This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Only applied when ``reduce=False``. Default: ``None``.
+            dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
+                before the reduction, which helps to prevent overflows. Defaults to
+                ``None``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            key_transform (Callable, optional): a function applied to the name of
+                every entry of the result, at every level of nesting, such as
+                ``lambda key: f"avg_{key}"``. Ignored when ``reduce=True``. Defaults
+                to ``None``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
+            ...     b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            ...     batch_size=(3, 4),
             ... )
-            >>> td.mean(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.mean()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.mean(dim=0).batch_size
+            torch.Size([4])
+            >>> td.mean(dim=0)["b", "c"].shape
+            torch.Size([4, 5, 6])
+            >>> td.mean()["a"].shape
+            torch.Size([])
+            >>> td.mean(dim="feature")["a"].shape
+            torch.Size([3, 4])
             >>> td.mean(reduce=True)
-            tensor(0.0456)
-            >>> td.mean(dim="feature")
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.mean(reduce=True, dim="feature")
+            tensor(0.0156)
+            >>> list(td.mean(key_transform=lambda key: f"avg_{key}").keys(True, True))
+            ['avg_a', ('avg_b', 'avg_c')]
+
+            With ``reduce=True`` and an int ``dim``, the leaves are concatenated
+            along ``dim`` before the reduction:
+
+            >>> td = TensorDict(a=torch.ones(3, 4), b=torch.ones(3, 4), batch_size=(3, 4))
+            >>> td.mean(dim=0, reduce=True)
+            tensor([1., 1., 1., 1.])
+            >>> td.mean(dim="feature", reduce=True)
             tensor([[1., 1., 1., 1.],
                     [1., 1., 1., 1.],
                     [1., 1., 1., 1.]])
-            >>> td.mean(reduce=True, dim=0)
-            tensor([[1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.]])
-            >>> # Using key_transform to add prefix to keys
-            >>> td.mean(key_transform=lambda key: f"avg_{key}")
-            TensorDict(
-                fields={
-                    avg_a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    avg_b: TensorDict(
-                        fields={
-                            avg_c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            avg_d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-
-
         """
         # if dim is NO_DEFAULT and not keepdim:
         #     dim = None
@@ -974,106 +866,48 @@ class _Reductions:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the mean of all non-NaN elements in the input tensordict.
+        """Returns the mean of the non-NaN elements of every leaf.
+
+        Works as :meth:`~.mean`, but ignores NaN values.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
-                tensordict containing the mean value of all leaves (if this can be computed).
-                If integer or tuple of integers, `mean` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, tuple of int or str, optional): the batch dimensions to
+                reduce. A negative ``dim`` counts from the end of the batch
+                dimensions. ``"feature"`` reduces the feature dimensions of each
+                leaf instead, and the result keeps the batch size. Defaults to
+                ``None``, which reduces every element of each leaf, and the result
+                has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is cast to dtype before the operation is performed.
-                This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
+            dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
+                before the reduction, which helps to prevent overflows. Defaults to
+                ``None``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
-            >>> _ = torch.manual_seed(0)
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.nanmean(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.nanmean()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-            >>> td.nanmean(reduce=True)
-            tensor(0.0456)
-            >>> td.nanmean(dim="feature")
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.nanmean(reduce=True, dim="feature")
-            tensor([[1., 1., 1., 1.],
-                    [1., 1., 1., 1.],
-                    [1., 1., 1., 1.]])
-            >>> td.nanmean(reduce=True, dim=0)
-            tensor([[1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.]])
-
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[1.0, float("nan")], [3.0, 4.0]]), batch_size=[2])
+            >>> td.nanmean()["a"]
+            tensor(2.6667)
+            >>> td.mean()["a"]
+            tensor(nan)
+            >>> td.nanmean(dim=0)["a"]
+            tensor([2., 4.])
         """
         return self._cast_reduction(
             reduction_name="nanmean",
@@ -1110,108 +944,49 @@ class _Reductions:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the produce of values of all elements in the input tensordict.
+        """Returns the product of every leaf, over all its elements or along a batch dimension.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
-                tensordict containing the prod value of all leaves (if this can be computed).
-                If integer or tuple of integers, `prod` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                A tuple reduces only its first dim; passing one is deprecated
-                and will be removed in TensorDict 0.17.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int or str, optional): the batch dimension to reduce. A negative
+                ``dim`` counts from the end of the batch dimensions. ``"feature"``
+                reduces the feature dimensions of each leaf instead, and the result
+                keeps the batch size. A tuple reduces only its first dimension;
+                passing one is deprecated and will be removed in TensorDict 0.17.
+                Defaults to ``None``, which reduces every element of each leaf, and
+                the result has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is cast to dtype before the operation is performed.
-                This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
+            dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
+                before the reduction, which helps to prevent overflows. Defaults to
+                ``None``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
-            >>> _ = torch.manual_seed(0)
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.prod(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.prod()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-            >>> td.prod(reduce=True)  # the product of many values below 1 underflows to 0
-            tensor(0.)
-            >>> td.prod(dim="feature")
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.prod(reduce=True, dim="feature")
-            tensor([[1., 1., 1., 1.],
-                    [1., 1., 1., 1.],
-                    [1., 1., 1., 1.]])
-            >>> td.prod(reduce=True, dim=0)
-            tensor([[1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.],
-                    [1., 1., 1., 1., 1.]])
-
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[1.0, 2.0], [3.0, 4.0]]), batch_size=[2])
+            >>> td.prod()["a"]
+            tensor(24.)
+            >>> td.prod(dim=0)["a"]
+            tensor([3., 8.])
+            >>> td.prod(dim="feature")["a"]
+            tensor([ 2., 12.])
+            >>> td.prod(reduce=True)
+            tensor(24.)
         """
         result = self._cast_reduction(
             reduction_name="prod",
@@ -1272,110 +1047,72 @@ class _Reductions:
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the sum value of all elements in the input tensordict.
+        """Returns the sum of every leaf, over all its elements or along batch dimensions.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
-                tensordict containing the sum value of all leaves (if this can be computed).
-                If integer or tuple of integers, `sum` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, tuple of int or str, optional): the batch dimensions to
+                reduce. A negative ``dim`` counts from the end of the batch
+                dimensions. ``"feature"`` reduces the feature dimensions of each
+                leaf instead, and the result keeps the batch size. Defaults to
+                ``None``, which reduces every element of each leaf, and the result
+                has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Without a
+                ``dim``, pass ``dim=None`` to use it. Defaults to ``False``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is cast to dtype before the operation is performed.
-                This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Only applied when ``reduce=False``. Default: ``None``.
+            dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
+                before the reduction, which helps to prevent overflows. Defaults to
+                ``None``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            key_transform (Callable, optional): a function applied to the name of
+                every entry of the result, at every level of nesting, such as
+                ``lambda key: f"sum_{key}"``. Ignored when ``reduce=True``. Defaults
+                to ``None``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
+            ...     b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            ...     batch_size=(3, 4),
             ... )
-            >>> td.sum(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.sum()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.sum(dim=0).batch_size
+            torch.Size([4])
+            >>> td.sum(dim=0)["b", "c"].shape
+            torch.Size([4, 5, 6])
+            >>> td.sum()["a"].shape
+            torch.Size([])
+            >>> td.sum(dim="feature")["a"].shape
+            torch.Size([3, 4])
             >>> td.sum(reduce=True)
-            tensor(21.9029)
-            >>> td.sum(dim="feature")
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.sum(reduce=True, dim="feature")
-            tensor([[15., 15., 15., 15.],
-                    [15., 15., 15., 15.],
-                    [15., 15., 15., 15.]])
-            >>> td.sum(reduce=True, dim=0)
-            tensor([[9., 9., 9., 9., 9.],
-                    [9., 9., 9., 9., 9.],
-                    [9., 9., 9., 9., 9.],
-                    [9., 9., 9., 9., 9.]])
+            tensor(6.5324)
+            >>> list(td.sum(key_transform=lambda key: f"sum_{key}").keys(True, True))
+            ['sum_a', ('sum_b', 'sum_c')]
 
+            With ``reduce=True`` and an int ``dim``, the leaves are concatenated
+            along ``dim`` before the reduction:
+
+            >>> td = TensorDict(a=torch.ones(3, 4), b=torch.ones(3, 4), batch_size=(3, 4))
+            >>> td.sum(dim=0, reduce=True)
+            tensor([6., 6., 6., 6.])
+            >>> td.sum(dim="feature", reduce=True)
+            tensor([[2., 2., 2., 2.],
+                    [2., 2., 2., 2.],
+                    [2., 2., 2., 2.]])
         """
         result = self._cast_reduction(
             reduction_name="sum",
@@ -1415,106 +1152,48 @@ class _Reductions:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the sum of all non-NaN elements in the input tensordict.
+        """Returns the sum of the non-NaN elements of every leaf.
+
+        Works as :meth:`~.sum`, but counts NaN values as zero.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
-                tensordict containing the sum value of all leaves (if this can be computed).
-                If integer or tuple of integers, `sum` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, tuple of int or str, optional): the batch dimensions to
+                reduce. A negative ``dim`` counts from the end of the batch
+                dimensions. ``"feature"`` reduces the feature dimensions of each
+                leaf instead, and the result keeps the batch size. Defaults to
+                ``None``, which reduces every element of each leaf, and the result
+                has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
-            dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is cast to dtype before the operation is performed.
-                This is useful for preventing data type overflows. Default: ``None``.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
+            dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
+                before the reduction, which helps to prevent overflows. Defaults to
+                ``None``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
-            >>> _ = torch.manual_seed(0)
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.nansum(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.nansum()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-            >>> td.nansum(reduce=True)
-            tensor(21.9029)
-            >>> td.nansum(dim="feature")
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.nansum(reduce=True, dim="feature")
-            tensor([[15., 15., 15., 15.],
-                    [15., 15., 15., 15.],
-                    [15., 15., 15., 15.]])
-            >>> td.nansum(reduce=True, dim=0)
-            tensor([[9., 9., 9., 9., 9.],
-                    [9., 9., 9., 9., 9.],
-                    [9., 9., 9., 9., 9.],
-                    [9., 9., 9., 9., 9.]])
-
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([[1.0, float("nan")], [3.0, 4.0]]), batch_size=[2])
+            >>> td.nansum()["a"]
+            tensor(8.)
+            >>> td.sum()["a"]
+            tensor(nan)
+            >>> td.nansum(dim=0)["a"]
+            tensor([4., 4.])
         """
         return self._cast_reduction(
             reduction_name="nansum",
@@ -1563,111 +1242,75 @@ class _Reductions:
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the standard deviation value of all elements in the input tensordict.
+        """Returns the standard deviation of every leaf, over all its elements or along batch dimensions.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
-                tensordict containing the sum value of all leaves (if this can be computed).
-                If integer or tuple of integers, `std` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-                With ``dim="feature"``, a leaf that has no feature dimension (as ``b.d`` in the
-                example) gives NaN, and torch warns that the degrees of freedom are ``<= 0``.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, tuple of int or str, optional): the batch dimensions to
+                reduce. A negative ``dim`` counts from the end of the batch
+                dimensions. ``"feature"`` reduces the feature dimensions of each
+                leaf instead, and the result keeps the batch size. Defaults to
+                ``None``, which reduces every element of each leaf, and the result
+                has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
-            correction (int): difference between the sample size and sample degrees of freedom.
-                Defaults to Bessel's correction, correction=1.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Only applied when ``reduce=False``. Default: ``None``.
+            correction (int, optional): the difference between the sample size and
+                the degrees of freedom. Defaults to ``1``, Bessel's correction.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            key_transform (Callable, optional): a function applied to the name of
+                every entry of the result, at every level of nesting, such as
+                ``lambda key: f"std_{key}"``. Ignored when ``reduce=True``. Defaults
+                to ``None``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
+
+        .. note:: With ``dim="feature"`` and the default ``correction``, a leaf
+            without feature dimensions gives NaN, and torch warns that the degrees
+            of freedom are ``<= 0``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
+            ...     b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            ...     batch_size=(3, 4),
             ... )
-            >>> td.std(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.std()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.std(dim=0).batch_size
+            torch.Size([4])
+            >>> td.std(dim=0)["b", "c"].shape
+            torch.Size([4, 5, 6])
+            >>> td.std()["a"].shape
+            torch.Size([])
+            >>> td.std(dim="feature")["a"].shape
+            torch.Size([3, 4])
             >>> td.std(reduce=True)
-            tensor(1.0353)
-            >>> td.std(dim="feature")  # b.d has no feature dimension: NaN and a UserWarning
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.std(reduce=True, dim="feature")
+            tensor(1.0264)
+            >>> list(td.std(key_transform=lambda key: f"std_{key}").keys(True, True))
+            ['std_a', ('std_b', 'std_c')]
+
+            With ``reduce=True`` and an int ``dim``, the leaves are concatenated
+            along ``dim`` before the reduction:
+
+            >>> td = TensorDict(a=torch.ones(3, 4), b=torch.ones(3, 4), batch_size=(3, 4))
+            >>> td.std(dim=0, reduce=True)
+            tensor([0., 0., 0., 0.])
+            >>> td.std(dim="feature", reduce=True)
             tensor([[0., 0., 0., 0.],
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
-            >>> td.std(reduce=True, dim=0)
-            tensor([[0., 0., 0., 0., 0.],
-                    [0., 0., 0., 0., 0.],
-                    [0., 0., 0., 0., 0.],
-                    [0., 0., 0., 0., 0.]])
-
         """
         result = self._cast_reduction(
             reduction_name="std",
@@ -1719,111 +1362,75 @@ class _Reductions:
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the variance value of all elements in the input tensordict.
+        """Returns the variance of every leaf, over all its elements or along batch dimensions.
 
         Args:
-            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
-                tensordict containing the sum value of all leaves (if this can be computed).
-                If integer or tuple of integers, `var` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-                With ``dim="feature"``, a leaf that has no feature dimension (as ``b.d`` in the
-                example) gives NaN, and torch warns that the degrees of freedom are ``<= 0``.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            dim (int, tuple of int or str, optional): the batch dimensions to
+                reduce. A negative ``dim`` counts from the end of the batch
+                dimensions. ``"feature"`` reduces the feature dimensions of each
+                leaf instead, and the result keeps the batch size. Defaults to
+                ``None``, which reduces every element of each leaf, and the result
+                has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
-            correction (int): difference between the sample size and sample degrees of freedom.
-                Defaults to Bessel's correction, correction=1.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Only applied when ``reduce=False``. Default: ``None``.
+            correction (int, optional): the difference between the sample size and
+                the degrees of freedom. Defaults to ``1``, Bessel's correction.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            key_transform (Callable, optional): a function applied to the name of
+                every entry of the result, at every level of nesting, such as
+                ``lambda key: f"var_{key}"``. Ignored when ``reduce=True``. Defaults
+                to ``None``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
+
+        .. note:: With ``dim="feature"`` and the default ``correction``, a leaf
+            without feature dimensions gives NaN, and torch warns that the degrees
+            of freedom are ``<= 0``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
             >>> td = TensorDict(
             ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
+            ...     b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)),
+            ...     batch_size=(3, 4),
             ... )
-            >>> td.var(dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.var()
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.var(dim=0).batch_size
+            torch.Size([4])
+            >>> td.var(dim=0)["b", "c"].shape
+            torch.Size([4, 5, 6])
+            >>> td.var()["a"].shape
+            torch.Size([])
+            >>> td.var(dim="feature")["a"].shape
+            torch.Size([3, 4])
             >>> td.var(reduce=True)
-            tensor(1.0719)
-            >>> td.var(dim="feature")  # b.d has no feature dimension: NaN and a UserWarning
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> td = TensorDict(
-            ...     a=torch.ones(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.ones(3, 4, 5),
-            ...         d=torch.ones(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.var(reduce=True, dim="feature")
+            tensor(1.0535)
+            >>> list(td.var(key_transform=lambda key: f"var_{key}").keys(True, True))
+            ['var_a', ('var_b', 'var_c')]
+
+            With ``reduce=True`` and an int ``dim``, the leaves are concatenated
+            along ``dim`` before the reduction:
+
+            >>> td = TensorDict(a=torch.ones(3, 4), b=torch.ones(3, 4), batch_size=(3, 4))
+            >>> td.var(dim=0, reduce=True)
+            tensor([0., 0., 0., 0.])
+            >>> td.var(dim="feature", reduce=True)
             tensor([[0., 0., 0., 0.],
                     [0., 0., 0., 0.],
                     [0., 0., 0., 0.]])
-            >>> td.var(reduce=True, dim=0)
-            tensor([[0., 0., 0., 0., 0.],
-                    [0., 0., 0., 0., 0.],
-                    [0., 0., 0., 0., 0.],
-                    [0., 0., 0., 0., 0.]])
-
         """
         result = self._cast_reduction(
             reduction_name="var",
@@ -1879,110 +1486,55 @@ class _Reductions:
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
     ) -> Self | torch.Tensor:  # noqa: D417
-        """Returns the q-th quantile of all elements in the input tensordict.
+        """Returns the ``q``-th quantile of every leaf, over all its elements or along a batch dimension.
 
         Args:
-            q (float or torch.Tensor): quantile to compute, must be between 0 and 1.
-            dim (int, str, optional): if ``None``, returns a dimensionless
-                tensordict containing the quantile value of all leaves (if this can be computed).
-                If integer, `quantile` is called upon the dimension specified if
-                and only if this dimension is compatible with the tensordict
-                shape.
-                A tuple reduces only its first dim; passing one is deprecated
-                and will be removed in TensorDict 0.17.
-                Only the `"feature"` string is currently permitted. Using `dim="feature"` will
-                achieve the reduction over all feature dimensions. If `reduce=True`, a tensor of the
-                shape of the TensorDict's batch-size will be returned. Otherwise, a new tensordict
-                with the same structure as ``self`` with reduced feature dimensions will be returned.
-            keepdim (bool): whether the output tensor has dim retained or not.
+            q (float or torch.Tensor): the quantile, between 0 and 1. With a
+                1-dimensional tensor of ``n`` quantiles, every leaf of the result
+                gets a leading dimension of size ``n``, and so does the batch size
+                when ``dim`` is given.
+            dim (int or str, optional): the batch dimension to reduce. A negative
+                ``dim`` counts from the end of the batch dimensions. ``"feature"``
+                reduces the feature dimensions of each leaf instead, and the result
+                keeps the batch size. A tuple reduces only its first dimension;
+                passing one is deprecated and will be removed in TensorDict 0.17.
+                Defaults to ``None``, which reduces every element of each leaf, and
+                the result has an empty batch size.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
-            interpolation (str): interpolation method to use when the desired quantile lies
-                between two data points. Options are 'linear', 'lower', 'higher', 'midpoint', and 'nearest'.
-                Defaults to 'linear'.
-            reduce (bool, optional): if ``True``, the reduction will occur across all TensorDict values
-                and a single reduced tensor will be returned.
-                Defaults to ``False``. With feature dims, a negative ``dim`` counts from the end of
-                each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-                the end of the batch dims, as with ``reduce=False``.
-            key_transform (Callable[[NestedKey], NestedKey], optional): A function to transform key names.
-                If provided, all keys in the result will be transformed using this function.
-                For string keys, the function receives a string. For tuple keys, it receives a tuple.
-                Only applied when ``reduce=False``. Default: ``None``.
+            interpolation (str, optional): the method used when the quantile lies
+                between two data points: ``"linear"``, ``"lower"``, ``"higher"``,
+                ``"midpoint"`` or ``"nearest"``. Defaults to ``"linear"``.
+            reduce (bool, optional): if ``True``, reduces all the leaves together
+                and returns a single tensor. Without ``dim``, the result is a
+                scalar. With an int ``dim``, the leaves are concatenated along
+                ``dim`` first, so they must have the same number of dimensions. With
+                ``dim="feature"``, the result has the batch size as its shape. With
+                feature dimensions, a negative ``dim`` counts from the end of each
+                leaf. Starting with TensorDict 0.17, the default will change to
+                counting it from the end of the batch dimensions, as with
+                ``reduce=False``. Defaults to ``False``.
+            key_transform (Callable, optional): a function applied to the name of
+                every entry of the result, at every level of nesting, such as
+                ``lambda key: f"median_{key}"``. Ignored when ``reduce=True``.
+                Defaults to ``None``.
+
+        Returns:
+            A new tensordict, or a tensor if ``reduce=True``.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
-            >>> _ = torch.manual_seed(0)
-            >>> td = TensorDict(
-            ...     a=torch.randn(3, 4, 5),
-            ...     b=TensorDict(
-            ...         c=torch.randn(3, 4, 5, 6),
-            ...         d=torch.randn(3, 4, 5),
-            ...         batch_size=(3, 4, 5),
-            ...     ),
-            ...     batch_size=(3, 4)
-            ... )
-            >>> td.quantile(0.5, dim=0)  # median along dim 0
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([4]),
-                device=None,
-                is_shared=False)
-            >>> td.quantile(0.5)  # median of all elements
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-            >>> td.quantile(0.5, reduce=True)  # single median value
-            tensor(0.0603)
-            >>> td.quantile(0.5, dim="feature")  # median along feature dimensions
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-            >>> # Multiple quantiles
-            >>> td.quantile(torch.tensor([0.25, 0.5, 0.75]), dim=0)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),
-                            d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4, 5]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3, 4]),
-                device=None,
-                is_shared=False)
-
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.arange(5.0), b=torch.arange(5.0) * 2, batch_size=[5])
+            >>> td.quantile(0.5)["b"]
+            tensor(4.)
+            >>> td.quantile(torch.tensor([0.25, 0.75]), dim=0)["a"]
+            tensor([1., 3.])
+            >>> td.quantile(0.5, reduce=True)  # the median of the ten elements
+            tensor(2.5000)
         """
         result = self._cast_reduction(
             reduction_name="quantile",
@@ -2275,19 +1827,33 @@ class _Reductions:
         )
 
     def logsumexp(self, dim=None, keepdim=False, *, out=None):  # noqa: D417
-        """Returns the log of summed exponentials of each row of the input tensordict in the given dimension ``dim``. The computation is numerically stabilized.
+        """Returns the log of the summed exponentials of every leaf along batch dimensions.
 
-        If keepdim is ``True``, the output tensor is of the same size as input except in the dimension(s) ``dim`` where it is of size ``1``.
-        Otherwise, ``dim`` is squeezed (see :func:`~torch.squeeze`), resulting in the output tensor having 1 (or len(dim)) fewer dimension(s).
+        The computation is numerically stable, as with :func:`torch.logsumexp`.
+        Unlike :meth:`~.sum`, it never reduces the feature dimensions: without
+        ``dim``, it reduces every batch dimension.
 
         Args:
-            dim (int or tuple of ints, optional): the dimension or dimensions to reduce. If ``None``, all batch dimensions of the
-                tensordict are reduced.
-            keepdim (bool): whether the output tensordict has dim retained or not.
+            dim (int or tuple of int, optional): the batch dimensions to reduce. A
+                negative ``dim`` counts from the end of the batch dimensions.
+                Defaults to ``None``, which reduces all the batch dimensions.
+            keepdim (bool, optional): if ``True``, the reduced batch dimensions are
+                kept with size 1. Defaults to ``False``.
 
         Keyword Args:
-            out (TensorDictBase, optional): the output tensordict.
+            out (TensorDictBase, optional): the tensordict to write the result into,
+                which is returned. Defaults to ``None``, which returns a new
+                tensordict.
 
+        Raises:
+            ValueError: if ``dim`` is not a batch dimension.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(2, 3), batch_size=[2])
+            >>> td.logsumexp()["a"]  # log(exp(0) + exp(0))
+            tensor([0.6931, 0.6931, 0.6931])
         """
         if isinstance(dim, int):
             if dim < 0:

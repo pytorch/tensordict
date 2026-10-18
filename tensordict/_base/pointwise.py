@@ -62,94 +62,75 @@ class _PointwiseOps:
     """Elementwise arithmetic, comparison and logical operations."""
 
     def __abs__(self) -> Self:
-        """Returns a new TensorDict instance with absolute values of all tensors.
-
-        Returns:
-            A new TensorDict instance with the same key set as the original,
-            but with all tensors having their absolute values computed.
+        """Returns ``abs(td)``, a new tensordict with the absolute value of every leaf.
 
         .. seealso:: :meth:`~.abs`
-
         """
         return self.abs()
 
     def __neg__(self) -> Self:
-        """Returns a new TensorDict instance with negated values of all tensors.
-
-        Returns:
-            A new TensorDict instance with the same key set as the original,
-            but with all tensors having their values negated.
+        """Returns ``-td``, a new tensordict with every leaf negated.
 
         .. seealso:: :meth:`~.neg`
-
         """
         return self.neg()
 
     def __ne__(self, other: Any) -> Self | bool:
-        """NOT operation over two tensordicts, for evey key.
+        """Compares the tensordict with ``other`` leaf by leaf with ``!=``.
 
-        The two tensordicts must have the same key set.
+        Works as :meth:`~.__eq__`, except that an ``other`` of another type
+        gives ``True``.
 
         Args:
-            other (TensorDictBase, dict, or float): the value to compare against.
+            other (TensorDictBase, dict, torch.Tensor or Number): the value to
+                compare with.
 
         Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            A new tensordict of boolean leaves, or ``True``.
         """
         return self._compare(other, "__ne__", "__ne__", default=True)
 
     def __xor__(self, other: Any) -> Self | bool:
-        """XOR operation over two tensordicts, for evey key.
+        """Computes ``self ^ other`` leaf by leaf and returns a new tensordict.
 
-        The two tensordicts must have the same key set.
+        The operation is a logical XOR for boolean leaves and a bitwise XOR for
+        integer leaves. ``other`` is paired as in :meth:`~.__eq__`: a
+        tensordict or ``dict`` must have the same keys, or a ``KeyError`` is
+        raised.
 
         Args:
-            other (TensorDictBase, dict, or float): the value to compare against.
-
-        Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            other (TensorDictBase, dict, torch.Tensor or Number): the other
+                operand.
         """
         return self._compare(other, "__xor__", "__xor__", default=True)
 
     def __rxor__(self, other: TensorCollection | torch.Tensor | float):
-        """XOR operation over two tensordicts, for evey key.
-
-        Wraps `__xor__` as it is assumed to be commutative.
-        """
+        """Computes ``other ^ self``, which is the same as ``self ^ other``."""
         return self.__xor__(other)
 
     def __or__(self, other: Any) -> Self | bool:
-        """OR operation over two tensordicts, for evey key.
+        """Computes ``self | other`` leaf by leaf and returns a new tensordict.
 
-        The two tensordicts must have the same key set.
+        The operation is a logical OR for boolean leaves and a bitwise OR for
+        integer leaves. ``other`` is paired as in :meth:`~.__eq__`: a
+        tensordict or ``dict`` must have the same keys, or a ``KeyError`` is
+        raised.
 
         Args:
-            other (TensorDictBase, dict, or float): the value to compare against.
-
-        Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            other (TensorDictBase, dict, torch.Tensor or Number): the other
+                operand.
         """
         return self._compare(other, "__or__", "__or__", default=False)
 
     def __ror__(self, other: TensorCollection | torch.Tensor) -> Self:
-        """Right-side OR operation over two tensordicts, for evey key.
-
-        This is a wrapper around `__or__` since it is assumed to be commutative.
-        """
+        """Computes ``other | self``, which is the same as ``self | other``."""
         return self | other
 
     def __invert__(self) -> Self:
-        """Returns a new TensorDict instance with all tensors inverted (i.e., bitwise NOT operation).
+        """Returns ``~td``, a new tensordict with ``~`` applied to every leaf.
 
-        Returns:
-            A new TensorDict instance with the same key set as the original,
-            but with all tensors having their bits inverted.
+        The operation is a logical NOT for boolean leaves and a bitwise NOT for
+        integer leaves.
         """
         keys, vals = self._items_list(True, True)
         vals = [~v for v in vals]
@@ -167,14 +148,23 @@ class _PointwiseOps:
         )
 
     def __and__(self, other: TensorCollection | torch.Tensor | float) -> Self:
-        """Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value.
+        """Computes ``self & other`` leaf by leaf and returns a new tensordict.
+
+        The operation is a logical AND for boolean leaves and a bitwise AND for
+        integer leaves. A tensordict ``other`` is paired with the tensordict key
+        by key and must have the same keys, or a ``KeyError`` is raised.
 
         Args:
-            other: The value to perform the AND operation with.
+            other (TensorDictBase, torch.Tensor or Number): the other operand.
 
-        Returns:
-            A new TensorDict instance with the same key set as the original,
-            but with all tensors having performed a AND operation with the given value.
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([1.0, 2.0, 3.0]), batch_size=[3])
+            >>> ((td > 1) & (td < 3))["a"]
+            tensor([False,  True, False])
+            >>> (~(td > 1))["a"]
+            tensor([ True, False, False])
         """
         if _mixes_lazy_stacks(self, (other,)):
             # as for | and ^: the foreach path below flattens a lazy stack
@@ -207,52 +197,91 @@ class _PointwiseOps:
     __rand__ = __and__
 
     def __eq__(self, other: Any) -> Self | bool:
-        """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
+        """Compares the tensordict with ``other`` leaf by leaf with ``==``.
+
+        ``other`` can be a tensordict or a ``dict`` with the same keys, paired
+        with the tensordict key by key (a ``KeyError`` is raised if the keys
+        differ); a tensor, which is aligned with the batch dimensions of each
+        leaf; or a number. A batch size that differs from the tensordict's is
+        broadcast with it. An ``other`` of another type, such as ``None``,
+        gives ``False``. The other comparisons (``!=``, ``<``, ``<=``, ``>``,
+        ``>=``) work the same way.
+
+        Args:
+            other (TensorDictBase, dict, torch.Tensor or Number): the value to
+                compare with.
 
         Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
+            A new tensordict of boolean leaves, or ``False``.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.tensor([1.0, 2.0]), b=torch.zeros(2), batch_size=[2])
+            >>> (td == 1)["a"]
+            tensor([ True, False])
+            >>> (td == td.clone()).all()
+            True
+            >>> (td >= torch.tensor([2.0, 0.0]))["b"]
+            tensor([False,  True])
+            >>> td == None
+            False
         """
         return self._compare(other, "__eq__", "__eq__", default=False)
 
     def __ge__(self, other: Any) -> Self | bool:
-        """Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
+        """Compares the tensordict with ``other`` leaf by leaf with ``>=``.
+
+        Works as :meth:`~.__eq__`.
+
+        Args:
+            other (TensorDictBase, dict, torch.Tensor or Number): the value to
+                compare with.
 
         Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            A new tensordict of boolean leaves, or ``False``.
         """
         return self._compare(other, "__ge__", "__le__", default=False)
 
     def __gt__(self, other: Any) -> Self | bool:
-        """Compares two tensordicts against each other using the "greater than" operator, for every key. The two tensordicts must have the same key set.
+        """Compares the tensordict with ``other`` leaf by leaf with ``>``.
+
+        Works as :meth:`~.__eq__`.
+
+        Args:
+            other (TensorDictBase, dict, torch.Tensor or Number): the value to
+                compare with.
 
         Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            A new tensordict of boolean leaves, or ``False``.
         """
         return self._compare(other, "__gt__", "__lt__", default=False)
 
     def __le__(self, other: Any) -> Self | bool:
-        """Compares two tensordicts against each other using the "lower or equal" operator, for every key. The two tensordicts must have the same key set.
+        """Compares the tensordict with ``other`` leaf by leaf with ``<=``.
+
+        Works as :meth:`~.__eq__`.
+
+        Args:
+            other (TensorDictBase, dict, torch.Tensor or Number): the value to
+                compare with.
 
         Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            A new tensordict of boolean leaves, or ``False``.
         """
         return self._compare(other, "__le__", "__ge__", default=False)
 
     def __lt__(self, other: Any) -> Self | bool:
-        """Compares two tensordicts against each other using the "lower than" operator, for every key. The two tensordicts must have the same key set.
+        """Compares the tensordict with ``other`` leaf by leaf with ``<``.
+
+        Works as :meth:`~.__eq__`.
+
+        Args:
+            other (TensorDictBase, dict, torch.Tensor or Number): the value to
+                compare with.
 
         Returns:
-            a new TensorDict instance with all tensors are boolean
-            tensors of the same shape as the original tensors.
-
+            A new tensordict of boolean leaves, or ``False``.
         """
         return self._compare(other, "__lt__", "__gt__", default=False)
 
@@ -319,10 +348,10 @@ class _PointwiseOps:
         return default
 
     def isfinite(self) -> Self:
-        """Returns a new tensordict with boolean elements representing if each element is finite or not.
+        """Returns a new tensordict with :func:`torch.isfinite` applied to every leaf.
 
-        Real values are finite when they are not NaN, negative infinity, or infinity. Complex values are finite when both their real and imaginary parts are finite.
-
+        The leaves of the result are ``True`` where an element is neither NaN
+        nor infinite.
         """
         keys, vals = self._items_list(True, True)
         vals = [val.isfinite() for val in vals]
@@ -340,10 +369,9 @@ class _PointwiseOps:
         )
 
     def isnan(self) -> Self:
-        """Returns a new tensordict with boolean elements representing if each element of input is NaN or not.
+        """Returns a new tensordict with :func:`torch.isnan` applied to every leaf.
 
-        Complex values are considered NaN when either their real and/or imaginary part is NaN.
-
+        The leaves of the result are ``True`` where an element is NaN.
         """
         keys, vals = self._items_list(True, True)
         vals = [val.isnan() for val in vals]
@@ -361,7 +389,7 @@ class _PointwiseOps:
         )
 
     def isneginf(self) -> Self:
-        """Returns a tensordict of boolean leaves that are ``True`` where the element is negative infinity."""
+        """Returns a new tensordict with :func:`torch.isneginf` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         vals = [val.isneginf() for val in vals]
         items = dict(zip(keys, vals))
@@ -378,7 +406,7 @@ class _PointwiseOps:
         )
 
     def isposinf(self) -> Self:
-        """Returns a tensordict of boolean leaves that are ``True`` where the element is positive infinity."""
+        """Returns a new tensordict with :func:`torch.isposinf` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         vals = [val.isposinf() for val in vals]
         items = dict(zip(keys, vals))
@@ -395,7 +423,7 @@ class _PointwiseOps:
         )
 
     def isreal(self) -> Self:
-        """Returns a new tensordict with boolean elements representing if each element of input is real-valued or not."""
+        """Returns a new tensordict with :func:`torch.isreal` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         vals = [val.isreal() for val in vals]
         items = dict(zip(keys, vals))
@@ -464,7 +492,31 @@ class _PointwiseOps:
         return self.pow_(other)
 
     def abs(self) -> Self:
-        """Computes the absolute value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.abs` applied to every leaf.
+
+        The other unary operations (:meth:`~.exp`, :meth:`~.log`,
+        :meth:`~.sqrt`, :meth:`~.sin`...) work the same way. Each has an
+        in-place twin with a trailing underscore (:meth:`~.abs_`,
+        :meth:`~.exp_`...) that writes into the leaves and returns ``self``.
+        See :ref:`inplace-conventions`.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     a=torch.tensor([-1.0, 2.0]),
+            ...     b=TensorDict(c=torch.tensor([-3.0, 0.0]), batch_size=[2]),
+            ...     batch_size=[2],
+            ... )
+            >>> td.abs()["b", "c"]
+            tensor([3., 0.])
+            >>> td.exp()["a"]
+            tensor([0.3679, 7.3891])
+            >>> td.abs_() is td
+            True
+            >>> td["a"]
+            tensor([1., 2.])
+        """
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -484,14 +536,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def abs_(self) -> Self:
-        """Computes the absolute value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.abs` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("abs_", vals)
         return self
 
     def acos(self) -> Self:
-        """Computes the :func:`~torch.acos` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.acos` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -511,14 +563,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def acos_(self) -> Self:
-        """Computes the :func:`~torch.acos` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.acos` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("acos_", vals)
         return self
 
     def exp(self) -> Self:
-        """Computes the :func:`~torch.exp` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.exp` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -538,14 +590,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def exp_(self) -> Self:
-        """Computes the :func:`~torch.exp` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.exp` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("exp_", vals)
         return self
 
     def neg(self) -> Self:
-        """Computes the :func:`~torch.neg` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.neg` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         # Empty tensordict (no tensors) - return a copy unchanged
         if not vals:
@@ -568,7 +620,7 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def neg_(self) -> Self:
-        """Computes the :func:`~torch.neg` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.neg` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         # Empty tensordict (no tensors) - nothing to do
         if not vals:
@@ -580,7 +632,7 @@ class _PointwiseOps:
         return self
 
     def reciprocal(self) -> Self:
-        """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.reciprocal` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -600,14 +652,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def reciprocal_(self) -> Self:
-        """Computes the :func:`~torch.reciprocal` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.reciprocal` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("reciprocal_", vals)
         return self
 
     def sigmoid(self) -> Self:
-        """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.sigmoid` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -627,14 +679,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def sigmoid_(self) -> Self:
-        """Computes the :func:`~torch.sigmoid` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.sigmoid` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("sigmoid_", vals)
         return self
 
     def sign(self) -> Self:
-        """Computes the :func:`~torch.sign` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.sign` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -654,14 +706,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def sign_(self) -> Self:
-        """Computes the :func:`~torch.sign` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.sign` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("sign_", vals)
         return self
 
     def sin(self) -> Self:
-        """Computes the :func:`~torch.sin` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.sin` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -681,14 +733,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def sin_(self) -> Self:
-        """Computes the :func:`~torch.sin` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.sin` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("sin_", vals)
         return self
 
     def sinh(self) -> Self:
-        """Computes the :func:`~torch.sinh` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.sinh` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -708,14 +760,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def sinh_(self) -> Self:
-        """Computes the :func:`~torch.sinh` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.sinh` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("sinh_", vals)
         return self
 
     def tan(self) -> Self:
-        """Computes the :func:`~torch.tan` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.tan` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -735,14 +787,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def tan_(self) -> Self:
-        """Computes the :func:`~torch.tan` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.tan` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("tan_", vals)
         return self
 
     def tanh(self) -> Self:
-        """Computes the :func:`~torch.tanh` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.tanh` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -762,14 +814,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def tanh_(self) -> Self:
-        """Computes the :func:`~torch.tanh` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.tanh` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("tanh_", vals)
         return self
 
     def trunc(self) -> Self:
-        """Computes the :func:`~torch.trunc` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.trunc` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -789,14 +841,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def trunc_(self) -> Self:
-        """Computes the :func:`~torch.trunc` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.trunc` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("trunc_", vals)
         return self
 
     def lgamma(self) -> Self:
-        """Computes the :func:`~torch.lgamma` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.lgamma` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -816,14 +868,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def lgamma_(self) -> Self:
-        """Computes the :func:`~torch.lgamma` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.lgamma` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("lgamma_", vals)
         return self
 
     def frac(self) -> Self:
-        """Computes the :func:`~torch.frac` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.frac` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -843,14 +895,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def frac_(self) -> Self:
-        """Computes the :func:`~torch.frac` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.frac` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("frac_", vals)
         return self
 
     def expm1(self) -> Self:
-        """Computes the :func:`~torch.expm1` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.expm1` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -870,14 +922,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def expm1_(self) -> Self:
-        """Computes the :func:`~torch.expm1` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.expm1` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("expm1_", vals)
         return self
 
     def log(self) -> Self:
-        """Computes the :func:`~torch.log` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.log` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -897,21 +949,29 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def log_(self) -> Self:
-        """Computes the :func:`~torch.log` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.log` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("log_", vals)
         return self
 
     def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
-        """Apply a softmax function to the tensordict elements.
+        """Returns a new tensordict with :func:`torch.softmax` applied to every leaf along a batch dimension.
 
         Args:
-            dim (int or tuple of ints): A tensordict dimension along which softmax will be computed.
-            dtype (torch.dtype, optional): the desired data type of returned tensor.
-                If specified, the input tensor is cast to dtype before the operation is performed.
-                This is useful for preventing data type overflows.
+            dim (int): the batch dimension along which softmax is computed. A
+                negative ``dim`` counts from the end of the batch dimensions.
+            dtype (torch.dtype, optional): if given, each leaf is cast to this
+                dtype before the operation, which helps to prevent overflows.
+                Defaults to ``None``.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+            >>> td.softmax(0)["x"]
+            tensor([[0.5000, 0.5000, 0.5000],
+                    [0.5000, 0.5000, 0.5000]])
         """
         if isinstance(dim, int):
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
@@ -922,7 +982,7 @@ class _PointwiseOps:
         )
 
     def log10(self) -> Self:
-        """Computes the :func:`~torch.log10` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.log10` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -942,14 +1002,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def log10_(self) -> Self:
-        """Computes the :func:`~torch.log10` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.log10` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("log10_", vals)
         return self
 
     def log1p(self) -> Self:
-        """Computes the :func:`~torch.log1p` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.log1p` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -969,14 +1029,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def log1p_(self) -> Self:
-        """Computes the :func:`~torch.log1p` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.log1p` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("log1p_", vals)
         return self
 
     def log2(self) -> Self:
-        """Computes the :func:`~torch.log2` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.log2` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -996,14 +1056,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def log2_(self) -> Self:
-        """Computes the :func:`~torch.log2` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.log2` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("log2_", vals)
         return self
 
     def ceil(self) -> Self:
-        """Computes the :func:`~torch.ceil` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.ceil` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1023,14 +1083,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def ceil_(self) -> Self:
-        """Computes the :func:`~torch.ceil` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.ceil` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("ceil_", vals)
         return self
 
     def floor(self) -> Self:
-        """Computes the :func:`~torch.floor` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.floor` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1050,14 +1110,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def floor_(self) -> Self:
-        """Computes the :func:`~torch.floor` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.floor` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("floor_", vals)
         return self
 
     def round(self) -> Self:
-        """Computes the :func:`~torch.round` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.round` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1077,14 +1137,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def round_(self) -> Self:
-        """Computes the :func:`~torch.round` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.round` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("round_", vals)
         return self
 
     def erf(self) -> Self:
-        """Computes the :func:`~torch.erf` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.erf` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1104,14 +1164,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def erf_(self) -> Self:
-        """Computes the :func:`~torch.erf` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.erf` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("erf_", vals)
         return self
 
     def erfc(self) -> Self:
-        """Computes the :func:`~torch.erfc` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.erfc` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1131,14 +1191,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def erfc_(self) -> Self:
-        """Computes the :func:`~torch.erfc` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.erfc` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("erfc_", vals)
         return self
 
     def asin(self) -> Self:
-        """Computes the :func:`~torch.asin` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.asin` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1158,14 +1218,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def asin_(self) -> Self:
-        """Computes the :func:`~torch.asin` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.asin` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("asin_", vals)
         return self
 
     def atan(self) -> Self:
-        """Computes the :func:`~torch.atan` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.atan` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1185,14 +1245,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def atan_(self) -> Self:
-        """Computes the :func:`~torch.atan` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.atan` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("atan_", vals)
         return self
 
     def cos(self) -> Self:
-        """Computes the :func:`~torch.cos` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.cos` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1212,14 +1272,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def cos_(self) -> Self:
-        """Computes the :func:`~torch.cos` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.cos` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("cos_", vals)
         return self
 
     def cosh(self) -> Self:
-        """Computes the :func:`~torch.cosh` value of each element of the TensorDict."""
+        """Returns a new tensordict with :func:`torch.cosh` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -1239,7 +1299,7 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def cosh_(self) -> Self:
-        """Computes the :func:`~torch.cosh` value of each element of the TensorDict in-place."""
+        """Applies :func:`torch.cosh` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("cosh_", vals)
@@ -1252,22 +1312,25 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Performs a bitwise AND operation between ``self`` and :attr:`other`.
+        r"""Returns a new tensordict with the bitwise AND of every leaf and ``other``.
 
         .. math::
             \text{out}_i = \text{input}_i \land \text{other}_i
 
         Args:
-            other (TensorDictBase or torch.Tensor): the tensor or TensorDict to perform the bitwise AND with.
+            other (TensorDictBase, torch.Tensor or Number): the other operand. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
@@ -1306,22 +1369,28 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Performs a logical AND operation between ``self`` and :attr:`other`.
+        r"""Returns a new tensordict with the logical AND of every leaf and ``other``.
+
+        Nonzero elements count as ``True``, and the leaves of the result are
+        boolean.
 
         .. math::
             \text{out}_i = \text{input}_i \land \text{other}_i
 
         Args:
-            other (TensorDictBase or torch.Tensor): the tensor or TensorDict to perform the logical AND with.
+            other (TensorDictBase or torch.Tensor): the other operand. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
@@ -1361,24 +1430,44 @@ class _PointwiseOps:
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Adds :attr:`other`, scaled by :attr:`alpha`, to ``self``.
+        r"""Returns a new tensordict with ``other``, scaled by ``alpha``, added to every leaf.
+
+        ``td + other`` and ``other + td`` call this method.
 
         .. math::
             \text{out}_i = \text{input}_i + \text{alpha} \times \text{other}_i
 
         Args:
-            other (TensorDictBase or torch.Tensor): the tensor or TensorDict to add to ``self``.
+            other (TensorDictBase, torch.Tensor or Number): the value to add. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            alpha (Number, optional): the multiplier for :attr:`other`.
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            alpha (Number, optional): the multiplier for ``other``. Defaults to
+                ``None``, which adds ``other`` as it is.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(2, 3), b=torch.ones(2), batch_size=[2])
+            >>> td.add(1, alpha=2)["b"]
+            tensor([3., 3.])
+            >>> td.add(torch.tensor([1.0, 2.0]))["a"]  # one value per batch element
+            tensor([[1., 1., 1.],
+                    [2., 2., 2.]])
+            >>> other = TensorDict(b=torch.ones(2), c=torch.ones(2), batch_size=[2])
+            >>> sorted(td.add(other, default="intersection").keys())
+            ['b']
+            >>> sorted(td.add(other, default=torch.zeros(())).keys())
+            ['a', 'b', 'c']
         """
         keys, vals = self._items_list(True, True)
         # Empty tensordict (no tensors) - return a copy unchanged
@@ -1436,10 +1525,19 @@ class _PointwiseOps:
         *,
         alpha: float | None = None,
     ) -> Self:
-        """In-place version of :meth:`~.add`.
+        """Adds ``other``, scaled by ``alpha``, to every leaf in place and returns ``self``.
 
-        .. note::
-            In-place ``add`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.add`, called by ``td += other``. It
+        has no ``default``: a tensordict ``other`` must have every key of the
+        tensordict, and its other keys are ignored.
+
+        Args:
+            other (TensorDictBase, torch.Tensor or Number): the value to add,
+                paired with the leaves as in :meth:`~.add`.
+
+        Keyword Args:
+            alpha (Number, optional): the multiplier for ``other``. Defaults to
+                ``None``, which adds ``other`` as it is.
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -1477,19 +1575,24 @@ class _PointwiseOps:
         end: TensorCollection | torch.Tensor,
         weight: TensorCollection | torch.Tensor | float,
     ) -> Self:
-        r"""Does a linear interpolation of two tensors :attr:`start` (given by ``self``) and :attr:`end` based on a scalar or tensor :attr:`weight`.
+        r"""Returns a new tensordict that interpolates linearly from every leaf (the start) to ``end``.
 
         .. math::
             \text{out}_i = \text{start}_i + \text{weight}_i \times (\text{end}_i - \text{start}_i)
 
-        The shapes of :attr:`start` and :attr:`end` must be
-        broadcastable. If :attr:`weight` is a tensor, then
-        the shapes of :attr:`weight`, :attr:`start`, and :attr:`end` must be broadcastable.
-
         Args:
-            end (TensorDict): the tensordict with the ending points.
-            weight (TensorDict, tensor or float): the weight for the interpolation formula.
+            end (TensorDictBase): the end points, paired with the tensordict
+                key by key. It must have every key of the tensordict.
+            weight (TensorDictBase or float): the interpolation weight: a
+                number for all the leaves, or a tensordict paired key by key.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> start = TensorDict(x=torch.zeros(2), batch_size=[2])
+            >>> end = TensorDict(x=torch.full((2,), 10.0), batch_size=[2])
+            >>> start.lerp(end, 0.25)["x"]
+            tensor([2.5000, 2.5000])
         """
         if (isinstance(end, Tensor) and end.ndim) or (
             isinstance(weight, Tensor) and weight.ndim
@@ -1531,7 +1634,16 @@ class _PointwiseOps:
         end: TensorDictBase | torch.Tensor | float,
         weight: TensorDictBase | torch.Tensor | float,
     ):
-        """In-place version of :meth:`~.lerp`."""
+        """Interpolates linearly from every leaf to ``end`` in place and returns ``self``.
+
+        The in-place version of :meth:`~.lerp`.
+
+        Args:
+            end (TensorDictBase): the end points, paired with the tensordict
+                key by key. It must have every key of the tensordict.
+            weight (TensorDictBase or float): the interpolation weight: a
+                number for all the leaves, or a tensordict paired key by key.
+        """
         if (isinstance(end, Tensor) and end.ndim) or (
             isinstance(weight, Tensor) and weight.ndim
         ):
@@ -1566,23 +1678,27 @@ class _PointwiseOps:
         other2: TensorDictBase | torch.Tensor,
         value: float | None = 1,
     ) -> Self:  # noqa: D417
-        r"""Performs the element-wise division of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
+        r"""Returns a new tensordict with ``value * other1 / other2`` added to every leaf.
 
         .. math::
             \text{out}_i = \text{input}_i + \text{value} \times \frac{\text{other1}_i}{\text{other2}_i}
 
-        The shapes of the elements of ``self``, :attr:`other1`, and :attr:`other2` must be
-        broadcastable.
-
-        For inputs of type `FloatTensor` or `DoubleTensor`, :attr:`value` must be
-        a real number, otherwise an integer.
-
         Args:
-            other1 (TensorDict or Tensor): the numerator tensordict (or tensor)
-            other2 (TensorDict or Tensor): the denominator tensordict (or tensor)
+            other1 (TensorDictBase or torch.Tensor): the numerator. A tensordict
+                is paired with the tensordict key by key and must have all its
+                keys. A tensor is aligned with the batch dimensions of each leaf
+                and expanded over its feature dimensions.
+            other2 (TensorDictBase or torch.Tensor): the denominator, paired
+                like ``other1``.
+            value (Number, optional): the multiplier for
+                :math:`\text{other1} / \text{other2}`. Defaults to ``1``.
 
-        Keyword Args:
-            value (Number, optional): multiplier for :math:`\text{other1} / \text{other2}`
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(x=torch.ones(2), batch_size=[2])
+            >>> td.addcdiv(torch.tensor([1.0, 2.0]), torch.tensor([2.0, 2.0]), value=2)["x"]
+            tensor([2., 3.])
         """
         keys, vals = self._items_list(True, True)
         if not vals:
@@ -1612,7 +1728,20 @@ class _PointwiseOps:
     @_write_back_inplace
     @_maybe_broadcast_other("addcdiv_", 2)
     def addcdiv_(self, other1, other2, *, value: float | None = 1):
-        """The in-place version of :meth:`~.addcdiv`."""
+        r"""Adds ``value * other1 / other2`` to every leaf in place and returns ``self``.
+
+        The in-place version of :meth:`~.addcdiv`.
+
+        Args:
+            other1 (TensorDictBase or torch.Tensor): the numerator, paired with
+                the leaves as in :meth:`~.addcdiv`.
+            other2 (TensorDictBase or torch.Tensor): the denominator, paired
+                like ``other1``.
+
+        Keyword Args:
+            value (Number, optional): the multiplier for
+                :math:`\text{other1} / \text{other2}`. Defaults to ``1``.
+        """
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
         if not vals:
@@ -1642,23 +1771,29 @@ class _PointwiseOps:
         *,
         value: float | None = 1,
     ) -> Self:  # noqa: D417
-        r"""Performs the element-wise multiplication of :attr:`other1` by :attr:`other2`, multiplies the result by the scalar :attr:`value` and adds it to ``self``.
+        r"""Returns a new tensordict with ``value * other1 * other2`` added to every leaf.
 
         .. math::
             \text{out}_i = \text{input}_i + \text{value} \times \text{other1}_i \times \text{other2}_i
 
-        The shapes of ``self``, :attr:`other1`, and :attr:`other2` must be
-        broadcastable.
-
-        For inputs of type `FloatTensor` or `DoubleTensor`, :attr:`value` must be
-        a real number, otherwise an integer.
-
         Args:
-            other1 (TensorDict or Tensor): the tensordict or tensor to be multiplied
-            other2 (TensorDict or Tensor): the tensordict or tensor to be multiplied
+            other1 (TensorDictBase or torch.Tensor): the first factor. A
+                tensordict is paired with the tensordict key by key and must
+                have all its keys. A tensor is aligned with the batch dimensions
+                of each leaf and expanded over its feature dimensions.
+            other2 (TensorDictBase or torch.Tensor): the second factor, paired
+                like ``other1``.
 
         Keyword Args:
-            value (Number, optional): multiplier for :math:`other1 .* other2`
+            value (Number, optional): the multiplier for
+                :math:`\text{other1} \times \text{other2}`. Defaults to ``1``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(x=torch.ones(2), batch_size=[2])
+            >>> td.addcmul(torch.tensor([1.0, 2.0]), torch.tensor([3.0, 3.0]), value=2)["x"]
+            tensor([ 7., 13.])
         """
         keys, vals = self._items_list(True, True)
         if not vals:
@@ -1688,7 +1823,20 @@ class _PointwiseOps:
     @_write_back_inplace
     @_maybe_broadcast_other("addcmul_", 2)
     def addcmul_(self, other1, other2, *, value: float | None = 1):
-        """The in-place version of :meth:`~.addcmul`."""
+        r"""Adds ``value * other1 * other2`` to every leaf in place and returns ``self``.
+
+        The in-place version of :meth:`~.addcmul`.
+
+        Args:
+            other1 (TensorDictBase or torch.Tensor): the first factor, paired
+                with the leaves as in :meth:`~.addcmul`.
+            other2 (TensorDictBase or torch.Tensor): the second factor, paired
+                like ``other1``.
+
+        Keyword Args:
+            value (Number, optional): the multiplier for
+                :math:`\text{other1} \times \text{other2}`. Defaults to ``1``.
+        """
         # the leaves of the tensordict operands are paired by key, as in add_
         keys, vals = self._items_list(True, True)
         if not vals:
@@ -1718,26 +1866,30 @@ class _PointwiseOps:
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Subtracts :attr:`other`, scaled by :attr:`alpha`, from ``self``.
+        r"""Returns a new tensordict with ``other``, scaled by ``alpha``, subtracted from every leaf.
+
+        ``td - other`` calls this method, and ``other - td`` calls
+        :meth:`~.rsub`.
 
         .. math::
             \text{out}_i = \text{input}_i - \text{alpha} \times \text{other}_i
 
-        Supports broadcasting,
-        type promotion, and integer, float, and complex inputs.
-
         Args:
-            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+            other (TensorDictBase, torch.Tensor or Number): the value to
+                subtract. A tensordict is paired with the tensordict key by key.
+                A tensor is aligned with the batch dimensions of each leaf and
+                expanded over its feature dimensions. Batch sizes that differ
+                are broadcast together.
 
         Keyword Args:
-            alpha (Number): the multiplier for :attr:`other`.
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            alpha (Number, optional): the multiplier for ``other``. Defaults to
+                ``None``, which subtracts ``other`` as it is.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -1785,11 +1937,17 @@ class _PointwiseOps:
     def sub_(
         self, other: TensorDictBase | torch.Tensor | float, alpha: float | None = None
     ):
-        """In-place version of :meth:`~.sub`.
+        """Subtracts ``other``, scaled by ``alpha``, from every leaf in place and returns ``self``.
 
-        .. note::
-            In-place ``sub`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.sub`, called by ``td -= other``. It
+        has no ``default``: a tensordict ``other`` must have every key of the
+        tensordict, and its other keys are ignored.
 
+        Args:
+            other (TensorDictBase, torch.Tensor or Number): the value to
+                subtract, paired with the leaves as in :meth:`~.sub`.
+            alpha (Number, optional): the multiplier for ``other``. Defaults to
+                ``None``, which subtracts ``other`` as it is.
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -1816,29 +1974,29 @@ class _PointwiseOps:
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Subtracts ``self``, scaled by ``alpha``, from ``other``, leaf by leaf.
+        r"""Returns a new tensordict with every leaf, scaled by ``alpha``, subtracted from ``other``.
+
+        ``other - td`` calls this method.
 
         .. math::
             \text{out}_i = \text{other}_i - \text{alpha} \times \text{self}_i
 
-        Supports broadcasting,
-        type promotion, and integer, float, and complex inputs.
-
         Args:
-            other (TensorDict, torch.Tensor or Number): the value from which
-                ``self`` is subtracted. The dimensions of a tensor match the
-                leading dimensions of each leaf, and the tensor is expanded
-                over the other dimensions.
+            other (TensorDictBase, torch.Tensor or Number): the value from which
+                the leaves are subtracted. A tensordict is paired with the
+                tensordict key by key. A tensor is aligned with the batch
+                dimensions of each leaf and expanded over its feature
+                dimensions. Batch sizes that differ are broadcast together.
 
         Keyword Args:
-            alpha (Number): the multiplier for ``self``.
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            alpha (Number, optional): the multiplier for the leaves. Defaults to
+                ``None``, which subtracts them as they are.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         Examples:
             >>> import torch
@@ -1897,11 +2055,17 @@ class _PointwiseOps:
 
     @_maybe_broadcast_other("__mod__")
     def mod(self, other: TensorCollection | torch.Tensor) -> Self:
-        """Computes the element-wise modulo of ``self`` and :attr:`other`.
+        """Returns a new tensordict with the remainder of every leaf divided by ``other``.
+
+        ``td % other`` calls this method. The remainder has the sign of the
+        divisor, as with the ``%`` operator of tensors.
 
         Args:
-            other (TensorDict or Tensor): the other input tensordict or tensor.
-
+            other (TensorDictBase, torch.Tensor or Number): the divisor. A
+                tensordict is paired with the tensordict key by key and must
+                have the same keys. A tensor is aligned with the batch
+                dimensions of each leaf and expanded over its feature
+                dimensions.
         """
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
@@ -1933,11 +2097,15 @@ class _PointwiseOps:
     @_write_back_inplace
     @_maybe_broadcast_other("mul_")
     def mul_(self, other: TensorCollection | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.mul`.
+        """Multiplies every leaf by ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``mul`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.mul`, called by ``td *= other``. It
+        has no ``default``: a tensordict ``other`` must have every key of the
+        tensordict, and its other keys are ignored.
 
+        Args:
+            other (TensorDictBase, torch.Tensor or Number): the multiplier,
+                paired with the leaves as in :meth:`~.mul`.
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -1964,24 +2132,27 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Multiplies :attr:`other` to ``self``.
+        r"""Returns a new tensordict with every leaf multiplied by ``other``.
+
+        ``td * other`` and ``other * td`` call this method.
 
         .. math::
             \text{out}_i = \text{input}_i \times \text{other}_i
 
-        Supports broadcasting, type promotion, and integer, float, and complex inputs.
-
         Args:
-            other (TensorDict, Tensor or Number): the tensor or number to subtract from ``self``.
+            other (TensorDictBase, torch.Tensor or Number): the multiplier. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2024,11 +2195,15 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def maximum_(self, other: TensorCollection | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.maximum`.
+        """Replaces every leaf with its element-wise maximum with ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``maximum`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.maximum`. It has no ``default``: a
+        tensordict ``other`` must have every key of the tensordict, and its
+        other keys are ignored.
 
+        Args:
+            other (TensorDictBase or Number): the other operand, paired with
+                the leaves as in :meth:`~.maximum`.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(
@@ -2059,19 +2234,22 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        """Computes the element-wise maximum of ``self`` and :attr:`other`.
+        """Returns a new tensordict with the element-wise maximum of every leaf and ``other``.
 
         Args:
-            other (TensorDict or Tensor): the other input tensordict or tensor.
+            other (TensorDictBase, torch.Tensor or Number): the other operand. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2114,11 +2292,15 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def minimum_(self, other: TensorCollection | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.minimum`.
+        """Replaces every leaf with its element-wise minimum with ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``minimum`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.minimum`. It has no ``default``: a
+        tensordict ``other`` must have every key of the tensordict, and its
+        other keys are ignored.
 
+        Args:
+            other (TensorDictBase or Number): the other operand, paired with
+                the leaves as in :meth:`~.minimum`.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(
@@ -2149,19 +2331,22 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        """Computes the element-wise minimum of ``self`` and :attr:`other`.
+        """Returns a new tensordict with the element-wise minimum of every leaf and ``other``.
 
         Args:
-            other (TensorDict or Tensor): the other input tensordict or tensor.
+            other (TensorDictBase, torch.Tensor or Number): the other operand. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2204,11 +2389,15 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def clamp_max_(self, other: TensorCollection | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.clamp_max`.
+        """Clamps every leaf to at most ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``clamp_max`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.clamp_max`. It has no ``default``: a
+        tensordict ``other`` must have every key of the tensordict, and its
+        other keys are ignored.
 
+        Args:
+            other (TensorDictBase or Number): the upper bound, paired with
+                the leaves as in :meth:`~.clamp_max`.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(self, Tensor.clamp_max_, (other,), inplace=True)
@@ -2245,19 +2434,22 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        """Clamps each element of ``self`` to at most ``other``.
+        """Returns a new tensordict with every leaf clamped to at most ``other``.
 
         Args:
-            other (TensorDict or Tensor): the other input tensordict or tensor.
+            other (TensorDictBase, torch.Tensor or Number): the upper bound. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2308,11 +2500,15 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.clamp_min`.
+        """Clamps every leaf to at least ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``clamp_min`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.clamp_min`. It has no ``default``: a
+        tensordict ``other`` must have every key of the tensordict, and its
+        other keys are ignored.
 
+        Args:
+            other (TensorDictBase or Number): the lower bound, paired with
+                the leaves as in :meth:`~.clamp_min`.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(self, Tensor.clamp_min_, (other,), inplace=True)
@@ -2349,19 +2545,20 @@ class _PointwiseOps:
         other: TensorDictBase | torch.Tensor,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        """Clamps each element of ``self`` to at least ``other``.
+        """Returns a new tensordict with every leaf clamped to at least ``other``.
 
         Args:
-            other (TensorDict or Tensor): the other input tensordict or tensor.
-
-        Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            other (TensorDictBase, torch.Tensor or Number): the lower bound. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2419,20 +2616,43 @@ class _PointwiseOps:
         *,
         out=None,
     ) -> Self:  # noqa: D417, W605
-        r"""Clamps all elements in :attr:`self` into the range `[` :attr:`min`, :attr:`max` `]`.
+        r"""Returns a new tensordict with every leaf clamped into the range ``[min, max]``.
 
-        Letting min_value and max_value be :attr:`min` and :attr:`max`, respectively, this returns:
+        .. math::
+            y_i = \min(\max(x_i, \text{min}_i), \text{max}_i)
 
-            .. math::
-                y_i = \min(\max(x_i, \text{min\_value}_i), \text{max\_value}_i)
+        Where ``min`` is greater than ``max``, the result is ``max``, as with
+        :func:`torch.clamp`. At least one of ``min`` and ``max`` must be given;
+        with only one bound, ``clamp`` calls :meth:`~.clamp_min` or
+        :meth:`~.clamp_max`.
 
-            If :attr:`min` is ``None``, there is no lower bound.
-            Or, if :attr:`max` is ``None`` there is no upper bound.
+        Args:
+            min (TensorDictBase, torch.Tensor, Number or None, optional): the
+                lower bound. A tensordict is paired with the tensordict key by
+                key. ``min`` and ``max`` must both be tensordicts, or neither.
+                Defaults to ``None``, which sets no lower bound.
+            max (TensorDictBase, torch.Tensor, Number or None, optional): the
+                upper bound. ``min`` and ``max`` must both be tensordicts, or
+                neither. Defaults to ``None``, which sets no upper bound.
 
-        .. note::
-            If :attr:`min` is greater than :attr:`max` :func:`torch.clamp(..., min, max) <torch.clamp>`
-            sets all elements in :attr:`input` to the value of :attr:`max`.
+        Keyword Args:
+            out (TensorDictBase, optional): the tensordict to write the result
+                into. Passing it currently raises an error: a ``ValueError``
+                when ``min`` or ``max`` is ``None``, a ``TypeError`` otherwise.
+                Defaults to ``None``.
 
+        Raises:
+            ValueError: if one of ``min`` and ``max`` is a tensordict and the
+                other is not.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(x=torch.tensor([-2.0, 0.5, 3.0]), batch_size=[3])
+            >>> td.clamp(0.0, 1.0)["x"]
+            tensor([0.0000, 0.5000, 1.0000])
+            >>> td.clamp(max=0.0)["x"]
+            tensor([-2.,  0.,  0.])
         """
         if min is None:
             if out is not None:
@@ -2479,11 +2699,15 @@ class _PointwiseOps:
     @_write_back_inplace
     @_maybe_broadcast_other("pow_")
     def pow_(self, other: TensorDictBase | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.pow`.
+        """Raises every leaf to the power ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``pow`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.pow`, called by ``td **= other``. It
+        has no ``default``: a tensordict ``other`` must have every key of the
+        tensordict, and its other keys are ignored.
 
+        Args:
+            other (TensorDictBase, torch.Tensor or Number): the exponent,
+                paired with the leaves as in :meth:`~.pow`.
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -2503,24 +2727,25 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Takes the power of each element in ``self`` with :attr:`other` and returns a tensor with the result.
+        r"""Returns a new tensordict with every leaf raised to the power ``other``.
 
-        :attr:`other` can be either a single ``float`` number, a `Tensor` or a ``TensorDict``.
-
-        When :attr:`other` is a tensor, the shapes of :attr:`input`
-        and :attr:`other` must be broadcastable.
+        ``td ** other`` calls this method. ``other ** td`` with a number
+        ``other`` raises a ``NotImplementedError``.
 
         Args:
-            other (float, tensor or tensordict): the exponent value
+            other (TensorDictBase, torch.Tensor or Number): the exponent. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2560,11 +2785,15 @@ class _PointwiseOps:
     @_write_back_inplace
     @_maybe_broadcast_other("div_")
     def div_(self, other: TensorDictBase | torch.Tensor) -> Self:
-        """In-place version of :meth:`~.div`.
+        """Divides every leaf by ``other`` in place and returns ``self``.
 
-        .. note::
-            Inplace ``div`` does not support ``default`` keyword argument.
+        The in-place version of :meth:`~.div`, called by ``td /= other``. It
+        has no ``default``: a tensordict ``other`` must have every key of the
+        tensordict, and its other keys are ignored.
 
+        Args:
+            other (TensorDictBase, torch.Tensor or Number): the divisor,
+                paired with the leaves as in :meth:`~.div`.
         """
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
@@ -2584,25 +2813,28 @@ class _PointwiseOps:
         *,
         default: str | CompatibleType | None = None,
     ) -> Self:  # noqa: D417
-        r"""Divides each element of the input ``self`` by the corresponding element of :attr:`other`.
+        r"""Returns a new tensordict with every leaf divided by ``other``.
+
+        ``td / other`` calls this method. Integer leaves are promoted to the
+        default floating-point dtype, as with :func:`torch.div`.
 
         .. math::
             \text{out}_i = \frac{\text{input}_i}{\text{other}_i}
 
-        Supports broadcasting, type promotion and integer, float, tensordict or tensor inputs.
-        Always promotes integer types to the default scalar type.
-
         Args:
-            other (TensorDict, Tensor or Number): the divisor.
+            other (TensorDictBase, torch.Tensor or Number): the divisor. A
+                tensordict is paired with the tensordict key by key. A tensor is
+                aligned with the batch dimensions of each leaf and expanded over
+                its feature dimensions. Batch sizes that differ are broadcast
+                together.
 
         Keyword Args:
-            default (torch.Tensor or str, optional): the value to use for an
-                entry that only one of the two tensordicts has. If ``None``
-                (default), the two tensordicts must have the same keys, and a
-                missing key raises ``KeyError``. If ``"intersection"``, only
-                the keys that both tensordicts have are computed, and the
-                other keys are dropped. Any other value replaces the missing
-                entries on both sides of the operation.
+            default (torch.Tensor or str, optional): what to do with the keys
+                that only one of the two tensordicts has. ``None`` requires the
+                same keys and raises a ``KeyError`` otherwise.
+                ``"intersection"`` computes the keys that both have and drops
+                the others. A tensor stands in for the missing entry on either
+                side, and the result has the keys of both. Defaults to ``None``.
 
         """
         keys, vals = self._items_list(True, True)
@@ -2641,14 +2873,14 @@ class _PointwiseOps:
 
     @_write_back_inplace
     def sqrt_(self) -> Self:
-        """In-place version of :meth:`~.sqrt`."""
+        """Applies :func:`torch.sqrt` to every leaf in place and returns ``self``."""
         vals = self._values_list(True, True)
         if vals:
             _foreach("sqrt_", vals)
         return self
 
     def sqrt(self) -> Self:
-        """Computes the element-wise square root of ``self``."""
+        """Returns a new tensordict with :func:`torch.sqrt` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
@@ -2668,7 +2900,7 @@ class _PointwiseOps:
 
     # Filling
     def zero_(self) -> Self:
-        """Zeros all tensors in the tensordict in-place."""
+        """Fills every leaf with zeros in place and returns ``self``."""
         if self._fills_without_reading:
             for key in self.keys():
                 self._fill_((key,), 0)
@@ -2686,15 +2918,25 @@ class _PointwiseOps:
         return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> Self:
-        """Fills a tensor pointed by the key with a given scalar value.
+        """Fills the entry at ``key`` with ``value`` in place and returns ``self``.
+
+        If ``key`` points to a nested tensordict, every leaf of it is filled.
 
         Args:
-            key (str or nested key): entry to be filled.
-            value (Number or bool): value to use for the filling.
+            key (NestedKey): the key of the entry to fill.
+            value (Number or bool): the value to write.
 
-        Returns:
-            self
+        Raises:
+            KeyError: if ``key`` is missing.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(2), b=TensorDict(c=torch.zeros(2)))
+            >>> td.fill_("a", 1.0)["a"]
+            tensor([1., 1.])
+            >>> td.fill_("b", 2.0)["b", "c"]
+            tensor([2., 2.])
         """
         self._fill_(_unravel_key_to_tuple(key), value)
         return self
@@ -2741,28 +2983,46 @@ class _PointwiseOps:
         pad: int | bool = None,
         update_batch_size: bool = False,
     ) -> Self:  # noqa: D417
-        """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
+        """Returns a tensordict with the leaves where ``condition`` is ``True`` and ``other`` elsewhere.
+
+        :func:`torch.where` is applied to every leaf. ``condition`` is aligned
+        with the batch dimensions of each leaf and expanded over its feature
+        dimensions.
 
         Args:
-            condition (BoolTensor): When ``True`` (nonzero), yields ``self``,
-                otherwise yields ``other``.
-            other (TensorDictBase or Scalar): value (if ``other`` is a scalar)
-                or values selected at indices where condition is ``False``.
-                On a :class:`~tensordict.LazyStackedTensorDict`, a tensor
-                ``other`` that starts with the batch shape up to the stack
-                dim is split along the stack dim, one piece per member, so
-                it must also have the stack size at the stack dim: expand it
-                to the batch shape first.
+            condition (torch.Tensor): a boolean mask over the leading batch
+                dimensions.
+            other (TensorDictBase, torch.Tensor or Number): the values to take
+                where ``condition`` is ``False``. A tensordict is paired with
+                the tensordict key by key. On a
+                :class:`~tensordict.LazyStackedTensorDict`, a tensor ``other``
+                that starts with the batch shape up to the stack dimension is
+                split along that dimension, one piece per member, so it must
+                have the stack size there: expand it to the batch shape first.
 
         Keyword Args:
-            out (TensorDictBase, optional): the output ``TensorDictBase`` instance.
-            pad (scalar, optional): if provided, missing keys from the source
-                or destination tensordict will be written as `torch.where(mask, self, pad)`
-                or `torch.where(mask, pad, other)`. Defaults to ``None``, ie
-                missing keys are not tolerated.
-            update_batch_size (bool, optional): if ``True`` and ``out`` is provided, the batch size of the output will be
-                updated to match the batch size of the condition. Defaults to ``False``.
+            out (TensorDictBase, optional): the tensordict to write the result
+                into, which is returned. Defaults to ``None``, which returns a
+                new tensordict.
+            pad (Number or bool, optional): the value that stands in for an
+                entry that only one of the tensordict and a tensordict
+                ``other`` has. Defaults to ``None``, which raises a
+                ``KeyError`` for such an entry.
+            update_batch_size (bool, optional): passed to :meth:`~.update`
+                when the result is written into ``out``. It only matters when
+                ``out`` is a lazy stack: if ``True``, its number of members
+                follows the result. Defaults to ``False``.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(x=torch.ones(2, 3), batch_size=[2])
+            >>> td.where(torch.tensor([True, False]), 0.0)["x"]
+            tensor([[1., 1., 1.],
+                    [0., 0., 0.]])
+            >>> other = TensorDict(y=torch.zeros(2), batch_size=[2])
+            >>> sorted(td.where(torch.tensor([True, False]), other, pad=-1).keys())
+            ['x', 'y']
         """
         if self._masking_on_dense_copy:
             return self.to_tensordict().where(
