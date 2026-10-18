@@ -49,6 +49,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
+    _key_through_leaf_error,
     _load_metadata,
     _members_hold_leaf,
     _NESTED_TENSORS_AS_LISTS,
@@ -2045,6 +2046,9 @@ class TensorDict(TensorDictBase):
                 return value
             if type(value) is not TensorDict:
                 # a lazy stack, a tensorclass, a tensor...: it reads the rest
+                if isinstance(value, Tensor):
+                    # as in TensorDictBase._get_tuple, for the Dynamo of torch 2.11
+                    raise _key_through_leaf_error(key, i, value)
                 try:
                     return value._get_tuple(key[i:], default=default, **kwargs)
                 except AttributeError as err:

@@ -2941,9 +2941,11 @@ def _foreach(name: str, tensors, *args, **kwargs):
     ``sub`` and ``sub_`` with one tensor and ``alpha``, for which
     ``torch._foreach_sub`` has no overload.
     """
-    # Dynamo folds the depth to a guarded constant. Do not test
-    # ``peek_interpreter_stack() is None``: Dynamo evaluates it as False.
-    if torch._C._functorch.get_dynamic_layer_stack_depth() == 0 and not (
+    # Dynamo folds this check to a constant when it traces, also inside a
+    # traced vmap. Other checks fail on some supported torch: Dynamo traces
+    # ``get_dynamic_layer_stack_depth()`` only from torch 2.13, and evaluates
+    # ``peek_interpreter_stack() is None`` as False.
+    if not torch._C._are_functorch_transforms_active() and not (
         _any_unbatched(tensors)
         or any(isinstance(arg, (list, tuple)) and _any_unbatched(arg) for arg in args)
     ):

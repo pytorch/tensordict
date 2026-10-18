@@ -215,8 +215,8 @@ def test_getitem_batch_size_ellipsis(index):
 
 def test_slice_length_symbolic(monkeypatch):
     # gh-2889: the formula that torch.compile takes, on ints, gives the length
-    # that slice.indices gives; a negative step, which a TensorDict without
-    # tensor leaves takes, keeps slice.indices
+    # that slice.indices gives, also for a negative step, which a TensorDict
+    # without tensor leaves takes
     monkeypatch.setattr(tensordict._indexing, "is_dynamo_compiling", lambda: True)
     bounds = [None, -12, -7, -3, -1, 0, 1, 2, 3, 7, 12]
     for n in range(9):

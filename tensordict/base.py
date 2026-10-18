@@ -348,6 +348,15 @@ class _KeyThroughLeafError(ValueError):
     """
 
 
+def _key_through_leaf_error(key: tuple, i: int, value: Any) -> _KeyThroughLeafError:
+    """The error for reading ``key[i:]`` in ``value``, the leaf at ``key[i - 1]``."""
+    rest = key[i] if len(key) == i + 1 else key[i:]
+    return _KeyThroughLeafError(
+        f"{key[i - 1]!r} is a {type(value).__name__}, not a tensordict, "
+        f"so it has no entry {rest!r}."
+    )
+
+
 def _raise_if_not_a_tensordict(
     err: AttributeError, key: tuple, i: int, value: Any
 ) -> None:
@@ -358,11 +367,7 @@ def _raise_if_not_a_tensordict(
     left to the caller, which returns ``None``.
     """
     if "has no attribute" in str(err):
-        rest = key[i] if len(key) == i + 1 else key[i:]
-        raise _KeyThroughLeafError(
-            f"{key[i - 1]!r} is a {type(value).__name__}, not a tensordict, "
-            f"so it has no entry {rest!r}."
-        )
+        raise _key_through_leaf_error(key, i, value)
 
 
 def _is_inside(key: NestedKey, other: NestedKey) -> bool:
@@ -2196,7 +2201,7 @@ def _copy_leaves(
         dests[0].copy_(sources[0], non_blocking=non_blocking)
     # _foreach_copy_compiled cannot run under a torch.func transform
     # (vmap), _foreach can. Same check as in _foreach, which explains it.
-    elif torch._C._functorch.get_dynamic_layer_stack_depth() != 0:
+    elif torch._C._are_functorch_transforms_active():
         _foreach("copy_", dests, sources, non_blocking=non_blocking)
     elif (
         torch.is_grad_enabled()
@@ -2851,8 +2856,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # )
         if istuple and any(type(idx) is EllipsisType for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
+        # The bounds are tested one by one: the Dynamo of torch 2.11 and 2.12
+        # fixes the bounds of a slice that it compares with slice(None).
         if len(index) <= len(self.batch_size) and all(
-            isinstance(idx, slice) and idx == slice(None) for idx in index
+            isinstance(idx, slice)
+            and idx.start is None
+            and idx.stop is None
+            and idx.step is None
+            for idx in index
         ):
             return self
 
@@ -5135,6 +5146,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         first = self._get_str(key[0], default, **kwargs)
         if len(key) == 1 or first is default:
             return first
+        if isinstance(first, Tensor):
+            # Tested first: under the Dynamo of torch 2.11, reading a missing
+            # attribute of a tensor raises an internal error, not AttributeError.
+            raise _key_through_leaf_error(key, 1, first)
         try:
             return first._get_tuple(key[1:], default=default, **kwargs)
         except AttributeError as err:

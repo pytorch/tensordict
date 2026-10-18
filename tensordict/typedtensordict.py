@@ -257,14 +257,16 @@ def _make_init(cls: type) -> Callable:
                 "use from_dict(..., check=False)",
             )
             return
-        missing = required_keys - kwargs.keys()
+        # The Dynamo of torch 2.11 cannot trace frozenset - dict.keys() (nor
+        # dict.keys() - frozenset); these set methods also run faster in eager.
+        missing = required_keys.difference(kwargs)
         if missing:
             missing_str = ", ".join(sorted(missing))
             raise TypeError(
                 f"{type(self).__name__}() missing required field(s): {missing_str}"
             )
-        extra = kwargs.keys() - expected_keys
-        if extra:
+        if not expected_keys.issuperset(kwargs):
+            extra = set(kwargs).difference(expected_keys)
             extra_str = ", ".join(sorted(extra))
             raise TypeError(
                 f"{type(self).__name__}() got unexpected field(s): {extra_str}"
@@ -451,6 +453,19 @@ def _make_delegate_tuple_wrap(method_name: str) -> Callable:
     method.__name__ = method_name
     method.__qualname__ = f"TypedTensorDict.{method_name}"
     return method
+
+
+class _traced_property(property):
+    """A property whose setter Dynamo traces on an object created in the compiled code.
+
+    The Dynamo of torch 2.11 records the assignment of a plain property on such
+    an object as an attribute store, which it replays after the graph: the
+    setter then runs on the source before its attributes are restored. It
+    traces a ``__set__`` written in Python.
+    """
+
+    def __set__(self, obj, value):
+        self.fset(obj, value)
 
 
 @dataclass_transform(kw_only_default=True)
@@ -734,7 +749,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # Properties (delegated to _source)
     # ------------------------------------------------------------------
     # Override: the batch size of the source.
-    @property
+    @_traced_property
     def batch_size(self) -> torch.Size:
         return self._source.batch_size
 
@@ -743,7 +758,7 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         self._source.batch_size = new_size
 
     # Override: the names of the source.
-    @property
+    @_traced_property
     def names(self):
         return self._source.names
 
