@@ -1566,7 +1566,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     for name, method in operators.items():
         if name not in own_operators and not (_is_non_tensor and name == "__repr__"):
             setattr(cls, name, method)
-    if _is_non_tensor:
+    if _is_non_tensor and hasattr(cls, "_patch_operators"):
+        # NonTensorDataBase patches its comparison operators
         cls._patch_operators()
 
     if not hasattr(cls, "_new_unsafe"):
@@ -1890,6 +1891,24 @@ def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
     )
 
 
+def _pop_instance_attr_traced(obj, name: str) -> Any:
+    """Removes ``name`` from the instance ``__dict__`` of ``obj`` under Dynamo, and returns it.
+
+    The Dynamo of torch 2.11 can neither pop from the ``__dict__`` of an
+    instance nor call ``object.__delattr__``, but it traces a
+    ``super().__delattr__`` that resolves to ``object.__delattr__``. Eager code
+    pops from the ``__dict__``, which is faster.
+    """
+    obj_dict = obj.__dict__
+    value = obj_dict[name]
+    try:
+        super(type(obj).__mro__[-2], obj).__delattr__(name)
+    except AttributeError:
+        # the field of a tensor_only class is a property without a deleter
+        del obj_dict[name]
+    return value
+
+
 def _init_wrapper(
     __init__: Callable,
     cls,
@@ -2017,26 +2036,23 @@ def _init_wrapper(
                 self_dict = self.__dict__
                 td_dict = self._tensordict._tensordict
                 non_td = self._non_tensordict
-                # The Dynamo of torch 2.11 can neither pop from the __dict__ of
-                # an instance nor call object.__delattr__, but it traces
-                # super().__delattr__ that resolves to object.__delattr__.
-                delattr_ = super(type(self).__mro__[-2], self).__delattr__
-                if "_init_none_fields" in self_dict:
-                    init_none_fields = self_dict["_init_none_fields"]
-                    delattr_("_init_none_fields")
-                else:
+                compiling = is_dynamo_compiling()
+                if "_init_none_fields" not in self_dict:
                     init_none_fields = ()
+                elif compiling:
+                    init_none_fields = _pop_instance_attr_traced(
+                        self, "_init_none_fields"
+                    )
+                else:
+                    init_none_fields = self_dict.pop("_init_none_fields")
                 for key, field in type(self).__dataclass_fields__.items():
                     if key not in required_fields:
                         continue
                     if key in self_dict:
-                        value = self_dict[key]
-                        try:
-                            delattr_(key)
-                        except AttributeError:
-                            # The field of a tensor_only class is a property
-                            # without a deleter.
-                            del self_dict[key]
+                        if compiling:
+                            value = _pop_instance_attr_traced(self, key)
+                        else:
+                            value = self_dict.pop(key)
                     elif key in td_dict or key in init_none_fields or key in non_td:
                         continue
                     elif field.default is None and not type(self)._is_non_tensor:
