@@ -659,11 +659,11 @@ def pad_sequence(
             a ``"masks"`` entry. If ``return_mask`` is a nested key (a string
             or a tuple of strings), the masks are stored under that key. The
             masks entry is a tensordict with the structure of the stacked
-            tensordict. Each of its entries is the mask of the valid values,
-            of size ``torch.Size([stack_len, *new_shape])``, where
-            ``new_shape[pad_dim]`` is the largest size and the rest of
-            ``new_shape`` matches the shape of the input entries. Not
-            available for tensorclass inputs. Use
+            tensordict. Each of its entries is the mask of the valid values.
+            If ``pad_dim`` is a batch dimension, the mask has the output's
+            batch size. Otherwise, its shape is the output's batch size
+            followed by the padded length, regardless of the feature
+            dimension's position. Not available for tensorclass inputs. Use
             :func:`~tensordict.unpad_sequence` to turn the result back into
             the variable-length samples.
         padding_side (str, optional): ``"right"`` puts the padding after the
@@ -731,7 +731,7 @@ def pad_sequence(
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
     keys_copy = list(keys)
-    mask_keys = []
+    mask_pad_dims = {}
     for i, td in enumerate(list_of_tensordicts):
         if is_tensorclass(td):
             td = td._tensordict
@@ -762,7 +762,7 @@ def pad_sequence(
 
             if return_mask:
                 mask_key = unravel_key((masks_key, key))
-                mask_keys.append(mask_key)
+                mask_pad_dims[mask_key] = min(pos_pad_dim, td.ndim)
                 list_of_dicts[i][mask_key] = torch.ones(mask_shape, dtype=torch.bool)
                 keys_copy.append(mask_key)
 
@@ -824,17 +824,16 @@ def pad_sequence(
                 out.set(key, TensorDict.lazy_stack(items))
                 continue
             tensor_shape = item0.shape
-            pos_pad_dim = (
-                (pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim)
-                if len(tensor_shape) > 1
-                else 0  # handles the case when the masks are 1-dimensional
-            )
+            if key in mask_pad_dims:
+                pos_pad_dim = mask_pad_dims[key]
+            else:
+                pos_pad_dim = pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim
             out.set(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
                     [d[key].transpose(0, pos_pad_dim) for d in list_of_dicts],
                     batch_first=True,
-                    padding_value=padding_value if key not in mask_keys else False,
+                    padding_value=padding_value if key not in mask_pad_dims else False,
                     padding_side=padding_side,
                 ).transpose(1, pos_pad_dim + 1),
                 inplace=True,
