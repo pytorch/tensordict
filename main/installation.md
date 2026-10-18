@@ -6,7 +6,7 @@ Install the latest release from PyPI:
 pip install tensordict
 ```
 
-tensordict needs Python 3.10+ and PyTorch 2.13+. To make sure that the
+tensordict needs Python 3.10+ and PyTorch 2.11+. To make sure that the
 install worked, print the version:
 
 ```
@@ -16,7 +16,7 @@ python -c "import tensordict; print(tensordict.__version__)"
 ## Requirements
 
 tensordict is pure Python: it has no compiled extension. Each change is
-tested with PyTorch 2.13, the latest PyTorch release, and PyTorch nightly, on
+tested with PyTorch 2.11, the latest PyTorch release, and PyTorch nightly, on
 Python 3.10 to 3.15 and the free-threaded 3.14t and 3.15t.
 
 If PyTorch is not installed, `pip` installs the default build from PyPI
