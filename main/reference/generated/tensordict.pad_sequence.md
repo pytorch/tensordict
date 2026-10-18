@@ -18,7 +18,11 @@ Parameters:
 - **pad_dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dimension of the entries to pad, counted
 from the first dimension of each entry (batch dimensions
 included). If it is a batch dimension, the batch size of the
-result is padded too. Defaults to `0`.
+result is padded too. A negative `pad_dim` counts from the last
+dimension of each entry. If it lands on a batch dimension of some
+entries and on another dimension of others, the batch size is not
+padded, and, unless `out` is given, no entry may be longer along
+it than the batch of the first sample. Defaults to `0`.
 - **padding_value** (*number**,**optional*) - the padding value. Defaults to `0.0`.
 Non-tensor entries are not filled with `padding_value`: when the padded
 dim is a batch dimension of the output, they keep their values at the
@@ -52,7 +56,11 @@ Raises:
 
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `list_of_tensordicts` is empty, or if the entry
  shapes differ in a dimension other than `pad_dim`.
-- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `padding_side` is neither `"left"` nor `"right"`.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `padding_side` is neither `"left"` nor `"right"`,
+ or if a negative `pad_dim` lands on a batch dimension of some
+ entries and on another dimension of others, and, with no `out`,
+ an entry is longer along it than the batch of the first sample.
+- [**IndexError**](https://docs.python.org/3/builtins/exceptions.html#IndexError) - if `pad_dim` is out of range for an entry.
 
 Examples
 
