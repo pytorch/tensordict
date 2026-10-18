@@ -1510,10 +1510,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 def _getter(self):
                     td = self._tensordict
                     if type(td) is TensorDict:
-                        # Cheaper than _get_str. Dynamo also guards on a key
-                        # that dict.get misses, but not on the KeyError in
-                        # _get_str: a compiled function that read None would
-                        # keep reading None once the field holds a tensor.
+                        # Cheaper than _get_str. Dynamo guards on a key that
+                        # dict.get misses: a compiled function that read None
+                        # recompiles once the field holds a tensor.
                         out = td._tensordict.get(key, _UNSET)
                     else:
                         out = td._get_str(key, _UNSET)
@@ -3231,8 +3230,8 @@ def _getattr(self, item: str, **kwargs) -> Any:
                 return out
         td = self._tensordict
         if type(td) is TensorDict:
-            # as in the tensor_only getter: Dynamo guards on a key that
-            # dict.get misses, but not on the KeyError in _get_str
+            # as in the tensor_only getter: cheaper than _get_str, and
+            # Dynamo guards on a key that dict.get misses
             out = td._tensordict.get(item, _UNSET)
         else:
             out = td._get_str(item, _UNSET, **kwargs)
@@ -3292,8 +3291,8 @@ class _FieldGetter:
                 return _from_shared_nontensor(out)
             return out
         if type(td) is TensorDict:
-            # as in the tensor_only getter: Dynamo guards on a key that
-            # dict.get misses, but not on the KeyError in _get_str
+            # as in the tensor_only getter: cheaper than _get_str, and
+            # Dynamo guards on a key that dict.get misses
             out = td._tensordict.get(name, _UNSET)
         else:
             out = td._get_str(name, _UNSET)
