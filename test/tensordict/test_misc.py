@@ -801,6 +801,22 @@ class TestPointwiseOps:
         assert [x.data_ptr() for t in tds for x in t.values(True, True)] == data_ptrs
         assert_allclose_td(td, expected)
 
+    @pytest.mark.parametrize("op", ["maximum_", "minimum_", "clamp_min_", "clamp_max_"])
+    def test_inplace_tensor_empty_and_unbatched(self, op):
+        # An empty tensordict and an UnbatchedTensor leaf keep their own
+        # paths for a tensor with dims (#2962 changes neither)
+        td = TensorDict(batch_size=[2])
+        assert getattr(td, op)(torch.ones(3)) is td
+        other = torch.tensor([-1.0, 1.0])
+        td = TensorDict(
+            a=torch.zeros(2, 2), u=UnbatchedTensor(torch.zeros(3, 2)), batch_size=[2]
+        )
+        # every leaf meets the tensor as torch broadcasts it, from the right
+        torch_op = {"maximum_": "clamp_min", "minimum_": "clamp_max"}.get(op, op[:-1])
+        assert getattr(td, op)(other) is td
+        assert (td["a"] == getattr(torch.zeros(2, 2), torch_op)(other)).all()
+        assert (td["u"] == getattr(torch.zeros(3, 2), torch_op)(other)).all()
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensor(self, shape):
         torch.manual_seed(0)

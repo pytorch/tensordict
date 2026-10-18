@@ -2235,12 +2235,10 @@ class _PointwiseOps:
         Args:
             other (TensorDictBase, torch.Tensor or Number): the other operand,
                 paired with the leaves as in :meth:`~.maximum`. A tensor is
-                aligned with the batch dimensions of each leaf.
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor`: then every
+                leaf broadcasts with it from the right, as in torch.
         """
-        if isinstance(other, Tensor) and other.ndim:
-            # broadcast the tensor to the batch dims, as maximum does
-            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
-            return clamp_min_(self, other)
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(
                 self, lambda x, y: torch.maximum(x, y, out=x), (other,), inplace=True
@@ -2260,6 +2258,10 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_min_(other))
             return self
+        if isinstance(other, Tensor) and other.ndim:
+            # broadcast the tensor to the batch dims, as maximum does
+            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
+            return clamp_min_(self, other)
         _foreach("maximum_", vals, other_val)
         return self
 
@@ -2337,12 +2339,10 @@ class _PointwiseOps:
         Args:
             other (TensorDictBase, torch.Tensor or Number): the other operand,
                 paired with the leaves as in :meth:`~.minimum`. A tensor is
-                aligned with the batch dimensions of each leaf.
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor`: then every
+                leaf broadcasts with it from the right, as in torch.
         """
-        if isinstance(other, Tensor) and other.ndim:
-            # broadcast the tensor to the batch dims, as minimum does
-            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
-            return clamp_max_(self, other)
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(
                 self, lambda x, y: torch.minimum(x, y, out=x), (other,), inplace=True
@@ -2362,6 +2362,10 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_max_(other))
             return self
+        if isinstance(other, Tensor) and other.ndim:
+            # broadcast the tensor to the batch dims, as minimum does
+            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
+            return clamp_max_(self, other)
         _foreach("minimum_", vals, other_val)
         return self
 
@@ -2439,12 +2443,10 @@ class _PointwiseOps:
         Args:
             other (TensorDictBase, torch.Tensor or Number): the upper bound,
                 paired with the leaves as in :meth:`~.clamp_max`. A tensor is
-                aligned with the batch dimensions of each leaf.
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor`: then every
+                leaf broadcasts with it from the right, as in torch.
         """
-        if isinstance(other, Tensor) and other.ndim:
-            # broadcast the tensor to the batch dims, as clamp_max does
-            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
-            return clamp_max_(self, other)
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(self, Tensor.clamp_max_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
@@ -2462,6 +2464,10 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_max_(other))
             return self
+        if isinstance(other, Tensor) and other.ndim:
+            # broadcast the tensor to the batch dims, as clamp_max does
+            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
+            return clamp_max_(self, other)
         try:
             _foreach("clamp_max_", vals, other_val)
         except RuntimeError as err:
@@ -2555,12 +2561,10 @@ class _PointwiseOps:
         Args:
             other (TensorDictBase, torch.Tensor or Number): the lower bound,
                 paired with the leaves as in :meth:`~.clamp_min`. A tensor is
-                aligned with the batch dimensions of each leaf.
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor`: then every
+                leaf broadcasts with it from the right, as in torch.
         """
-        if isinstance(other, Tensor) and other.ndim:
-            # broadcast the tensor to the batch dims, as clamp_min does
-            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
-            return clamp_min_(self, other)
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(self, Tensor.clamp_min_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
@@ -2578,6 +2582,10 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_min_(other))
             return self
+        if isinstance(other, Tensor) and other.ndim:
+            # broadcast the tensor to the batch dims, as clamp_min does
+            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
+            return clamp_min_(self, other)
         try:
             _foreach("clamp_min_", vals, other_val)
         except RuntimeError as err:
