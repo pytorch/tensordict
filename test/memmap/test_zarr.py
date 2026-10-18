@@ -829,6 +829,9 @@ class TestZarrWriteOps:
         assert "nested" in ztd.keys()
         ztd["nested", "x"] = torch.zeros(3, 4)
         assert (ztd["nested", "x"] == 0).all()
+        # A nested key under an existing group keeps the group's entries.
+        ztd.create_nested(("b", "d"))
+        assert {("b", "c"), ("b", "d")} <= set(ztd.keys(True))
 
     def test_kwargs_passthrough(self, tmp_path):
         td = TensorDict({"a": torch.randn(64, 64)}, batch_size=[64])

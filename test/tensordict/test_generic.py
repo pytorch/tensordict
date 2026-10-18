@@ -1834,6 +1834,61 @@ class TestGeneric:
 
         assert convert_ellipsis_to_idx(ellipsis_index, batch_size) == expected_index
 
+    @pytest.mark.parametrize(
+        "entry",
+        ["td", "tensor", "non_tensor", "tensorclass", "locked", "memmap"],
+    )
+    def test_create_nested_path(self, entry, tmpdir):
+        # A tensordict on the path keeps its entries. Any other entry, or a
+        # locked tensordict, is replaced by an empty tensordict.
+        sub = TensorDict(x=torch.zeros(3), batch_size=[3])
+        if entry == "tensor":
+            value = torch.zeros(3)
+        elif entry == "non_tensor":
+            value = NonTensorData("s", batch_size=[3])
+        elif entry == "tensorclass":
+            value = self._KeysUpdateTC(
+                x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]
+            )
+        elif entry == "locked":
+            value = sub.lock_()
+        elif entry == "memmap":
+            value = sub.memmap_(tmpdir)
+        else:
+            value = sub
+        td = TensorDict(a=value, batch_size=[3])
+        assert td.create_nested(("a", "b", "c")) is td
+        a = td.get("a")
+        assert type(a) is TensorDict
+        assert not a.is_locked
+        expected = {"b", ("b", "c")} | ({"x"} if entry == "td" else set())
+        assert set(a.keys(True)) == expected
+
+    def test_create_nested_tensorclass(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            td: TensorDict = None
+
+        tc = TC(
+            x=torch.zeros(3),
+            td=TensorDict(y=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        assert tc.create_nested(("td", "b")) is tc
+        assert set(tc.td.keys()) == {"y", "b"}
+        assert (tc.td["y"] == 1).all()
+
+    def test_create_nested_lazy_stack(self):
+        # A key that every member holds keeps its entries.
+        td = lazy_stack([TensorDict(a={"x": torch.zeros(())}) for _ in range(2)])
+        td.create_nested(("a", "b"))
+        assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        # A key that only some members hold is replaced in every member.
+        td = lazy_stack([TensorDict(a={"x": torch.zeros(())}), TensorDict()])
+        td.create_nested(("a", "b"))
+        assert set(td.keys(True)) == {"a", ("a", "b")}
+
     @pytest.mark.skipif(
         not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu"
     )

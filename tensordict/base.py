@@ -6575,8 +6575,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         The new tensordict has the batch size, device and names of the
         tensordict. An existing entry at ``key`` is replaced. For a tuple key,
-        every level is created new, so an existing entry on the path, such as
-        ``td["a"]`` for ``("a", "b")``, is replaced too.
+        the tensordicts already on the path keep their entries: ``("a", "b")``
+        adds ``"b"`` to an existing ``td["a"]``. A missing level, an entry on
+        the path that is not a tensordict, or a locked tensordict on the path
+        is replaced by a new empty tensordict.
 
         Args:
             key (NestedKey): the key of the new tensordict.
@@ -6592,6 +6594,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             torch.Size([3, 4, 5])
             >>> list(data.keys(include_nested=True))
             [('some', 'nested', 'value'), ('some', 'nested'), 'some']
+            >>> _ = data.create_nested(("some", "other"))
+            >>> list(data.keys(include_nested=True))
+            [('some', 'nested', 'value'), ('some', 'nested'), ('some', 'other'), 'some']
         """
         key = _unravel_key_to_tuple(key)
         self._create_nested_tuple(key)
@@ -6603,9 +6608,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out
 
     def _create_nested_tuple(self, key):
-        td = self._create_nested_str(key[0])
         if len(key) > 1:
+            # Keep an existing tensordict on the path with its entries. Any
+            # other entry, or a locked tensordict, is replaced.
+            td = self._get_str(key[0], None)
+            if not isinstance(td, TensorDictBase) or is_non_tensor(td) or td.is_locked:
+                td = self._create_nested_str(key[0])
             td._create_nested_tuple(key[1:])
+        else:
+            self._create_nested_str(key[0])
 
     def copy_(self, tensordict: T, non_blocking: bool = False) -> Self:
         """Copies the entries of ``tensordict`` into the existing entries, and returns ``self``.
