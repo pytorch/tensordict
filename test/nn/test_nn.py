@@ -5463,6 +5463,16 @@ class TestTensorDictParams:
         assert isinstance(params["a"], nn.Parameter)
         assert params["a"].shape == (5, 3)
 
+    def test_replace_does_not_modify_arg(self):
+        # https://github.com/pytorch/tensordict/issues/2949
+        params = TensorDictParams(TensorDict(a=nn.Parameter(torch.ones(3))))
+        td = TensorDict(a=torch.zeros(3))
+        td_replace = td.replace(params, b=torch.ones(3))
+        assert set(params.keys()) == {"a"}
+        assert [name for name, _ in params.named_parameters()] == ["a"]
+        assert td_replace["a"] is params["a"]
+        assert (td_replace["b"] == 1).all()
+
     @pytest.mark.parametrize("no_convert", [False, True])
     @pytest.mark.parametrize("lock", [False, True])
     def test_setitem(self, lock, no_convert):
