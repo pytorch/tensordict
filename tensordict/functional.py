@@ -647,7 +647,10 @@ def pad_sequence(
         pad_dim (int, optional): the dimension of the entries to pad, counted
             from the first dimension of each entry (batch dimensions
             included). If it is a batch dimension, the batch size of the
-            result is padded too. Defaults to ``0``.
+            result is padded too. A negative ``pad_dim`` counts from the last
+            dimension of each entry. If entries of different ranks put it on
+            different dimensions, at least one of them a batch dimension, the
+            samples must have the same batch size. Defaults to ``0``.
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
             Non-tensor entries are not filled with ``padding_value``: when the padded
             dim is a batch dimension of the output, they keep their values at the
@@ -679,7 +682,11 @@ def pad_sequence(
     Raises:
         RuntimeError: if ``list_of_tensordicts`` is empty, or if the entry
             shapes differ in a dimension other than ``pad_dim``.
-        ValueError: if ``padding_side`` is neither ``"left"`` nor ``"right"``.
+        ValueError: if ``padding_side`` is neither ``"left"`` nor ``"right"``,
+            or if a negative ``pad_dim`` lands on different dimensions of
+            entries of different ranks and the batch sizes of the samples
+            differ.
+        IndexError: if ``pad_dim`` is out of range for an entry.
 
     Examples:
         >>> import torch
@@ -731,6 +738,8 @@ def pad_sequence(
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
     mask_pad_dims = {}
+    # The batch dims that pad_dim lands on, counted in each entry
+    leaf_batch_pad_dims = set()
     for i, td in enumerate(list_of_tensordicts):
         if is_tensorclass(td):
             td = td._tensordict
@@ -746,6 +755,11 @@ def pad_sequence(
                 raise RuntimeError("Cannot pad scalars")
 
             pos_pad_dim = pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim
+            if pos_pad_dim < 0:
+                raise IndexError(
+                    f"pad_dim={pad_dim} is out of range for the entry {key!r} "
+                    f"of shape {tuple(tensor_shape)}."
+                )
 
             # track the maximum sequence length to update batch_size accordingly
             if tensor_shape[pos_pad_dim] > max_seq_length:
@@ -758,6 +772,8 @@ def pad_sequence(
             if pos_pad_dim >= td.ndim:
                 mask_shape += torch.Size([tensor_shape[pos_pad_dim]])
                 update_batch_size = False
+            else:
+                leaf_batch_pad_dims.add(pos_pad_dim)
 
             if return_mask:
                 mask_key = unravel_key((masks_key, key))
@@ -768,6 +784,23 @@ def pad_sequence(
     keys = list(keys) + list(mask_pad_dims)
 
     old_batch_size = list(list_of_tensordicts[0].batch_size)
+    if leaf_batch_pad_dims and (len(leaf_batch_pad_dims) > 1 or not update_batch_size):
+        # A negative pad_dim counts from the last dim of each entry: entries of
+        # different ranks put it on different dims, so the batch cannot be
+        # padded. That is fine if no batch dim needs padding.
+        if any(
+            td.batch_size != list_of_tensordicts[0].batch_size
+            for td in list_of_tensordicts
+        ):
+            raise ValueError(
+                f"pad_dim={pad_dim} counts from the last dim of each entry, "
+                "and the entries of different ranks put it on different "
+                f"dims: batch dims {sorted(leaf_batch_pad_dims)}"
+                + ("" if update_batch_size else " and feature dims")
+                + ". This works only if the samples have the same batch size. "
+                "Pass a non-negative pad_dim."
+            )
+        update_batch_size = False
     # The batch dim set to max_seq_length, if any: non-tensor entries are
     # padded along it too.
     batch_pad_dim = None
@@ -775,8 +808,10 @@ def pad_sequence(
         if max_seq_length == float("-inf"):
             # No tensor leaf: pad the non-tensor entries to the longest batch
             max_seq_length = max(td.batch_size[pad_dim] for td in list_of_tensordicts)
-        old_batch_size[pad_dim] = max_seq_length
-        batch_pad_dim = pad_dim % len(old_batch_size)
+            batch_pad_dim = pad_dim % len(old_batch_size)
+        else:
+            (batch_pad_dim,) = leaf_batch_pad_dims
+        old_batch_size[batch_pad_dim] = max_seq_length
     shape = [
         len(list_of_tensordicts),
     ] + old_batch_size
