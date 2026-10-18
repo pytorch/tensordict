@@ -940,6 +940,25 @@ class TestTD:
             assert (r["a"] == e["a"]).all()
             assert (r["u"] == e["u"]).all()
 
+    def test_stack_distinct_unbatched(self, mode):
+        # Stacking distinct unbatched entries compares their data pointers,
+        # which breaks the graph. With the fallback UnbatchedTensor (torch
+        # 2.13 and older), the Dynamo of torch 2.11 recursed without end there.
+        def make(value):
+            return TensorDict(
+                a=torch.full((3, 2), value),
+                u=UnbatchedTensor(torch.full((5,), value)),
+                batch_size=[3],
+            )
+
+        fn_c = torch.compile(lambda x, y: torch.stack([x, y], 0), mode=mode)
+        with pytest.warns(UserWarning, match="different data storage"):
+            result = fn_c(make(0.0), make(1.0))
+        assert result.batch_size == (2, 3)
+        assert (result["a"][1] == 1).all()
+        assert isinstance(result["u"], UnbatchedTensor)
+        assert (result["u"] == 0).all()
+
     @pytest.mark.parametrize("named", [False, True])
     def test_apply_is_leaf(self, named, mode):
         # With is_leaf=is_leaf_nontensor, fn is called on the non-tensor entry
