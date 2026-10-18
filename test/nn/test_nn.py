@@ -588,6 +588,29 @@ class TestTDModule:
         assert "e" in td
         assert "f" in td
 
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_wrapper_runs_hooks_once(self, subclass):
+        # gh-2942: the wrapper ran the wrapped module's forward hooks a second
+        # time, and the copied selection hook raised a TypeError
+        class PlusOne(TensorDictModuleWrapper):
+            def forward(self, tensordict):
+                tensordict = self.td_module(tensordict)
+                tensordict["y"] = tensordict["y"] + 1
+                return tensordict
+
+        inner = TensorDictModule(lambda x: (x + 1, x * 2), ["x"], ["y", "z"])
+        inner.register_forward_hook(
+            lambda module, args, out: out.set("y", out["y"] * 10)
+        )
+        wrapper_cls = PlusOne if subclass else TensorDictModuleWrapper
+        offset = 1 if subclass else 0
+        td = wrapper_cls(inner)(TensorDict(x=torch.tensor(1.0)))
+        assert td["y"] == 20 + offset
+        inner.select_out_keys("y")
+        td = wrapper_cls(inner)(TensorDict(x=torch.tensor(1.0)))
+        assert td["y"] == 20 + offset
+        assert "z" not in td
+
     @pytest.mark.parametrize("wrap", [False, True])
     def test_out_keys_setter(self, wrap):
         net = nn.Linear(3, 4)

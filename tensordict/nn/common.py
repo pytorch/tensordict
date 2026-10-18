@@ -1463,10 +1463,10 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
 
     def __init__(self, td_module: TensorDictModuleBase) -> None:
         super().__init__()
+        # The wrapped module's forward hooks run when forward calls it, so
+        # they are not copied onto the wrapper, which would run them twice
+        # (gh-2942).
         self.td_module = td_module
-        if len(self.td_module._forward_hooks):
-            for pre_hook in self.td_module._forward_hooks:
-                self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
     @property
     def out_keys(self):
