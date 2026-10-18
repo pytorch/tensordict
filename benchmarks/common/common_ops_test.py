@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import itertools
 
 import pytest
@@ -598,6 +599,21 @@ def test_creation_nested_many_keys(benchmark, num_keys):
     tensors = {str(i): torch.zeros(3, 4, 5) for i in range(num_keys)}
     tensors["nested"] = {str(i): torch.zeros(3, 4, 5) for i in range(num_keys)}
     benchmark(TensorDict, tensors, [3, 4])
+
+
+@pytest.mark.parametrize("kind", ["namedtuple", "structseq"])
+def test_from_namedtuple(benchmark, kind):
+    result = torch.randn(4, 3).max(0)  # a structseq, torch.return_types.max
+    if kind == "namedtuple":
+        result = collections.namedtuple("MaxResult", ["values", "indices"])(*result)
+    benchmark(TensorDict.from_namedtuple, result)
+
+
+def test_lazy_stack_flags(benchmark):
+    td = LazyStackedTensorDict.lazy_stack(
+        [TensorDict(a=torch.zeros(3)) for _ in range(4)], 0
+    )
+    benchmark(lambda: (td.is_shared(), td.is_memmap()))
 
 
 def test_clone(benchmark, td):

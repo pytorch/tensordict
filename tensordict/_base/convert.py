@@ -2282,17 +2282,17 @@ class _Conversion:
         from tensordict import TensorDict
 
         def namedtuple_to_dict(namedtuple_obj):
-            # Test for a structseq first: under the Dynamo of torch 2.11, a
-            # structseq has _fields, but no _asdict.
-            if is_structseq_instance(namedtuple_obj):
+            # A namedtuple. Test for _asdict, not _fields: under the Dynamo of
+            # torch 2.11, a structseq has _fields, but no _asdict.
+            if isinstance(namedtuple_obj, tuple) and hasattr(namedtuple_obj, "_asdict"):
+                namedtuple_obj = namedtuple_obj._asdict()
+            elif is_structseq_instance(namedtuple_obj):
                 # torch.return_types (the results of max, sort, topk, ...)
                 # are structseqs: named fields, but no _fields or _asdict.
                 namedtuple_obj = {
                     name: getattr(namedtuple_obj, name)
                     for name in type(namedtuple_obj).__match_args__
                 }
-            elif _is_namedtuple(namedtuple_obj):
-                namedtuple_obj = namedtuple_obj._asdict()
             for key, value in namedtuple_obj.items():
                 namedtuple_obj[key] = cls.from_any(
                     value, device=device, batch_size=batch_size
