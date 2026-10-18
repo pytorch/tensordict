@@ -145,9 +145,23 @@ class _DeviceOps:
     """Device and dtype conversions, memory placement and memory size."""
 
     def auto_device_(self) -> Self:
-        """Automatically sets the device, if it is unique.
+        """Sets the device of the tensordict to the device of its leaves, if they all share one.
 
-        Returns: self with the edited ``device`` attribute.
+        If the leaves are on several devices, the device is set to ``None``.
+        The nested tensordicts get the same device. The leaves are not moved.
+        See :ref:`devices`.
+
+        Returns:
+            ``self``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            >>> print(td.device)
+            None
+            >>> td.auto_device_().device
+            device(type='cpu')
 
         """
         devices = {
@@ -163,47 +177,35 @@ class _DeviceOps:
         return self
 
     def data_ptr(self, *, storage: bool = False):
-        """Returns the data_ptr of the tensordict leaves.
+        """Returns the data pointers of the leaves, as a tensordict of integers.
 
-        This can be useful to check if two tensordicts share the same ``data_ptr()``.
+        The result has the keys of the tensordict, an empty batch size and the
+        CPU device. Each leaf is replaced by its
+        :meth:`~torch.Tensor.data_ptr`, as a 0-d ``int64`` tensor. Compare two
+        results to check whether two tensordicts share memory. In a lazy stack,
+        each member is a nested entry named by its index (``"0"``, ``"1"``,
+        ...), which gives the data pointers of the leaves it really holds.
 
         Keyword Args:
-            storage (bool, optional): if ``True``, `tensor.untyped_storage().data_ptr()` will be called
-                instead. Defaults to ``False``.
+            storage (bool, optional): if ``True``, returns the data pointer of
+                the storage of each leaf
+                (``tensor.untyped_storage().data_ptr()``) instead, which a view
+                shares with its base. Defaults to ``False``.
 
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
+            >>> td = TensorDict(a=torch.zeros(2), b=torch.zeros(2), batch_size=[2])
             >>> td0 = td.unsqueeze(0)  # the leaves of td0 are views on the leaves of td
             >>> assert (td0.data_ptr() == td.data_ptr()).all()
-
-        .. note:: :class:`~tensordict.LazyStackedTensorDict` instances will be displayed as nested tensordicts to
-            reflect the true ``data_ptr()`` of their leaves:
-
-                >>> td0 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
-                >>> td1 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2])
-                >>> td = TensorDict.lazy_stack([td0, td1])
-                >>> td.data_ptr()
-                TensorDict(
-                    fields={
-                        0: TensorDict(
-                            fields={
-                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([]),
-                            device=cpu,
-                            is_shared=False),
-                        1: TensorDict(
-                            fields={
-                                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-                                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([]),
-                            device=cpu,
-                            is_shared=False)},
-                    batch_size=torch.Size([]),
-                    device=cpu,
-                    is_shared=False)
+            >>> td1 = td[1:]  # views with an offset
+            >>> (td1.data_ptr() == td.data_ptr()).all()
+            False
+            >>> (td1.data_ptr(storage=True) == td.data_ptr(storage=True)).all()
+            True
+            >>> stack = TensorDict.lazy_stack([td, td])
+            >>> list(stack.data_ptr().keys(include_nested=True, leaves_only=True))
+            [('0', 'a'), ('0', 'b'), ('1', 'a'), ('1', 'b')]
 
         """
         if storage:
@@ -232,7 +234,8 @@ class _DeviceOps:
         The leaves are not moved. After this call, you can set leaves on any
         device. See :ref:`devices`.
 
-        Returns: self
+        Returns:
+            ``self``.
 
         Examples:
             >>> import torch
@@ -256,13 +259,26 @@ class _DeviceOps:
 
     @_cache_while_locked  # noqa: B019
     def param_count(self, *, count_duplicates: bool = True) -> int:
-        """Counts the number of parameters (total number of indexable items), accounting for tensors only.
+        """Returns the total number of elements of the tensor leaves.
+
+        It sums :meth:`~torch.Tensor.numel` over the tensor leaves, nested
+        tensordicts included. Non-tensor data is not counted.
 
         Keyword Args:
-            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
-                If ``False``, only strictly identical tensors will be discarded (same views but different
-                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
-                to be a single copy).
+            count_duplicates (bool, optional): if ``True``, a tensor stored
+                under several keys is counted once per key. If ``False``, it
+                is counted once. Two different views of one tensor are counted
+                twice in both cases. Defaults to ``True``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> x = torch.zeros(6)
+            >>> td = TensorDict(a=x, b=x, c=torch.zeros(2, 3), s="text")
+            >>> td.param_count()
+            18
+            >>> td.param_count(count_duplicates=False)
+            12
 
         """
         vals = self._values_list(True, True)
@@ -275,13 +291,28 @@ class _DeviceOps:
 
     @_cache_while_locked  # noqa: B019
     def bytes(self, *, count_duplicates: bool = True) -> int:
-        """Counts the number of bytes of the contained tensors.
+        """Returns the number of bytes of the tensor leaves.
+
+        Each tensor leaf counts ``numel() * dtype.itemsize`` bytes, and a leaf
+        with a gradient counts the bytes of its gradient too. Non-tensor data
+        is not counted. A view counts the bytes of its own elements, not those
+        of the storage it shares.
 
         Keyword Args:
-            count_duplicates (bool): Whether to count duplicated tensor as independent or not.
-                If ``False``, only strictly identical tensors will be discarded (same views but different
-                ids from a common base tensor will be counted twice). Defaults to `True` (each tensor is assumed
-                to be a single copy).
+            count_duplicates (bool, optional): if ``True``, a tensor stored
+                under several keys is counted once per key. If ``False``, it
+                is counted once. Two different views of one tensor are counted
+                twice in both cases. Defaults to ``True``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> x = torch.zeros(6)
+            >>> td = TensorDict(a=x, b=x, c=torch.zeros(2, 3))
+            >>> td.bytes()
+            72
+            >>> td.bytes(count_duplicates=False)
+            48
 
         """
         set_of_tensors = set() if not count_duplicates else []
@@ -342,28 +373,41 @@ class _DeviceOps:
         return total
 
     def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> Self:
-        """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
+        """Returns a tensordict whose tensor leaves are in pinned (page-locked) memory.
+
+        Calls :meth:`~torch.Tensor.pin_memory` on every tensor leaf. Copies
+        from pinned memory to an accelerator are faster, and can run
+        asynchronously with ``to(device, non_blocking=True)``. Pinning needs an
+        accelerator, such as CUDA. A :class:`~tensordict.PersistentTensorDict`
+        or a :class:`~tensordict.store.TensorDictStore` raises a
+        ``RuntimeError``: call :meth:`to_tensordict` first. See
+        :ref:`devices`.
 
         Args:
-            num_threads (int, optional): if provided, the number of threads to
-                use to call ``pin_memory`` on the leaves, in a
-                :class:`~concurrent.futures.ThreadPoolExecutor`. Defaults to
-                ``None``, which, like ``0``, calls
-                :meth:`~torch.Tensor.pin_memory` on the calling thread.
-            inplace (bool, optional): if ``True``, the tensordict is modified
-                in-place. When every node is an unlocked
-                :class:`~tensordict.TensorDict` or
-                :class:`~tensordict.LazyStackedTensorDict` (or a tensorclass
-                over one) and no leaf is a :class:`~tensordict.MemoryMappedTensor`, in
-                shared memory, sparse, jagged or an
-                :class:`~tensordict.UnbatchedTensor`, each leaf is replaced by
-                its pinned copy, and the tensordict and every nested node stay
-                the same objects; keys that hold the same tensor share its
-                pinned copy, and a leaf that is a view of another leaf gets its
-                own. Any other tree, such as a locked one or one that holds a
-                memory-mapped tensordict, has the pinned copies written back
-                into its leaves, as before, so they stay in pageable memory.
-                Defaults to ``False``.
+            num_threads (int, optional): the number of threads that pin the
+                leaves, in a :class:`~concurrent.futures.ThreadPoolExecutor`.
+                Defaults to ``None``, which, like ``0``, pins them on the
+                calling thread.
+            inplace (bool, optional): if ``True``, the tensordict and its
+                nested tensordicts keep their identity, each leaf is replaced
+                by its pinned copy, and the call returns ``self``. A locked
+                tensordict, one that holds a node other than a
+                :class:`~tensordict.TensorDict`, a lazy stack or a tensorclass,
+                or one with memory-mapped, shared, sparse, jagged or unbatched
+                leaves gets the pinned copies written back into its existing
+                leaves, which stay in pageable memory. Defaults to ``False``.
+
+        Examples:
+            The example needs an accelerator, so it is not run when the
+            documentation is tested.
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(obs=torch.zeros(1000, 3), batch_size=[1000])
+            >>> pinned = td.pin_memory()  # doctest: +SKIP
+            >>> pinned["obs"].is_pinned()  # doctest: +SKIP
+            True
+            >>> td_cuda = pinned.to("cuda", non_blocking=True)  # doctest: +SKIP
 
         """
         if self._pin_memory_unsupported:
@@ -419,41 +463,64 @@ class _DeviceOps:
         replacement="pin_memory(inplace=True)",
     )
     def pin_memory_(self, num_threads: int = 0) -> Self:
-        """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors and returns the TensorDict modifies in-place.
+        """Pins the tensor leaves of the tensordict and returns ``self``.
 
         .. deprecated:: 0.15
             Use ``pin_memory(inplace=True)`` instead. Pinning allocates new
-            storage, so it does not fit the trailing-underscore convention.
-            ``pin_memory_()`` pins on the main thread by default
-            (``num_threads=0``); pass ``num_threads=0`` to
-            :meth:`pin_memory` to keep that behavior.
+            storage, so it does not fit the trailing-underscore convention
+            (see :ref:`inplace-conventions`). ``pin_memory_`` will be removed
+            in TensorDict 0.17.
 
         Args:
-            num_threads (int, optional): if provided, the number of threads to
-                use to call ``pin_memory`` on the leaves. Defaults to ``0``.
+            num_threads (int, optional): the number of threads that pin the
+                leaves, as in :meth:`pin_memory`. Defaults to ``0``, which
+                pins them on the calling thread.
 
         """
         return self.pin_memory(num_threads=num_threads, inplace=True)
 
     def cpu(self, **kwargs) -> Self:
-        """Casts a tensordict to CPU.
+        """Returns the tensordict on the CPU, as ``to("cpu", **kwargs)`` does.
 
-        This function also supports all the keyword arguments of :meth:`~.to`.
+        A tensordict whose device is already the CPU is returned as it is.
+
+        Args:
+            **kwargs: passed to :meth:`to`, for example ``non_blocking``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            >>> td.cpu().device
+            device(type='cpu')
         """
         return self.to("cpu", **kwargs)
 
     def cuda(self, device: int | str | torch.device | None = None, **kwargs) -> Self:
-        """Casts a tensordict to a cuda device (if not already on it).
+        """Returns the tensordict on a CUDA device, as :meth:`to` does.
+
+        A tensordict that is already on that device is returned as it is.
 
         Args:
-            device (int, str or torch.device, optional): if provided, the cuda
-                device on which the tensor should be cast. An integer is a cuda
-                device index. Defaults to the current cuda device.
-
-        This function also supports all the keyword arguments of :meth:`~.to`.
+            device (int, str or torch.device, optional): the CUDA device. An
+                integer (or a string of digits) is a device index. Defaults to
+                ``None``, which uses the current CUDA device.
+            **kwargs: passed to :meth:`to`, for example ``non_blocking``.
 
         Raises:
-            RuntimeError: if ``device`` is not a cuda device.
+            RuntimeError: if ``device`` is not a CUDA device.
+
+        Examples:
+            The example needs a CUDA device, so it is not run when the
+            documentation is tested.
+
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            >>> td.cuda().device  # doctest: +SKIP
+            device(type='cuda', index=0)
+            >>> td.cuda(1).device  # doctest: +SKIP
+            device(type='cuda', index=1)
 
         """
         if device is None:
@@ -469,17 +536,25 @@ class _DeviceOps:
         return self.to(device, **kwargs)
 
     def is_shared(self) -> bool:
-        """Checks if tensordict is in shared memory.
+        """Whether the tensordict is in shared memory.
 
-        If a TensorDict instance is in shared memory, it is locked (entries cannot
-        be renamed, removed or added). If a ``TensorDict`` is created with
-        tensors that are all in shared memory, this does __not__ mean that ``is_shared``
-        will return ``True`` (as a new tensor may or may not be in shared memory).
-        Only if one calls `tensordict.share_memory_()` or places the tensordict
-        on a device where the content is shared by default (eg, ``"cuda"``)
-        will the tensordict be considered in shared memory.
+        It is ``True`` after :meth:`share_memory_`, and always for a
+        tensordict on a CUDA device. A tensordict built from tensors that are
+        in shared memory is not marked as shared: only
+        :meth:`share_memory_` marks it. A tensordict in shared memory is
+        locked: entries cannot be added, renamed or removed. See
+        :ref:`keys-locking`.
 
-        This is always ``True`` for tensordicts on a CUDA device.
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            >>> td.is_shared()
+            False
+            >>> td.share_memory_().is_shared()
+            True
+            >>> td.is_locked
+            True
 
         """
         if self.device and not self._is_memmap:
@@ -488,12 +563,22 @@ class _DeviceOps:
 
     # Stream
     def record_stream(self, stream: torch.cuda.Stream) -> Self:
-        """Marks the tensordict as having been used by this stream.
+        """Marks the tensor leaves of the tensordict as used by ``stream``.
 
-        When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work
-        queued on stream at the time of deallocation is complete.
+        Calls :meth:`~torch.Tensor.record_stream` on every tensor leaf: when
+        a leaf is freed, its memory is not reused until the work queued on
+        ``stream`` at that time is complete. A tensordict can be marked with
+        one stream only.
 
-        See :meth:`~torch.Tensor.record_stream` for more information.`
+        Args:
+            stream (torch.cuda.Stream): the stream that uses the leaves.
+
+        Returns:
+            ``self``.
+
+        Raises:
+            RuntimeError: if the tensordict is already marked with another
+                stream.
 
         """
         if self._stream is not None and self._stream != stream:
@@ -629,102 +714,108 @@ class _DeviceOps:
 
     @_as_context_manager()
     def to(self, *args, **kwargs) -> Self:
-        """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
+        """Returns a tensordict cast to another device, dtype or memory format, or with a new batch size.
 
-        When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original
-        dtype (including integer and boolean leaves), unless ``cast_filter`` selects the
-        leaves to cast.
+        It accepts the forms of :meth:`torch.Tensor.to`, and some more:
+
+        - ``to(device, dtype=None)``: moves every leaf to ``device`` and, if
+          ``dtype`` is given, casts it.
+        - ``to(dtype)``: casts every tensor leaf to ``dtype``, whatever its
+          original dtype (integer and boolean leaves too), unless
+          ``cast_filter`` selects the leaves to cast.
+        - ``to(tensor)``: uses the device and the dtype of ``tensor``.
+        - ``to(other=tensordict)``: uses the device of ``other``, and its
+          dtype if all its leaves share one. Otherwise the dtypes are kept.
+        - ``to(batch_size=...)``: only sets the batch size, in place, and
+          returns ``self``.
+        - ``to(td.attrs())``: casts each leaf to the device and the dtype that
+          :meth:`~tensordict.TensorDict.attrs` recorded for the same key. See
+          :ref:`devices`.
+
+        The result is ``self`` when the device is already the device of the
+        tensordict and no dtype or memory format is given. Otherwise it is a
+        new tensordict, unless ``inplace=True``. When only the device changes,
+        a consolidated tensordict gives a consolidated result, whose leaves
+        are views of one storage on the new device.
 
         Args:
-            device (torch.device, optional): the desired device of the tensordict.
-            dtype (torch.dtype, optional): the desired dtype of all the tensors in
-                the tensordict.
-            tensor (torch.Tensor, optional): Tensor whose dtype and device are the desired
-                dtype and device for all tensors in this TensorDict.
+            device (torch.device, str or int, optional): the device of the
+                result. Its nested tensordicts get it too.
+            dtype (torch.dtype, optional): the dtype of the tensor leaves of
+                the result.
+            tensor (torch.Tensor, optional): a tensor whose device and dtype
+                are the device and dtype of the result.
 
         Keyword Args:
-            non_blocking (bool, optional): controls how the leaves are copied.
-                If ``None`` (default), the leaves are copied with ``non_blocking=True``
-                and, when the target device is not a CUDA device (e.g. device-to-host
-                copies), the tensordict synchronizes once after all the copies have been
-                issued; for a CPU target, only if a leaf comes from another device.
-                Under :func:`torch.compile`, these copies are blocking instead.
-                If ``True``, the copies are non-blocking and no synchronization
-                is performed: the caller is responsible for synchronizing before reading
-                the results. If ``False``, the copies are blocking.
-            memory_format (torch.memory_format, optional): the desired memory
-                format for the 4D and 5D tensors in this tensordict, as in
-                :meth:`torch.nn.Module.to`.
-            batch_size (torch.Size, optional): resulting batch-size of the
-                output tensordict. When the device or dtype changes, every
-                nested tensordict gets exactly this batch size and the names
-                are erased. Starting with TensorDict 0.17, the default will
-                change to setting the batch size as ``to(batch_size=...)``
-                does without a device: nested tensordicts with more batch
-                dimensions keep their batch size, nested lazy stacks stay
-                lazy stacks (or raise, as there, if they need more batch
-                dimensions) and the names are kept. A ``FutureWarning`` is
-                emitted when the result will change.
-            other (TensorDictBase, optional): TensorDict instance whose dtype
-                and device are the desired dtype and device for all tensors
-                in this TensorDict.
-
-                .. note::
-                    Since :class:`~tensordict.TensorDictBase` instances do not have
-                    a dtype, the dtype is gathered from the example leaves.
-                    If there are more than one dtype, then no dtype
-                    casting is done.
-
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves the dtype cast applies to.
-                ``key`` is the nested key of the leaf as a tuple of str, for
-                example ``("obs",)`` or ``("next", "done")``. Leaves for which
-                it returns ``False`` keep their dtype; a device or memory-format
-                change still applies to them. It is not called on non-tensor
-                data, nor when no dtype is given or when ``to`` gets an attrs
-                tensordict, whose leaves give each leaf its dtype. An
-                :class:`~tensordict.UnbatchedTensor` leaf is passed as is, not
-                as a :class:`torch.Tensor`. Helpers such as
-                :func:`~tensordict.is_inexact` can be passed directly. Defaults
-                to the ``cast_filter`` of a tensorclass that declares one, and to
-                casting every leaf otherwise; pass ``None`` to cast every leaf.
-                The dtype shorthands (:meth:`float`, :meth:`bfloat16`, ...) take
-                it too.
-
-            non_blocking_pin (bool, optional): if ``True``, the tensors are pinned before
-                being sent to device. This will be done asynchronously but can be
-                controlled via the ``num_threads`` argument.
+            non_blocking (bool, optional): how the leaves are copied. ``None``
+                copies them with ``non_blocking=True`` and, when the target
+                is not a CUDA device (for example a copy to the host),
+                synchronizes once after all the copies are issued; for a CPU
+                target, only if a leaf comes from another device. Under
+                :func:`torch.compile`, these copies are blocking instead.
+                ``True`` copies without synchronizing: synchronize before you
+                read the results. ``False`` makes blocking copies. Defaults to
+                ``None``. Pass it by keyword: a positional value is ignored.
+            memory_format (torch.memory_format, optional): the memory format of
+                the 4D and 5D tensors of the result, as in
+                :meth:`torch.nn.Module.to`. Defaults to ``None``, which keeps
+                the memory format.
+            batch_size (torch.Size, optional): the batch size of the result.
+                When the device or dtype changes, every nested tensordict gets
+                exactly this batch size and the names are erased. Starting with
+                TensorDict 0.17, the default will change to setting the batch
+                size as ``to(batch_size=...)`` does without a device: nested
+                tensordicts with more batch dimensions keep their batch size,
+                nested lazy stacks stay lazy stacks (or raise, as there, if
+                they need more batch dimensions) and the names are kept. A
+                ``FutureWarning`` is emitted when the result will change.
+                Defaults to ``None``, which keeps the batch size.
+            other (TensorDictBase, optional): a tensordict whose device, and
+                dtype if all its leaves share one, are those of the result.
+                Defaults to ``None``.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves the
+                dtype cast applies to. ``key`` is the nested key of the leaf as
+                a tuple of str, for example ``("obs",)`` or
+                ``("next", "done")``. Leaves for which it returns ``False``
+                keep their dtype, but still move to the new device or memory
+                format. It is not called on non-tensor data, without a dtype,
+                or with an attrs tensordict. An
+                :class:`~tensordict.UnbatchedTensor` leaf is passed as is.
+                Helpers such as :func:`~tensordict.is_inexact` can be passed
+                directly. Defaults to the ``cast_filter`` of a tensorclass that
+                declares one, and to casting every leaf otherwise; pass
+                ``None`` to cast every leaf. The dtype shorthands
+                (:meth:`float`, :meth:`bfloat16`, ...) take it too.
+            non_blocking_pin (bool, optional): if ``True``, pins the tensors
+                before sending them to the device, in ``num_threads``
+                threads. Defaults to ``False``.
 
                 .. note::
                     Each call starts and joins its pinning threads, which costs
                     the same however little data there is. So
-                    ``non_blocking_pin=True`` pays off only for large tensordicts,
-                    with leaves of a MiB or more and tens of MiB in total. For
-                    smaller tensordicts, ``tensordict.to("cuda")`` is usually the
-                    fastest, and ``tensordict.pin_memory().to("cuda",
-                    non_blocking=True)`` is also faster than
-                    ``non_blocking_pin=True``. Where the crossover lies depends on
-                    the machine, so measure it on yours.
+                    ``non_blocking_pin=True`` pays off only for large
+                    tensordicts, with leaves of a MiB or more and tens of MiB
+                    in total. For smaller tensordicts, ``td.to("cuda")`` is
+                    usually the fastest, and
+                    ``td.pin_memory().to("cuda", non_blocking=True)`` is also
+                    faster than ``non_blocking_pin=True``. Measure the
+                    crossover on your machine.
 
-            num_threads (int or None, optional): if ``non_blocking_pin=True``, the number
-                of threads to be used for ``pin_memory``. By default,
-                up to ``max(1, torch.get_num_threads() // 2)`` threads are
-                started, and no more than one per leaf.
-                ``num_threads=0`` will cancel any
-                multithreading for the `pin_memory()` calls.
-            inplace (bool, optional): if ``True``, the data will be written in-place in the same tensordict.
-                This can be significantly faster whenever building a tensordict is CPU-overhead bound.
-                Defaults to ``False``.
+            num_threads (int, optional): with ``non_blocking_pin=True``, the
+                number of threads that pin the leaves, at most one per leaf.
+                ``0`` pins them on the calling thread. Defaults to ``None``,
+                which starts up to ``max(1, torch.get_num_threads() // 2)``
+                threads.
+            inplace (bool, optional): if ``True``, writes the cast leaves into
+                the tensordict, which keeps its identity and keys, and returns
+                ``self``. This can be faster when building a new tensordict is
+                what costs the most. See :ref:`inplace-conventions`. Defaults
+                to ``False``.
 
         Returns:
-            a new tensordict instance if the device differs from the tensordict
-            device and/or if the dtype or memory format is passed. The same
-            tensordict otherwise.
-            ``batch_size`` only modifications are done in-place.
-
-        .. note::
-            If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
-            Each new tensor will be a view on the consolidated storage cast to the desired device.
+            ``self`` when nothing changes, with ``inplace=True``, or when only
+            ``batch_size`` is given; a new tensordict otherwise.
 
         This operation can be used as a context manager too. Inside the
         ``with`` block, you work on the cast tensordict. When the block exits,
@@ -1086,11 +1177,14 @@ class _DeviceOps:
             device_module.synchronize()
 
     def double(self, *, cast_filter: Callable | None = None) -> Self:
-        r"""Casts all tensors to ``torch.double`` (``torch.float64``).
+        """Returns a tensordict whose tensor leaves are cast to ``torch.float64`` (``torch.double``).
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
 
         def dble(x):
@@ -1101,11 +1195,14 @@ class _DeviceOps:
         return _cast_filtered(self, dble, cast_filter, propagate_lock=True)
 
     def float(self, *, cast_filter: Callable | None = None) -> Self:
-        r"""Casts all tensors to ``torch.float``.
+        """Returns a tensordict whose tensor leaves are cast to ``torch.float32`` (``torch.float``).
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
 
         def tofloat(x):
@@ -1116,11 +1213,14 @@ class _DeviceOps:
         return _cast_filtered(self, tofloat, cast_filter, propagate_lock=True)
 
     def int(self, *, cast_filter: Callable | None = None) -> Self:
-        r"""Casts all tensors to ``torch.int``.
+        """Returns a tensordict whose tensor leaves are cast to ``torch.int32`` (``torch.int``).
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
 
         def toint(x):
@@ -1131,11 +1231,14 @@ class _DeviceOps:
         return _cast_filtered(self, toint, cast_filter, propagate_lock=True)
 
     def bool(self, *, cast_filter: Callable | None = None) -> Self:
-        r"""Casts all tensors to ``torch.bool``.
+        """Returns a tensordict whose tensor leaves are cast to ``torch.bool``.
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
 
         def tobool(x):
@@ -1146,11 +1249,14 @@ class _DeviceOps:
         return _cast_filtered(self, tobool, cast_filter, propagate_lock=True)
 
     def half(self, *, cast_filter: Callable | None = None) -> Self:
-        r"""Casts all tensors to ``torch.half``.
+        """Returns a tensordict whose tensor leaves are cast to ``torch.float16`` (``torch.half``).
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
 
         def tohalf(x):
@@ -1163,14 +1269,20 @@ class _DeviceOps:
     def type(
         self, dst_type: torch.dtype, *, cast_filter: Callable | None = None
     ) -> Self:
-        r"""Casts all tensors to :attr:`dst_type`.
+        """Returns a tensordict whose tensor leaves are cast to ``dst_type``.
+
+        Each leaf is cast with :meth:`torch.Tensor.type`.
 
         Args:
-            dst_type (type or string): the desired type
+            dst_type (torch.dtype or str): the dtype, or the name of a tensor
+                type such as ``"torch.IntTensor"``.
 
         Keyword Args:
-            cast_filter (callable, optional): a predicate ``fn(key, value) -> bool``
-                that selects the tensor leaves to cast, as in :meth:`to`.
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
         """
 
         def totype(x):

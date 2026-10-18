@@ -74,9 +74,10 @@ when an existing `test/<area>/test_*.py` covers the area — extend it.
 
 - Every new public class/function must be referenced in
   `docs/source/reference/{td,tc,nn,ttd}.rst`.
-- Docstrings: Sphinx-style (`Args:` / `Returns:` / `Examples:`) with a runnable
-  `>>>` example for every new public class. Cite paper + arXiv link if
-  applicable.
+- Docstrings: Google style for Sphinx napoleon (`Args:` / `Keyword Args:` /
+  `Returns:` / `Examples:`), following "Writing docstrings" in
+  [`CONTRIBUTING.md`](CONTRIBUTING.md), with a runnable `>>>` example for
+  every new public class. Cite paper + arXiv link if applicable.
 - No emojis anywhere (code, docs, commits, PRs).
 
 ## Tutorials

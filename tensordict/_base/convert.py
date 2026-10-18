@@ -306,29 +306,39 @@ class _Conversion:
         """Builds a tensordict by stacking a list of dicts or tensor collections.
 
         Each dict is converted with :meth:`from_dict` and the results are
-        stacked along a new leading dimension.
+        stacked along a new leading dimension. A tensordict or tensorclass in
+        the list is stacked as it is: the keyword arguments do not apply to
+        it.
 
         Args:
             input (list): the dicts or tensor collections to stack.
 
         Keyword Args:
-            auto_batch_size (bool, optional): if ``True``, the batch size of
-                each element is computed automatically. See :meth:`from_dict`.
-            batch_size (iterable of int, optional): the batch size of the
-                result, with the length of the list first. Each element gets
-                ``batch_size[1:]``.
-            device (torch.device or compatible type, optional): a device for
-                the result.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                of each element to the largest leading shape that all its
+                entries share. Defaults to ``None``, which behaves like
+                ``False`` unless ``batch_dims`` is given.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result, with the length of the list first. Each element
+                gets ``batch_size[1:]``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
+                Defaults to ``None``.
             batch_dims (int, optional): the maximum number of batch dimensions
-                of the result, the list dimension included. Exclusive with
-                ``batch_size``.
-            names (list of str, optional): the dimension names of the result,
-                one per batch dimension, with the name of the list dimension
-                first.
+                of the result, the list dimension included. Turns on
+                ``auto_batch_size`` when that is ``None``. Exclusive with
+                ``batch_size``. Defaults to ``None``.
+            names (list of str, optional): the names of the batch dimensions
+                of the result, one per dimension, with the name of the list
+                dimension first. Defaults to ``None``.
             lazy (bool, optional): if ``True``, the result is a lazy stack;
                 if ``False``, a dense stack. Defaults to ``None``, which builds
                 a dense stack when the elements have the same shape and a lazy
-                stack otherwise.
+                stack otherwise. See :ref:`stacking`.
+
+        Raises:
+            ValueError: if ``batch_size[0]`` is not the length of the list.
 
         Examples:
             >>> import torch
@@ -411,49 +421,57 @@ class _Conversion:
         batch_dims=None,
         names=None,
     ):
-        """Instance method version of :meth:`~tensordict.TensorDict.from_dict`.
+        """Builds a tensordict from a dictionary, with the types of the entries of this tensordict.
 
-        Unlike :meth:`~tensordict.TensorDict.from_dict`, this method will
-        attempt to keep the tensordict types within the existing tree (for
-        any existing leaf).
+        Works like :meth:`~tensordict.TensorDict.from_dict`, except for the
+        nested dicts: a nested dict whose key is a nested tensordict or
+        tensorclass of this tensordict is converted to that type, recursively.
+        The other nested dicts become :class:`~tensordict.TensorDict`
+        instances. Use it to turn the output of :meth:`~.to_dict` back into
+        tensorclasses. The values of this tensordict are not used, and the
+        result is a :class:`~tensordict.TensorDict`.
+
+        Args:
+            input_dict (dict): the dictionary to convert. Nested dicts become
+                nested entries.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Defaults to ``None``, which behaves like ``False`` unless
+                ``batch_dims`` is given.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries
+                share. Defaults to ``None``, which gives an empty batch size
+                unless the batch size is computed.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
+                Defaults to ``None``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Turns on ``auto_batch_size`` when
+                that is ``None``. Exclusive with ``batch_size``. Defaults to
+                ``None``.
+            names (list of str, optional): the names of the batch dimensions,
+                one per dimension. Used only with ``batch_size``: when the
+                batch size is empty or computed, the names are dropped.
+                Defaults to ``None``.
+
+        Raises:
+            ValueError: if both ``batch_size`` and ``batch_dims`` are given.
 
         Examples:
-            >>> from tensordict import TensorDict, tensorclass
             >>> import torch
-            >>>
+            >>> from tensordict import TensorDict, tensorclass
             >>> @tensorclass
             ... class MyClass:
             ...     x: torch.Tensor
-            ...     y: int
-            >>>
-            >>> td = TensorDict({"a": torch.randn(()), "b": MyClass(x=torch.zeros(()), y=1)})
-            >>> print(td.from_dict_instance(td.to_dict()))
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: MyClass(
-                        x=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                        y=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-            >>> print(td.from_dict(td.to_dict()))
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td = TensorDict(a=torch.zeros(()), b=MyClass(x=torch.zeros(())))
+            >>> data = {"a": torch.ones(()), "b": {"x": torch.ones(())}}
+            >>> type(td.from_dict_instance(data)["b"]).__name__
+            'MyClass'
+            >>> type(TensorDict.from_dict(data)["b"]).__name__
+            'TensorDict'
 
         """
         if batch_dims is not None and batch_size is not None:
@@ -517,27 +535,39 @@ class _Conversion:
         auto_batch_size: bool = False,
         batch_dims: int | None = None,
     ):
-        """Converts a pytree to a TensorDict instance.
+        """Converts a pytree to a tensordict that :meth:`~.to_pytree` converts back.
 
-        This method is designed to keep the pytree nested structure as much as possible.
+        Each list, tuple, named tuple and dict of the pytree becomes a nested
+        tensordict, and its type is stored in a ``"_pytree_type"`` entry so
+        that :meth:`~.to_pytree` can rebuild the pytree. The elements of a list
+        or tuple get the keys ``"0"``, ``"1"``, ... The subclasses of these
+        types, such as :class:`collections.OrderedDict`,
+        :class:`collections.defaultdict` and the ``torch.return_types``
+        results of ``torch.max`` and the like, are accepted too. A
+        ``defaultdict`` is rebuilt without its ``default_factory``.
 
-        Additional non-tensor keys are added to keep track of each level's identity, providing
-        a built-in pytree-to-tensordict bijective transform API.
+        A tensor or a tensor collection is returned as it is. Python ints and
+        floats and NumPy arrays become tensors, so :meth:`~.to_pytree` returns
+        them as tensors. A dict key that is not a :class:`NestedKey` (such as an
+        int or an object) is stored in a :class:`~tensordict.NonTensorData`
+        entry next to its value. Other types raise a ``NotImplementedError``.
 
-        Accepted classes currently include lists, tuples, named tuples and dict,
-        and subclasses of these such as :class:`collections.OrderedDict`,
-        :class:`collections.defaultdict` and the results of ``torch.max`` and
-        the other ``torch.return_types``. A ``defaultdict`` is rebuilt without
-        its ``default_factory``.
+        Args:
+            pytree: the pytree to convert: a list, tuple, named tuple or dict,
+                nested to any depth, whose leaves are tensors, tensor
+                collections, Python numbers or NumPy arrays.
 
-        .. note::
-            For dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
-            instances.
-
-        .. note::
-            Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-            Note that this transformation is surjective: transforming back the tensordict to a pytree will not
-            recover the original types.
+        Keyword Args:
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Defaults to ``None``, which gives an empty batch size unless
+                ``auto_batch_size=True``.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
 
         .. note::
             A module ``state_dict()`` round-trips through ``from_pytree``, and its
@@ -554,50 +584,46 @@ class _Conversion:
             round-trip through :meth:`~.to_pytree`:
 
             - a list of numbers comes back as a tensor;
-            - a dict holding a str, list or tuple, and an empty dict or named
-              tuple (or a dict or named tuple holding one), come back as a
-              ``GenericDict`` named tuple;
-            - a tuple subclass, such as a ``torch.return_types`` result, and
-              a plain tuple holding anything but tensors, Python ints and
-              floats, dicts and named tuples (such as a str, a list or a NumPy
-              number), or holding one of the dicts or named tuples above, make
-              :meth:`~.to_pytree` raise a ``ValueError``, and an empty tuple
-              comes back as an empty ``GenericDict``.
+            - an empty tuple, an empty dict or named tuple, and a dict that
+              holds a str or a list come back as a ``GenericDict`` named
+              tuple;
+            - a dict that holds a tuple, a tuple subclass (such as a
+              ``torch.return_types`` result), and a tuple that holds anything
+              other than tensors, Python numbers, dicts and named tuples make
+              :meth:`~.to_pytree` raise a ``ValueError``.
 
-            The other dict, named tuple and plain tuple fields come back with
-            their own type.
+            The other dict, named tuple and tuple fields come back with their
+            own type.
 
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict
-            >>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
-            >>> class WeirdLookingClass:
+            >>> pytree = {"obs": torch.zeros(3, 4), "pair": (torch.zeros(3), torch.ones(3))}
+            >>> td = TensorDict.from_pytree(pytree, auto_batch_size=True)
+            >>> td.batch_size
+            torch.Size([3])
+            >>> sorted(td.keys()), sorted(td["pair"].keys())
+            (['_pytree_type', 'obs', 'pair'], ['0', '1', '_pytree_type'])
+            >>> type(td.to_pytree()["pair"]).__name__
+            'tuple'
+
+            A pytree with lists, dicts, a named tuple and a dict key that is
+            not a string round-trips:
+
+            >>> class Key:
             ...     pass
-            ...
-            >>> weird_key = WeirdLookingClass()
-            >>> # Make a pytree with tuple, lists, dict and namedtuple
+            >>> key = Key()
             >>> pytree = (
-            ...     [torch.randint(10, (3,)), torch.zeros(2)],
-            ...     {
-            ...         "tensor": torch.randn(
-            ...             2,
-            ...         ),
-            ...         "td": TensorDict({"one": 1}),
-            ...         weird_key: torch.randint(10, (2,)),
-            ...         "list": [1, 2, 3],
-            ...     },
-            ...     {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+            ...     [torch.arange(3), torch.zeros(2)],
+            ...     {"tensor": torch.ones(2), key: torch.arange(2), "list": [1, 2, 3]},
+            ...     {"named_tuple": TensorDict(two=torch.ones(1)).to_namedtuple()},
             ... )
-            >>> # Build a TensorDict from that pytree
-            >>> td = TensorDict.from_pytree(pytree)
-            >>> # Recover the pytree
-            >>> pytree_recon = td.to_pytree()
-            >>> # Check that the leaves match
+            >>> pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
             >>> def check(v1, v2):
             ...     assert (v1 == v2).all()
-            ...
             >>> _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon)
-            >>> assert weird_key in pytree_recon[1]
+            >>> key in pytree_recon[1]
+            True
 
         """
         if is_tensor_collection(pytree):
@@ -664,11 +690,21 @@ class _Conversion:
         raise NotImplementedError(f"Unknown type {type(pytree)}.")
 
     def to_pytree(self):
-        """Converts a tensordict to a PyTree.
+        """Rebuilds the pytree that :meth:`~.from_pytree` converted to this tensordict.
 
-        If the tensordict was not created from a pytree, this method just returns ``self`` without modification.
+        If the tensordict has no ``"_pytree_type"`` entry, that is, if it was
+        not created by :meth:`~.from_pytree`, this method returns ``self``.
+        A nested tensordict without that entry is kept as a tensordict in the
+        pytree.
 
-        See :meth:`~.from_pytree` for more information and examples.
+        .. seealso:: :meth:`~.from_pytree` for the supported types.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict.from_pytree({"a": [torch.zeros(2), torch.ones(2)]})
+            >>> td.to_pytree()
+            {'a': [tensor([0., 0.]), tensor([1., 1.])]}
 
         """
         _pytree_type = self._get_str("_pytree_type", default=None)
@@ -729,30 +765,44 @@ class _Conversion:
         batch_size: torch.Size | None = None,
         non_tensor_as_stack: bool = False,
     ):
-        """Creates a PersistentTensorDict from a h5 file.
+        """Opens an HDF5 file as a :class:`~tensordict.PersistentTensorDict`.
+
+        The data stays in the file: entries are read when they are accessed.
+        Requires ``h5py``. See :ref:`saving` and
+        :class:`~tensordict.PersistentTensorDict`.
 
         Args:
-            filename (str): The path to the h5 file.
+            filename (str or path): the path to the HDF5 file.
 
-        Keyword Arguments:
-            mode (str, optional): how the file is opened: ``"r"`` (read only),
-                ``"r+"`` (read and write), or another mode of :class:`h5py.File`
-                (see :class:`~tensordict.PersistentTensorDict`). Defaults to ``"r"``.
-            auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
-            batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output
-                tensordict should have. Defaults to ``None`` (full batch-size at each level).
-            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
+        Keyword Args:
+            mode (str, optional): how the file is opened, as in
+                :class:`h5py.File`: ``"r"`` (read only), ``"r+"`` (read and
+                write), and so on. Defaults to ``"r"``.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``, which
+                gives each nested tensordict the largest batch size that its
+                entries share.
             non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
                 dataset that tensordict did not write, such as a string column
                 with one string per row, reads as a
                 :class:`~tensordict.NonTensorStack` of its rows when its
-                leading dims equal the batch size. Otherwise it reads as one
-                :class:`~tensordict.NonTensorData` that holds the whole
+                leading dimensions equal the batch size. Otherwise it reads as
+                one :class:`~tensordict.NonTensorData` that holds the whole
                 dataset. Defaults to ``False``.
 
         Returns:
-            A PersistentTensorDict representation of the input h5 file.
+            A :class:`~tensordict.PersistentTensorDict` backed by the file.
+
+        Raises:
+            TypeError: if both ``auto_batch_size=True`` and ``batch_size``
+                are given.
 
         Examples:
             >>> import os
@@ -801,40 +851,54 @@ class _Conversion:
         non_tensor_as_stack: bool = False,
         allow_pickle: bool | None = None,
     ):
-        """Creates a PersistentTensorDict from a zarr store.
+        """Opens a zarr store as a :class:`~tensordict.PersistentTensorDict`.
 
-        Requires ``zarr>=3.0`` to be installed.
+        The data stays in the store: entries are read when they are accessed.
+        Requires ``zarr>=3.0``. See :ref:`saving` and
+        :class:`~tensordict.PersistentTensorDict`.
 
         Args:
-            filename (str, path or zarr store): The path to the zarr store (a
+            filename (str, path or zarr store): the path to the zarr store (a
                 directory), or a ``zarr.abc.store.Store`` instance (e.g. a
                 ``zarr.storage.ZipStore``).
 
-        Keyword Arguments:
-            mode (str, optional): Reading mode. Defaults to ``"r"``.
-            auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
-            batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output
-                tensordict should have. Defaults to ``None`` (full batch-size at each level).
-            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``
-                (read from the metadata written by :meth:`~.to_zarr`, or automatically determined
-                for stores written by other tools).
+        Keyword Args:
+            mode (str, optional): how the store is opened: ``"r"`` (read
+                only), ``"r+"`` (read and write), and so on, as in
+                :func:`zarr.open_group`. Defaults to ``"r"``.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``, which
+                reads the batch size and the names of the batch dimensions that :meth:`~.to_zarr` stored, or, for
+                a store written by another tool, gives each nested tensordict
+                the largest batch size that its entries share.
             non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
                 array that tensordict did not write, such as a string column
                 with one string per row, reads as a
                 :class:`~tensordict.NonTensorStack` of its rows when its
-                leading dims equal the batch size. Otherwise it reads as one
-                :class:`~tensordict.NonTensorData` that holds the whole
+                leading dimensions equal the batch size. Otherwise it reads as
+                one :class:`~tensordict.NonTensorData` that holds the whole
                 array. Defaults to ``False``.
-            allow_pickle (bool or None, optional): whether to decode pickled
-                non-tensor values. ``False`` rejects them before decoding;
-                ``True`` permits them only for data you trust. The default,
-                ``None``, permits them with a ``FutureWarning`` when read.
+            allow_pickle (bool, optional): whether to decode pickled
+                non-tensor values. ``False`` rejects them before decoding.
+                ``True`` permits them: use it only for data you trust.
+                ``None`` permits them with a ``FutureWarning`` when read.
                 Starting with TensorDict 0.17, the default will change to
                 ``allow_pickle=False``. Tensor and JSON entries are unaffected.
+                Defaults to ``None``.
 
         Returns:
-            A PersistentTensorDict representation of the input zarr store.
+            A :class:`~tensordict.PersistentTensorDict` backed by the store.
+
+        Raises:
+            TypeError: if both ``auto_batch_size=True`` and ``batch_size``
+                are given.
 
         Examples:
             >>> import os
@@ -882,44 +946,57 @@ class _Conversion:
         device=None,
         **kwargs,
     ) -> TensorDictBase:
-        """Pre-allocate a zero-filled TensorDict from a schema.
+        """Allocates a zero-filled tensordict from a schema of shapes and dtypes.
 
-        Creates a :class:`TensorDictBase` whose storage backend is selected
-        by ``storage``.  Each entry in ``schema`` maps a field name to an
-        ``(element_shape, dtype)`` pair; the full stored shape is
-        ``[*batch_size, *element_shape]``.
+        Each entry of ``schema`` maps a key to an ``(element_shape, dtype)``
+        pair, and the entry gets the shape ``[*batch_size, *element_shape]``.
+        ``storage`` selects where the zeros are stored, so that a buffer on
+        disk or on a server can be created without building it in memory
+        first.
 
         Args:
-            schema: Mapping from field name to ``(element_shape, dtype)``.
-                ``element_shape`` is the per-element shape (excluding
-                ``batch_size``).
+            schema (dict): maps each key (a ``str``) to a pair
+                ``(element_shape, dtype)``, where ``element_shape`` (a list of
+                int or a ``torch.Size``) is the shape of the entry after the
+                batch dimensions.
 
         Keyword Args:
-            batch_size: Overall batch dimensions prepended to every element
-                shape.  Defaults to ``()``.
-            storage (str or None): Backend selector:
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result, prepended to every element shape. Defaults to
+                ``None``, an empty batch size.
+            storage (str, optional): where the entries are stored:
 
-                - ``None`` -- plain :class:`TensorDict` with regular tensors.
-                - ``"memmap"`` -- memory-mapped tensors on disk.
-                  Pass ``prefix=<dir>`` in *kwargs*.
-                - ``"h5"`` -- HDF5 via :class:`PersistentTensorDict`.
-                  Pass ``filename=<path>`` in *kwargs*.
-                - ``"zarr"`` -- zarr (requires ``zarr>=3.0``) via
-                  :class:`PersistentTensorDict`. Pass ``filename=<path or store>``
-                  in *kwargs*.
-                - ``"shared"`` -- CPU shared-memory tensors.
-                - ``"redis"`` / ``"dragonfly"`` -- delegates to
-                  :meth:`TensorDictStore.from_schema`.
+                - ``None``: a :class:`~tensordict.TensorDict` of regular
+                  tensors.
+                - ``"memmap"``: memory-mapped tensors, in the directory given
+                  by ``prefix=<dir>`` (see :meth:`~.memmap_like`).
+                - ``"h5"``: a :class:`~tensordict.PersistentTensorDict` in the
+                  HDF5 file given by ``filename=<path>``.
+                - ``"zarr"``: a :class:`~tensordict.PersistentTensorDict` in
+                  the zarr store given by ``filename=<path or store>``
+                  (requires ``zarr>=3.0``).
+                - ``"shared"``: tensors in shared memory (see
+                  :meth:`~.share_memory_`).
+                - ``"redis"`` or ``"dragonfly"``: a
+                  :class:`~tensordict.store.TensorDictStore` on a server,
+                  through :meth:`TensorDictStore.from_schema
+                  <tensordict.store.TensorDictStore.from_schema>`.
 
-            device: Device for the resulting tensors (ignored by some
-                backends).
-            **kwargs: Backend-specific arguments forwarded to the
-                underlying constructor (e.g. ``prefix`` for memmap,
-                ``filename`` for h5, ``host``/``port`` for redis).
+                Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. The ``"memmap"`` storage ignores it. Defaults to
+                ``None``.
+            **kwargs: passed to the backend: ``prefix`` and the other
+                arguments of :meth:`~.memmap_like` for ``"memmap"``,
+                ``filename`` for ``"h5"`` and ``"zarr"``, ``host``, ``port``
+                and the like for ``"redis"`` and ``"dragonfly"``.
 
         Returns:
-            A new :class:`TensorDictBase` subclass instance with
-            pre-allocated (zero-filled) keys.
+            A new tensordict of the type that ``storage`` selects, filled with
+            zeros.
+
+        Raises:
+            ValueError: if ``storage`` is not one of the values above.
 
         Examples:
             >>> import torch
@@ -940,7 +1017,8 @@ class _Conversion:
             ...         storage="memmap",
             ...         prefix=d,
             ...     )
-            ...     assert td_mm.is_memmap()
+            ...     print(td_mm.is_memmap())
+            True
 
         """
         from tensordict._td import TensorDict
@@ -1043,21 +1121,26 @@ class _Conversion:
 
         The result is a :class:`~tensordict.TensorDict` (or a
         :class:`~tensordict.nn.TensorDictParams` with ``as_module=True``),
-        whichever class this method is called on.
+        whatever class this method is called on.
+
+        .. note::
+            This method locks the result by default (``lock=True``), but its
+            override :meth:`TensorDict.from_module
+            <tensordict.TensorDict.from_module>` does not.
 
         Args:
             module (nn.Module): the module to get the parameters from.
-            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
-                instance will be returned which can be used to store parameters
-                within a :class:`torch.nn.Module`. Defaults to ``False``.
-            lock (bool, optional): if ``True``, the resulting tensordict will be locked.
-                Defaults to ``True``.
-            use_state_dict (bool, optional): if ``True``, the state-dict from the
-                module will be used and unflattened into a TensorDict with
-                the tree structure of the model. Defaults to ``False``.
-
-                .. note::
-                    This is particularly useful when state-dict hooks have to be used.
+            as_module (bool, optional): if ``True``, returns a
+                :class:`~tensordict.nn.TensorDictParams`, which can be stored
+                as a submodule of a :class:`torch.nn.Module`. Defaults to
+                ``False``.
+            lock (bool, optional): if ``True``, the result is locked (see
+                :ref:`keys-locking`). Defaults to ``True``.
+            use_state_dict (bool, optional): if ``True``, reads the module's
+                ``state_dict()``, so that its state-dict hooks run, and
+                unflattens it into the tree of the submodules. The leaves are
+                then the tensors of the state dict, not the parameters.
+                Defaults to ``False``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1093,106 +1176,95 @@ class _Conversion:
         lazy_stack: bool = False,
         expand_identical: bool = False,
     ):
-        """Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
+        """Stacks the parameters and buffers of several modules in one tensordict.
+
+        The result has one batch dimension, with one element per module, and
+        the structure that :meth:`~.from_module` gives. Use it to run an
+        ensemble of modules that have the same structure with
+        :func:`torch.vmap` and :meth:`~.to_module` (see the example).
+
+        The default, dense result holds new parameters and buffers: the
+        stacks of those of the modules, with the same ``requires_grad``. Pass
+        these new parameters to the optimizer: gradients reach them, not the
+        parameters of the modules. With ``lazy_stack=True``, the result is a
+        lazy stack of the parameters of the modules, which receive the
+        gradients.
 
         Args:
-            modules (sequence of nn.Module): the modules to get the parameters from.
-                If the modules differ in their structure, a lazy stack is needed
-                (see the ``lazy_stack`` argument below).
+            *modules (nn.Module): the modules to get the parameters from. With
+                a dense stack, they must have the same parameters and buffers,
+                with the same shapes.
 
         Keyword Args:
-            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
-                instance will be returned which can be used to store parameters
-                within a :class:`torch.nn.Module`. Defaults to ``False``.
-            lock (bool, optional): if ``True``, the resulting tensordict will be locked.
-                Defaults to ``True``.
-            use_state_dict (bool, optional): if ``True``, the state-dict from the
-                module will be used and unflattened into a TensorDict with
-                the tree structure of the model. Defaults to ``False``.
-
-                .. note::
-                    This is particularly useful when state-dict hooks have to be used.
-
-            lazy_stack (bool, optional): whether parameters should be densly or
-                lazily stacked. Defaults to ``False`` (dense stack).
-
-                .. note::
-                    ``lazy_stack`` and ``as_module`` are exclusive features.
+            as_module (bool, optional): if ``True``, returns a
+                :class:`~tensordict.nn.TensorDictParams`, which can be stored
+                as a submodule of a :class:`torch.nn.Module`. Exclusive with
+                ``lazy_stack``. Defaults to ``False``.
+            lock (bool, optional): if ``True``, the result is locked (see
+                :ref:`keys-locking`). Defaults to ``True``.
+            use_state_dict (bool, optional): if ``True``, reads the
+                ``state_dict()`` of each module, so that its state-dict hooks
+                run. Defaults to ``False``.
+            lazy_stack (bool, optional): if ``True``, returns a
+                :class:`~tensordict.LazyStackedTensorDict` of the parameters of
+                the modules; if ``False``, stacks them into new parameters.
+                Exclusive with ``as_module``, and not compatible with lazy
+                modules. Defaults to ``False``.
 
                 .. warning::
-                    There is a crucial difference between lazy and non-lazy outputs
-                    in that non-lazy output will reinstantiate parameters with the
-                    desired batch-size, while ``lazy_stack`` will just represent
-                    the parameters as lazily stacked. This means that whilst the
-                    original parameters can safely be passed to an optimizer
-                    when ``lazy_stack=True``, the new parameters need to be passed
-                    when it is set to ``True``.
+                    A lazy stack stacks the parameters each time an entry is
+                    read with :meth:`~.get`, which costs memory (``N`` times
+                    the size of the parameters, more if a graph is built) and
+                    time, and the optimizer holds ``N`` times more parameters.
+                    Use ``lazy_stack=True`` only when you need to train the
+                    parameters of the modules themselves.
 
-                .. warning::
-                    Whilst it can be tempting to use a lazy stack to keep the
-                    orignal parameter references, remember that lazy stack
-                    perform a stack each time :meth:`~.get` is called. This will
-                    require memory (N times the size of the parameters, more if a
-                    graph is built) and time to be computed.
-                    It also means that the optimizer(s) will contain more
-                    parameters, and operations like :meth:`~torch.optim.Optimizer.step`
-                    or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
-                    to be executed. In general, ``lazy_stack`` should be reserved
-                    to very few use cases.
+            expand_identical (bool, optional): if ``True``, a parameter that is
+                the same object in every module is expanded instead of
+                stacked, so that the result shares its memory. Ignored when
+                ``lazy_stack=True``. Defaults to ``False``.
 
-            expand_identical (bool, optional): if ``True`` and the same parameter (same
-                identity) is being stacked to itself, an expanded version of this parameter
-                will be returned instead. This argument is ignored when ``lazy_stack=True``.
+        Raises:
+            RuntimeError: if ``lazy_stack=True`` and ``as_module=True``, or if
+                ``lazy_stack=True`` and a module has uninitialized (lazy)
+                parameters.
 
         Examples:
             >>> import torch
             >>> from torch import nn
             >>> from tensordict import TensorDict
             >>> _ = torch.manual_seed(0)
-            >>> empty_module = nn.Linear(3, 4, device="meta")
-            >>> n_models = 2
-            >>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
+            >>> modules = [nn.Linear(3, 4) for _ in range(2)]
             >>> params = TensorDict.from_modules(*modules)
-            >>> print(params)
-            TensorDict(
-                fields={
-                    bias: Parameter(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    weight: Parameter(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)
-            >>> # example of batch execution
+            >>> params.batch_size, params["weight"].shape
+            (torch.Size([2]), torch.Size([2, 4, 3]))
+
+            Run the two modules on one input with :func:`torch.vmap`, through a
+            module on the ``"meta"`` device that holds no data. The gradients
+            reach the stacked parameters, not those of the modules:
+
+            >>> empty_module = nn.Linear(3, 4, device="meta")
             >>> def exec_module(params, x):
             ...     with params.to_module(empty_module):
             ...         return empty_module(x)
             >>> x = torch.randn(3)
             >>> y = torch.vmap(exec_module, (0, None))(params, x)
-            >>> assert y.shape == (n_models, 4)
-            >>> # since lazy_stack = False, backprop leaves the original params untouched
+            >>> y.shape
+            torch.Size([2, 4])
             >>> y.sum().backward()
-            >>> assert params["weight"].grad.norm() > 0
-            >>> assert modules[0].weight.grad is None
+            >>> params["weight"].grad is not None, modules[0].weight.grad is None
+            (True, True)
 
-        With ``lazy_stack=True``, things are slightly different:
+            With ``lazy_stack=True``, the gradients reach the parameters of
+            the modules:
 
             >>> params = TensorDict.from_modules(*modules, lazy_stack=True)
-            >>> print(params)
-            LazyStackedTensorDict(
-                fields={
-                    bias: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    weight: Tensor(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                exclusive_fields={
-                },
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False,
-                stack_dim=0)
-            >>> # example of batch execution
+            >>> type(params).__name__
+            'LazyStackedTensorDict'
             >>> y = torch.vmap(exec_module, (0, None))(params, x)
-            >>> assert y.shape == (n_models, 4)
             >>> y.sum().backward()
-            >>> assert modules[0].weight.grad is not None
-
+            >>> modules[0].weight.grad is not None
+            True
 
         """
         param_list = [
@@ -1289,21 +1361,23 @@ class _Conversion:
             module (nn.Module): a module to write the parameters into.
 
         Keyword Args:
-            inplace (bool, optional): if ``True``, the parameters or tensors
-                in the module are updated in-place. Defaults to ``None``, which
-                behaves like ``False``. Cannot be passed together with
-                ``use_state_dict=True``.
-            return_swap (bool, optional): if ``True``, the old parameter configuration
-                will be returned. Defaults to ``True``.
-            swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
-                the tensordict where the swap should be written.
-            memo: deprecated. Passing it raises ``RuntimeError``.
-            use_state_dict (bool, optional): if ``True``, state-dict API will be
-                used to load the parameters (including the state-dict hooks).
-                Defaults to ``False``.
-            non_blocking (bool, optional): if ``True`` and this copy is between
-                different devices, the copy may occur asynchronously with respect
-                to the host.
+            inplace (bool, optional): if ``True``, copies the values into the
+                existing parameters and buffers of the module, which keep
+                their identity. Otherwise the leaves of the tensordict replace
+                them. Defaults to ``None``, which behaves like ``False``.
+                Cannot be passed with ``use_state_dict=True``.
+            return_swap (bool, optional): if ``True``, returns the parameters
+                and buffers that the module held before the call. Defaults to
+                ``True``.
+            swap_dest (TensorDictBase, optional): with ``return_swap``, a
+                tensordict to write the old values into and to return.
+                Defaults to ``None``, which returns a new tensordict.
+            use_state_dict (bool, optional): if ``True``, loads the values
+                through the state-dict API, so that the module's state-dict
+                hooks run. Defaults to ``False``.
+            non_blocking (bool, optional): if ``True``, copies between devices
+                can run asynchronously with respect to the host. Defaults to
+                ``False``.
             preserve_module_state (bool, optional): if ``True``, existing
                 :class:`~torch.nn.Parameter` and buffer registrations are
                 preserved when writing tensor leaves to ``module``: parameters
@@ -1311,18 +1385,21 @@ class _Conversion:
                 and buffers remain registered buffers. Leaves that are not
                 parameters but require gradients, or that are batched by
                 :func:`~torch.vmap`, are registered as they are, so that
-                gradients still reach them. If ``False``, tensor
-                leaves are written with the historical replacement semantics,
-                which may deregister an existing parameter when the source leaf
-                is not an :class:`~torch.nn.Parameter`. Defaults to ``True``.
-                Pass ``False`` to retain the historical replacement behavior.
+                gradients still reach them. If ``False``, a leaf that is not a
+                :class:`~torch.nn.Parameter` replaces the attribute as it is,
+                which can deregister an existing parameter (the historical
+                behavior). Defaults to ``True``.
 
                 .. versionchanged:: 0.15
                     ``preserve_module_state=None``, deprecated in 0.14, is no
                     longer accepted.
 
+            memo: no longer accepted: passing it raises a ``RuntimeError``.
+
         Returns:
-            A tensordict containing the values from the module if ``return_swap`` is ``True``, ``None`` otherwise.
+            A tensordict of the values that the module held before the call
+            (or ``swap_dest``) if ``return_swap`` is ``True``, ``None``
+            otherwise.
 
         Examples:
             >>> import torch
@@ -1332,28 +1409,32 @@ class _Conversion:
             >>> params = TensorDict.from_module(module)
             >>> zeros = params.data.clone().zero_()
             >>> old_params = zeros.to_module(module)
-            >>> assert (module.weight == 0).all()
+            >>> bool((module.weight == 0).all())
+            True
             >>> _ = old_params.to_module(module)  # restores the original values
-            >>> assert (module.weight != 0).any()
+            >>> bool((module.weight != 0).any())
+            True
 
-            Use the tensordict as a context manager to make a functional call:
+            Use the tensordict as a context manager to make a functional call.
+            When the block exits, the original parameters are written back:
 
-        >>> zeros = params.data * 0
-        >>> with zeros.to_module(module):
-        ...     y = module(torch.ones(2, 3))  # runs with zeroed parameters
-        >>> assert (y == 0).all()
-        >>> # When the block exits, the original parameters are written back.
-        >>> assert (module.weight != 0).any()
+            >>> with zeros.to_module(module):
+            ...     y = module(torch.ones(2, 3))  # runs with zeroed parameters
+            >>> bool((y == 0).all())
+            True
+            >>> bool((module.weight != 0).any())
+            True
 
             The original parameters are written back if the block raises an
             exception too:
 
-        >>> try:
-        ...     with zeros.to_module(module):
-        ...         raise ValueError("stop")
-        ... except ValueError:
-        ...     pass
-        >>> assert (module.weight != 0).any()
+            >>> try:
+            ...     with zeros.to_module(module):
+            ...         raise ValueError("stop")
+            ... except ValueError:
+            ...     pass
+            >>> bool((module.weight != 0).any())
+            True
 
         """
         if memo is not None:
@@ -1551,11 +1632,28 @@ class _Conversion:
 
     @classmethod
     def fromkeys(cls, keys: List[NestedKey], value: Any = 0):
-        """Creates a tensordict from a list of keys and a single value.
+        """Creates a tensordict with the same value for every key, like :meth:`dict.fromkeys`.
+
+        The result is a :class:`~tensordict.TensorDict` with an empty batch
+        size. A nested key creates nested tensordicts. A Python number becomes
+        a tensor for each key, and a tensor is stored as it is: every key then
+        holds the same tensor object.
 
         Args:
-            keys (list of NestedKey): An iterable specifying the keys of the new dictionary.
-            value (compatible type, optional): The value for all keys. Defaults to ``0``.
+            keys (list of NestedKey): the keys of the result.
+            value (Any, optional): the value of every key: a tensor, a number,
+                or any value that the :class:`~tensordict.TensorDict`
+                constructor takes. Defaults to ``0``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict.fromkeys(["a", ("b", "c")], torch.zeros(3))
+            >>> td["b", "c"]
+            tensor([0., 0., 0.])
+            >>> td["a"] is td["b", "c"]
+            True
+
         """
         from tensordict._td import TensorDict
 
@@ -1580,17 +1678,16 @@ class _Conversion:
     def to_tensordict(self, *, retain_none: bool | None = None) -> Self:
         """Returns a :class:`~tensordict.TensorDict` copy of this tensordict.
 
-        Every tensor is cloned, and every sub-tensordict and tensorclass is
+        Every tensor is cloned, and every nested tensordict and tensorclass is
         converted to a :class:`~tensordict.TensorDict`, recursively. Use it to
         get a regular, unlocked tensordict in memory from a lazy stack, a
         memory-mapped or locked tensordict, a
         :class:`~tensordict.PersistentTensorDict` or a tensorclass. The batch
-        size, device and dimension names are kept, with one exception: if the
-        tensordicts of a lazy stack have no names, the result has no names
-        either, even when the stack dimension has a name (from
-        ``stack_dim_name`` or the ``names`` setter). ``densify()`` and
-        ``clone()`` of the lazy stack keep that name. To keep it here, name
-        the dimension again with :meth:`refine_names`.
+        size, device and names of the batch dimensions are kept, with one
+        exception: if the tensordicts of a lazy stack have no names, the
+        result has no names either, even when the stack dimension has a name
+        (from ``stack_dim_name`` or the ``names`` setter). Name the dimension
+        again with :meth:`~.refine_names`, as in the example.
 
         Keyword Args:
             retain_none (bool, optional): if ``True``, the ``None`` fields of
@@ -1599,7 +1696,7 @@ class _Conversion:
                 ``None`` fields are dropped.
 
         Returns:
-            a new TensorDict object containing the same values.
+            A new :class:`~tensordict.TensorDict` with copies of the values.
 
         Examples:
             >>> import torch
@@ -1652,40 +1749,34 @@ class _Conversion:
         )
 
     def to_lazystack(self, dim: int = 0):
-        """Converts a TensorDict to a LazyStackedTensorDict or equivalent.
+        """Returns a lazy stack of the slices of the tensordict along ``dim``.
 
-        .. note::
-            This method can be used to swap the stack dimension of a LazyStackedTensorDict.
-            For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:
-
-            >>> import torch
-            >>> from tensordict import LazyStackedTensorDict, TensorDict
-            >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
-            >>> td2 = td.to_lazystack()
-            >>> td2.batch_size
-            torch.Size([2, 3])
-            >>> assert isinstance(td2, LazyStackedTensorDict)
-            >>> assert td2.stack_dim == 0
-            >>> td3 = td2.to_lazystack(1)
-            >>> assert td3.stack_dim == 1
-            >>> td3.batch_size
-            torch.Size([2, 3])
+        The tensordict is unbound along ``dim`` and the slices are stacked in
+        a :class:`~tensordict.LazyStackedTensorDict` (see :ref:`stacking`).
+        The slices are views: writing into a tensordict of the stack in place
+        writes into the original data. The batch size does not change. A lazy
+        stack along ``dim`` is returned as it is, and a lazy stack along
+        another dimension is restacked, which changes its stack dimension.
 
         Args:
-            dim (int, optional): the dimension along which to stack the tensordict.
-                Defaults to ``0``.
+            dim (int, optional): the dimension to stack along. Defaults to
+                ``0``.
 
         Returns:
-            A LazyStackedTensorDict instance.
+            A lazy stack with ``stack_dim == dim``, or ``self`` when the
+            tensordict is already one.
 
         Examples:
             >>> import torch
-            >>> from tensordict import LazyStackedTensorDict, TensorDict
-            >>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
-            >>> td2 = td.to_lazystack()
-            >>> td2.batch_size
-            torch.Size([2, 3])
-            >>> assert isinstance(td2, LazyStackedTensorDict)
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(2, 3), batch_size=(2, 3))
+            >>> stack = td.to_lazystack()
+            >>> type(stack).__name__, stack.batch_size, stack.stack_dim
+            ('LazyStackedTensorDict', torch.Size([2, 3]), 0)
+            >>> stack.to_lazystack(1).stack_dim
+            1
+            >>> stack.to_lazystack(0) is stack
+            True
 
         """
         from tensordict import lazy_stack, LazyStackedTensorDict
@@ -1707,22 +1798,35 @@ class _Conversion:
         convert_tensors: bool | Literal["numpy"] = False,
         tolist_first: bool = False,
     ) -> dict[str, Any]:
-        """Returns a dictionary with key-value pairs matching those of the tensordict.
+        """Returns a nested dictionary with the entries of the tensordict.
 
-        Args:
-            retain_none (bool): if ``True``, the ``None`` values from tensorclass instances
-                will be written in the dictionary.
-                Otherwise, they will be discarded. Default: ``True``.
-            convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
-                If "numpy", tensors will be converted to numpy arrays.
-                Otherwise, they will remain as tensors. Default: ``False``.
-            tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
-                it has batch dimensions. Default: ``False``.
+        Nested tensordicts and tensorclasses become nested dicts. The tensors
+        are not copied unless ``convert_tensors`` is set. Non-tensor data is
+        returned as its Python value.
+
+        Keyword Args:
+            retain_none (bool, optional): if ``True``, the ``None`` fields of
+                tensorclasses are written in the dict as ``None``. If
+                ``False``, they are dropped. Defaults to ``True``.
+            convert_tensors (bool or str, optional): if ``True``, tensors are
+                converted to (nested) Python lists with
+                :meth:`torch.Tensor.tolist`. If ``"numpy"``, they are converted
+                to NumPy arrays. If ``False``, they are kept as tensors.
+                Defaults to ``False``.
+            tolist_first (bool, optional): if ``True``, a nested tensordict is
+                converted with :meth:`~.tolist`, so that a nested tensordict
+                with batch dimensions becomes a list of dicts, one per element.
+                Defaults to ``False``.
 
         Returns:
-            A dictionary representation of the tensordict.
+            A dict whose keys are those of the tensordict.
 
-        .. seealso:: :meth:`~tensordict.TensorDictBase.tolist`
+        Raises:
+            RuntimeError: on a lazy stack whose tensordicts have different
+                keys (see :ref:`stacking-variable-size`).
+
+        .. seealso:: :meth:`~.tolist`, :meth:`~.numpy` and
+            :meth:`~tensordict.TensorDict.from_dict`, which converts back.
 
         Examples:
             >>> import torch
@@ -1780,53 +1884,57 @@ class _Conversion:
         tolist_first: bool = False,
         as_linked_list: bool = False,
     ) -> List[Any]:
-        """Returns a nested list representation of the tensordict.
+        """Returns the elements of the tensordict as nested lists, one level per batch dimension.
 
-        If the tensordict has no batch dimensions, this method returns a single list or dictionary.
-        Otherwise, it returns a nested list where each inner list represents a batch dimension.
+        The innermost elements are the tensordict indexed at every batch
+        index, converted with :meth:`~.to_dict`: for batch size ``[2, 3]``,
+        the result is a list of 2 lists of 3 dicts. A tensordict without
+        batch dimensions returns one dict.
 
-        Args:
-            convert_nodes (bool): if ``True``, leaf nodes will be converted to dictionaries.
-                Otherwise, they will be returned as tensordicts. Default: ``True``.
-            convert_tensors (bool, "numpy"): if ``True``, tensors will be converted to lists when creating the dictionary.
-                If "numpy", tensors will be converted to numpy arrays.
-                Otherwise, they will remain as tensors. Default: ``False``.
-            tolist_first (bool): if ``True``, the tensordict will be converted to a list first when
-                it has batch dimensions. Default: ``False``.
-            as_linked_list (bool): if ``True``, the list will be converted to a :class:`tensordict.utils.LinkedList`
-                which will automatically update the tensordict when the list is modified. Default: ``False``.
+        Keyword Args:
+            convert_nodes (bool, optional): if ``True``, the elements are
+                converted to dicts. If ``False``, they are kept as
+                tensordicts. Defaults to ``True``.
+            convert_tensors (bool or str, optional): as in :meth:`~.to_dict`:
+                if ``True``, tensors become Python lists, and if ``"numpy"``,
+                NumPy arrays. Requires ``convert_nodes=True``. Defaults to
+                ``False``.
+            tolist_first (bool, optional): as in :meth:`~.to_dict`: if
+                ``True``, a nested tensordict with batch dimensions becomes a
+                list of dicts. Defaults to ``False``.
+            as_linked_list (bool, optional): if ``True``, returns a
+                :class:`~tensordict.utils.LinkedList`: assigning an element of
+                the outer list (``result[0] = {...}``) writes it into the
+                tensordict. Defaults to ``False``.
 
         Returns:
-            A nested list representation of the tensordict.
+            A list (nested once per batch dimension), or a dict (or ``self``
+            if ``convert_nodes=False``) when the tensordict has no batch
+            dimensions.
+
+        Raises:
+            TypeError: if ``convert_tensors`` is set and ``convert_nodes=False``.
+
+        .. seealso:: :meth:`~.to_dict`.
 
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict
-            >>>
             >>> td = TensorDict(
-            ...     a=torch.arange(24).view(2, 3, 4),
-            ...     b=TensorDict(c=torch.arange(12).reshape(2, 3, 2), batch_size=(2, 3, 2)),
-            ...     batch_size=(2, 3)
+            ...     a=torch.arange(4).view(2, 2),
+            ...     b=TensorDict(c=torch.arange(8).view(2, 2, 2), batch_size=(2, 2, 2)),
+            ...     batch_size=(2,),
             ... )
-            >>> print(td.tolist(tolist_first=True))
-            [[{'a': tensor([0, 1, 2, 3]), 'b': [{'c': tensor(0)}, {'c': tensor(1)}]}, {'a': tensor([4, 5, 6, 7]), 'b': [{'c': tensor(2)}, {'c': tensor(3)}]}, {'a': tensor([ 8,  9, 10, 11]), 'b': [{'c': tensor(4)}, {'c': tensor(5)}]}], [{'a': tensor([12, 13, 14, 15]), 'b': [{'c': tensor(6)}, {'c': tensor(7)}]}, {'a': tensor([16, 17, 18, 19]), 'b': [{'c': tensor(8)}, {'c': tensor(9)}]}, {'a': tensor([20, 21, 22, 23]), 'b': [{'c': tensor(10)}, {'c': tensor(11)}]}]]
-            >>> print(td.tolist(tolist_first=False))
-            [[{'a': tensor([0, 1, 2, 3]), 'b': {'c': tensor([0, 1])}}, {'a': tensor([4, 5, 6, 7]), 'b': {'c': tensor([2, 3])}}, {'a': tensor([ 8,  9, 10, 11]), 'b': {'c': tensor([4, 5])}}], [{'a': tensor([12, 13, 14, 15]), 'b': {'c': tensor([6, 7])}}, {'a': tensor([16, 17, 18, 19]), 'b': {'c': tensor([8, 9])}}, {'a': tensor([20, 21, 22, 23]), 'b': {'c': tensor([10, 11])}}]]
-            >>> print(td.tolist(convert_tensors=True))
-            [[{'a': [0, 1, 2, 3], 'b': {'c': [0, 1]}}, {'a': [4, 5, 6, 7], 'b': {'c': [2, 3]}}, {'a': [8, 9, 10, 11], 'b': {'c': [4, 5]}}], [{'a': [12, 13, 14, 15], 'b': {'c': [6, 7]}}, {'a': [16, 17, 18, 19], 'b': {'c': [8, 9]}}, {'a': [20, 21, 22, 23], 'b': {'c': [10, 11]}}]]
-            >>> print(td.tolist(convert_nodes=False)[0][0])
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.int64, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                        batch_size=torch.Size([2]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td.tolist()
+            [{'a': tensor([0, 1]), 'b': {'c': tensor([[0, 1],
+                    [2, 3]])}}, {'a': tensor([2, 3]), 'b': {'c': tensor([[4, 5],
+                    [6, 7]])}}]
+            >>> td.tolist(convert_tensors=True)
+            [{'a': [0, 1], 'b': {'c': [[0, 1], [2, 3]]}}, {'a': [2, 3], 'b': {'c': [[4, 5], [6, 7]]}}]
+            >>> td.tolist(tolist_first=True, convert_tensors=True)[0]
+            {'a': [0, 1], 'b': [[{'c': 0}, {'c': 1}], [{'c': 2}, {'c': 3}]]}
+            >>> type(td.tolist(convert_nodes=False)[0]).__name__
+            'TensorDict'
 
         """
         if convert_tensors and not convert_nodes:
@@ -1865,31 +1973,24 @@ class _Conversion:
         return result
 
     def numpy(self) -> np.ndarray | dict[str, Any]:
-        """Converts a tensordict to a (possibly nested) dictionary of numpy arrays.
+        """Returns a nested dict of NumPy arrays with the entries of the tensordict.
 
-        Non-tensor data is exposed as such.
+        Each tensor becomes a NumPy array with :meth:`torch.Tensor.numpy`,
+        so the arrays share memory with the tensors, and a tensor that
+        requires gradients or is not on the CPU raises a ``RuntimeError`` or
+        ``TypeError``: call :meth:`~.detach` or :meth:`~.cpu` first. A nested
+        tensor becomes a tuple of arrays. Non-tensor data is returned as its
+        Python value. The ``None`` fields of tensorclasses are dropped.
+
+        .. seealso:: :meth:`~.to_struct_array` to convert to a NumPy
+            structured array, and :meth:`~.to_dict`.
 
         Examples:
-            >>> from tensordict import TensorDict
             >>> import torch
+            >>> from tensordict import TensorDict
             >>> data = TensorDict({"a": {"b": torch.zeros(()), "c": "a string!"}})
-            >>> print(data)
-            TensorDict(
-                fields={
-                    a: TensorDict(
-                        fields={
-                            b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                            c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
-            >>> print(data.numpy())
+            >>> data.numpy()
             {'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}
-
-        seealso: :meth:`~tensordict.TensorDictBase.to_struct_array` to convert to a struct array.
 
         """
         as_dict = self.to_dict(retain_none=False)
@@ -1906,13 +2007,21 @@ class _Conversion:
         return torch.utils._pytree.tree_map(to_numpy, as_dict)
 
     def to_namedtuple(self, dest_cls: type | None = None) -> Any:
-        """Converts a tensordict to a namedtuple.
+        """Converts the tensordict to a named tuple, recursively.
+
+        Each nested tensordict becomes a nested named tuple. Without
+        ``dest_cls``, each level is an instance of a new named tuple class,
+        ``GenericDict``, whose fields are the keys. The ``None`` fields of
+        tensorclasses are dropped.
 
         Args:
-            dest_cls (Type, optional): an optional namedtuple class to use
-                for the result. A nested tensordict is converted to
-                ``dest_cls`` too if ``dest_cls`` takes its keys, and to a
-                ``GenericDict`` otherwise.
+            dest_cls (type, optional): the named tuple class of the result. A
+                nested tensordict is converted to ``dest_cls`` too if
+                ``dest_cls`` takes its keys, and to a ``GenericDict``
+                otherwise. Defaults to ``None``.
+
+        .. seealso:: :meth:`~tensordict.TensorDict.from_namedtuple`, which
+            converts back.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -1936,43 +2045,73 @@ class _Conversion:
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
     ):
-        """Recursively converts any object to a TensorDict.
+        """Converts a dict, tuple, dataclass, array or file to a tensordict, recursively.
 
-        .. note::  ``from_any`` is less restrictive than the regular TensorDict constructor. It can cast data structures like
-            dataclasses or tuples to a tensordict using custom heuristics. This approach may incur some extra overhead and
-            involves more opinionated choices in terms of mapping strategies.
+        ``from_any`` picks the conversion from the type of ``obj``, and
+        applies it to the values inside ``obj`` too. It accepts more types
+        than the :class:`~tensordict.TensorDict` constructor, at the cost of
+        some overhead and of opinionated choices about how each type maps to
+        entries:
 
-        .. note:: This method recursively converts the input object to a TensorDict. If the object is already a
-            TensorDict (or any similar tensor collection object), it will be returned as is.
-
-        Args:
-            obj: The object to be converted.
-
-        Keyword Args:
-            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
-            batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output tensordict
-                should have. Defaults to ``None`` (full batch-size at each level).
-            device (torch.device, optional): The device on which the TensorDict will be created.
-            batch_size (torch.Size, optional): The batch size of the TensorDict.
-                Exclusive with ``auto_batch_size``.
-
-        Returns:
-            A TensorDict representation of the input object.
-
-        Supported objects:
-
-        - Dataclasses through :meth:`~.from_dataclass` (dataclasses will be converted to TensorDict instances, not tensorclasses).
-        - Namedtuples through :meth:`~.from_namedtuple`.
-        - Dictionaries through :meth:`~.from_dict`.
-        - Tuples through :meth:`~.from_tuple`. This includes the results of
-          ``torch.return_types`` (``max``, ``sort``, ``topk``, ...), which get
-          the keys ``"0"``, ``"1"``, ... and a :class:`FutureWarning`.
+        - a dict or :class:`collections.UserDict`: :meth:`~.from_dict`;
+        - a named tuple: :meth:`~.from_namedtuple`;
+        - a tuple: :meth:`~.from_tuple`, with the keys ``"0"``, ``"1"``, ...
+          This includes the results of ``torch.return_types`` (``max``,
+          ``sort``, ``topk``, ...), which also emit a :class:`FutureWarning`.
           Starting with TensorDict 0.17, the default will change to their
           field names (``"values"``, ``"indices"``, ...), as
-          :meth:`~.from_namedtuple` gives.
-        - NumPy's structured arrays through :meth:`~.from_struct_array`.
-        - HDF5 objects through :meth:`~.from_h5`.
+          :meth:`~.from_namedtuple` gives;
+        - a dataclass instance: :meth:`~.from_dataclass` (the result is a
+          tensordict, not a tensorclass);
+        - a NumPy structured array: :meth:`~.from_struct_array`;
+        - a pandas DataFrame: :meth:`~.from_pandas`;
+        - an open :class:`h5py.File`: a
+          :class:`~tensordict.PersistentTensorDict` (see :meth:`~.from_h5`).
+
+        A tensor or a tensor collection is returned as it is. A list becomes a
+        tensor if :func:`torch.tensor` takes it, and a
+        :class:`~tensordict.NonTensorStack` otherwise. Any other object is
+        returned unchanged.
+
+        Args:
+            obj: the object to convert.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
+                Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``.
+
+        Returns:
+            A tensordict (a :class:`~tensordict.PersistentTensorDict` for an
+            HDF5 file), a tensor or a :class:`~tensordict.NonTensorStack` for
+            a list, or ``obj`` itself for the other types.
+
+        Examples:
+            >>> import dataclasses
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> @dataclasses.dataclass
+            ... class Data:
+            ...     obs: torch.Tensor
+            ...     extra: tuple
+            >>> data = Data(obs=torch.zeros(3, 4), extra=(torch.ones(3), {"x": torch.ones(3)}))
+            >>> td = TensorDict.from_any(data, auto_batch_size=True)
+            >>> td.batch_size
+            torch.Size([3])
+            >>> sorted(td.keys(include_nested=True, leaves_only=True), key=str)
+            [('extra', '0'), ('extra', '1', 'x'), 'obs']
+            >>> TensorDict.from_any([1, 2, 3])
+            tensor([1, 2, 3])
 
         """
         if type(obj) is Tensor or is_tensor_collection(obj):
@@ -2101,34 +2240,46 @@ class _Conversion:
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
     ):
-        """Converts a tuple to a TensorDict.
+        """Converts a tuple to a tensordict with the keys ``"0"``, ``"1"``, ...
+
+        Each element is converted with :meth:`~.from_any`, so a nested tuple
+        or dict becomes a nested tensordict and a number becomes a tensor.
 
         Args:
-            obj: The tuple instance to be converted.
+            obj (tuple): the tuple to convert.
 
         Keyword Args:
-            auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically. Defaults to ``False``.
-            batch_dims (int, optional): If auto_batch_size is ``True``, defines how many dimensions the output tensordict
-                should have. Defaults to ``None`` (full batch-size at each level).
-            device (torch.device, optional): The device on which the TensorDict will be created. Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to ``None``.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
+                Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                It applies to the nested tensordicts too. Exclusive with
+                ``auto_batch_size``. Defaults to ``None``, an empty batch size.
 
         Returns:
-            A TensorDict representation of the input tuple.
+            A :class:`~tensordict.TensorDict`.
+
+        Raises:
+            TypeError: if both ``auto_batch_size=True`` and ``batch_size``
+                are given.
 
         Examples:
+            >>> import torch
             >>> from tensordict import TensorDict
-            >>> my_tuple = (1, 2, 3)
-            >>> td = TensorDict.from_tuple(my_tuple)
-            >>> print(td)
-            TensorDict(
-                fields={
-                    0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-                    1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-                    2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            >>> td = TensorDict.from_tuple((torch.zeros(3, 4), 1), auto_batch_size=True)
+            >>> td["0"].shape, td["1"], td.batch_size
+            (torch.Size([3, 4]), tensor(1), torch.Size([]))
+            >>> td = TensorDict.from_tuple((torch.zeros(3, 4), torch.ones(3)), auto_batch_size=True)
+            >>> td.batch_size
+            torch.Size([3])
 
         """
         from tensordict import TensorDict
@@ -2159,40 +2310,66 @@ class _Conversion:
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
     ):
-        """Converts a dataclass into a TensorDict instance.
+        """Converts a dataclass instance to a tensordict, with one entry per field.
+
+        Each field value is converted with :meth:`~.from_any`, so a nested
+        dataclass or dict becomes a nested tensordict and a number becomes a
+        tensor. With ``as_tensorclass=True``, the conversion is that of the
+        function :func:`~tensordict.from_dataclass` instead, which returns a
+        tensorclass.
 
         Args:
-            dataclass: The dataclass instance to be converted.
+            dataclass: the dataclass instance to convert. With
+                ``as_tensorclass=True``, it can also be a dataclass type.
 
         Keyword Args:
-            dest_cls (tensorclass, optional): A tensorclass type to be used to map the data. If not provided, a new
-                class is created. Without effect if :attr:`obj` is a type or as_tensorclass is `False`.
-            auto_batch_size (bool, optional): If ``True``, automatically determines and applies batch size to the
-                resulting TensorDict. Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``, defines how many dimensions the output
-                tensordict should have. Defaults to ``None`` (full batch-size at each level).
-            as_tensorclass (bool, optional): If ``True``, delegates the conversion to the free function
-                :func:`~tensordict.from_dataclass` and returns a tensor-compatible class (:func:`~tensordict.tensorclass`)
-                or instance instead of a TensorDict. Defaults to ``False``.
-            device (torch.device, optional): The device on which the TensorDict will be created.
+            dest_cls (type, optional): with ``as_tensorclass=True``, the
+                tensorclass to convert to. Ignored otherwise. Defaults to
+                ``None``, which creates a new tensorclass with the fields of
+                the dataclass.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            as_tensorclass (bool, optional): if ``True``, returns a
+                tensorclass instance (or a tensorclass type, for a dataclass
+                type) through :func:`~tensordict.from_dataclass`. Defaults to
+                ``False``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict.
-                Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``, an
+                empty batch size.
 
         Returns:
-            A TensorDict instance derived from the provided dataclass, unless `as_tensorclass` is True, in which case a tensor-compatible class or instance is returned.
+            A :class:`~tensordict.TensorDict`, or a tensorclass instance or
+            type if ``as_tensorclass=True``.
 
         Raises:
-            TypeError: If the provided input is not a dataclass instance.
+            TypeError: if ``dataclass`` is not a dataclass and
+                ``as_tensorclass=False``, or if both ``auto_batch_size=True``
+                and ``batch_size`` are given.
 
-        .. warning:: This method is distinct from the free function `from_dataclass` and serves a different purpose.
-            While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.
-
-        .. note::
-            - This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.
-            - Each key in the resulting TensorDict is initialized using the `cls.from_any` method.
-            - The `auto_batch_size` option allows for automatic batch size determination and application to the
-              resulting TensorDict.
+        Examples:
+            >>> import dataclasses
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> @dataclasses.dataclass
+            ... class Data:
+            ...     obs: torch.Tensor
+            ...     reward: torch.Tensor
+            >>> data = Data(obs=torch.zeros(3, 4), reward=torch.ones(3))
+            >>> td = TensorDict.from_dataclass(data, auto_batch_size=True)
+            >>> type(td).__name__, td.batch_size
+            ('TensorDict', torch.Size([3]))
+            >>> tc = TensorDict.from_dataclass(data, as_tensorclass=True, batch_size=[3])
+            >>> type(tc).__name__, tc.batch_size
+            ('Data_tc', torch.Size([3]))
 
         """
         if as_tensorclass:
@@ -2236,23 +2413,39 @@ class _Conversion:
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
     ):
-        """Converts a namedtuple to a TensorDict recursively.
+        """Converts a named tuple to a tensordict whose keys are its field names.
+
+        Each field value is converted with :meth:`~.from_any`, so a nested
+        named tuple or dict becomes a nested tensordict and a number becomes a
+        tensor. The ``torch.return_types`` results of ``torch.max``,
+        ``torch.sort`` and the like are accepted too. :meth:`~.to_namedtuple`
+        converts back.
 
         Args:
-            named_tuple: The namedtuple instance to be converted.
+            named_tuple (NamedTuple): the named tuple to convert.
 
         Keyword Args:
-            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
-                Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``, defines how many dimensions the output
-                tensordict should have. Defaults to ``None`` (full batch-size at each level).
-            device (torch.device, optional): The device on which the TensorDict will be created.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size of the TensorDict.
-                Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                It applies to the nested tensordicts too. Exclusive with
+                ``auto_batch_size``. Defaults to ``None``, an empty batch size.
 
         Returns:
-            A TensorDict representation of the input namedtuple.
+            A :class:`~tensordict.TensorDict`.
+
+        Raises:
+            TypeError: if both ``auto_batch_size=True`` and ``batch_size``
+                are given.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -2261,22 +2454,13 @@ class _Conversion:
             ...     "a_tensor": torch.zeros((3)),
             ...     "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
             >>> nt = data.to_namedtuple()
-            >>> print(nt)
+            >>> nt
             GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
-            >>> TensorDict.from_namedtuple(nt, auto_batch_size=True)
-            TensorDict(
-                fields={
-                    a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    nested: TensorDict(
-                        fields={
-                            a_string: NonTensorData(data=zero!, batch_size=torch.Size([3]), device=None),
-                            a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+            >>> td = TensorDict.from_namedtuple(nt, auto_batch_size=True)
+            >>> td.batch_size, td["nested", "a_string"]
+            (torch.Size([3]), 'zero!')
+            >>> sorted(TensorDict.from_namedtuple(torch.tensor([2, 0, 1]).max(0)).keys())
+            ['indices', 'values']
 
         """
         from tensordict import TensorDict
@@ -2318,35 +2502,45 @@ class _Conversion:
         device: torch.device | None = None,
         batch_size: torch.Size | None = None,
     ) -> Self:
-        """Converts a structured numpy array to a TensorDict.
+        """Converts a NumPy structured array to a tensordict, with one entry per field.
 
-        The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation).
-        Changing values of the structured numpy array in-place will affect the content of the TensorDict.
-
-        .. note:: This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory
-            content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content
-            of the TensorDict.
-            The exception is a field whose item size does not divide the size of a record, such as the ``"i8"``
-            field of a packed array of ``"i8"`` and ``"f4"`` fields (12 bytes per record): torch cannot view such a
-            field, so it is copied.
+        The batch size is the shape of the array, and each entry holds a
+        field. The conversion is zero-copy: the tensors share memory with the
+        array, so an in-place change to the array changes the tensordict, and
+        the other way around. Two cases copy the data: a ``device`` other
+        than the CPU, and a field whose item size does not divide the size of
+        a record, such as the ``"i8"`` field of a packed array of ``"i8"`` and
+        ``"f4"`` fields (12 bytes per record), which torch cannot view. String
+        fields become non-tensor data. :meth:`~.to_struct_array` converts
+        back.
 
         Args:
-            struct_array (np.ndarray): The structured numpy array to be converted.
+            struct_array (np.ndarray): the structured array to convert.
 
         Keyword Args:
-            auto_batch_size (bool, optional): If ``True``, the batch size will be computed automatically. Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``, defines how many dimensions the output
-                tensordict should have. Defaults to ``None`` (full batch-size at each level).
-            device (torch.device, optional): The device on which the TensorDict will be created.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share,
+                which can add the dimensions of array fields. Exclusive with
+                ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-
-                .. note::  Changing the device (i.e., specifying any device other than ``None`` or ``"cpu"``) will transfer the data,
-                    resulting in a change to the memory location of the returned data.
-
-            batch_size (torch.Size, optional): The batch size of the TensorDict. Defaults to None.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``,
+                which uses the shape of the array.
 
         Returns:
-            A TensorDict representation of the input structured numpy array.
+            A tensordict of the class this method is called on
+            (:class:`~tensordict.TensorDict` for ``TensorDictBase``).
+
+        Raises:
+            TypeError: if both ``auto_batch_size=True`` and ``batch_size``
+                are given.
 
         Examples:
             >>> import numpy as np
@@ -2356,12 +2550,13 @@ class _Conversion:
             ...     dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
             ... )
             >>> td = TensorDict.from_struct_array(x)
-            >>> x_recon = td.to_struct_array()
-            >>> assert (x_recon == x).all()
-            >>> assert x_recon.shape == x.shape
-            >>> # Try modifying x age field and check effect on td
-            >>> x["age"] += 1
-            >>> assert (td["age"] == np.array([10, 4])).all()
+            >>> td.batch_size, td["age"]
+            (torch.Size([2]), tensor([9, 3], dtype=torch.int32))
+            >>> x["age"] += 1  # the tensordict shares memory with the array
+            >>> td["age"]
+            tensor([10,  4], dtype=torch.int32)
+            >>> bool((td.to_struct_array() == x).all())
+            True
 
         """
         from tensordict.base import TensorDictBase
@@ -2384,17 +2579,20 @@ class _Conversion:
         return td
 
     def to_struct_array(self) -> np.ndarray:
-        """Converts a tensordict to a numpy structured array.
+        """Converts the tensordict to a NumPy structured array, with one field per entry.
 
-        In a :meth:`.from_struct_array` - :meth:`.to_struct_array` loop, the content of the input and output arrays should match.
-        However, `to_struct_array` will not keep the memory content of the original arrays.
-
-        .. seealso:: :meth:`.from_struct_array` for more information.
-
-        .. seealso:: :meth:`.numpy` to convert to a dictionary of numpy arrays.
+        The shape of the array is the batch size. A nested tensordict becomes
+        a nested structured field, and the feature dimensions of a tensor
+        become the shape of its field. String values become ``"U"`` fields of
+        at least 10 characters. Unlike :meth:`~.from_struct_array`, this
+        method copies the data: the array does not share memory with the
+        tensordict.
 
         Returns:
-            A numpy structured array representation of the input TensorDict.
+            A ``np.ndarray`` with a structured dtype.
+
+        .. seealso:: :meth:`~.from_struct_array`, which converts back, and
+            :meth:`~.numpy` to convert to a dict of NumPy arrays.
 
         Examples:
             >>> import torch
@@ -2522,33 +2720,43 @@ class _Conversion:
         separator: str | None = None,
         dtype: torch.dtype | None = None,
     ) -> Self:
-        """Converts a pandas DataFrame to a TensorDict.
+        """Converts a pandas DataFrame to a tensordict, with one entry per column.
 
-        Numeric columns become tensors, string/object columns become
-        :class:`~tensordict.NonTensorData`.
+        The batch size is ``[num_rows]``. Numeric and boolean columns become
+        tensors, string and object columns become non-tensor data, a
+        categorical column becomes the tensor of its codes, and a datetime
+        column becomes an ``int64`` tensor of nanoseconds.
+        :meth:`~.to_pandas` converts back.
 
         Args:
-            dataframe (pd.DataFrame): The pandas DataFrame to convert.
+            dataframe (pd.DataFrame): the DataFrame to convert.
 
         Keyword Args:
-            auto_batch_size (bool, optional): If ``True``, the batch size will
-                be computed automatically. Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
-                defines how many dimensions the output tensordict should have.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-            device (torch.device, optional): The device for tensor data.
-                Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size. Defaults to
-                ``[num_rows]``.
-            separator (str, optional): If provided, column names are split on
-                this separator to create nested TensorDicts. For example, with
-                ``separator="."``, a column ``"obs.x"`` becomes
-                ``td["obs", "x"]``. Defaults to ``None``.
-            dtype (torch.dtype, optional): If provided, all numeric columns
-                are cast to this dtype. Defaults to ``None``.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``,
+                which gives ``[num_rows]``.
+            separator (str, optional): if given, splits the column names on it
+                to build nested entries: with ``separator="."``, the column
+                ``"obs.x"`` becomes the entry ``("obs", "x")``. Defaults to
+                ``None``, which keeps the column names as keys.
+            dtype (torch.dtype, optional): if given, casts the numeric and
+                boolean columns to it. Defaults to ``None``, which keeps the
+                dtype of each column.
 
         Returns:
-            A TensorDict representation of the DataFrame.
+            A tensordict of the class this method is called on
+            (:class:`~tensordict.TensorDict` for ``TensorDictBase``).
 
         Examples:
             >>> from tensordict import TensorDict
@@ -2586,21 +2794,26 @@ class _Conversion:
         return result
 
     def to_pandas(self, *, separator: str | None = None):
-        """Converts this TensorDict to a pandas DataFrame.
+        """Converts the tensordict to a pandas DataFrame, with one column per leaf.
 
-        Each leaf key becomes a column. Tensor values are converted to numpy
-        arrays, :class:`~tensordict.NonTensorData` values are converted to
-        Python lists.
+        Each leaf must hold one value per row: a tensor of shape
+        ``[num_rows]``, or non-tensor data. Tensors are copied to the CPU and
+        converted to NumPy arrays. Non-tensor data becomes a column of Python
+        values. Requires pandas.
 
         Keyword Args:
-            separator (str, optional): If provided, nested keys are joined
-                with this separator to produce flat column names. For example,
-                ``td["obs", "x"]`` becomes column ``"obs.x"`` with
-                ``separator="."``. Required when the TensorDict contains
-                nested sub-TensorDicts. Defaults to ``None``.
+            separator (str, optional): if given, joins the keys of nested
+                entries with it to build the column names: with
+                ``separator="."``, the entry ``("obs", "x")`` becomes the
+                column ``"obs.x"``. Required when the tensordict has nested
+                tensordicts. Defaults to ``None``.
 
         Returns:
-            A pandas DataFrame.
+            A ``pd.DataFrame`` with one row per element of the tensordict.
+
+        Raises:
+            ValueError: if the tensordict has a nested tensordict and no
+                ``separator``, or if a tensor has more than one dimension.
 
         Examples:
             >>> import torch
@@ -2628,32 +2841,43 @@ class _Conversion:
         dtype: torch.dtype | None = None,
         **kwargs,
     ) -> Self:
-        """Creates a TensorDict from a CSV file.
+        """Reads a CSV file into a tensordict, with one entry per column.
 
-        Requires either pandas or pyarrow to be installed.
+        Requires pandas or pyarrow: the file is read with
+        :func:`pandas.read_csv` when pandas is installed, and with
+        ``pyarrow.csv.read_csv`` otherwise. The columns are converted as in
+        :meth:`~.from_pandas`. :meth:`~.to_csv` writes such a file.
 
         Args:
-            path (str or Path): Path to the CSV file.
+            path (str or Path): the path of the CSV file.
 
         Keyword Args:
-            auto_batch_size (bool, optional): If ``True``, the batch size will
-                be computed automatically. Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
-                defines how many dimensions the output tensordict should have.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-            device (torch.device, optional): The device for tensor data.
-                Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size. Defaults to
-                ``[num_rows]``.
-            separator (str, optional): If provided, column names are split on
-                this separator to create nested TensorDicts. Defaults to ``None``.
-            dtype (torch.dtype, optional): If provided, all numeric columns
-                are cast to this dtype. Defaults to ``None``.
-            **kwargs: Additional keyword arguments forwarded to the CSV reader
-                (``pandas.read_csv`` or ``pyarrow.csv.read_csv``).
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``,
+                which gives ``[num_rows]``.
+            separator (str, optional): if given, splits the column names on it
+                to build nested entries: with ``separator="."``, the column
+                ``"obs.x"`` becomes the entry ``("obs", "x")``. Defaults to
+                ``None``, which keeps the column names as keys.
+            dtype (torch.dtype, optional): if given, casts the numeric and
+                boolean columns to it. Defaults to ``None``, which keeps the
+                dtype of each column.
+            **kwargs: passed to the CSV reader.
 
         Returns:
-            A TensorDict representation of the CSV data.
+            A tensordict of the class this method is called on
+            (:class:`~tensordict.TensorDict` for ``TensorDictBase``).
 
         Examples:
             >>> import os
@@ -2693,18 +2917,43 @@ class _Conversion:
         return result
 
     def to_csv(self, path, *, separator: str | None = None, **kwargs):
-        """Writes this TensorDict to a CSV file.
+        """Writes the tensordict to a CSV file, with one column per leaf.
 
-        Requires pandas to be installed.
+        The tensordict is converted with :meth:`~.to_pandas`, so the same
+        rules apply, and written with :meth:`pandas.DataFrame.to_csv`
+        without the index. Requires pandas. :meth:`~.from_csv` reads the
+        file back.
 
         Args:
-            path (str or Path): Path to the output CSV file.
+            path (str or Path): the path of the CSV file.
 
         Keyword Args:
-            separator (str, optional): If provided, nested keys are joined
-                with this separator. Defaults to ``None``.
-            **kwargs: Additional keyword arguments forwarded to
-                ``pandas.DataFrame.to_csv``.
+            separator (str, optional): if given, joins the keys of nested
+                entries with it to build the column names: with
+                ``separator="."``, the entry ``("obs", "x")`` becomes the
+                column ``"obs.x"``. Required when the tensordict has nested
+                tensordicts. Defaults to ``None``.
+            **kwargs: passed to :meth:`pandas.DataFrame.to_csv`.
+
+        Raises:
+            ValueError: as :meth:`~.to_pandas`.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.arange(2), b=TensorDict(c=torch.zeros(2)), batch_size=[2])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.csv")
+            ...     td.to_csv(path, separator=".")
+            ...     with open(path) as f:
+            ...         print(f.read())
+            a,b.c
+            0,0.0
+            1,0.0
+            <BLANKLINE>
+
         """
         _write_csv(self, path, separator=separator, **kwargs)
 
@@ -2722,35 +2971,45 @@ class _Conversion:
         columns: list[str] | None = None,
         **kwargs,
     ) -> Self:
-        """Creates a TensorDict from a Parquet file.
+        """Reads a Parquet file into a tensordict, with one entry per column.
 
-        Requires either pyarrow or pandas to be installed. Prefers pyarrow
-        when available for better performance.
+        Requires pyarrow or pandas: the file is read with
+        ``pyarrow.parquet.read_table`` when pyarrow is installed, and with
+        :func:`pandas.read_parquet` otherwise. The columns are converted as in
+        :meth:`~.from_pandas`. :meth:`~.to_parquet` writes such a file.
 
         Args:
-            path (str or Path): Path to the Parquet file.
+            path (str or Path): the path of the Parquet file.
 
         Keyword Args:
-            auto_batch_size (bool, optional): If ``True``, the batch size will
-                be computed automatically. Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
-                defines how many dimensions the output tensordict should have.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-            device (torch.device, optional): The device for tensor data.
-                Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size. Defaults to
-                ``[num_rows]``.
-            separator (str, optional): If provided, column names are split on
-                this separator to create nested TensorDicts. Defaults to ``None``.
-            dtype (torch.dtype, optional): If provided, all numeric columns
-                are cast to this dtype. Defaults to ``None``.
-            columns (list of str, optional): If provided, only read these
-                columns from the file. Defaults to ``None`` (all columns).
-            **kwargs: Additional keyword arguments forwarded to the Parquet
-                reader.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``,
+                which gives ``[num_rows]``.
+            separator (str, optional): if given, splits the column names on it
+                to build nested entries: with ``separator="."``, the column
+                ``"obs.x"`` becomes the entry ``("obs", "x")``. Defaults to
+                ``None``, which keeps the column names as keys.
+            dtype (torch.dtype, optional): if given, casts the numeric and
+                boolean columns to it. Defaults to ``None``, which keeps the
+                dtype of each column.
+            columns (list of str, optional): the columns to read. Defaults to
+                ``None``, which reads all the columns.
+            **kwargs: passed to the Parquet reader.
 
         Returns:
-            A TensorDict representation of the Parquet data.
+            A tensordict of the class this method is called on
+            (:class:`~tensordict.TensorDict` for ``TensorDictBase``).
 
         Examples:
             >>> import os
@@ -2790,18 +3049,41 @@ class _Conversion:
         return result
 
     def to_parquet(self, path, *, separator: str | None = None, **kwargs):
-        """Writes this TensorDict to a Parquet file.
+        """Writes the tensordict to a Parquet file, with one column per leaf.
 
-        Requires either pyarrow or pandas to be installed.
+        The tensordict is converted with :meth:`~.to_pandas`, so the same
+        rules apply. Requires pandas. The file is written with
+        ``pyarrow.parquet.write_table`` when pyarrow is installed, and with
+        :meth:`pandas.DataFrame.to_parquet` otherwise. :meth:`~.from_parquet`
+        reads the file back.
 
         Args:
-            path (str or Path): Path to the output Parquet file.
+            path (str or Path): the path of the Parquet file.
 
         Keyword Args:
-            separator (str, optional): If provided, nested keys are joined
-                with this separator. Defaults to ``None``.
-            **kwargs: Additional keyword arguments forwarded to the Parquet
-                writer.
+            separator (str, optional): if given, joins the keys of nested
+                entries with it to build the column names: with
+                ``separator="."``, the entry ``("obs", "x")`` becomes the
+                column ``"obs.x"``. Required when the tensordict has nested
+                tensordicts. Defaults to ``None``.
+            **kwargs: passed to the Parquet writer.
+
+        Raises:
+            ValueError: as :meth:`~.to_pandas`.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.arange(2), b=TensorDict(c=torch.zeros(2)), batch_size=[2])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.parquet")
+            ...     td.to_parquet(path, separator=".")
+            ...     td2 = TensorDict.from_parquet(path, separator=".")
+            >>> td2["b", "c"]
+            tensor([0., 0.])
+
         """
         _write_parquet(self, path, separator=separator, **kwargs)
 
@@ -2819,38 +3101,49 @@ class _Conversion:
         lines: bool = False,
         **kwargs,
     ) -> Self:
-        """Creates a TensorDict from a JSON file.
+        """Reads a JSON file of records into a tensordict, with one entry per field.
 
-        Supports both standard JSON (array of records) and JSON Lines format.
-        For nested JSON objects, use :func:`from_dict` instead.
-
-        Requires pandas for best results. Falls back to stdlib ``json``
-        for simple cases.
+        The file holds an array of records (``[{"a": 1, "b": 2.0}, ...]``),
+        or one record per line with ``lines=True`` (JSON Lines). Each field
+        becomes an entry with one value per record. The file is read with
+        :func:`pandas.read_json` when pandas is installed, and with the
+        :mod:`json` module otherwise. To convert a single JSON object, load
+        it with :func:`json.load` and pass it to :meth:`~.from_dict`.
+        :meth:`~.to_json` writes such a file.
 
         Args:
-            path (str or Path): Path to the JSON file.
+            path (str or Path): the path of the JSON file.
 
         Keyword Args:
-            auto_batch_size (bool, optional): If ``True``, the batch size will
-                be computed automatically. Defaults to ``False``.
-            batch_dims (int, optional): If ``auto_batch_size`` is ``True``,
-                defines how many dimensions the output tensordict should have.
+            auto_batch_size (bool, optional): if ``True``, sets the batch size
+                to the largest leading shape that all the entries share.
+                Exclusive with ``batch_size``. Defaults to ``False``.
+            batch_dims (int, optional): with ``auto_batch_size``, the maximum
+                number of batch dimensions. Ignored without
+                ``auto_batch_size``. Defaults to ``None``.
+            device (torch.device, str or int, optional): the device of the
+                result. Leaves on another device are moved to it. ``None``
+                leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
-            device (torch.device, optional): The device for tensor data.
-                Defaults to ``None``.
-            batch_size (torch.Size, optional): The batch size. Defaults to
-                ``[num_rows]``.
-            separator (str, optional): If provided, column names are split on
-                this separator to create nested TensorDicts. Defaults to ``None``.
-            dtype (torch.dtype, optional): If provided, all numeric columns
-                are cast to this dtype. Defaults to ``None``.
-            lines (bool, optional): If ``True``, reads the file as JSON Lines
-                (one JSON object per line). Defaults to ``False``.
-            **kwargs: Additional keyword arguments forwarded to the JSON
-                reader.
+            batch_size (torch.Size or list of int, optional): the batch size of
+                the result: the leading dimensions that all its entries share.
+                Exclusive with ``auto_batch_size``. Defaults to ``None``,
+                which gives ``[num_rows]``.
+            separator (str, optional): if given, splits the column names on it
+                to build nested entries: with ``separator="."``, the column
+                ``"obs.x"`` becomes the entry ``("obs", "x")``. Defaults to
+                ``None``, which keeps the column names as keys.
+            dtype (torch.dtype, optional): if given, casts the numeric and
+                boolean columns to it. Defaults to ``None``, which keeps the
+                dtype of each column.
+            lines (bool, optional): if ``True``, reads the file as JSON Lines,
+                one record per line. Defaults to ``False``.
+            **kwargs: passed to :func:`pandas.read_json`. Ignored without
+                pandas.
 
         Returns:
-            A TensorDict representation of the JSON data.
+            A tensordict of the class this method is called on
+            (:class:`~tensordict.TensorDict` for ``TensorDictBase``).
 
         Examples:
             >>> import os
@@ -2899,18 +3192,41 @@ class _Conversion:
         lines: bool = False,
         **kwargs,
     ):
-        """Writes this TensorDict to a JSON file.
+        """Writes the tensordict to a JSON file, as an array of records.
+
+        Each element of the tensordict becomes one record, with one field per
+        leaf, as in :meth:`~.to_pandas`. With pandas installed, the file is
+        written with :meth:`pandas.DataFrame.to_json` (``orient="records"``),
+        and otherwise with the :mod:`json` module. :meth:`~.from_json` reads
+        the file back.
 
         Args:
-            path (str or Path): Path to the output JSON file.
+            path (str or Path): the path of the JSON file.
 
         Keyword Args:
-            separator (str, optional): If provided, nested keys are joined
-                with this separator. Defaults to ``None``.
-            lines (bool, optional): If ``True``, writes in JSON Lines format.
-                Defaults to ``False``.
-            **kwargs: Additional keyword arguments forwarded to the JSON
-                writer.
+            separator (str, optional): if given, joins the keys of nested
+                entries with it to build the column names: with
+                ``separator="."``, the entry ``("obs", "x")`` becomes the
+                column ``"obs.x"``. Required when the tensordict has nested
+                tensordicts. Defaults to ``None``.
+            lines (bool, optional): if ``True``, writes JSON Lines, one record
+                per line. Defaults to ``False``.
+            **kwargs: passed to :meth:`pandas.DataFrame.to_json`. Ignored
+                without pandas.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.arange(2), b=TensorDict(c=torch.zeros(2)), batch_size=[2])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     path = os.path.join(tmpdir, "data.json")
+            ...     td.to_json(path, separator=".")
+            ...     with open(path) as f:
+            ...         print(f.read())
+            [{"a":0,"b.c":0.0},{"a":1,"b.c":0.0}]
+
         """
         _write_json(self, path, separator=separator, lines=lines, **kwargs)
 
@@ -2919,42 +3235,32 @@ class _Conversion:
         filename,
         **kwargs,
     ) -> Any:
-        """Converts a tensordict to a PersistentTensorDict with the h5 backend.
+        """Writes the tensordict to a new HDF5 file and returns a tensordict backed by it.
+
+        Each leaf becomes a dataset of the file, and each nested tensordict a
+        group. An existing file at ``filename`` is overwritten. The batch size
+        and the names of the batch dimensions are kept. Requires ``h5py``.
+        :meth:`~.from_h5` opens the file again. See :ref:`saving`.
 
         Args:
-            filename (str or path): path to the h5 file.
-            **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
+            filename (str or path): the path of the HDF5 file.
+            **kwargs: passed to :meth:`h5py.Group.create_dataset`, for example
+                ``compression="gzip"``.
 
         Returns:
-            A :class:`~tensordict.PersistentTensorDict` instance linked to the newly created file.
+            A :class:`~tensordict.PersistentTensorDict` backed by the new file.
 
         Examples:
-            >>> import torch
+            >>> import os
             >>> import tempfile
-            >>> import timeit
-            >>>
-            >>> from tensordict import TensorDict, MemoryMappedTensor
-            >>> td = TensorDict({
-            ...     "a": MemoryMappedTensor.from_tensor(torch.zeros(()).expand(1_000_000)),
-            ...     "b": {"c": MemoryMappedTensor.from_tensor(torch.zeros(()).expand(1_000_000, 3))},
-            ... }, [1_000_000])
-            >>>
-            >>> file = tempfile.NamedTemporaryFile()
-            >>> td_h5 = td.to_h5(file.name, compression="gzip", compression_opts=9)
-            >>> print(td_h5)
-            PersistentTensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: PersistentTensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([1000000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([1000000]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([1000000]),
-                device=None,
-                is_shared=False)
-
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(1000), b={"c": torch.zeros(1000, 3)}, batch_size=[1000])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     td_h5 = td.to_h5(os.path.join(tmpdir, "data.h5"), compression="gzip")
+            ...     print(type(td_h5).__name__, td_h5.batch_size, td_h5["b", "c"].shape)
+            ...     td_h5.close()
+            PersistentTensorDict torch.Size([1000]) torch.Size([1000, 3])
 
         """
         from tensordict.persistent import PersistentTensorDict
@@ -2975,57 +3281,47 @@ class _Conversion:
         allow_pickle: bool | None = None,
         **kwargs,
     ) -> Any:
-        """Converts a tensordict to a PersistentTensorDict with the zarr backend.
+        """Writes the tensordict to a new zarr store and returns a tensordict backed by it.
 
-        Requires ``zarr>=3.0`` to be installed. The batch size (and dimension
-        names) are persisted in the store attributes such that
-        :meth:`~.from_zarr` restores them without inference.
+        Each leaf becomes an array of the store, and each nested tensordict a
+        group. An existing store at ``filename`` is overwritten. The batch
+        size and the names of the batch dimensions are saved in the store
+        attributes, so that :meth:`~.from_zarr` restores them. Requires
+        ``zarr>=3.0``. See :ref:`saving`.
 
         Args:
-            filename (str, path or zarr store): path to the zarr store (a
+            filename (str, path or zarr store): the path of the zarr store (a
                 directory), or a ``zarr.abc.store.Store`` instance (e.g. a
                 ``zarr.storage.ZipStore``).
-            **kwargs: kwargs to be passed to :meth:`zarr.Group.create_array`.
-                By default each tensor is stored as a single uncompressed chunk;
-                pass ``chunks=...`` and/or ``compressors=...`` to override (e.g.
-                for out-of-core row access or on-disk compression). Since leaves
-                have different ranks, ``chunks`` constrains the leading
-                dimensions of each leaf and trailing dimensions are left whole
-                (e.g. ``chunks=(16,)`` chunks every leaf along its first
-                dimension in blocks of 16).
+            **kwargs: passed to :meth:`zarr.Group.create_array`. By default
+                each tensor is stored as one uncompressed chunk. Pass
+                ``chunks=...`` or ``compressors=...`` to change that (for
+                example to read rows without loading the whole array, or to
+                compress on disk). ``chunks`` applies to the leading
+                dimensions of each leaf, and the trailing dimensions are left
+                whole: ``chunks=(16,)`` chunks every leaf along its first
+                dimension in blocks of 16.
 
         Keyword Args:
-            allow_pickle (bool or None, optional): read policy for the returned
-                handle. ``None`` (default) trusts the values just written, as
-                does ``True``. ``False`` rejects reads of pickled non-tensor
-                values. Reopening the store with :meth:`~.from_zarr` uses that
-                call's policy, not the writer's.
+            allow_pickle (bool, optional): the read policy of the returned
+                tensordict for pickled non-tensor values. ``False`` rejects
+                them. ``None`` and ``True`` read them, since this call wrote
+                them. Opening the store again with :meth:`~.from_zarr` uses
+                the policy of that call. Defaults to ``None``.
 
         Returns:
-            A :class:`~tensordict.PersistentTensorDict` instance linked to the newly created store.
+            A :class:`~tensordict.PersistentTensorDict` backed by the new store.
 
         Examples:
+            >>> import os
             >>> import tempfile
             >>> import torch
             >>> from tensordict import TensorDict
-            >>> td = TensorDict({
-            ...     "a": torch.zeros(1000),
-            ...     "b": {"c": torch.zeros(1000, 3)},
-            ... }, [1000])
-            >>> td_zarr = td.to_zarr(tempfile.mkdtemp() + "/store.zarr")
-            >>> print(td_zarr)
-            PersistentTensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([1000]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: PersistentTensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([1000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([1000]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([1000]),
-                device=None,
-                is_shared=False)
+            >>> td = TensorDict(a=torch.zeros(1000), b={"c": torch.zeros(1000, 3)}, batch_size=[1000])
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     td_zarr = td.to_zarr(os.path.join(tmpdir, "store.zarr"), chunks=(100,))
+            ...     print(type(td_zarr).__name__, td_zarr.batch_size, td_zarr["b", "c"].shape)
+            PersistentTensorDict torch.Size([1000]) torch.Size([1000, 3])
 
         """
         from tensordict.persistent import PersistentTensorDict
@@ -3051,29 +3347,36 @@ class _Conversion:
         device=None,
         **kwargs,
     ) -> Any:
-        """Upload this TensorDict to a key-value store (Redis, Dragonfly, etc.).
+        """Uploads the tensordict to a key-value server and returns a tensordict backed by it.
 
-        Returns a :class:`~tensordict.store.TensorDictStore` (or
-        :class:`~tensordict.store.LazyStackedTensorDictStore` for
-        lazy stacks) backed by the uploaded data.
-
-        For :class:`LazyStackedTensorDict` inputs, data is streamed in chunks
-        to avoid materialising the full stack in memory.
+        The entries are written to a Redis or Dragonfly server, under the key
+        namespace ``prefix``. The result reads and writes the server. A lazy
+        stack is uploaded in chunks, without building the dense stack in
+        memory, and gives a :class:`~tensordict.store.LazyStackedTensorDictStore`.
+        Requires the ``redis`` Python package and a running server. See
+        :ref:`storage`.
 
         Keyword Args:
-            backend (STORE_BACKENDS): Store backend — ``"redis"`` (default)
-                or ``"dragonfly"``.
-            host (str): Server hostname.  Defaults to ``"localhost"``.
-            port (int): Server port.  Defaults to ``6379``.
-            db (int): Database number.  Defaults to ``0``.
-            unix_socket_path (str, optional): Unix domain socket path.
-            prefix (str): Key namespace.  Defaults to ``"tensordict"``.
-            device (torch.device, optional): Device override for retrieved
-                tensors.  If ``None``, uses this TensorDict's device.
-            **kwargs: Extra connection keyword arguments.
+            backend (str, optional): the server type: ``"redis"`` or
+                ``"dragonfly"``. Defaults to ``"redis"``.
+            host (str, optional): the server hostname. Defaults to
+                ``"localhost"``.
+            port (int, optional): the server port. Defaults to ``6379``.
+            db (int, optional): the database number. Defaults to ``0``.
+            unix_socket_path (str, optional): the path of a Unix domain socket
+                to connect through instead of ``host`` and ``port``. Defaults
+                to ``None``.
+            prefix (str, optional): the key namespace of the data on the
+                server. Defaults to ``"tensordict"``.
+            device (torch.device, str or int, optional): the device of the
+                tensors that the result reads. Defaults to ``None``, which
+                uses the device of the tensordict.
+            **kwargs: passed to the connection of the client.
 
         Returns:
-            A store-backed TensorDict instance.
+            A :class:`~tensordict.store.TensorDictStore`, or a
+            :class:`~tensordict.store.LazyStackedTensorDictStore` for a lazy
+            stack.
 
         Examples:
             The example needs a Redis server on ``localhost:6379``, and the

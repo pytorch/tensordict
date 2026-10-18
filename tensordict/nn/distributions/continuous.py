@@ -25,16 +25,25 @@ __all__ = [
 
 
 class NormalParamExtractor(nn.Module):
-    """A non-parametric nn.Module that splits its input into loc and scale parameters.
+    """A module without parameters that splits a tensor into the location and scale of a normal distribution.
 
-    The scale parameters are mapped onto positive values using the specified ``scale_mapping``.
+    The module splits the last dimension of its first input into two halves:
+    the first half is the location, the second half goes through
+    ``scale_mapping`` and is clamped to at least ``scale_lb`` to give the
+    scale. With an odd size, the location gets one element more than the
+    scale. Calling the module with
+    more inputs returns them unchanged after the scale:
+    ``module(x, *others)`` returns ``(loc, scale, *others)``.
 
     Args:
-        scale_mapping (str, optional): positive mapping function to be used with the std.
-            default = ``"biased_softplus_1.0"`` (i.e. softplus map with bias such that fn(0.0) = 1.0)
-            choices: ``"softplus"``, ``"exp"``, ``"relu"``, ``"biased_softplus_1"`` or ``"none"`` (no mapping).
-            See :func:`~tensordict.nn.mappings` for more details.
-        scale_lb (Number, optional): The minimum value of the scale (the standard deviation). Default is 1e-4.
+        scale_mapping (str, optional): the function that maps the second half
+            to positive values, by name: for example ``"softplus"``,
+            ``"exp"``, ``"relu"``, ``"biased_softplus_<bias>"`` or ``"none"``
+            (no mapping). See :func:`~tensordict.nn.mappings`. Defaults to
+            ``"biased_softplus_1.0"``, a softplus shifted so that an input of
+            ``0`` gives a scale of ``1``.
+        scale_lb (Number, optional): the minimum value of the scale (the
+            standard deviation). Defaults to ``1e-4``.
 
     Examples:
         >>> import torch
@@ -74,26 +83,36 @@ class NormalParamExtractor(nn.Module):
 
 
 class AddStateIndependentNormalScale(torch.nn.Module):
-    """A nn.Module that adds trainable state-independent scale parameters.
+    """A module that returns its input as a location, with a learned scale that does not depend on the input.
 
-    The scale parameters are mapped onto positive values using the specified ``scale_mapping``.
+    The module holds one tensor, ``state_independent_scale``, of shape
+    ``scale_shape``. ``module(loc, *others)`` returns
+    ``(loc, scale, *others)``, where ``scale`` is that tensor expanded to the
+    shape of ``loc``, mapped by ``scale_mapping`` and clamped to at least
+    ``scale_lb``. Unlike :class:`NormalParamExtractor`, the input is not split:
+    all of it is the location.
 
     Args:
-        scale_shape (torch.Size or equivalent, optional): the shape of the scale parameter.
-            Defaults to ``torch.Size(())``.
+        scale_shape (torch.Size, int or tuple of int, optional): the shape of
+            the scale tensor. It must match the trailing dimensions of
+            ``loc``, or the call raises a ``RuntimeError``. Defaults to
+            ``torch.Size(())``: one scale for all the elements.
 
     Keyword Args:
-        scale_mapping (str, optional): positive mapping function to be used with the std.
-            Defaults to ``"exp"``,
-            choices: ``"softplus"``, ``"exp"``, ``"relu"``, ``"biased_softplus_1"``.
-        scale_lb (Number, optional): The minimum value of the scale (the standard deviation).
-            Defaults to ``1e-4``.
-        device (torch.device, optional): the device of the module.
-        make_param (bool, optional): whether the scale should be a parameter (``True``)
-            or a buffer (``False``).
-            Defaults to ``True``.
-        init_value (float, optional): Initial value of state independent scale.
-            Defaults to 0.0.
+        scale_mapping (str, optional): the function that maps the scale tensor
+            to positive values, by name, for example ``"softplus"``,
+            ``"exp"`` or ``"biased_softplus_1.0"``. See
+            :func:`~tensordict.nn.mappings`. Defaults to ``"exp"``.
+        scale_lb (Number, optional): the minimum value of the scale (the
+            standard deviation). Defaults to ``1e-4``.
+        device (torch.device, optional): the device of the scale tensor.
+            Defaults to ``None``, the default device.
+        make_param (bool, optional): if ``True``, the scale tensor is a
+            trainable :class:`~torch.nn.Parameter`. If ``False``, it is a
+            buffer. Defaults to ``True``.
+        init_value (float, optional): the initial value of the scale tensor,
+            before ``scale_mapping``. With the default ``"exp"`` mapping,
+            ``0.0`` gives a scale of ``1``. Defaults to ``0.0``.
 
     Examples:
         >>> from torch import nn
@@ -158,14 +177,19 @@ class AddStateIndependentNormalScale(torch.nn.Module):
     def forward(
         self, loc: torch.Tensor, *others: torch.Tensor
     ) -> tuple[torch.Tensor, ...]:
-        """Forward of AddStateIndependentNormalScale.
+        """Returns ``loc``, the scale expanded to the shape of ``loc``, and ``others``.
 
         Args:
-            loc (torch.Tensor): a location parameter.
-            *others: other unused parameters.
+            loc (torch.Tensor): the location. Its trailing dimensions must
+                match ``scale_shape``.
+            *others: other values, returned unchanged.
 
         Returns:
-            a tuple of two or more tensors containing the ``(loc, scale, *others)`` values.
+            The tuple ``(loc, scale, *others)``.
+
+        Raises:
+            RuntimeError: if the trailing dimensions of ``loc`` do not match
+                ``scale_shape``.
         """
         # Slice from the start: with a 0-dim scale, loc.shape[-0:] would be
         # the whole shape of loc instead of an empty one.
@@ -183,26 +207,31 @@ class AddStateIndependentNormalScale(torch.nn.Module):
 
 
 class Delta(D.Distribution):
-    """Delta distribution.
+    """A distribution with all its mass on one value, ``param``.
 
-    A distribution with all its mass on ``param``. :meth:`sample`,
-    :meth:`rsample`, :attr:`mean`, :attr:`mode` and
-    :attr:`deterministic_sample` return ``param``. :meth:`log_prob` returns
-    ``inf`` for a value equal to ``param`` (within ``atol`` and ``rtol``) and
-    ``-inf`` otherwise. It is the default ``distribution_class`` of
-    :class:`~tensordict.nn.ProbabilisticTensorDictModule`.
+    :meth:`sample` and :meth:`rsample` return ``param`` (expanded to the
+    sample shape), and :attr:`mean`, :attr:`mode` and
+    :attr:`deterministic_sample` return it as it is. :meth:`log_prob` returns
+    ``inf`` for a value equal to ``param`` (within ``atol`` and ``rtol``, on
+    every element of the event) and ``-inf`` otherwise. It is the default
+    ``distribution_class`` of
+    :class:`~tensordict.nn.ProbabilisticTensorDictModule`, which then copies
+    its input to its output.
 
     Args:
-        param (torch.Tensor): parameter of the delta distribution;
-        atol (number, optional): absolute tolerance to consider that a tensor matches the distribution parameter;
-            Default is 1e-6
-        rtol (number, optional): relative tolerance to consider that a tensor matches the distribution parameter;
-            Default is 1e-6
-        batch_shape (torch.Size, optional): batch shape;
-        event_shape (torch.Size, optional): shape of the outcome.
-            If neither ``batch_shape`` nor ``event_shape`` is given, the last
-            dimension of ``param`` is the event shape and the others are the
-            batch shape.
+        param (torch.Tensor): the value that holds all the mass.
+        atol (float, optional): the absolute tolerance with which
+            :meth:`log_prob` compares a value with ``param``. Defaults to
+            ``1e-6``.
+        rtol (float, optional): the relative tolerance with which
+            :meth:`log_prob` compares a value with ``param``. Defaults to
+            ``1e-6``.
+        batch_shape (torch.Size, optional): the batch shape. Defaults to
+            ``None``: see ``event_shape``.
+        event_shape (torch.Size, optional): the shape of one value. If
+            neither ``batch_shape`` nor ``event_shape`` is given (or both
+            are empty), the last dimension of ``param`` is the event shape and
+            the others are the batch shape. Defaults to ``None``.
 
     Examples:
         >>> import torch
@@ -241,6 +270,7 @@ class Delta(D.Distribution):
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
 
     def update(self, param: torch.Tensor) -> None:
+        """Replaces ``param``. The batch and event shapes do not change."""
         self.param = param
 
     def _is_equal(self, value: torch.Tensor) -> torch.Tensor:

@@ -46,7 +46,7 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
 def _populate_memmap(
     *, dest, value, key, copy_existing, prefix, like, existsok, robust_key
 ):
-    """Populate ``dest`` with a memory-mapped copy of ``value``."""
+    """Populates ``dest`` with a memory-mapped copy of ``value``."""
     from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
 
     _raise_if_jagged(value, key)
@@ -91,7 +91,7 @@ def _populate_empty(
     prefix,
     robust_key,
 ):
-    """Populate ``dest`` with an empty memory-mapped tensor."""
+    """Populates ``dest`` with an empty memory-mapped tensor."""
     from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
 
     if prefix is None:
@@ -130,7 +130,7 @@ def _populate_storage(
     storage,
     robust_key,
 ):
-    """Populate ``dest`` with a memory-mapped tensor backed by ``storage``."""
+    """Populates ``dest`` with a memory-mapped tensor backed by ``storage``."""
     from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
 
     if prefix is None:
@@ -160,7 +160,7 @@ def _populate_storage(
 
 
 def _update_metadata(*, metadata, key, value, is_collection):
-    """Update memmap metadata for a tensor or nested tensor collection."""
+    """Records the metadata of a leaf or of a nested tensordict in ``metadata[key]``."""
     if not is_collection:
         metadata[key] = {
             "device": str(value.device),

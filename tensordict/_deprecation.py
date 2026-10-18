@@ -44,11 +44,12 @@ def warn_deprecated(
 
     Keyword Args:
         removal (str): the release that removes ``what``, for instance ``"0.17"``.
-        replacement (str, optional): what to use instead.
+        replacement (str, optional): what to use instead. Defaults to
+            ``None``, which names no replacement.
         stacklevel (int, optional): the frame that the warning points to,
             counted as in :func:`warnings.warn` from the caller of this
-            function. The default, ``2``, points to the code that called the
-            deprecated function.
+            function. Defaults to ``2``, which points to the code that called
+            the deprecated function.
     """
     warnings.warn(
         deprecation_message(what, removal=removal, replacement=replacement),
@@ -78,7 +79,8 @@ def warn_deprecated_env_var(
 
     Keyword Args:
         removal (str): the release that removes support for ``name=value``.
-        replacement (str, optional): what to use instead.
+        replacement (str, optional): what to use instead. Defaults to
+            ``None``, which names no replacement.
     """
     warnings.warn(
         deprecation_message(
@@ -102,7 +104,8 @@ def deprecated(
 
     Keyword Args:
         removal (str): the release that removes ``what``.
-        replacement (str, optional): what to use instead.
+        replacement (str, optional): what to use instead. Defaults to
+            ``None``, which names no replacement.
     """
 
     def decorator(func: _F) -> _F:

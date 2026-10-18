@@ -112,25 +112,29 @@ _VERBOSE_FALSE_OVERRIDES = {
 
 
 class set_printoptions(_DecoratorContextManager):
-    """Controls which attributes appear in TensorDict's ``__repr__`` output.
+    """Sets the options that control what the repr of a tensordict shows.
 
     Use it as a context manager or a decorator to change the options for a
-    block of code, or call ``set_printoptions(...).set()`` to change them
-    for the rest of the program. :ref:`printing` describes every option
-    with examples.
+    block of code; the previous options come back at the end of the block.
+    Call ``set_printoptions(...).set()`` to change them for the rest of the
+    program. The options that are not passed keep their current value.
+    :ref:`printing` describes every option with examples, and
+    :func:`~tensordict.get_printoptions` returns the current values.
 
-    Args:
-        verbose (bool, optional): if ``False``, the device, dtype and
-            ``is_shared`` attributes are hidden, unless a keyword argument
-            sets them. Defaults to ``True``.
+    Keyword Args:
+        verbose (bool, optional): if ``False``, hides the device, dtype and
+            ``is_shared`` attributes, unless a keyword argument sets them.
+            Defaults to ``True``.
         **kwargs: the options to set: ``show_batch_size``, ``show_device``,
             ``show_is_shared``, ``show_shape``, ``show_field_device``,
             ``show_dtype``, ``show_field_is_shared``, ``show_grad``,
             ``show_is_contiguous``, ``show_is_view``, ``show_storage_size``,
-            ``plain``, ``sort_keys`` and ``compact``. An unknown option
-            raises a ``TypeError``. ``compact=True`` prints each entry on
-            one line as its dtype and its shape after the batch dims
-            (``f32[3]``); see :ref:`printing`.
+            ``plain``, ``sort_keys`` and ``compact``. ``compact=True`` prints
+            each entry on one line as its dtype and its feature dimensions
+            (``f32[3]``).
+
+    Raises:
+        TypeError: if an option is unknown.
 
     Examples:
         >>> import torch
@@ -165,6 +169,7 @@ class set_printoptions(_DecoratorContextManager):
         self.set()
 
     def set(self) -> None:
+        """Applies the options for the rest of the program."""
         self._old = dict(_REPR_OPTIONS)
         _REPR_OPTIONS.update(self._kwargs)
 
@@ -173,7 +178,7 @@ class set_printoptions(_DecoratorContextManager):
 
 
 def get_printoptions() -> dict:
-    """Returns the current TensorDict print options as a dict.
+    """Returns the current print options of tensordicts as a dict.
 
     The keys are the options of :class:`~tensordict.set_printoptions`. See
     :ref:`printing`.
@@ -209,12 +214,27 @@ if _LAZY_OP is not None and _LAZY_OP.lower() in ("y", "yes", "t", "true", "on", 
 
 
 class set_lazy_legacy(_DecoratorContextManager):
-    """Sets the behaviour of some methods to a lazy transform.
+    """Turns the legacy lazy mode on or off.
+
+    In the legacy lazy mode, :meth:`~tensordict.TensorDictBase.unsqueeze`,
+    :meth:`~tensordict.TensorDictBase.squeeze`,
+    :meth:`~tensordict.TensorDictBase.view`,
+    :meth:`~tensordict.TensorDictBase.transpose` and
+    :meth:`~tensordict.TensorDictBase.permute` return lazy views of the
+    tensordict instead of tensordicts, and :func:`torch.stack` returns a lazy
+    stack. The mode is off by default, and the ``LAZY_LEGACY_OP``
+    environment variable sets it at import. Use it as a context manager or a
+    decorator, or call ``set_lazy_legacy(mode).set()`` to change the mode for
+    the rest of the program.
 
     .. deprecated:: 0.15
         The legacy lazy mode (``set_lazy_legacy(True)``) is deprecated and will
         be removed in TensorDict 0.17. ``set_lazy_legacy(False)`` will then do
-        nothing.
+        nothing. Use :func:`~tensordict.lazy_stack` to build a lazy stack.
+
+    Args:
+        mode (bool): if ``True``, turns the legacy lazy mode on, and emits a
+            ``DeprecationWarning``.
     """
 
     def __init__(self, mode: bool) -> None:
@@ -239,6 +259,7 @@ class set_lazy_legacy(_DecoratorContextManager):
             self.set()
 
     def set(self) -> None:
+        """Applies the mode for the rest of the program."""
         global _LAZY_OP
         self._old_mode = _LAZY_OP
         _LAZY_OP = bool(self.mode)
@@ -254,16 +275,23 @@ class set_lazy_legacy(_DecoratorContextManager):
 
 
 def lazy_legacy(allow_none=False):
-    """Returns `True` if lazy representations will be used for selected methods.
+    """Returns whether the legacy lazy mode is on.
 
-    Args:
-        allow_none (bool, optional): if ``True`` and the option was never
-            set, ``None`` is returned instead of the default (``False``).
-            Defaults to ``False``.
+    See :class:`~tensordict.set_lazy_legacy`.
 
     .. deprecated:: 0.15
         The legacy lazy mode is deprecated and will be removed in TensorDict 0.17,
         see :class:`~tensordict.set_lazy_legacy`.
+
+    Args:
+        allow_none (bool, optional): if ``True`` and the option was never
+            set, returns ``None`` instead of the default (``False``).
+            Defaults to ``False``.
+
+    Examples:
+        >>> from tensordict import lazy_legacy
+        >>> lazy_legacy()
+        False
     """
     if _LAZY_OP is None and allow_none:
         return None
@@ -333,6 +361,7 @@ class _set_capture_non_tensor_stack(_DecoratorContextManager):
             self.set()
 
     def set(self) -> None:
+        """Applies the mode for the rest of the program."""
         global _CAPTURE_NONTENSOR_STACK
         self._old_mode = _CAPTURE_NONTENSOR_STACK
         _CAPTURE_NONTENSOR_STACK = bool(self.mode)
@@ -352,7 +381,15 @@ class _set_capture_non_tensor_stack(_DecoratorContextManager):
 
 
 class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
-    """Controls whether identical non-tensor data should be captured when stacked.
+    """Sets whether stacking identical non-tensor data gives one value instead of a stack.
+
+    By default, :func:`torch.stack` of :class:`~tensordict.NonTensorData`
+    returns a :class:`~tensordict.NonTensorStack`, even when all the values
+    are equal. With ``mode=True``, a stack of equal values gives a single
+    :class:`~tensordict.NonTensorData`. The ``CAPTURE_NONTENSOR_STACK``
+    environment variable sets the mode at import. Use it as a context manager
+    or a decorator, or call ``set_capture_non_tensor_stack(mode).set()`` to
+    change the mode for the rest of the program.
 
     .. deprecated:: 0.15
         Capturing identical non-tensor data (``set_capture_non_tensor_stack(True)``
@@ -361,6 +398,18 @@ class set_capture_non_tensor_stack(_set_capture_non_tensor_stack):
         to get the single value of a stack of identical values.
         ``set_capture_non_tensor_stack(False)``, the default, does not warn,
         and will keep working, doing nothing, after the removal.
+
+    Args:
+        mode (bool): if ``True``, stacking identical non-tensor data gives one
+            value, and the call emits a ``DeprecationWarning``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import NonTensorData, set_capture_non_tensor_stack
+        >>> with set_capture_non_tensor_stack(False):
+        ...     stack = torch.stack([NonTensorData("a"), NonTensorData("a")])
+        >>> type(stack).__name__, stack.data
+        ('NonTensorStack', 'a')
     """
 
     def __init__(self, mode: bool) -> None:
@@ -384,8 +433,13 @@ def capture_non_tensor_stack(allow_none=False):
 
     Args:
         allow_none (bool, optional): if ``True`` and the option was never
-            set, ``None`` is returned instead of the default (``False``).
+            set, returns ``None`` instead of the default (``False``).
             Defaults to ``False``.
+
+    Examples:
+        >>> from tensordict import capture_non_tensor_stack
+        >>> capture_non_tensor_stack()
+        False
     """
     if _CAPTURE_NONTENSOR_STACK is None and allow_none:
         return None
@@ -455,6 +509,7 @@ class _set_list_to_stack(_DecoratorContextManager):
             self.set()
 
     def set(self) -> None:
+        """Applies the mode for the rest of the program."""
         global _LIST_TO_STACK
         self._old_mode = _LIST_TO_STACK
         _LIST_TO_STACK = bool(self.mode)
@@ -470,7 +525,15 @@ class _set_list_to_stack(_DecoratorContextManager):
 
 
 class set_list_to_stack(_set_list_to_stack):
-    """Context manager and decorator to control list handling in TensorDict.
+    """Sets whether assigning a list to a key stores a stack of non-tensor data.
+
+    By default (``mode=True``), ``td[key] = ["a", "b"]`` stores a
+    :class:`~tensordict.NonTensorStack` with one value per element along the
+    first batch dimension. With ``mode=False``, the list is stored as one
+    :class:`~tensordict.NonTensorData` value. The ``LIST_TO_STACK``
+    environment variable sets the mode at import. Use it as a context manager
+    or a decorator, or call ``set_list_to_stack(mode).set()`` to change the
+    mode for the rest of the program.
 
     .. deprecated:: 0.15
         Turning list-to-stack conversion off (``set_list_to_stack(False)`` or
@@ -478,6 +541,18 @@ class set_list_to_stack(_set_list_to_stack):
         Use :meth:`td.set_non_tensor(key, value) <tensordict.TensorDictBase.set_non_tensor>`
         to store a list as one value. ``set_list_to_stack(True)``, the default,
         does not warn, and will keep working, doing nothing, after the removal.
+
+    Args:
+        mode (bool): if ``True``, a list is stored as a stack. ``False``
+            stores it as one value, and emits a ``DeprecationWarning``.
+
+    Examples:
+        >>> from tensordict import TensorDict, set_list_to_stack
+        >>> td = TensorDict(batch_size=[2])
+        >>> with set_list_to_stack(True):
+        ...     td["x"] = ["a", "b"]
+        >>> type(td.get("x")).__name__, td["x"]
+        ('NonTensorStack', LinkedList(['a', 'b']))
     """
 
     def __init__(self, mode: bool) -> None:
@@ -499,8 +574,13 @@ def list_to_stack(allow_none=False):
 
     Args:
         allow_none (bool, optional): if ``True`` and the option was never
-            set, ``None`` is returned instead of the default. Defaults to
-            ``False``.
+            set, returns ``None`` instead of the default (``True``). Defaults
+            to ``False``.
+
+    Examples:
+        >>> from tensordict import list_to_stack
+        >>> list_to_stack()
+        True
     """
     if _LIST_TO_STACK is None and allow_none:
         return None

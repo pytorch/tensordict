@@ -168,21 +168,19 @@ def _num_indexed_dims(index) -> int:
 def convert_ellipsis_to_idx(
     idx: tuple[int | Ellipsis] | Ellipsis, batch_size: list[int]
 ) -> tuple[int, ...]:
-    """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
-
-    Example:
-        >>> idx = (..., 0)
-        >>> batch_size = [1,2,3]
-        >>> new_index = convert_ellipsis_to_idx(idx, batch_size)
-        >>> print(new_index)
-        (slice(None, None, None), slice(None, None, None), 0)
+    """Replaces the ellipsis of an index with one ``slice(None)`` per dimension that it covers.
 
     Args:
-        idx (tuple, Ellipsis): Input index
-        batch_size (list): Shape of tensor to be indexed
+        idx (tuple or Ellipsis): the index. Other indices are returned as is.
+        batch_size (list of int): the shape that the index applies to.
 
     Returns:
-        new_index (tuple): Output index
+        The index as a tuple without ellipsis.
+
+    Examples:
+        >>> from tensordict._indexing import convert_ellipsis_to_idx
+        >>> convert_ellipsis_to_idx((..., 0), [1, 2, 3])
+        (slice(None, None, None), slice(None, None, None), 0)
     """
     if idx is Ellipsis:
         idx = (idx,)

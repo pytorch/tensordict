@@ -32,11 +32,11 @@ def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
     Args:
         values (torch.Tensor): the logits, or the probabilities if
             ``do_softmax=False``, along the last dimension.
-        do_softmax (bool, optional): if ``True``, apply a softmax to ``values``
-            first. Defaults to ``True``.
+        do_softmax (bool, optional): if ``True``, applies a softmax to
+            ``values`` first. Defaults to ``True``.
 
     Returns:
-        a ``torch.long`` tensor with the shape of ``values``, with one ``1``
+        A ``torch.long`` tensor with the shape of ``values``, with one ``1``
         per row of the last dimension.
 
     Examples:
@@ -57,10 +57,10 @@ def rand_one_hot(values: torch.Tensor, do_softmax: bool = True) -> torch.Tensor:
 
 
 class OneHotCategorical(D.Categorical):
-    """One-hot categorical distribution.
+    """A categorical distribution whose values are one-hot tensors.
 
-    This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
-    of the discrete tensors. :meth:`sample`, :attr:`mode` and
+    It behaves as :class:`torch.distributions.Categorical`, except that it
+    reads and produces one-hot encodings. :meth:`sample`, :attr:`mode` and
     :attr:`deterministic_sample` return ``torch.long`` one-hot tensors, and
     :meth:`log_prob` takes one. When several logits tie for the maximum,
     :attr:`mode` marks the first, as :class:`torch.distributions.OneHotCategorical`
@@ -108,10 +108,15 @@ class OneHotCategorical(D.Categorical):
         super().__init__(probs=probs, logits=logits, **kwargs)
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+        """Returns the log-probability of the category of ``value``, a one-hot tensor.
+
+        The category is the index of the maximum along the last dimension.
+        """
         return super().log_prob(value.argmax(dim=-1))
 
     @property
     def mode(self) -> torch.Tensor:
+        """The one-hot encoding of the most likely category, the first one if several tie."""
         # One-hot of the first maximum: comparing with the max marks every tie.
         index = self.logits.max(-1).indices
         return torch.nn.functional.one_hot(index, self.logits.shape[-1])
@@ -122,6 +127,7 @@ class OneHotCategorical(D.Categorical):
         self,
         sample_shape: torch.Size | Sequence[int] | None = None,
     ) -> torch.Tensor:
+        """Draws one-hot ``torch.long`` samples of shape ``sample_shape + batch_shape + (num_categories,)``."""
         if sample_shape is None:
             sample_shape = torch.Size([])
         out = super().sample(sample_shape=sample_shape)
@@ -132,6 +138,10 @@ class OneHotCategorical(D.Categorical):
         self,
         sample_shape: torch.Size | Sequence[int] | None = None,
     ) -> torch.Tensor:
+        """Draws straight-through one-hot samples, which carry the gradient of a relaxed sample.
+
+        See the class description.
+        """
         if sample_shape is None:
             sample_shape = torch.Size([])
         # A Categorical always has both probs and logits; pass only one.

@@ -9,11 +9,10 @@ T = TypeVar("T", bound="TensorCollection")
 
 
 class TensorCollection:
-    """A base class for TensorDictBase and TensorClass.
+    """The abstract base class of tensordicts and tensorclasses.
 
-    This is an abstract base class that provides the foundation for tensor collections
-    like TensorDict and TensorClass. It serves as a common interface for all tensor
-    collection types in the tensordict library.
+    :class:`~tensordict.TensorDictBase` and :class:`~tensordict.TensorClass`
+    inherit from it. It cannot be instantiated.
 
     Use it in type hints and ``isinstance`` checks for "a tensordict or a
     tensorclass". Classes decorated with ``@tensorclass`` do not inherit from
@@ -35,10 +34,7 @@ class TensorCollection:
     """
 
     def __init__(self, *args, **kwargs):
-        """Initialize the TensorCollection.
-
-        This is an abstract base class and should not be instantiated directly.
-        """
+        """Raises a ``NotImplementedError``: the class cannot be instantiated."""
         if not (args or kwargs) and "_tensordict" in self.__dict__:
             # super().__init__() from the __init__ of a TensorClass subclass,
             # once the tensorclass constructor has built the instance.

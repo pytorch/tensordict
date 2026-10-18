@@ -52,7 +52,7 @@ T = TypeVar("T", bound="TensorDictBase")
 
 
 def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable]:
-    """Register a torch function override for TensorDict."""
+    """Registers the decorated function as the implementation of ``torch_function`` for tensordicts."""
 
     @functools.wraps(torch_function)
     def decorator(func: Callable) -> Callable:
@@ -63,7 +63,7 @@ def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable
 
 
 def implements_for_lazy_td(torch_function: Callable) -> Callable[[Callable], Callable]:
-    """Register a torch function override for TensorDict."""
+    """Registers the decorated function as the implementation of ``torch_function`` for lazy stacks."""
 
     @functools.wraps(torch_function)
     def decorator(func: Callable) -> Callable:
@@ -1020,14 +1020,23 @@ def _chunk(td: T, chunks: int, dim: int = 0) -> tuple[T, ...]:
 
 @implements_for_td(torch.where)
 def where(condition, input, other, *, out=None):
-    """Return a ``TensorDict`` of elements selected from either input or other, depending on condition.
+    """Implements ``torch.where(condition, input, other)`` for tensordicts.
+
+    Selects the elements of ``input`` where ``condition`` is ``True`` and those
+    of ``other`` elsewhere. One of ``input`` and ``other`` can be a scalar or
+    a tensor. See :meth:`~tensordict.TensorDictBase.where`.
 
     Args:
-        condition (BoolTensor): When ``True`` (nonzero), yield ``input``, otherwise yield ``other``.
-        input (TensorDictBase or Scalar): value (if ``input`` is a scalar) or values selected at indices where condition is ``True``.
-        other (TensorDictBase or Scalar): value (if ``other`` is a scalar) or values selected at indices where condition is ``False``.
-        out (Tensor, optional): the output ``TensorDictBase`` instance.
+        condition (torch.Tensor): a boolean mask.
+        input (TensorDictBase, torch.Tensor or scalar): the values where
+            ``condition`` is ``True``.
+        other (TensorDictBase, torch.Tensor or scalar): the values where
+            ``condition`` is ``False``.
 
+    Keyword Args:
+        out (TensorDictBase, optional): a tensordict to write the result
+            into. A :class:`~tensordict.PersistentTensorDict` raises a
+            ``RuntimeError``. Defaults to ``None``.
     """
     if isinstance(out, PersistentTensorDict):
         raise RuntimeError(

@@ -24,78 +24,71 @@ def to_mds(
     writer: "streaming.MDSWriter" | None = None,  # noqa # type-ignore
     **kwargs,
 ) -> None:
-    """Writes the content of a TensorCollection to a streaming dataset.
+    """Writes the tensordict to a MosaicML Streaming (MDS) dataset.
+
+    Each element along the first batch dimension is one sample of the
+    dataset; a tensordict without batch dimensions is one sample. Tensors are
+    written as NumPy arrays, and zero-dimensional ones as Python numbers.
+    Read the dataset back with ``streaming.StreamingDataset``. See the
+    `streaming documentation <https://docs.mosaicml.com/projects/streaming>`_.
+
+    The MDS writer has limited support for nested dictionaries: call
+    :meth:`~tensordict.TensorDictBase.flatten_keys` before writing, and
+    :meth:`~tensordict.TensorDictBase.unflatten_keys` after reading.
+
+    The type of a non-tensor column is read from its first sample, which
+    must not be ``None``; the other samples must have the same type, or be
+    ``None``.
 
     Keyword Args:
-        out (str | Tuple[str, str]): Output dataset directory to save shard files.
+        columns (dict of str to str, optional): the MDS encoding of each
+            column, for example ``{"obs": "ndarray", "name": "str"}``.
+            Defaults to ``None``, which infers them from the first sample.
+        out (str or tuple of str): where to write the shard files:
 
-            1. If ``out`` is a local directory, shard files are saved locally.
-            2. If ``out`` is a remote directory, a local temporary directory is created to
-                cache the shard files and then the shard files are uploaded to a remote
-                location. At the end, the temp directory is deleted once shards are uploaded.
-            3. If ``out`` is a tuple of ``(local_dir, remote_dir)``, shard files are saved in the
-                `local_dir` and also uploaded to a remote location.
-        columns (dict[str, str]): an optional dict of columns. Will be automatically inferred from
-            the tensor collection if not provided.
-        keep_local (bool): If the dataset is uploaded, whether to keep the local dataset directory
-            or remove it after uploading. Defaults to ``False``.
-        compression (str, optional): Optional compression or compression:level. Defaults to
-            ``None``.
-        hashes (List[str], optional): Optional list of hash algorithms to apply to shard files.
-            Defaults to ``None``.
-        size_limit (Union[int, str], optional): Optional shard size limit, after which point to
-            start a new shard. If ``None``, puts everything in one shard. Can specify bytes
-            human-readable format as well, for example ``"100kb"`` for 100 kilobyte
-            (100*1024) and so on. Defaults to ``1 << 26``.
-            Ignored if ``writer`` is passed.
-        writer (MDSWriter, optional): the writer to use. If ``None``, it is
-            created from ``out`` and the other keyword arguments.
-        **kwargs (Any): Additional settings for the Writer.
+            - a local directory: the shards are written there;
+            - a remote location: the shards are written to a local temporary
+              directory, uploaded, and deleted;
+            - a ``(local_dir, remote_dir)`` tuple: the shards are written to
+              ``local_dir`` and uploaded to ``remote_dir``.
 
-    .. note:: The MDSWriter has limited support for nested dictionaries. The proper way to handle nested tensordicts
-        is to use the :meth:`~tensordict.TensorDictBase.flatten_keys` method before writing, and :meth:`~tensordict.TensorDictBase.unflatten_keys` method after reading.
+        keep_local (bool, optional): if ``True`` and the dataset is uploaded,
+            keeps the local copy. Defaults to ``False``.
+        compression (str, optional): the compression, as ``"name"`` or
+            ``"name:level"``. Defaults to ``None``.
+        hashes (list of str, optional): the hash algorithms to apply to the
+            shard files. Defaults to ``None``.
+        size_limit (int or str, optional): the size after which a new shard
+            starts, in bytes or as a string such as ``"100kb"``. ``None``
+            writes one shard. Ignored if ``writer`` is passed. Defaults to
+            ``1 << 26`` (64 MiB).
+        writer (streaming.MDSWriter, optional): the writer to use. Defaults to
+            ``None``, which creates one from ``out`` and the other keyword
+            arguments.
+        **kwargs: passed to ``streaming.MDSWriter``.
 
-    .. warning::
-        This method requires `mosaicml-streaming` to be installed.
-
-    .. warning::
-        For non-tensor data, the type of the data must be fixed. The way tensordict recovers the data type is by
-        looking at the first element of the list. If it's `None` an error will be thrown. Otherwise all the
-        data in the list must have the same type (or be None if missing).
-
-    .. seealso:: See the Mosaic streaming library API at `<https://docs.mosaicml.com/projects/streaming>`_
-
-    The following example writes a dataset and loads it in a PyTorch
-    dataloader. It needs ``mosaicml-streaming``, so it is not run when the
-    documentation is tested.
+    Raises:
+        ImportError: if ``mosaicml-streaming`` is not installed.
+        ValueError: if the tensordict is empty.
 
     Examples:
+        The example needs ``mosaicml-streaming`` (``pip install mosaicml-streaming``).
+
         >>> import tempfile
-        >>> from typing import Any
-        >>> from tensordict import TensorDict, LazyStackedTensorDict
         >>> import torch
-        >>>
-        >>>
+        >>> from tensordict import LazyStackedTensorDict, TensorDict
         >>> td = LazyStackedTensorDict(
-        ...     TensorDict(a=0, b=1, c=torch.randn(2), d="a string"),
-        ...     TensorDict(a=0, b=1, c=torch.randn(3), d="another string"),
-        ...     TensorDict(a=0, b=1, c=torch.randn(3), d="yet another string"),
+        ...     TensorDict(a=0, c=torch.zeros(2), d="a string"),
+        ...     TensorDict(a=1, c=torch.zeros(3), d="another string"),
         ... )
-        >>>
-        >>> with tempfile.TemporaryDirectory() as tempdir:  # doctest: +SKIP
-        ...     # Create a dataset on one process / thread / node...
-        ...     td.to_mds(out=tempdir)
-        ...
-        ...     # Create a dataloader
-        ...     from streaming import StreamingDataset
-        ...
-        ...     # Load the dataset on another thread / process / node...
-        ...     dataset = StreamingDataset(local=tempdir, remote=None, batch_size=2)
-        ...
-        ...     # Use the class `from_list` method as a collate_fn
-        ...     dl = torch.utils.data.DataLoader(dataset=dataset, batch_size=2, collate_fn=LazyStackedTensorDict.from_list)
-        ...     for batch in dl:
-        ...         print("batch", batch)
+        >>> from streaming import StreamingDataset  # doctest: +SKIP
+        >>> with tempfile.TemporaryDirectory() as tmpdir:  # doctest: +SKIP
+        ...     td.to_mds(out=tmpdir)
+        ...     dataset = StreamingDataset(local=tmpdir, remote=None, batch_size=2)
+        ...     loader = torch.utils.data.DataLoader(
+        ...         dataset, batch_size=2, collate_fn=LazyStackedTensorDict.from_list
+        ...     )
+        ...     batch = next(iter(loader))  # a lazy stack of the two samples
 
     """
     try:

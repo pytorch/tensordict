@@ -298,59 +298,78 @@ class TensorDict(TensorDictBase):
     - The shape of every entry must start with the batch size. If it does
       not, setting the entry raises a ``RuntimeError``.
     - If ``device`` is set, every entry is moved to that device. If it is
-      not set, the entries can be on different devices.
-    - A key is a string, or a tuple of strings for a nested entry.
+      not set, the entries can be on different devices. See :ref:`devices`.
+    - A key is a string, or a tuple of strings for a nested entry. Other keys
+      raise a ``KeyError``.
+
+    The values of ``source`` are stored as given, not copied, except when
+    they are moved to ``device``. A nested ``dict`` becomes a nested
+    tensordict with the same batch size. Numbers and arrays become tensors,
+    and other values such as strings are stored as non-tensor data (see
+    :ref:`non-tensor-data`).
 
     Args:
-        source (TensorDict or Mapping[NestedKey, Union[Tensor, TensorDictBase]]): a
-            data source, such as a ``dict`` or any other
-            :class:`~collections.abc.Mapping`, read like a ``dict``. If empty,
-            the tensordict can be populated subsequently.
-            A ``TensorDict`` can also be built via a sequence of keyword arguments,
-            as it is the case for ``dict(...)``.
-        batch_size (iterable of int, optional): a batch size for the
-            tensordict. The batch size can be modified subsequently as long
-            as it is compatible with its content.
-            If no batch size is provided, an empty batch size is assumed (it
-            is not inferred automatically from the data). To automatically set
-            the batch size, refer to :meth:`~.auto_batch_size_`.
-        device (torch.device or compatible type, optional): a device for the
-            TensorDict. If provided, all tensors will be stored on that device.
-            If not, tensors on different devices are allowed.
-        names (list of str, optional): the names of the dimensions of the
-            tensordict. If provided, its length must match the one of the
-            ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
-            for every dimension).
-        non_blocking (bool, optional): if ``True`` and a device is passed, the
-            entries are moved to the device without synchronization. This is
-            safe only from CPU to CUDA. In other cases, you must synchronize
-            yourself. If ``False``, every move is synchronous. If ``None``
-            (default), the moves are asynchronous, and the constructor
-            synchronizes after them if required.
-        lock (bool, optional): if ``True``, the resulting tensordict will be
-            locked.
+        source (dict, Mapping or TensorDictBase, optional): the entries, read
+            like a ``dict``: string or nested keys to tensors, tensordicts,
+            nested dicts or other values. Exclusive with ``**kwargs``.
+            Defaults to ``None``, which gives an empty tensordict that can be
+            filled later.
+        batch_size (torch.Size, list of int or int, optional): the batch size
+            of the tensordict: the leading dimensions that all its entries
+            share. It can be changed later if the entries allow it. Defaults
+            to ``None``, which gives the batch size ``[]``.
+        device (torch.device, str or int, optional): the device of the
+            tensordict. Entries on another device are moved to it. Defaults to
+            ``None``, which leaves each entry where it is, and the tensordict
+            has no device.
+        names (list of str, optional): the names of the batch dimensions, one
+            per dimension. Defaults to ``None``, which leaves the dimensions
+            unnamed.
+        non_blocking (bool, optional): with ``device``, if ``True``, the
+            entries are copied to the device asynchronously with respect to
+            the host, with no synchronization: this is safe only from CPU to
+            CUDA. If ``False``, every copy is synchronous. Defaults to
+            ``None``, which copies asynchronously and synchronizes after the
+            copies when needed.
+        lock (bool, optional): if ``True``, the tensordict is locked: its
+            entries cannot be added, removed or replaced. See
+            :ref:`keys-locking`. Defaults to ``False``.
+        **kwargs: the entries, as keyword arguments, instead of ``source``.
+
+    Raises:
+        ValueError: if both ``source`` and ``**kwargs`` are given, or if the
+            length of ``names`` differs from that of ``batch_size``.
+        RuntimeError: if the shape of an entry does not start with
+            ``batch_size``.
 
     Examples:
+        Name the batch dimensions. Shape operations keep the names:
+
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> source = {'random': torch.randn(3, 4),
-        ...     'zeros': torch.zeros(3, 4, 5)}
-        >>> batch_size = [3]
-        >>> td = TensorDict(source, batch_size=batch_size)
-        >>> print(td.shape)  # equivalent to td.batch_size
-        torch.Size([3])
-        >>> td_unsqueeze = td.unsqueeze(-1)
-        >>> print(td_unsqueeze.get("zeros").shape)
-        torch.Size([3, 1, 4, 5])
-        >>> print(td_unsqueeze[0].shape)
-        torch.Size([1])
-        >>> print(td_unsqueeze.view(-1).shape)
-        torch.Size([3])
-        >>> print((td.clone()==td).all())
-        True
-        >>> td_add = td.apply(lambda x, y: x + y, td)
-        >>> (td_add["random"] == 2 * td["random"]).all()
-        tensor(True)
+        >>> td = TensorDict(
+        ...     obs=torch.zeros(3, 4), action=torch.zeros(3, 2), batch_size=[3], names=["time"]
+        ... )
+        >>> td.names
+        ['time']
+        >>> td.unsqueeze(0).names
+        [None, 'time']
+
+        Set the batch size from the data:
+
+        >>> td = TensorDict(obs=torch.zeros(3, 4))
+        >>> td.batch_size
+        torch.Size([])
+        >>> td.auto_batch_size_().batch_size
+        torch.Size([3, 4])
+
+        Adding an entry to a locked tensordict raises an error:
+
+        >>> td = TensorDict(obs=torch.zeros(3), batch_size=[3], lock=True)
+        >>> td["action"] = torch.zeros(3)
+        Traceback (most recent call last):
+            ...
+        RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 
     """
 
@@ -637,7 +656,7 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         filter_empty: bool = True,
     ):
-        """Puts the parameters and buffers of a module in a tensordict.
+        """Returns a tensordict that holds the parameters and buffers of a module.
 
         The entries are the parameters and buffers of the module themselves,
         not copies. Submodules become nested tensordicts.
@@ -648,7 +667,7 @@ class TensorDict(TensorDictBase):
             (``lock=True``).
 
         Args:
-            module (nn.Module): the module to get the parameters from.
+            module (torch.nn.Module): the module to get the parameters from.
             as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
                 instance is returned, which can be used to store parameters
                 within a :class:`torch.nn.Module`. Defaults to ``False``.
@@ -664,7 +683,7 @@ class TensorDict(TensorDictBase):
                 Defaults to ``True``.
 
         Returns:
-            a :class:`~tensordict.TensorDict`, or a
+            A :class:`~tensordict.TensorDict`, or a
             :class:`~tensordict.nn.TensorDictParams` if ``as_module=True``.
 
         Examples:
@@ -3926,27 +3945,28 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
 
 
 class _TensorDictKeysView:
-    """A Key view for TensorDictBase instance.
+    """The view of the keys that :meth:`~tensordict.TensorDictBase.keys` returns for nested or filtered keys.
 
-    _TensorDictKeysView is returned when accessing tensordict.keys() and holds a
-    reference to the original TensorDict. This class enables us to support nested keys
-    when performing membership checks and when iterating over keys.
+    It holds a reference to the tensordict, so it shows the keys that are
+    added later. With ``include_nested=True``, a membership check accepts
+    nested keys: ``("a", "b") in td.keys(include_nested=True)`` is ``True``
+    if ``td["a", "b"]`` exists. (The plain ``td.keys()`` view accepts only
+    top-level string keys.)
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-
         >>> td = TensorDict(
-        >>>     {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)},
-        >>>     [1],
-        >>> )
-
-        >>> assert "a" in td.keys()
-        >>> assert ("a",) in td.keys()
-        >>> assert ("a", "b") in td.keys()
-        >>> assert ("a", "c") not in td.keys()
-
-        >>> assert set(td.keys()) == {("a", "b"), "c"}
+        ...     a=TensorDict(b=torch.zeros(1, 2), batch_size=[1, 2]),
+        ...     c=torch.zeros(1),
+        ...     batch_size=[1],
+        ... )
+        >>> keys = td.keys(include_nested=True)
+        >>> ("a", "b") in keys, ("a", "c") in keys
+        (True, False)
+        >>> td["d"] = torch.zeros(1)
+        >>> list(keys)
+        [('a', 'b'), 'a', 'c', 'd']
     """
 
     def __init__(

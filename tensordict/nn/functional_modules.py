@@ -34,7 +34,7 @@ def _register_params(self, name, param):
 
 @deprecated("tensordict.nn.functional_modules.set_tensor()", removal="0.17")
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor.
+    """Sets ``tensor`` as the attribute ``name`` of ``module``: a parameter, a buffer, or a plain attribute.
 
     .. deprecated:: 0.15
         This function will be removed in TensorDict 0.17. It has no replacement.
@@ -56,7 +56,7 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
 
 @deprecated("tensordict.nn.functional_modules.set_tensor_dict()", removal="0.17")
 def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor.
+    """Sets ``tensor`` as the attribute ``name`` of a module, given the ``__dict__`` of the module.
 
     .. deprecated:: 0.15
         This function will be removed in TensorDict 0.17. It has no replacement.

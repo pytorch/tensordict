@@ -84,16 +84,17 @@ def _wrap_generator(ctx_factory, func):
 
 
 def context_decorator(ctx, func):
-    """Like contextlib.ContextDecorator.
+    """Wraps ``func`` so that each call runs inside ``ctx``, like :class:`contextlib.ContextDecorator`.
 
-    Except:
+    Unlike :class:`contextlib.ContextDecorator`, it:
 
-    1. Is done by wrapping, rather than inheritance, so it works with context
-       managers that are implemented from C and thus cannot easily inherit from
-       Python classes
-    2. Wraps generators in the intuitive way (c.f. https://bugs.python.org/issue37743)
-    3. Errors out if you try to wrap a class, because it is ambiguous whether
-       or not you intended to wrap only the constructor
+    1. works by wrapping, rather than inheritance, so it works with context
+       managers that are implemented in C and cannot inherit from Python
+       classes;
+    2. runs each step of a generator inside the context (see
+       https://bugs.python.org/issue37743);
+    3. raises a ``RuntimeError`` for a class, because it is ambiguous whether
+       only the constructor is meant to be wrapped.
 
     The input argument can either be a context manager (in which case it must
     be a multi-shot context manager that can be directly invoked multiple times)

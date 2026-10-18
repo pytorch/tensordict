@@ -26,9 +26,33 @@ _CONST_LOG_SQRT_2PI_E = 0.5 * math.log(2 * math.pi * math.e)
 
 
 class TruncatedStandardNormal(Distribution):
-    """Truncated Standard Normal distribution.
+    """A standard normal distribution restricted to the interval ``[a, b]``.
+
+    The distribution before truncation has mean 0 and standard deviation 1.
+    Its samples are reparameterized (``rsample``). For other means and
+    standard deviations, use :class:`~tensordict.nn.distributions.TruncatedNormal`.
 
     Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+
+    Args:
+        a (Number or torch.Tensor): the lower bound of the support.
+        b (Number or torch.Tensor): the upper bound of the support. ``a`` and
+            ``b`` are broadcast together, and give the batch shape.
+        validate_args (bool, optional): passed to
+            :class:`~torch.distributions.Distribution`. Defaults to ``None``.
+
+    Raises:
+        ValueError: if ``a`` and ``b`` have different dtypes, or if ``a`` is
+            not smaller than ``b`` everywhere.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict.nn.distributions.truncated_normal import TruncatedStandardNormal
+        >>> dist = TruncatedStandardNormal(a=torch.zeros(2), b=torch.tensor([1.0, 2.0]))
+        >>> dist.mean
+        tensor([0.4599, 0.7228])
+        >>> dist.auc
+        tensor([0.3413, 0.4772])
     """
 
     arg_constraints = {
@@ -97,6 +121,7 @@ class TruncatedStandardNormal(Distribution):
 
     @property
     def auc(self) -> torch.Tensor:
+        """The mass of the standard normal distribution between ``a`` and ``b``, before truncation."""
         return self._Z
 
     @staticmethod
@@ -140,11 +165,9 @@ class TruncatedStandardNormal(Distribution):
 
 
 class TruncatedNormal(TruncatedStandardNormal):
-    """Truncated Normal distribution.
+    """A normal distribution of mean ``loc`` and standard deviation ``scale``, restricted to ``[a, b]``.
 
-    A normal distribution of mean ``loc`` and standard deviation ``scale``,
-    restricted to the interval ``[a, b]``. Its samples are reparameterized
-    (``rsample``).
+    Its samples are reparameterized (``rsample``).
 
     Source: https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
 
@@ -159,7 +182,10 @@ class TruncatedNormal(TruncatedStandardNormal):
         b (Number or torch.Tensor): the upper bound of the support, in the
             same units as ``loc``.
         validate_args (bool, optional): passed to
-            :class:`~torch.distributions.Distribution`.
+            :class:`~torch.distributions.Distribution`. Defaults to ``None``.
+
+    Raises:
+        ValueError: if ``a`` is not smaller than ``b`` everywhere.
 
     Examples:
         >>> import torch
