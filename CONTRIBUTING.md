@@ -42,6 +42,32 @@ from within the tensordict cloned directory.
 You can also install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`
 ). You can disable the check by appending `-n` to your commit command: `git commit -m <commit message> -n`
 
+## Writing docstrings
+
+The API reference is built from the docstrings by Sphinx's napoleon extension,
+in Google style. Its reader wants to know what a call does, what each argument
+means, and what comes back.
+
+- Start with one sentence that says what the call does or returns, in the
+  third person: "Returns a new tensordict with ...", "Stacks ...".
+- If needed, add a short paragraph on what a user must know: whether the result
+  is a new object, a view, or `self`, and what happens in the cases users hit
+  (a missing key, a locked tensordict, a lazy stack).
+- Document every argument under `Args:`, and the keyword-only ones under
+  `Keyword Args:`, as `name (type, optional): what it controls.`, and end the
+  entry of an argument that has a default with `Defaults to ``value``.` Add
+  `Returns:` when the first sentence does not say what comes back, and
+  `Raises:` for the errors a user may want to catch.
+- Give each class and each frequently used function an `Examples:` section
+  that runs as copied: import what it uses, use fixed values or
+  `torch.manual_seed`, and show the output of each expression.
+- Write code and literals in double backticks (``` ``None`` ```): single
+  backticks render in italics. Link other objects with `:class:`, `:meth:`
+  and `:func:`, and the concept pages with `:ref:`.
+- Keep it as short as the call allows. A property or an in-place twin needs one
+  line; a class or a main entry point can need a page. Leave out how it is
+  implemented, unless that changes what the user does.
+
 ## Pull Requests
 We actively welcome your pull requests.
 
