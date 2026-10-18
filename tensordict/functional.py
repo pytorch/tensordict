@@ -648,9 +648,10 @@ def pad_sequence(
             from the first dimension of each entry (batch dimensions
             included). If it is a batch dimension, the batch size of the
             result is padded too. A negative ``pad_dim`` counts from the last
-            dimension of each entry. If entries of different ranks put it on
-            different dimensions, at least one of them a batch dimension, the
-            samples must have the same batch size. Defaults to ``0``.
+            dimension of each entry. If it lands on a batch dimension of some
+            entries and on another dimension of others, the batch size is not
+            padded, and no entry may be longer along it than the batch of the
+            first sample. Defaults to ``0``.
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
             Non-tensor entries are not filled with ``padding_value``: when the padded
             dim is a batch dimension of the output, they keep their values at the
@@ -683,9 +684,9 @@ def pad_sequence(
         RuntimeError: if ``list_of_tensordicts`` is empty, or if the entry
             shapes differ in a dimension other than ``pad_dim``.
         ValueError: if ``padding_side`` is neither ``"left"`` nor ``"right"``,
-            or if a negative ``pad_dim`` lands on different dimensions of
-            entries of different ranks and the batch sizes of the samples
-            differ.
+            or if a negative ``pad_dim`` lands on a batch dimension of some
+            entries and on another dimension of others, and an entry is longer
+            along it than the batch of the first sample.
         IndexError: if ``pad_dim`` is out of range for an entry.
 
     Examples:
@@ -740,6 +741,9 @@ def pad_sequence(
     mask_pad_dims = {}
     # The batch dims that pad_dim lands on, counted in each entry
     leaf_batch_pad_dims = set()
+    old_batch_size = list(list_of_tensordicts[0].batch_size)
+    # An entry longer than the first sample's batch along a batch dim of it
+    longer_entry = None
     for i, td in enumerate(list_of_tensordicts):
         if is_tensorclass(td):
             td = td._tensordict
@@ -774,6 +778,11 @@ def pad_sequence(
                 update_batch_size = False
             else:
                 leaf_batch_pad_dims.add(pos_pad_dim)
+            if (
+                pos_pad_dim < len(old_batch_size)
+                and tensor_shape[pos_pad_dim] > old_batch_size[pos_pad_dim]
+            ):
+                longer_entry = (key, pos_pad_dim)
 
             if return_mask:
                 mask_key = unravel_key((masks_key, key))
@@ -783,22 +792,18 @@ def pad_sequence(
     # Each mask key once, in the order of its first sample
     keys = list(keys) + list(mask_pad_dims)
 
-    old_batch_size = list(list_of_tensordicts[0].batch_size)
     if leaf_batch_pad_dims and (len(leaf_batch_pad_dims) > 1 or not update_batch_size):
-        # A negative pad_dim counts from the last dim of each entry: entries of
-        # different ranks put it on different dims, so the batch cannot be
-        # padded. That is fine if no batch dim needs padding.
-        if any(
-            td.batch_size != list_of_tensordicts[0].batch_size
-            for td in list_of_tensordicts
-        ):
+        # pad_dim lands on a batch dim of some entries and on another dim of
+        # others, so the batch cannot be padded. That is fine if no entry is
+        # longer than the first sample's batch along a batch dim.
+        if pad_dim < 0 and longer_entry is not None:
             raise ValueError(
-                f"pad_dim={pad_dim} counts from the last dim of each entry, "
-                "and the entries of different ranks put it on different "
-                f"dims: batch dims {sorted(leaf_batch_pad_dims)}"
-                + ("" if update_batch_size else " and feature dims")
-                + ". This works only if the samples have the same batch size. "
-                "Pass a non-negative pad_dim."
+                f"pad_dim={pad_dim} counts from the last dim of each entry and "
+                f"lands on batch dims {sorted(leaf_batch_pad_dims)}"
+                + ("" if update_batch_size else " and on feature dims")
+                + " of the entries, so the batch cannot be padded along it, "
+                f"but the entry {longer_entry[0]!r} is longer than the batch "
+                f"of the first sample along dim {longer_entry[1]}."
             )
         update_batch_size = False
     # The batch dim set to max_seq_length, if any: non-tensor entries are
