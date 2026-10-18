@@ -4121,6 +4121,13 @@ class TestTensorClass:
         assert (data_replace.X == 0).all()
         assert (data_replace.y.X == 0).all()
 
+        # The keyword entries do not change the positional argument (#2949)
+        data_replace = data.replace(replacement, z="keyword")
+        assert replacement.z == "replacement"
+        assert data_replace.z == "keyword"
+        assert isinstance(data_replace.y, MyDataNested)
+        assert data_replace.y.z == "replacement"
+
     def test_squeeze(self):
         @tensorclass
         class MyDataNested:

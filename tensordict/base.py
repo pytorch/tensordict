@@ -6513,9 +6513,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         tensordict does not change. With no entry to write, ``replace``
         returns ``self``.
 
+        When both a positional argument and ``**kwargs`` are given, the
+        keyword entries are merged into a copy of the positional argument
+        (with ``dict`` unpacking for a dictionary, with :meth:`~.copy` and
+        :meth:`~.update` for a tensordict), so the argument does not change.
+        A tensordict backed by a file or a store, such as a
+        :class:`~tensordict.PersistentTensorDict`, shares that storage with
+        its copy and still receives the keyword entries.
+
         Args:
             *args (dict or TensorDictBase): at most one, the entries to write.
-            **kwargs: top-level entries to write, by key.
+            **kwargs: top-level entries to write, by key. They take
+                precedence over the entries of the positional argument.
 
         Returns:
             A shallow copy of the tensordict, or ``self`` if there is no entry
@@ -6549,10 +6558,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     f"arguments instead."
                 )
             dict_to_replace = args[0]
+            # Merge kwargs into a copy: the caller's argument must not change.
+            if kwargs:
+                if isinstance(dict_to_replace, dict):
+                    dict_to_replace = {**dict_to_replace, **kwargs}
+                elif is_tensor_collection(dict_to_replace):
+                    dict_to_replace = dict_to_replace.copy()
+                    dict_to_replace.update(kwargs)
         else:
-            dict_to_replace = {}
-        if kwargs:
-            dict_to_replace.update(kwargs)
+            dict_to_replace = kwargs
         is_dict = isinstance(dict_to_replace, dict)
         if is_dict:
             if not dict_to_replace:
