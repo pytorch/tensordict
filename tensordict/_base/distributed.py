@@ -39,62 +39,38 @@ class _Distributed:
     def gather_and_stack(
         self, dst: int, group: "torch.distributed.ProcessGroup" | None = None
     ) -> Self | None:
-        """Gathers tensordicts from various workers and stacks them onto self in the destination worker.
+        """Stacks the tensordicts of the other ranks into the tensordict of rank ``dst``, in place.
+
+        Every rank of the group must call it. On rank ``dst``, the tensordict must
+        have one row per other rank: its first batch dimension is
+        ``world_size - 1``, and its own data is not in the result. The
+        tensordicts are sent with :func:`torch.distributed.gather_object`, which
+        pickles them: use it only with ranks you trust. See
+        :ref:`distributed-collectives`.
 
         Args:
-            dst (int): the rank of the destination worker where :func:`gather_and_stack` will be called.
-            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
-                will be used for communication. Otherwise, the default process group
-                will be used.
-                Defaults to ``None``.
+            dst (int): the rank that receives the stack.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
 
-        Example:
-            >>> from torch import multiprocessing as mp
-            >>> from tensordict import TensorDict
-            >>> import torch
-            >>>
-            >>> def client():
-            ...     torch.distributed.init_process_group(
-            ...         "gloo",
-            ...         rank=1,
-            ...         world_size=2,
-            ...         init_method=f"tcp://localhost:10003",
-            ...     )
-            ...     # Create a single tensordict to be sent to server
-            ...     td = TensorDict(
-            ...         {("a", "b"): torch.randn(2),
-            ...          "c": torch.randn(2)}, [2]
-            ...     )
-            ...     td.gather_and_stack(0)
-            ...
-            >>> def server():
-            ...     torch.distributed.init_process_group(
-            ...         "gloo",
-            ...         rank=0,
-            ...         world_size=2,
-            ...         init_method=f"tcp://localhost:10003",
-            ...     )
-            ...     # Creates the destination tensordict on server.
-            ...     # The first dim must be equal to world_size-1
-            ...     td = TensorDict(
-            ...         {("a", "b"): torch.zeros(2),
-            ...          "c": torch.zeros(2)}, [2]
-            ...     ).expand(1, 2).contiguous()
-            ...     td.gather_and_stack(0)
-            ...     assert td["a", "b"] != 0
-            ...     print("yuppie")
-            ...
-            >>> if __name__ == "__main__":
-            ...     mp.set_start_method("spawn")
-            ...
-            ...     main_worker = mp.Process(target=server)
-            ...     secondary_worker = mp.Process(target=client)
-            ...
-            ...     main_worker.start()
-            ...     secondary_worker.start()
-            ...
-            ...     main_worker.join()
-            ...     secondary_worker.join()
+        Returns:
+            ``self`` on rank ``dst``, ``None`` on the other ranks.
+
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def gather_and_stack(rank, world_size):
+                    if rank == 0:
+                        out = TensorDict(a=torch.zeros(world_size - 1, 3), batch_size=[world_size - 1])
+                        out.gather_and_stack(dst=0)
+                        print(out["a"][:, 0])  # with 2 ranks: tensor([1.])
+                    else:
+                        td = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+                        td.gather_and_stack(dst=0)
         """
         from torch import distributed as dist
 
@@ -121,101 +97,63 @@ class _Distributed:
         pseudo_rand: bool = False,
         consolidated: bool = False,
     ) -> None:  # noqa: D417
-        """Sends the content of a tensordict to a distant worker.
+        """Sends the leaves of the tensordict to another rank, with :mod:`torch.distributed`.
+
+        The receiver calls :meth:`~.recv` on a tensordict with the same keys,
+        shapes and dtypes, which writes the values into its tensors. By default,
+        each leaf is one message, marked with a tag. To send to a rank that does
+        not know the structure, use :meth:`~.init_remote`. See :ref:`distributed`.
 
         Args:
             dst (int or TensorDictPipe, optional): the global rank of the
-                destination worker where the content should be sent, or a
-                :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
-                transport. Mutually exclusive with ``group_dst``; exactly one
-                of the two must be provided.
+                receiver, or a :class:`~tensordict._ucxx.TensorDictPipe` to send
+                through with UCXX, which ignores the other arguments. Exclusive
+                with ``group_dst``: pass exactly one of them. Defaults to ``None``.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
-                will be used for communication. Otherwise, the default process group
-                will be used.
-                Defaults to ``None``.
-            group_dst (int, optional): the rank of the destination worker
-                *relative to* ``group``. Requires ``group`` to be passed and is
-                mutually exclusive with ``dst``. When set, the p2p calls are
-                issued directly on the group's backend, so ``group`` may be a
-                standalone :class:`~torch.distributed.ProcessGroup` built
-                against a store (never registered through
-                :func:`~torch.distributed.init_process_group` or
-                :func:`~torch.distributed.new_group`).
-                Defaults to ``None``.
-            init_tag (int): the initial tag to be used to mark the tensors.
-                Note that this will be incremented by as much as the number of
-                tensors contained in the TensorDict.
-            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
-                random, allowing to send multiple data from different nodes
-                without overlap. Notice that the generation of these pseudo-random
-                numbers is expensive (1e-5 sec/number), meaning that it could
-                slow down the runtime of your algorithm.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            group_dst (int, optional): the rank of the receiver in ``group``,
+                which must be given. Exclusive with ``dst``. The messages then go
+                through the backend of ``group`` directly, so ``group`` can be a
+                standalone :class:`~torch.distributed.ProcessGroup` built on a store,
+                never registered by :func:`~torch.distributed.init_process_group` or
+                :func:`~torch.distributed.new_group`. Defaults to ``None``.
+            init_tag (int, optional): the tag of the first leaf. The next leaves
+                use ``init_tag + 1``, ``init_tag + 2``, and so on. The receiver must
+                pass the same value. Give two transfers that run at the same time
+                tag ranges that do not overlap. Defaults to ``0``.
+            pseudo_rand (bool, optional): if ``True``, the tags are pseudo-random
+                numbers seeded by ``init_tag``, so that transfers from several
+                ranks do not overlap. Generating them costs about 10
+                microseconds per leaf. The receiver must pass the same value.
                 Defaults to ``False``.
-            consolidated (bool): if True, sends the consolidated storage as a
-                single tensor (1 message). The tensordict is consolidated first
-                if needed. The receiver must use ``recv(consolidated=True)`` and
-                must already hold a consolidated tensordict with matching schema.
+            consolidated (bool, optional): if ``True``, sends all the leaves as one
+                message: the tensordict is consolidated first (see
+                :meth:`~.consolidate`), unless it is already. The receiver must call
+                ``recv(consolidated=True)`` on a consolidated tensordict with the
+                same structure. ``init_tag`` and ``pseudo_rand`` are ignored.
                 Defaults to ``False``.
 
-        Example:
-            >>> from torch import multiprocessing as mp
-            >>> from tensordict import TensorDict
-            >>> import torch
-            >>>
-            >>>
-            >>> def client():
-            ...     torch.distributed.init_process_group(
-            ...         "gloo",
-            ...         rank=1,
-            ...         world_size=2,
-            ...         init_method=f"tcp://localhost:10003",
-            ...     )
-            ...
-            ...     td = TensorDict(
-            ...         {
-            ...             ("a", "b"): torch.randn(2),
-            ...             "c": torch.randn(2, 3),
-            ...             "_": torch.ones(2, 1, 5),
-            ...         },
-            ...         [2],
-            ...     )
-            ...     td.send(0)
-            ...
-            >>>
-            >>> def server(queue):
-            ...     torch.distributed.init_process_group(
-            ...         "gloo",
-            ...         rank=0,
-            ...         world_size=2,
-            ...         init_method=f"tcp://localhost:10003",
-            ...     )
-            ...     td = TensorDict(
-            ...         {
-            ...             ("a", "b"): torch.zeros(2),
-            ...             "c": torch.zeros(2, 3),
-            ...             "_": torch.zeros(2, 1, 5),
-            ...         },
-            ...         [2],
-            ...     )
-            ...     td.recv(1)
-            ...     assert (td != 0).all()
-            ...     queue.put("yuppie")
-            ...
-            >>>
-            >>> if __name__=="__main__":
-            ...     queue = mp.Queue(1)
-            ...     main_worker = mp.Process(target=server, args=(queue,))
-            ...     secondary_worker = mp.Process(target=client)
-            ...
-            ...     main_worker.start()
-            ...     secondary_worker.start()
-            ...     out = queue.get(timeout=10)
-            ...     assert out == "yuppie"
-            ...     main_worker.join()
-            ...     secondary_worker.join()
+        Raises:
+            ValueError: if both or none of ``dst`` and ``group_dst`` are given, or
+                if ``group_dst`` is given without ``group``.
 
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def send_recv(rank, world_size):
+                    if rank == 0:
+                        td = TensorDict(a=torch.ones(4), b=torch.ones(4, 3), batch_size=[4])
+                        td.send(dst=1)
+                    elif rank == 1:
+                        td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+                        td.recv(src=0)
+                        print(td["b"].sum())  # tensor(12.)
         """
         from tensordict._ucxx import TensorDictPipe
 
@@ -293,49 +231,48 @@ class _Distributed:
         pseudo_rand: bool = False,
         consolidated: bool = False,
     ) -> int:  # noqa: D417
-        """Receives the content of a tensordict and updates content with it.
+        """Receives the leaves that :meth:`~.send` sends, and writes them into the tensordict in place.
 
-        Check the example in the `send` method for context.
+        The tensordict must have the keys, shapes and dtypes of the tensordict
+        that the sender sends. See :meth:`~.send` for an example, and
+        :ref:`distributed`.
 
         Args:
-            src (int or TensorDictPipe, optional): the global rank of the
-                source worker, or a
-                :class:`~tensordict._ucxx.TensorDictPipe` for UCXX-based
-                transport.  When a pipe is passed, the data is received
-                in-place into this tensordict's consolidated storage (if
-                available and its layout matches the received data);
-                otherwise the pipe returns a tensordict of its own, so use
-                the returned value. Mutually exclusive with ``group_src``;
-                exactly one of the two must be provided.
+            src (int or TensorDictPipe, optional): the global rank of the sender,
+                or a :class:`~tensordict._ucxx.TensorDictPipe` to receive from
+                with UCXX, which ignores the other arguments. Exclusive with
+                ``group_src``: pass exactly one of them. Defaults to ``None``.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
-                will be used for communication. Otherwise, the default process group
-                will be used.
-                Defaults to ``None``.
-            group_src (int, optional): the rank of the source worker *relative
-                to* ``group``. Requires ``group`` to be passed and is mutually
-                exclusive with ``src``. When set, the p2p calls are issued
-                directly on the group's backend, so ``group`` may be a
-                standalone :class:`~torch.distributed.ProcessGroup` built
-                against a store (never registered through
-                :func:`~torch.distributed.init_process_group` or
-                :func:`~torch.distributed.new_group`).
-                Defaults to ``None``.
-            init_tag (int): the ``init_tag`` used by the source worker.
-            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
-                random, allowing to send multiple data from different nodes
-                without overlap. Notice that the generation of these pseudo-random
-                numbers is expensive (1e-5 sec/number), meaning that it could
-                slow down the runtime of your algorithm.
-                This value must match the one passed to :func:`send`.
-                Defaults to ``False``.
-            consolidated (bool): if True, receives a single consolidated storage
-                tensor directly into ``self._consolidated["storage"]``. The
-                tensordict must already be consolidated (e.g. from a prior
-                :meth:`~.from_remote_init` call). All leaf tensor views update
-                in-place automatically.
-                Defaults to ``False``.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            group_src (int, optional): the rank of the sender in ``group``, which
+                must be given. Exclusive with ``src``. The messages then go through
+                the backend of ``group`` directly, so ``group`` can be a standalone
+                :class:`~torch.distributed.ProcessGroup` built on a store, never
+                registered by :func:`~torch.distributed.init_process_group` or
+                :func:`~torch.distributed.new_group`. Defaults to ``None``.
+            init_tag (int, optional): the ``init_tag`` that the sender passed.
+                Defaults to ``0``.
+            pseudo_rand (bool, optional): the ``pseudo_rand`` that the sender
+                passed. Defaults to ``False``.
+            consolidated (bool, optional): if ``True``, receives one message into
+                the consolidated storage of the tensordict, which updates all its
+                leaves, as sent by ``send(consolidated=True)``. The tensordict must
+                be consolidated already, for example by
+                ``consolidate(metadata=True)`` or :meth:`~.from_remote_init`;
+                otherwise an ``AttributeError`` is raised. ``init_tag`` and
+                ``pseudo_rand`` are ignored. Defaults to ``False``.
+
+        Returns:
+            With a pipe, the received tensordict, which is ``self`` only if the
+            tensordict is consolidated with the layout of the data, so use the
+            return value. With ``consolidated=True``, ``None``. Otherwise, the
+            tag of the last leaf received.
+
+        Raises:
+            ValueError: if both or none of ``src`` and ``group_src`` are given, or
+                if ``group_src`` is given without ``group``.
         """
         from tensordict._ucxx import TensorDictPipe
 
@@ -364,13 +301,26 @@ class _Distributed:
         )
 
     async def asend(self, dst: "TensorDictPipe") -> None:  # noqa: F821
-        """Sends the content of a tensordict through a UCXX pipe (async).
+        """Sends the tensordict through a UCXX pipe, asynchronously.
+
+        Awaits ``dst.asend(self)``. See :class:`~tensordict._ucxx.TensorDictPipe`,
+        which needs the optional ``ucxx`` package.
 
         Args:
             dst (TensorDictPipe): the pipe to send through.
 
-        .. seealso:: :meth:`send` for the synchronous variant and
-            torch.distributed-based transport.
+        .. seealso:: :meth:`~.send`, which also takes a pipe, and works without
+            ``await``.
+
+        Examples:
+            This example needs ``ucxx`` and a receiver on the other end of the
+            pipe:
+
+            .. code-block:: python
+
+                async def produce(pipe):
+                    for _ in range(10):
+                        await TensorDict(obs=torch.randn(64, 84)).asend(pipe)
         """
         await dst.asend(self)
 
@@ -380,19 +330,38 @@ class _Distributed:
         *,
         device: torch.device | str | None = None,
     ) -> "TensorDictBase":
-        """Receives content into this tensordict from a UCXX pipe (async).
+        """Receives a tensordict from a UCXX pipe, into the tensordict if possible, asynchronously.
+
+        Awaits ``src.arecv(self, device=device)``. If the tensordict is
+        consolidated with the layout of the received data, the data is written
+        into its storage. Otherwise, the pipe returns another tensordict: use the
+        return value. See :class:`~tensordict._ucxx.TensorDictPipe`, which needs
+        the optional ``ucxx`` package.
 
         Args:
             src (TensorDictPipe): the pipe to receive from.
 
         Keyword Args:
-            device: device for storage allocation on first receive.
+            device (torch.device, str or int, optional): the device of the storage
+                that the pipe allocates for a new structure. Defaults to ``None``,
+                which uses the device of the sender with a consolidated pipe, and
+                the CPU otherwise.
 
         Returns:
-            The received TensorDict (may be ``self`` for in-place updates).
+            The received tensordict, ``self`` or another tensordict.
 
-        .. seealso:: :meth:`recv` for the synchronous variant and
-            torch.distributed-based transport.
+        .. seealso:: :meth:`~.recv`, which also takes a pipe, and works without
+            ``await``.
+
+        Examples:
+            This example needs ``ucxx`` and a sender on the other end of the pipe:
+
+            .. code-block:: python
+
+                async def consume(pipe):
+                    td = await TensorDict().arecv(pipe)  # first receive: allocates
+                    for _ in range(9):
+                        td = await td.arecv(pipe)  # same structure: writes into td
         """
         return await src.arecv(self, device=device)
 
@@ -446,99 +415,52 @@ class _Distributed:
         use_broadcast: bool = False,
         _tensorclass_type: str | None = None,
     ) -> None:
-        """Initializes a remote tensordict by sending its metadata and content.
+        """Sends the structure and the content of the tensordict to a rank that does not know them.
 
-        Two transport modes are available:
+        The receiver calls :meth:`~.from_remote_init`, which builds a new
+        consolidated tensordict. The tensordict is consolidated (see
+        :meth:`~.consolidate`), then its metadata is sent with
+        :func:`torch.distributed.send_object_list`, which pickles it, and its
+        storage as one tensor. Send the next batches with
+        ``send(consolidated=True)``, into the tensordict that
+        :meth:`~.from_remote_init` returned. See :ref:`distributed`.
 
-        - **Point-to-point** (default): uses ``send_object_list`` +
-          ``dist.send`` to transfer metadata and storage to a single
-          destination rank. Only the sender and receiver need to call the
-          pair ``init_remote`` / ``from_remote_init``.
-        - **Broadcast** (``use_broadcast=True``): delegates to
-          :meth:`~.broadcast`.  Metadata and storage are broadcast to
-          *every* rank in the group.  All ranks must participate (receivers
-          call ``from_remote_init(src=..., use_broadcast=True)``).  ``dst``
-          is ignored in this mode.
+        With ``use_broadcast=True``, it calls :meth:`~.broadcast` instead, and
+        every rank of the group must take part: the others call
+        ``from_remote_init(src=..., use_broadcast=True)``.
 
         Args:
-            dst (int, optional): The rank of the destination process. Required
-                when ``use_broadcast=False`` (the default).  Ignored when
-                ``use_broadcast=True``.
-            group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
-            device (torch.device, optional): The device to use for tensor operations. Defaults to None.
-            use_broadcast (bool): If ``True``, use :meth:`~.broadcast` instead
-                of point-to-point send.  Defaults to ``False``.
-
-        .. seealso::
-            The receiving process should call `~.from_remote_init` or an equivalent method to receive and initialize a new tensordict based on the sent metadata.
+            dst (int, optional): the rank of the receiver. Required unless
+                ``use_broadcast=True``, which ignores it. Defaults to ``None``.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            device (torch.device, str or int, optional): point-to-point, the device
+                that the metadata goes through, as in
+                :func:`torch.distributed.send_object_list` (with ``nccl``, a CUDA
+                device). With ``use_broadcast=True``, the device of the
+                consolidated storage, as in :meth:`~.broadcast`. Defaults to
+                ``None``.
+            use_broadcast (bool, optional): if ``True``, broadcasts the tensordict
+                to every rank of the group. Defaults to ``False``.
 
         Examples:
-            >>> import os
-            >>> import torch
-            >>> import torch.distributed as dist
-            >>> from tensordict import TensorDict, MemoryMappedTensor
-            >>> import multiprocessing as mp
-            >>>
-            >>> def server(queue):
-            ...     # Set environment variables for distributed communication
-            ...     os.environ["MASTER_ADDR"] = "localhost"
-            ...     os.environ["MASTER_PORT"] = "29505"
-            ...
-            ...     # Initialize the distributed backend
-            ...     dist.init_process_group("gloo", rank=0, world_size=2)
-            ...
-            ...     # Create a sample tensordict
-            ...     td = (
-            ...         TensorDict(
-            ...             {
-            ...                 ("a", "b"): torch.ones(2),
-            ...                 "c": torch.ones(2),
-            ...                 ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.ones(2, 2)),
-            ...             },
-            ...             [2],
-            ...         )
-            ...         .expand(1, 2)
-            ...         .contiguous()
-            ...     )
-            ...
-            ...     # Send the tensordict metadata and content to the client
-            ...     td.init_remote(dst=1)
-            ...
-            >>> def client(queue):
-            ...     # Set environment variables for distributed communication
-            ...     os.environ["MASTER_ADDR"] = "localhost"
-            ...     os.environ["MASTER_PORT"] = "29505"
-            ...
-            ...     # Initialize the distributed backend
-            ...     dist.init_process_group("gloo", rank=1, world_size=2)
-            ...
-            ...     # Receive the tensordict metadata and content from the server
-            ...     received_td = TensorDict.from_remote_init(src=0)
-            ...
-            ...     # Verify that the received tensordict matches the expected structure and values
-            ...     assert set(received_td.keys()) == {"a", "c", "d"}
-            ...     assert (received_td == 1).all()
-            ...
-            ...     # Signal that the test has completed successfully
-            ...     queue.put("yuppie")
-            >>>
-            >>> if __name__ == "__main__":
-            ...     queue = mp.Queue(1)
-            ...
-            ...     # Create and start the server and client processes
-            ...     main_worker = mp.Process(target=server, args=(queue,))
-            ...     secondary_worker = mp.Process(target=client, args=(queue,))
-            ...
-            ...     main_worker.start()
-            ...     secondary_worker.start()
-            ...
-            ...     try:
-            ...         out = queue.get(timeout=10)  # Wait for the signal with a timeout
-            ...         print(out)  # Should print "yuppie"
-            ...     finally:
-            ...         queue.close()
-            ...         main_worker.join(timeout=10)
-            ...         secondary_worker.join(timeout=10)
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def cold_start(rank, world_size):
+                    if rank == 0:
+                        td = TensorDict(obs=torch.ones(2, 84), reward=torch.ones(2, 1), batch_size=[2])
+                        td.init_remote(dst=1)
+                        td["obs"].add_(1)
+                        td.send(dst=1, consolidated=True)
+                    elif rank == 1:
+                        td = TensorDict.from_remote_init(src=0)
+                        print(td.batch_size, td.is_consolidated())  # torch.Size([2]) True
+                        td.recv(src=0, consolidated=True)
+                        print(td["obs"][0, 0])  # tensor(2.)
         """
         if use_broadcast:
             rank = torch.distributed.get_rank(group=group)
@@ -572,31 +494,29 @@ class _Distributed:
         device: torch.device | None = None,
         use_broadcast: bool = False,
     ) -> Self:
-        """Creates a new tensordict instance initialized from remotely sent metadata.
+        """Receives a tensordict that :meth:`~.init_remote` sends, and returns it.
 
-        This class method receives consolidated metadata and a single storage buffer
-        sent by :meth:`~.init_remote`, then reconstructs the full tensordict.
-
-        Two transport modes are available (must match the sender's choice):
-
-        - **Point-to-point** (default): uses ``recv_object_list`` +
-          ``dist.recv``.  Only sender and receiver participate.
-        - **Broadcast** (``use_broadcast=True``): delegates to
-          :meth:`~.broadcast`.  All ranks must participate.
+        The result is consolidated (see :meth:`~.consolidate`): receive the next
+        batches into it with ``recv(consolidated=True)``, which allocates no new
+        memory. A tensorclass arrives as the same tensorclass, if this process can
+        import its class. The metadata is unpickled: use it only with ranks you
+        trust. See :meth:`~.init_remote` for an example, and :ref:`distributed`.
 
         Args:
-            src (int): The rank of the source process that sent the metadata.
-            group ("ProcessGroup", optional): The process group to use for communication. Defaults to None.
-            device (torch.device, optional): The device to use for tensor operations. Defaults to None.
-            use_broadcast (bool): If ``True``, use :meth:`~.broadcast` instead
-                of point-to-point recv.  Must match the sender's setting.
-                Defaults to ``False``.
+            src (int): the rank of the sender.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            device (torch.device, str or int, optional): the device of the result.
+                Point-to-point, it is also the device that the metadata goes
+                through, as in :func:`torch.distributed.recv_object_list`.
+                Defaults to ``None``, which is the CPU point-to-point, and the
+                device of the sender's storage with ``use_broadcast=True``.
+            use_broadcast (bool, optional): if ``True``, receives with
+                :meth:`~.broadcast`. It must match the sender's value. Defaults to
+                ``False``.
 
         Returns:
-            TensorDict: A new tensordict instance initialized with the received metadata and content.
-
-        .. seealso::
-            The sending process should have called `~.init_remote` to send the metadata and content.
+            A new consolidated tensordict, of the class that was sent.
         """
         if use_broadcast:
             return cls({}).broadcast(src=src, group=group, device=device)
@@ -633,113 +553,71 @@ class _Distributed:
         return_early: bool = False,
         consolidated: bool = False,
     ) -> int | List["Work"] | None:  # noqa: D417, F821
-        """Sends the content of the tensordict asynchronously.
+        """Sends the leaves of the tensordict to another rank, one asynchronous transfer per leaf.
+
+        As :meth:`~.send`, but the transfers of all the leaves run at the same
+        time. By default, the call waits until they are done. With
+        ``return_early=True``, it returns at once: call ``wait()`` on each
+        returned ``Work`` object before you change the tensordict. The receiver
+        calls :meth:`~.irecv` or :meth:`~.recv`. See :ref:`distributed`.
 
         Args:
-            dst (int, optional): the global rank of the destination worker
-                where the content should be sent. Mutually exclusive with
-                ``group_dst``; exactly one of the two must be provided.
+            dst (int, optional): the global rank of the receiver. Exclusive with
+                ``group_dst``: pass exactly one of them. Defaults to ``None``.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
-                will be used for communication. Otherwise, the default process group
-                will be used.
-                Defaults to ``None``.
-            group_dst (int, optional): the rank of the destination worker
-                *relative to* ``group``. Requires ``group`` to be passed and is
-                mutually exclusive with ``dst``. When set, the p2p calls are
-                issued directly on the group's backend, so ``group`` may be a
-                standalone :class:`~torch.distributed.ProcessGroup` built
-                against a store (never registered through
-                :func:`~torch.distributed.init_process_group` or
-                :func:`~torch.distributed.new_group`).
-                Defaults to ``None``.
-            init_tag (int): the initial tag to be used to mark the tensors.
-                Note that this will be incremented by as much as the number of
-                tensors contained in the TensorDict.
-            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
-                random, allowing to send multiple data from different nodes
-                without overlap. Notice that the generation of these pseudo-random
-                numbers is expensive (1e-5 sec/number), meaning that it could
-                slow down the runtime of your algorithm.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            group_dst (int, optional): the rank of the receiver in ``group``,
+                which must be given. Exclusive with ``dst``. As in :meth:`~.send`,
+                ``group`` can then be a standalone process group. Defaults to
+                ``None``.
+            init_tag (int, optional): the tag of the first leaf. The next leaves
+                use ``init_tag + 1``, ``init_tag + 2``, and so on. The receiver must
+                pass the same value. Defaults to ``0``.
+            pseudo_rand (bool, optional): if ``True``, the tags are pseudo-random
+                numbers seeded by ``init_tag``. The receiver must pass the same
+                value. Defaults to ``False``.
+            return_early (bool, optional): if ``True``, returns the list of
+                ``Work`` objects of the transfers without waiting for them.
                 Defaults to ``False``.
-            return_early (bool, optional): if True, a list of futures
-                will be returned instead of the tag of the last tensor sent.
-                Defaults to ``False``.
-            consolidated (bool): if True, sends the consolidated storage as a
-                single tensor (1 message), as :meth:`send` does. The tensordict
-                is consolidated first if needed, which copies every leaf on
-                each call: a sender that keeps a consolidated copy and
-                refreshes it with :meth:`~.update_` avoids that copy. The
-                receiver must use ``irecv(consolidated=True)`` or
-                ``recv(consolidated=True)`` and must already hold a
-                consolidated tensordict with matching schema. With
-                ``return_early=True``, the returned list holds the single
-                future; otherwise ``None`` is returned once the message is
-                sent. ``init_tag`` and ``pseudo_rand`` are ignored.
-                Defaults to ``False``.
+            consolidated (bool, optional): if ``True``, sends all the leaves as one
+                message, as ``send(consolidated=True)`` does. A tensordict that is
+                not consolidated is consolidated on each call, which copies every
+                leaf: keep a consolidated copy and refresh it with
+                :meth:`~.update_` to avoid the copy. The receiver must call
+                ``irecv(consolidated=True)`` or ``recv(consolidated=True)``.
+                ``init_tag`` and ``pseudo_rand`` are ignored. Defaults to ``False``.
 
-        Example:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>> from torch import multiprocessing as mp
-            >>> def client():
-            ...     torch.distributed.init_process_group(
-            ...         "gloo",
-            ...         rank=1,
-            ...         world_size=2,
-            ...         init_method=f"tcp://localhost:10003",
-            ...     )
-            ...
-            ...     td = TensorDict(
-            ...         {
-            ...             ("a", "b"): torch.randn(2),
-            ...             "c": torch.randn(2, 3),
-            ...             "_": torch.ones(2, 1, 5),
-            ...         },
-            ...         [2],
-            ...     )
-            ...     td.isend(0)
-            ...
-            >>>
-            >>> def server(queue, return_premature=True):
-            ...     torch.distributed.init_process_group(
-            ...         "gloo",
-            ...         rank=0,
-            ...         world_size=2,
-            ...         init_method=f"tcp://localhost:10003",
-            ...     )
-            ...     td = TensorDict(
-            ...         {
-            ...             ("a", "b"): torch.zeros(2),
-            ...             "c": torch.zeros(2, 3),
-            ...             "_": torch.zeros(2, 1, 5),
-            ...         },
-            ...         [2],
-            ...     )
-            ...     out = td.irecv(1, return_premature=return_premature)
-            ...     if return_premature:
-            ...         for fut in out:
-            ...             fut.wait()
-            ...     assert (td != 0).all()
-            ...     queue.put("yuppie")
-            ...
-            >>>
-            >>> if __name__ == "__main__":
-            ...     queue = mp.Queue(1)
-            ...     main_worker = mp.Process(
-            ...         target=server,
-            ...         args=(queue, )
-            ...         )
-            ...     secondary_worker = mp.Process(target=client)
-            ...
-            ...     main_worker.start()
-            ...     secondary_worker.start()
-            ...     out = queue.get(timeout=10)
-            ...     assert out == "yuppie"
-            ...     main_worker.join()
-            ...     secondary_worker.join()
+        Returns:
+            With ``return_early=True``, a list of ``Work`` objects. Otherwise, the
+            tag of the last leaf sent, or ``None`` with ``consolidated=True``.
 
+        Raises:
+            ValueError: if both or none of ``dst`` and ``group_dst`` are given, or
+                if ``group_dst`` is given without ``group``.
+
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def isend_irecv(rank, world_size):
+                    if rank == 0:
+                        td = TensorDict(a=torch.ones(4), b=torch.ones(4, 3), batch_size=[4])
+                        works = td.isend(dst=1, return_early=True)
+                        # ... other work, which does not change td ...
+                        for work in works:
+                            work.wait()
+                    elif rank == 1:
+                        td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+                        works = td.irecv(src=0, return_premature=True)
+                        # ... other work, which does not read td ...
+                        for work in works:
+                            work.wait()
+                        print(td["b"].sum())  # tensor(12.)
         """
         _check_p2p_peer(dst, group_dst, group, "dst", "group_dst")
         if consolidated:
@@ -826,52 +704,46 @@ class _Distributed:
         pseudo_rand: bool = False,
         consolidated: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
-        """Receives the content of a tensordict and updates content with it asynchronously.
+        """Receives the leaves that :meth:`~.isend` or :meth:`~.send` sends, one asynchronous transfer per leaf.
 
-        Check the example in the :meth:`~.isend` method for context.
+        The tensordict must have the keys, shapes and dtypes of the tensordict
+        that the sender sends; the values are written into its tensors in place.
+        By default, the call waits until all the transfers are done. With
+        ``return_premature=True``, it returns at once: call ``wait()`` on each
+        returned ``Work`` object before you read the tensordict. See
+        :meth:`~.isend` for an example, and :ref:`distributed`.
 
         Args:
-            src (int, optional): the global rank of the source worker. Mutually
-                exclusive with ``group_src``; exactly one of the two must be
-                provided.
+            src (int, optional): the global rank of the sender. Exclusive with
+                ``group_src``: pass exactly one of them. Defaults to ``None``.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
-                will be used for communication. Otherwise, the default process group
-                will be used.
-                Defaults to ``None``.
-            group_src (int, optional): the rank of the source worker *relative
-                to* ``group``. Requires ``group`` to be passed and is mutually
-                exclusive with ``src``. When set, the p2p calls are issued
-                directly on the group's backend, so ``group`` may be a
-                standalone :class:`~torch.distributed.ProcessGroup` built
-                against a store (never registered through
-                :func:`~torch.distributed.init_process_group` or
-                :func:`~torch.distributed.new_group`).
-                Defaults to ``None``.
-            return_premature (bool): if ``True``, returns a list of futures to wait
-                upon until the tensordict is updated. Defaults to ``False``,
-                i.e. waits until update is completed withing the call.
-            init_tag (int): the ``init_tag`` used by the source worker.
-            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
-                random, allowing to send multiple data from different nodes
-                without overlap. Notice that the generation of these pseudo-random
-                numbers is expensive (1e-5 sec/number), meaning that it could
-                slow down the runtime of your algorithm.
-                This value must match the one passed to :func:`isend`.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            group_src (int, optional): the rank of the sender in ``group``, which
+                must be given. Exclusive with ``src``. As in :meth:`~.recv`,
+                ``group`` can then be a standalone process group. Defaults to
+                ``None``.
+            return_premature (bool, optional): if ``True``, returns the list of
+                ``Work`` objects of the transfers without waiting for them.
                 Defaults to ``False``.
-            consolidated (bool): if True, receives a single consolidated storage
-                tensor directly into ``self._consolidated["storage"]``, as
-                :meth:`recv` does. The tensordict must already be consolidated
-                (e.g. from a prior :meth:`~.from_remote_init` call), and all
-                leaf tensor views update in-place. With
-                ``return_premature=True``, the returned list holds the single
-                future. ``init_tag`` and ``pseudo_rand`` are ignored.
+            init_tag (int, optional): the ``init_tag`` that the sender passed.
+                Defaults to ``0``.
+            pseudo_rand (bool, optional): the ``pseudo_rand`` that the sender
+                passed. Defaults to ``False``.
+            consolidated (bool, optional): if ``True``, receives one message into
+                the consolidated storage of the tensordict, as
+                ``recv(consolidated=True)`` does. The tensordict must be
+                consolidated already. ``init_tag`` and ``pseudo_rand`` are ignored.
                 Defaults to ``False``.
 
         Returns:
-            if ``return_premature=True``, a list of futures to wait
-                upon until the tensordict is updated.
+            With ``return_premature=True``, a list of ``Work`` objects. Otherwise,
+            ``None``.
+
+        Raises:
+            ValueError: if both or none of ``src`` and ``group_src`` are given, or
+                if ``group_src`` is given without ``group``.
         """
         _check_p2p_peer(src, group_src, group, "src", "group_src")
         if consolidated:
@@ -955,10 +827,47 @@ class _Distributed:
         return_premature=False,
         group=None,
     ) -> None:
-        """Reduces the tensordict across all machines.
+        """Reduces each leaf over all the ranks of the group, into the tensordict of rank ``dst``.
 
-        Only the process with ``rank`` dst is going to receive the final result.
+        Every rank of the group must call it, with a tensordict of the same
+        structure. Each leaf is reduced in place with
+        :func:`torch.distributed.reduce`. After the call, rank ``dst`` holds the
+        result. On the other ranks, the values of the tensordict are not defined
+        (with ``gloo``, they can hold partial results): clone the tensordict
+        before the call if you need them. See :ref:`distributed-collectives`.
 
+        Args:
+            dst (int): the rank that receives the result.
+            op (torch.distributed.ReduceOp, optional): the reduction. Defaults to
+                ``None``, which is ``torch.distributed.ReduceOp.SUM``.
+            async_op (bool, optional): if ``True``, the reductions of all the
+                leaves run at the same time, and the call waits for them unless
+                ``return_premature=True``. Defaults to ``False``.
+            return_premature (bool, optional): with ``async_op=True``, if
+                ``True``, returns the list of ``Work`` objects of the reductions
+                without waiting for them: call ``wait()`` on each one before you use
+                the tensordict. Defaults to ``False``.
+            group (torch.distributed.ProcessGroup, optional): the process group of
+                the leaves at the root of the tensordict. Defaults to ``None``, the
+                default process group. The leaves of nested tensordicts are
+                reduced on the default process group.
+
+        Returns:
+            With ``async_op=True`` and ``return_premature=True``, a list of
+            ``Work`` objects. Otherwise, ``None``.
+
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def reduce(rank, world_size):
+                    td = TensorDict(a=torch.ones(3) * (rank + 1), batch_size=[3])
+                    td.reduce(dst=0, op=dist.ReduceOp.SUM)
+                    if rank == 0:
+                        print(td["a"])  # with 2 ranks: tensor([3., 3., 3.])
         """
         from torch import distributed as dist
 
@@ -1017,27 +926,46 @@ class _Distributed:
         device: torch.device | str | None = None,
         _tensorclass_type: str | None = None,
     ) -> Self:
-        """Broadcasts a tensordict from ``src`` to all ranks.
+        """Sends the tensordict of rank ``src`` to every rank of the group, and returns it on each rank.
 
-        Uses consolidated transport: the source rank consolidates the tensordict
-        and broadcasts metadata (via ``broadcast_object_list``) followed by the
-        contiguous storage tensor (via ``dist.broadcast``). Receiving ranks
-        allocate a buffer and reconstruct the full tensordict.
+        Every rank of the group must call it. The other ranks do not need to know
+        the structure: they can call it on an empty tensordict. Rank ``src``
+        consolidates its tensordict (see :meth:`~.consolidate`), and broadcasts the
+        metadata with :func:`torch.distributed.broadcast_object_list`, which
+        pickles it, then the storage as one tensor. The other ranks build a new
+        tensordict from them. Use it only with ranks you trust. See
+        :ref:`distributed-collectives`.
 
         Args:
-            src (int): The rank of the source process.
+            src (int): the rank that sends its tensordict.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): The process group
-                to use. Defaults to ``None`` (default group).
-            device (torch.device or str, optional): The device on which to
-                allocate the receive buffer.  If ``None``, the device is
-                inferred from the source's consolidated storage (transmitted
-                via metadata).  Useful when the backend is ``nccl`` and
-                buffers must live on CUDA.  Defaults to ``None``.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            device (torch.device, str or int, optional): on rank ``src``, the
+                device of the consolidated storage, if the tensordict is not
+                consolidated yet. On the other ranks, the device of the result.
+                With ``nccl``, pass a CUDA device. Defaults to ``None``, which keeps
+                the device of the tensordict on rank ``src``, and uses the same
+                device on the other ranks.
 
         Returns:
-            TensorDict: the broadcast tensordict on all ranks (consolidated).
+            The consolidated tensordict of rank ``src``. On rank ``src``, it is
+            the tensordict itself if it is consolidated already, and a
+            consolidated copy otherwise. On the other ranks, it is a new
+            tensordict.
+
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def broadcast(rank, world_size):
+                    td = TensorDict(a=torch.arange(3.0), batch_size=[3]) if rank == 0 else TensorDict()
+                    td = td.broadcast(src=0)
+                    print(rank, td["a"])  # tensor([0., 1., 2.]) on every rank
         """
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
         from torch import distributed as dist
@@ -1081,23 +1009,38 @@ class _Distributed:
         group: "torch.distributed.ProcessGroup" | None = None,
         async_op: bool = False,
     ) -> None:
-        """All-reduces the tensordict across all ranks in-place.
+        """Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result.
 
-        Each leaf tensor is reduced individually via ``dist.all_reduce``.
-        After the call, every rank holds the reduced values.
+        Every rank of the group must call it, with a tensordict of the same
+        structure. Each leaf is reduced with :func:`torch.distributed.all_reduce`,
+        for example to sum or average gradients. See
+        :ref:`distributed-collectives`.
 
         Args:
-            op (dist.ReduceOp, optional): The reduce operation (e.g.
-                ``ReduceOp.SUM``). Defaults to ``ReduceOp.SUM``.
+            op (torch.distributed.ReduceOp, optional): the reduction. Defaults to
+                ``None``, which is ``torch.distributed.ReduceOp.SUM``.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): The process group
-                to use. Defaults to ``None`` (default group).
-            async_op (bool): if ``True``, returns a list of futures.
-                Defaults to ``False``.
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
+            async_op (bool, optional): if ``True``, returns the list of ``Work``
+                objects of the reductions without waiting for them: call ``wait()``
+                on each one before you use the tensordict. Defaults to ``False``.
 
         Returns:
-            None, or a list of futures if ``async_op=True``.
+            With ``async_op=True``, a list of ``Work`` objects. Otherwise, ``None``.
+
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def all_reduce(rank, world_size):
+                    td = TensorDict(a=torch.ones(3) * rank, batch_size=[3])
+                    td.all_reduce(op=dist.ReduceOp.SUM)
+                    print(rank, td["a"])  # with 2 ranks: tensor([1., 1., 1.]) on every rank
         """
         from torch import distributed as dist
 
@@ -1123,18 +1066,34 @@ class _Distributed:
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
     ) -> list:
-        """All-gathers tensordicts from every rank.
+        """Returns a list with the tensordict of each rank of the group, on every rank.
 
-        Each rank consolidates its tensordict, then metadata is gathered via
-        ``all_gather_object`` and storage via ``dist.all_gather``. Returns a
-        list of tensordicts, one per rank.
+        Every rank of the group must call it. The tensordicts can have different
+        structures. Each rank consolidates its tensordict (see
+        :meth:`~.consolidate`), the metadata is gathered with
+        :func:`torch.distributed.all_gather_object`, which pickles it, and the
+        storages with :func:`torch.distributed.all_gather`. Use it only with ranks
+        you trust. See :ref:`distributed-collectives`.
 
         Keyword Args:
-            group (torch.distributed.ProcessGroup, optional): The process group
-                to use. Defaults to ``None`` (default group).
+            group (torch.distributed.ProcessGroup, optional): the process group.
+                Defaults to ``None``, the default process group.
 
         Returns:
-            list[TensorDict]: A list of tensordicts from all ranks.
+            A list of new consolidated tensordicts, one per rank, in the order of
+            the ranks.
+
+        Examples:
+            This example runs in two processes: add it to the
+            :ref:`runner script of the distributed guide <distributed>` and
+            pass it to ``run``.
+
+            .. code-block:: python
+
+                def all_gather(rank, world_size):
+                    local = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+                    tds = local.all_gather()
+                    print(rank, [td["a"][0].item() for td in tds])  # [0.0, 1.0] on every rank
         """
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
         from torch import distributed as dist

@@ -104,33 +104,37 @@ class _Serialization:
         keep_vars=False,
         flatten=True,
     ) -> OrderedDict[str, Any]:
-        """Produces a state_dict from the tensordict.
+        """Returns the leaves of the tensordict in an ``OrderedDict``, as :meth:`torch.nn.Module.state_dict` does.
 
-        The state-dict is flat by default (dot-separated keys), following the
-        convention of :meth:`torch.nn.Module.state_dict`. Set ``flatten=False``
-        for a nested structure.
+        The state dict is flat by default: the key of a nested leaf joins its
+        keys with ``"."`` (``"n.b"`` for ``("n", "b")``), following
+        :meth:`torch.nn.Module.state_dict`. With ``flatten=False``, each
+        nested tensordict becomes a nested ``OrderedDict``. Read it back with
+        :meth:`~.load_state_dict`.
 
-        Metadata (batch_size, device) is stored in a ``_metadata`` attribute on
-        the returned OrderedDict, following the same convention as
-        :meth:`torch.nn.Module.state_dict`. In flat mode, metadata for each
-        nesting level is stored under its dot-separated prefix (``""`` for root,
-        ``"sub"`` for a nested tensordict at key ``"sub"``, etc.). In nested
-        mode, each nested OrderedDict carries its own ``_metadata``.
+        The batch size and device of each level are stored in a
+        ``_metadata`` attribute of the result, as in
+        :meth:`torch.nn.Module.state_dict`. In a flat state dict, they are
+        stored under the ``"."``-joined key of the level (``""`` for the root,
+        ``"n"`` for the nested tensordict ``"n"``). In a nested state dict,
+        each nested ``OrderedDict`` has its own ``_metadata``.
 
         Args:
-            destination (dict, optional): If provided, the state of tensordict will
-                be updated into the dict and the same object is returned.
-                Otherwise, an ``OrderedDict`` will be created and returned.
-                Default: ``None``.
-            prefix (str, optional): a prefix added to tensor
-                names to compose the keys in state_dict. Default: ``''``.
-            keep_vars (bool, optional): by default the :class:`torch.Tensor` items
-                returned in the state dict are detached from autograd. If it's
-                set to ``True``, detaching will not be performed.
-                Default: ``False``.
-            flatten (bool, optional): whether the structure should be flattened
-                with the ``"."`` character or not.
-                Defaults to ``True``.
+            destination (OrderedDict, optional): an ``OrderedDict`` to write the
+                entries into, and to return. A plain ``dict`` raises an
+                ``AttributeError``. Defaults to ``None``, which creates a new
+                ``OrderedDict``.
+            prefix (str, optional): a string prepended to every key. Defaults
+                to ``""``.
+            keep_vars (bool, optional): if ``False``, the tensors are detached
+                from autograd. If ``True``, the tensors of the tensordict are
+                returned unchanged. Defaults to ``False``.
+            flatten (bool, optional): if ``True``, nested keys are joined with
+                ``"."``. If ``False``, nested tensordicts become nested
+                ``OrderedDict`` instances. Defaults to ``True``.
+
+        Returns:
+            ``destination``, or a new ``OrderedDict``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -183,34 +187,37 @@ class _Serialization:
         assign=False,
         from_flatten=None,
     ) -> Self:
-        """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
+        """Loads a state dict, as :meth:`~.state_dict` returns it, into the tensordict, and returns ``self``.
 
-        Supports the flat format (with ``_metadata``, the default output of
-        :meth:`state_dict`), the nested format (with per-level ``_metadata``),
-        and the legacy format (with ``__batch_size``/``__device`` sentinel
-        keys).
-
-        When ``from_flatten`` is ``None`` (the default), the format is
-        auto-detected: if ``_metadata`` is present and the state_dict keys
-        don't match this tensordict's keys, the state_dict is unflattened
-        before loading.
+        Reads the flat format (the default of :meth:`~.state_dict`), the
+        nested format (``flatten=False``), and the legacy format, with
+        ``"__batch_size"`` and ``"__device"`` keys. The batch size of the
+        tensordict is set to the one stored in the state dict, if any.
 
         Args:
-            state_dict (OrderedDict): the state_dict of to be copied.
-            strict (bool, optional): whether to strictly enforce that the keys
-                in :attr:`state_dict` match the keys returned by this tensordict's
-                :meth:`torch.nn.Module.state_dict` function. Default: ``True``
-            assign (bool, optional): whether to assign items in the state
-                dictionary to their corresponding keys in the tensordict instead
-                of copying them inplace into the tensordict's current tensors.
-                When ``False``, the properties of the tensors in the current
-                module are preserved while when ``True``, the properties of the
-                Tensors in the state dict are preserved.
-                Default: ``False``
-            from_flatten (bool, optional): if ``True``, the input state_dict is
-                assumed to be flattened and will be unflattened before loading.
-                If ``None`` (default), auto-detects based on ``_metadata`` and
-                key comparison.
+            state_dict (OrderedDict): the state dict to load.
+            strict (bool, optional): if ``True``, a state dict whose keys are
+                not those of the tensordict raises a ``RuntimeError`` (empty
+                nested tensordicts excepted). If ``False``, the keys of the
+                state dict are written and the other entries of the
+                tensordict are kept. Defaults to ``True``.
+            assign (bool, optional): if ``False``, the values are copied in
+                place into the existing tensors, which keep their storage,
+                dtype and device. If ``True``, the tensors of the state dict
+                replace them. Defaults to ``False``.
+            from_flatten (bool, optional): if ``True``, the state dict is read
+                as flat, with ``"."``-joined keys. If ``False``, as nested.
+                Defaults to ``None``, which reads it as flat if it has a
+                ``_metadata`` attribute and its keys differ from those of the
+                tensordict.
+
+        Returns:
+            ``self``.
+
+        Raises:
+            RuntimeError: if ``strict=True`` and the keys do not match, or if
+                the state dict was saved on another device than that of the
+                tensordict.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -313,17 +320,23 @@ class _Serialization:
         return self
 
     def is_memmap(self) -> bool:
-        """Checks if tensordict is memory-mapped.
+        """Whether the tensordict is memory-mapped.
 
-        If a TensorDict instance is memory-mapped, it is locked (entries cannot
-        be renamed, removed or added). If a ``TensorDict`` is created with
-        tensors that are all memory-mapped, this does __not__ mean that ``is_memmap``
-        will return ``True`` (as a new tensor may or may not be memory-mapped).
-        Only if one calls `tensordict.memmap_()` will the tensordict be
-        considered as memory-mapped.
+        ``True`` for the tensordict of :meth:`~.memmap_`, and for the results
+        of :meth:`~.memmap` and :meth:`~.memmap_like` written to a directory or
+        to anonymous memory (not to an archive).
 
-        This is always ``True`` for tensordicts on a CUDA device.
+        A memory-mapped tensordict is locked (see :ref:`keys-locking`), and
+        unlocking it makes ``is_memmap`` return ``False``. A tensordict built
+        from memory-mapped tensors, or returned by :meth:`~.load_memmap`, is
+        not memory-mapped in this sense: a new entry would not be.
 
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3))
+            >>> td.is_memmap(), td.memmap().is_memmap()
+            (False, True)
         """
         return self._is_memmap
 
@@ -564,71 +577,75 @@ class _Serialization:
         """Copies all the leaves into one contiguous storage, and returns a tensordict of views of it.
 
         A consolidated tensordict pickles and moves between devices faster,
-        because its leaves are one block of memory. The result is locked (see
-        :meth:`~.lock_`): you can write into its leaves in place, but you
-        cannot add or remove entries.
+        because its leaves are one block of memory: :meth:`~.to`,
+        :mod:`pickle`, :meth:`~.send` and :meth:`~.broadcast` move that block
+        in one copy. The result is locked (see :ref:`keys-locking`): you can
+        write into its leaves in place, but you cannot add or remove entries.
+
+        If the tensordict is already consolidated, ``self`` is returned and
+        the other arguments are ignored. A ``filename`` other than its own
+        file writes nothing: ``td.contiguous().consolidate(filename=other)``
+        writes a new file.
 
         Args:
-            filename (Path, optional): an optional file path for a memory-mapped tensor
-                to use as a storage for the tensordict.
+            filename (str or Path, optional): a file to use as the storage. The
+                leaves are views into a memory map of the file, and the
+                metadata is written after them, so that
+                :meth:`~.from_consolidated` can read the file back. Defaults to
+                ``None``, which keeps the storage in memory.
 
         Keyword Args:
-            num_threads (integer, optional): the number of threads to use for populating
-                the storage. The leaves are copied by contiguous chunks of
-                roughly equal byte size, one chunk per thread. When writing to
-                a memory-mapped file with all leaves already on the target
-                device, ``num_threads`` is ignored and a single fused copy is
-                used instead, as concurrent writes to a fresh file mapping are
-                slower than a sequential one on most filesystems.
-            device (torch.device, optional): an optional device where the storage must be
-                instantiated.
-            non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
-            inplace (bool, optional): if ``True``, the resulting tensordict is the same
-                as ``self`` with updated values. Defaults to ``False``.
-            return_early (bool, optional): if ``True`` and ``num_threads>1``,
-                the method will return a :class:`~tensordict.utils.TensorDictFuture`
-                while the copies keep running in the background. The consolidated
-                tensordict can be queried using ``future.result()``. Incompatible
-                with ``use_buffer=True`` and ``non_blocking=True``. Defaults to
+            num_threads (int, optional): the number of threads that copy the
+                leaves into the storage, by chunks of about equal size. When
+                ``filename`` is given, ``return_early=False`` and all the
+                leaves are on the CPU, one copy is faster and ``num_threads``
+                is ignored. Defaults to ``0``, which copies in the calling
+                thread.
+            device (torch.device, str or int, optional): the device of the
+                storage. Exclusive with ``filename``, unless it is ``"cpu"``.
+                Defaults to ``None``, which uses the device of the tensordict,
+                or the CPU if it has none.
+            non_blocking (bool, optional): if ``True``, copies between devices
+                can run asynchronously with respect to the host. Defaults to
                 ``False``.
-            use_buffer (bool, optional): if ``True`` and a filename is passed, an intermediate
-                local buffer will be created in shared memory, and the data will be copied at
-                the storage location as a last step. This may be faster than writing directly
-                to a distant physical memory (e.g., NFS).
-                Defaults to ``False``.
-            share_memory (bool, optional): if ``True``, the storage will be placed in shared memory.
-                Defaults to ``False``.
-            pin_memory (bool, optional): whether the consolidated data should be placed in pinned
-                memory. Defaults to ``False``.
-            metadata (bool, optional): if ``True``, the metadata will be stored alongside the
-                common storage. If a filename is provided, this is without effect.
-                Storing the metadata can be useful when one wants to control how serialization
-                is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
-                differently if the metadata is or isn't available.
+            inplace (bool, optional): if ``True``, the leaves of the tensordict
+                are replaced by the views, and ``self`` is returned. Defaults
+                to ``False``.
+            return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+                returns a :class:`~tensordict.utils.TensorDictFuture` at once,
+                while the threads copy the leaves: ``future.result()`` waits
+                for them and returns the tensordict. Not supported with
+                ``use_buffer=True`` or ``non_blocking=True``. Defaults to
+                ``False``.
+            use_buffer (bool, optional): if ``True`` and ``filename`` is given,
+                the leaves are copied into a buffer in shared memory, which is
+                written to the file at the end. This can be faster on a remote
+                file system (for example NFS). In-place writes into the leaves
+                then do not reach the file. Defaults to ``False``.
+            share_memory (bool, optional): if ``True``, the storage is placed
+                in shared memory. Defaults to ``False``.
+            pin_memory (bool, optional): if ``True``, the storage is placed in
+                pinned memory. Defaults to ``False``.
+            metadata (bool, optional): if ``True``, the structure of the
+                tensordict is stored with the storage, which changes how the
+                result is pickled; :meth:`~.send` and :meth:`~.init_remote` use
+                it. It is always stored when ``filename`` is given. Defaults to
+                ``False``.
+
+        Returns:
+            A consolidated tensordict, ``self`` if ``inplace=True``, or a
+            :class:`~tensordict.utils.TensorDictFuture` of it if
+            ``return_early=True`` and ``num_threads > 1``.
 
         .. note::
-            If the tensordict is already consolidated, all arguments but ``filename`` are
-            ignored and ``self`` is returned. Call :meth:`~.contiguous` to re-consolidate.
-
-        .. note::
-            The file written with ``filename`` is a snapshot of the batch sizes and names
-            at the time of the call: :meth:`~.from_consolidated` reads them back from it.
-            The leaves are views into the file, so in-place writes into them reach it
-            (unless ``use_buffer=True``), but setting ``batch_size`` or ``names`` later
-            does not. Call ``consolidate(filename=filename)`` again on the result to write
-            the current ones into the file. Another file name writes nothing:
-            ``td.contiguous().consolidate(filename=other)`` writes a new file. Nothing
-            is written either if the file has been deleted or replaced, or has changed
-            size, since this tensordict was written to it.
-
-        .. note::
-            A pickle (or :func:`torch.save`, :meth:`~.send`, :meth:`~.broadcast`) of a
-            consolidated tensordict is rebuilt from metadata recorded here. Setting
-            ``batch_size`` or ``names`` on the consolidated tensordict updates that
-            metadata; setting them directly on a nested tensordict, as in
-            ``td["nested"].batch_size = ...``, may not. Call ``consolidate()`` again
-            afterwards: on a consolidated tensordict, it writes the current batch sizes
-            and names into that metadata.
+            The file written with ``filename`` holds the batch sizes and names
+            at the time of the call. Setting ``batch_size`` or ``names`` on the
+            result later does not change the file: call
+            ``consolidate(filename=filename)`` again on the result to write
+            them. Likewise, a pickle of the result is rebuilt from metadata
+            recorded here: setting the batch size of a nested tensordict, as in
+            ``td["nested"].batch_size = ...``, may not update it until
+            ``consolidate()`` is called again.
 
         Examples:
             >>> import pickle
@@ -964,12 +981,27 @@ class _Serialization:
 
     @classmethod
     def from_consolidated(cls, filename):
-        """Reconstructs a tensordict from a file written by :meth:`~.consolidate`.
+        """Reconstructs a tensordict from a file written by ``consolidate(filename=...)``.
 
-        The batch sizes and names are as they were when the file was written.
-        To write later changes into the file, call
-        ``consolidate(filename=filename)`` again on the consolidated tensordict.
-        See :func:`~tensordict.from_consolidated`.
+        The result is consolidated: its leaves are views into one
+        copy-on-write memory map of the file, so in-place writes into them do
+        not reach the file. It is not locked. The batch sizes and names are as
+        they were when the file was written. Same as
+        :func:`~tensordict.from_consolidated`.
+
+        Args:
+            filename (str or Path): the file to read.
+
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}, batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     _ = td.consolidate(filename=f"{path}/td.bin")
+            ...     loaded = TensorDict.from_consolidated(f"{path}/td.bin")
+            ...     print(loaded["b", "c"], loaded.is_consolidated())
+            tensor([1., 1., 1.]) True
         """
         # with open(Path(filename).with_suffix(".json"), "rb") as f:
         #     metadata = json.loads(f.read())
@@ -991,14 +1023,21 @@ class _Serialization:
         )
 
     def is_consolidated(self):
-        """Checks if a TensorDict has a consolidated storage.
+        """Whether the leaves of the tensordict are views into one storage made by :meth:`~.consolidate`.
 
-        Returns ``False`` once :meth:`~.memmap_` moves the leaves out of the
-        consolidated storage, once an in-place write changes a non-tensor
-        entry, or once a write replaces, adds or deletes an entry of an
-        unpickled copy, which is not locked, as the consolidated storage and
-        metadata no longer match the content. :meth:`~.consolidate` then
-        builds a new consolidated copy.
+        Becomes ``False`` when the storage no longer matches the content: after
+        :meth:`~.memmap_` moves the leaves out of it, after an in-place write
+        into a non-tensor entry, or after an entry is replaced, added or
+        deleted in an unpickled copy (which is not locked). In-place writes
+        into the tensor leaves keep it ``True``. Call :meth:`~.consolidate`
+        to build a new consolidated copy.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3))
+            >>> td.is_consolidated(), td.consolidate().is_consolidated()
+            (False, True)
         """
         return hasattr(self, "_consolidated") and not self._consolidated.get(
             "stale", False
@@ -1034,56 +1073,79 @@ class _Serialization:
         existsok: bool = True,
         robust_key: bool | None = True,
     ) -> Self:
-        """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
+        """Writes every leaf to a memory-mapped file in place, and returns ``self``.
+
+        Writes the same files as :meth:`~.memmap`, then replaces each leaf of
+        the tensordict with its :class:`~tensordict.MemoryMappedTensor`, so the
+        ``data_ptr()`` of every leaf changes. The device of the tensordict
+        becomes ``"cpu"``. See :ref:`saving`.
+
+        The tensordict is then locked (see :ref:`keys-locking`): you can write
+        into its leaves in place, but you cannot add, remove or replace an
+        entry. Once it is unlocked, :meth:`~.is_memmap` returns ``False``.
 
         Args:
-            prefix (str): directory prefix where the memory-mapped tensors will
-                be stored. The directory tree structure will mimic the tensordict's.
-            copy_existing (bool): If False (default), an exception will be raised if an
-                entry in the tensordict is already a tensor stored on disk
-                with an associated file, but is not saved in the correct
-                location according to prefix.
-                If ``True``, any existing Tensor will be copied to the new location.
+            prefix (str or Path, optional): the directory to write to.
+                Defaults to ``None``, which writes into the directory of the
+                tensordict if it is already memory-mapped there, and otherwise
+                into anonymous shared memory, which has no file name and lasts
+                as long as the process.
+            copy_existing (bool, optional): if ``False``, a leaf that is
+                already a memory-mapped tensor with a file at another path
+                raises a ``RuntimeError``, so that data on disk is not
+                duplicated by accident. If ``True``, the file is copied to the
+                new path. Defaults to ``False``.
 
         Keyword Args:
-            num_threads (int, optional): the number of threads used to write the memmap
-                tensors. Defaults to `0`.
-            return_early (bool, optional): if ``True`` and ``num_threads>0``,
-                the method will return a future of the tensordict. The resulting
-                tensordict can be queried using `future.result()`.
-            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
-                shared between the processes and writing operation (such as inplace update
-                or set) on any of the workers within a single node will update the value
-                on all other workers. If the number of non-tensor leaves is high (e.g.,
-                sharing large stacks of non-tensor data) this may result in OOM or similar
-                errors. Defaults to ``False``.
-            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
-                exists in the same path. Defaults to ``True``.
-            robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
-                handles keys with path separators and special characters. If ``False``,
-                uses legacy behavior (keys used as-is). If ``None``, uses the default
-                robust behavior.
-
-        The TensorDict is then locked, meaning that any writing operations that
-        isn't in-place will throw an exception (eg, rename, set or remove an
-        entry).
-        Once the tensordict is unlocked, the memory-mapped attribute is turned to ``False``,
-        because cross-process identity is not guaranteed anymore.
+            num_threads (int, optional): the number of threads that write the
+                files. ``0`` and ``1`` write them one after the other in the
+                calling thread. Threads help with a few large leaves and slow
+                down many small ones. Defaults to ``0``.
+            return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+                returns a :class:`~tensordict.utils.TensorDictFuture` at once,
+                while the threads write the files: ``future.result()`` waits
+                for them and returns the tensordict. Defaults to ``False``.
+            share_non_tensor (bool, optional): if ``True``, non-tensor data is
+                shared between the processes of the node, so that an in-place
+                write of a non-tensor entry in one process is seen by the
+                others. Many non-tensor leaves (for example a large stack of
+                non-tensor data) can use up the memory. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, a file that already exists
+                at the path of a leaf raises a ``RuntimeError``. If ``True``,
+                it is overwritten. Defaults to ``True``.
+            robust_key (bool, optional): if ``True``, keys are percent-encoded
+                in file and directory names (``"a/b"`` is written to
+                ``a%2Fb.memmap``), so that every file stays inside ``prefix``.
+                If ``False``, keys are used as file names unchanged, as in the
+                legacy layout: do not use it with keys you do not trust.
+                ``None`` is the same as ``True``. Defaults to ``True``.
 
         Returns:
-            self if ``return_early=False``, otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
+            ``self``, or a :class:`~tensordict.utils.TensorDictFuture` of it if
+            ``return_early=True`` and ``num_threads > 1``.
 
-        Note:
-            Serialising in this fashion might be slow with deeply nested tensordicts, so
-            it is not recommended to call this method inside a training loop.
+        Raises:
+            RuntimeError: if a leaf already has a file elsewhere and
+                ``copy_existing=False``, if a file exists and
+                ``existsok=False``, if the tensordict is in shared memory
+                (see :meth:`~.share_memory_`), or if it is a
+                :class:`~tensordict.PersistentTensorDict`, a
+                :class:`~tensordict.store.TensorDictStore`, a
+                :class:`~tensordict.store.LazyStackedTensorDictStore` or one of
+                their elements. Use :meth:`~.memmap` to make a memory-mapped
+                copy of those.
 
-        Note:
-            A :class:`~tensordict.PersistentTensorDict`, a
-            :class:`~tensordict.store.TensorDictStore` or a
-            :class:`~tensordict.store.LazyStackedTensorDictStore` (or one of its
-            elements) cannot be memory-mapped in-place: this method raises a
-            ``RuntimeError``. Use :meth:`~tensordict.TensorDictBase.memmap` to
-            build a memory-mapped copy instead.
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(obs=torch.zeros(3, 4), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     out = td.memmap_(path)
+            ...     print(out is td, td.is_memmap(), td.is_locked)
+            ...     print(type(td["obs"]).__name__)
+            True True True
+            MemoryMappedTensor
         """
         if self._memmap_inplace_unsupported:
             raise RuntimeError(
@@ -1137,23 +1199,46 @@ class _Serialization:
     ) -> Self:
         """Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
-        ``save`` (and its alias ``dumps``) is :meth:`~.memmap`: it takes the
-        same arguments. ``self`` is not changed. Read the result back with
-        :meth:`~.load`. See :ref:`saving`.
+        ``save`` (and its alias ``dumps``) calls :meth:`~.memmap` with
+        ``existsok=True``. :meth:`~.memmap` documents the arguments in full.
+        The tensordict is not changed. Read the files back with :meth:`~.load`.
+        See :ref:`saving`.
 
         Args:
-            prefix (str or Path): the directory where the tensordict is
-                written, one file per leaf. If ``prefix`` ends with ``".tdz"``
-                or ``archive=True``, a single archive file is written instead.
+            prefix (str or Path, optional): the directory where the tensordict
+                is written, one file per leaf. If ``prefix`` ends with
+                ``".tdz"`` or ``archive=True``, a single archive file is
+                written instead. Defaults to ``None``, which writes into the
+                directory of the tensordict if it is already memory-mapped
+                there, and otherwise into anonymous shared memory, which has no
+                file name and lasts as long as the process.
+            copy_existing (bool, optional): if ``False``, a leaf that is
+                already a memory-mapped tensor with a file at another path
+                raises a ``RuntimeError``. If ``True``, the file is copied to
+                the new path. Defaults to ``False``.
 
         Keyword Args:
-            archive (bool, optional): if ``True``, write a single archive file.
-                Defaults to ``None``, which writes an archive if ``prefix``
-                ends with ``".tdz"``.
+            num_threads (int, optional): the number of threads that write the
+                files. Defaults to ``0``, which writes them in the calling
+                thread.
+            return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+                returns a :class:`~tensordict.utils.TensorDictFuture` while
+                the threads write the files. Defaults to ``False``.
+            share_non_tensor (bool, optional): if ``True``, non-tensor data is
+                shared between the processes of the node. Defaults to
+                ``False``.
+            robust_key (bool, optional): if ``True``, keys are percent-encoded
+                in file names, so that every file stays inside ``prefix``.
+                Defaults to ``True``.
+            archive (bool, optional): if ``True``, writes a single archive
+                file. Defaults to ``None``, which writes an archive if
+                ``prefix`` ends with ``".tdz"``.
             compression (str or int, optional): the compression of the
-                archive. See :meth:`~.memmap`.
+                archive entries. Defaults to ``None``, which stores them
+                uncompressed.
 
-        All the other arguments are those of :meth:`~.memmap`.
+        Returns:
+            A new memory-mapped tensordict, as :meth:`~.memmap` returns.
 
         Examples:
             >>> import tempfile
@@ -1192,76 +1277,109 @@ class _Serialization:
         archive: bool | None = None,
         compression: str | int | None = None,
     ) -> Self:
-        """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
+        """Writes every leaf to a memory-mapped file and returns a new tensordict of them.
+
+        The tensordict is not changed: the result holds new
+        :class:`~tensordict.MemoryMappedTensor` leaves. Each leaf is written to
+        ``<prefix>/<key>.memmap``, each nested tensordict to a subdirectory,
+        and each level has a ``meta.json`` file. Read the files back with
+        :meth:`~.load_memmap`. :meth:`~.save` and :meth:`~.dumps` call this
+        method, and :meth:`~.memmap_` writes in place. See :ref:`saving`.
+
+        The result is locked (see :ref:`keys-locking`): you can write into its
+        leaves in place, but you cannot add, remove or replace an entry. Once
+        it is unlocked, :meth:`~.is_memmap` returns ``False``.
 
         Args:
-            prefix (str): directory prefix where the memory-mapped tensors will
-                be stored. The directory tree structure will mimic the tensordict's.
-                If ``prefix`` ends with ``".tdz"`` (or ``archive=True`` is
-                passed), a single-file archive is written instead of a
-                directory: a standard zip file whose entries replicate the
-                memmap directory layout. See ``archive`` below.
-            copy_existing (bool): If False (default), an exception will be raised if an
-                entry in the tensordict is already a tensor stored on disk
-                with an associated file, but is not saved in the correct
-                location according to prefix.
-                If ``True``, any existing Tensor will be copied to the new location.
+            prefix (str or Path, optional): the directory to write to. If it
+                ends with ``".tdz"``, a single archive file is written instead
+                (see ``archive``). Defaults to ``None``, which writes into the
+                directory of the tensordict if it is already memory-mapped
+                there, and otherwise into anonymous shared memory, which has no
+                file name and lasts as long as the process.
+            copy_existing (bool, optional): if ``False``, a leaf that is
+                already a memory-mapped tensor with a file at another path
+                raises a ``RuntimeError``, so that data on disk is not
+                duplicated by accident. If ``True``, the file is copied to the
+                new path. Defaults to ``False``.
 
         Keyword Args:
-            num_threads (int, optional): the number of threads used to write the memmap
-                tensors. Defaults to `0`.
-            return_early (bool, optional): if ``True`` and ``num_threads>0``,
-                the method will return a future of the tensordict.
-            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
-                shared between the processes and writing operation (such as inplace update
-                or set) on any of the workers within a single node will update the value
-                on all other workers. If the number of non_tensor leaves is high (e.g.,
-                sharing large stacks of non-tensor data) this may result in OOM or similar
-                errors. Defaults to ``False``.
-            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
-                exists in the same path. Defaults to ``True``.
-            robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
-                handles keys with path separators and special characters. If ``False``,
-                uses legacy behavior (keys used as-is). If ``None``, uses the default
-                robust behavior.
-            archive (bool, optional): if ``True``, ``prefix`` designates a
-                single file rather than a directory and the tensordict is
-                written as a memmap archive: a zip file mirroring the memmap
-                directory tree, with tensor payloads stored uncompressed and
-                aligned so that :meth:`~.load_memmap` can memory-map the file
-                and expose every leaf as a zero-copy view. If ``None``
-                (default), archive mode is enabled when ``prefix`` ends with
-                ``".tdz"``. The result of :meth:`~.load_memmap` on an archive
-                behaves like the result of :meth:`~.from_consolidated`: all
-                leaves are views into a single storage, and in-place writes do
-                not propagate to the file. Archives and memmap directories are
-                mutually convertible with :func:`~tensordict.pack_memmap` /
-                :func:`~tensordict.unpack_memmap` (or any zip tool). Note that
-                archives are written sequentially (single data pass) and
-                ``num_threads`` has no effect on them. An existing archive
-                is replaced by a new file rather than rewritten in place: a
-                symlink is followed, but other hard links to the old file
-                keep the old contents.
-            compression (str or int, optional): compression for archive
-                entries (``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"``
-                or a :mod:`zipfile` constant). Defaults to ``"stored"``
-                (uncompressed), which is what enables zero-copy loading.
-                Compressed archives load correctly but leaves are
-                decompressed in memory on access. Only valid in archive mode.
-
-        The TensorDict is then locked, meaning that any writing operations that
-        isn't in-place will throw an exception (eg, rename, set or remove an
-        entry).
-        Once the tensordict is unlocked, the memory-mapped attribute is turned to ``False``,
-        because cross-process identity is not guaranteed anymore.
+            num_threads (int, optional): the number of threads that write the
+                files. ``0`` and ``1`` write them one after the other in the
+                calling thread. Threads help with a few large leaves and slow
+                down many small ones. Defaults to ``0``.
+            return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+                returns a :class:`~tensordict.utils.TensorDictFuture` at once,
+                while the threads write the files: ``future.result()`` waits
+                for them and returns the tensordict. Not supported for an
+                archive. Defaults to ``False``.
+            share_non_tensor (bool, optional): if ``True``, non-tensor data is
+                shared between the processes of the node, so that an in-place
+                write of a non-tensor entry in one process is seen by the
+                others. Many non-tensor leaves (for example a large stack of
+                non-tensor data) can use up the memory. Defaults to ``False``.
+            existsok (bool, optional): if ``False``, a file that already exists
+                at the path of a leaf (or at the archive path) raises a
+                ``RuntimeError``. If ``True``, it is overwritten. Defaults to
+                ``True``.
+            robust_key (bool, optional): if ``True``, keys are percent-encoded
+                in file and directory names (``"a/b"`` is written to
+                ``a%2Fb.memmap``), so that every file stays inside ``prefix``.
+                If ``False``, keys are used as file names unchanged, as in the
+                legacy layout: do not use it with keys you do not trust.
+                ``None`` is the same as ``True``. Defaults to ``True``.
+            archive (bool, optional): if ``True``, ``prefix`` is a file, and
+                the tensordict is written to it as an archive: a zip file
+                whose entries are the files of the directory layout, with
+                uncompressed and aligned tensor payloads. Defaults to ``None``,
+                which writes an archive if ``prefix`` ends with ``".tdz"``.
+            compression (str or int, optional): the compression of the archive
+                entries: ``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"``,
+                or a :mod:`zipfile` constant. A compressed leaf is
+                decompressed in memory when it is loaded, instead of being
+                memory-mapped. Only valid for an archive. Defaults to ``None``,
+                which stores the entries uncompressed.
 
         Returns:
-            A new tensordict with the tensors stored on disk if ``return_early=False``,
-            otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
+            A new memory-mapped tensordict, or a
+            :class:`~tensordict.utils.TensorDictFuture` of it if
+            ``return_early=True`` and ``num_threads > 1``.
 
-        Note:
-            Serialising in this fashion might be slow with deeply nested tensordicts, so
-            it is not recommended to call this method inside a training loop.
+        Raises:
+            RuntimeError: if a leaf already has a file elsewhere and
+                ``copy_existing=False``, or if a file exists and
+                ``existsok=False``.
+            ValueError: if ``compression`` is given without an archive, or if
+                an archive is requested without ``prefix``.
+            NotImplementedError: if ``return_early=True`` for an archive.
+
+        .. note::
+            For an archive, the result is ``load_memmap(prefix)``: its leaves
+            are views into one copy-on-write mapping of the file, so in-place
+            writes do not reach the file, and it is not locked. Archives are
+            written in one pass, so ``num_threads`` does not speed them up. An
+            existing archive is replaced by a new file: a symlink is followed,
+            but other hard links keep the old content.
+            :func:`~tensordict.pack_memmap` and
+            :func:`~tensordict.unpack_memmap` convert between archives and
+            directories.
+
+        Examples:
+            >>> import os
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(
+            ...     obs=torch.zeros(3, 4),
+            ...     next=TensorDict(reward=torch.ones(3, 1), batch_size=[3]),
+            ...     batch_size=[3],
+            ... )
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     mm = td.memmap(path)
+            ...     print(type(mm["obs"]).__name__, mm.is_locked)
+            ...     print(sorted(os.listdir(path)))
+            MemoryMappedTensor True
+            ['meta.json', 'next', 'obs.memmap']
         """
         from tensordict.base import TensorDictBase
 
@@ -1347,63 +1465,67 @@ class _Serialization:
     ) -> Self:
         """Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
 
-        The files are filled with zeros. Write the values into the result
-        afterwards, for example with :meth:`~.update_` or indexing.
+        Use it to preallocate a large buffer on disk, then fill it with
+        :meth:`~.update_` or by indexing: :meth:`~.memmap` would write every
+        value first. New files are filled with zeros. A file that already
+        exists at the path of a leaf (with ``existsok=True``) keeps its
+        content. The tensordict is not changed. See :ref:`saving`.
+
+        The result is locked (see :ref:`keys-locking`): you can write into its
+        leaves in place, but you cannot add, remove or replace an entry. Once
+        it is unlocked, :meth:`~.is_memmap` returns ``False``.
 
         Args:
-            prefix (str): directory prefix where the memory-mapped tensors will
-                be stored. The directory tree structure will mimic the tensordict's.
-                If ``prefix`` ends with ``".tdz"`` (or ``archive=True`` is
-                passed), a preallocated single-file archive is created
-                instead. See ``archive`` below.
-            copy_existing (bool): If False (default), an exception will be raised if an
-                entry in the tensordict is already a tensor stored on disk
-                with an associated file, but is not saved in the correct
-                location according to prefix.
-                If ``True``, any existing Tensor will be copied to the new location.
+            prefix (str or Path, optional): the directory to write to. If it
+                ends with ``".tdz"``, a single archive file is written instead
+                (see ``archive``). Defaults to ``None``, which allocates the
+                leaves in anonymous shared memory, which has no file name and
+                lasts as long as the process.
+            copy_existing (bool, optional): accepted for symmetry with
+                :meth:`~.memmap`. It has no effect, since no value is copied.
+                Defaults to ``False``.
 
         Keyword Args:
-            num_threads (int, optional): the number of threads used to write the memmap
-                tensors. Defaults to `0`.
-            return_early (bool, optional): if ``True`` and ``num_threads>0``,
-                the method will return a future of the tensordict.
-            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
-                shared between the processes and writing operation (such as inplace update
-                or set) on any of the workers within a single node will update the value
-                on all other workers. If the number of non-tensor leaves is high (e.g.,
-                sharing large stacks of non-tensor data) this may result in OOM or similar
-                errors. Defaults to ``False``.
-            existsok (bool, optional): if ``False``, an exception will be raised if a tensor already
-                exists in the same path. Defaults to ``True``.
-            robust_key (bool, optional): if ``True`` (default), uses robust key encoding that safely
-                handles keys with path separators and special characters. If ``False``,
-                uses legacy behavior (keys used as-is). If ``None``, uses the default
-                robust behavior.
-            archive (bool, optional): if ``True``, ``prefix`` designates a
-                single file and a preallocated, zero-filled memmap archive is
-                created and loaded back with
-                ``load_memmap(prefix, mode="r+")``: the returned tensordict
-                writes through to the archive. If ``None`` (default), archive
-                mode is enabled when ``prefix`` ends with ``".tdz"``.
-                In-place writes leave the zip per-entry checksums stale; call
-                :func:`~tensordict.refresh_archive_checksums` before handing
-                the archive to tools that verify them. Nested tensors are not
-                supported in this mode.
-
-        The TensorDict is then locked, meaning that any writing operations that
-        isn't in-place will throw an exception (eg, rename, set or remove an
-        entry).
-        Once the tensordict is unlocked, the memory-mapped attribute is turned to ``False``,
-        because cross-process identity is not guaranteed anymore.
+            existsok (bool, optional): if ``False``, a file that already exists
+                at the path of a leaf (or at the archive path) raises a
+                ``RuntimeError``. If ``True``, it is reused. Defaults to
+                ``True``.
+            num_threads (int, optional): the number of threads that create the
+                files. ``0`` and ``1`` create them one after the other in the
+                calling thread. Defaults to ``0``.
+            return_early (bool, optional): if ``True`` and ``num_threads > 1``,
+                returns a :class:`~tensordict.utils.TensorDictFuture` at once,
+                while the threads create the files: ``future.result()`` waits
+                for them and returns the tensordict. Not supported for an
+                archive. Defaults to ``False``.
+            share_non_tensor (bool, optional): if ``True``, non-tensor data is
+                shared between the processes of the node, so that an in-place
+                write of a non-tensor entry in one process is seen by the
+                others. Many non-tensor leaves (for example a large stack of
+                non-tensor data) can use up the memory. Defaults to ``False``.
+            robust_key (bool, optional): if ``True``, keys are percent-encoded
+                in file and directory names (``"a/b"`` is written to
+                ``a%2Fb.memmap``), so that every file stays inside ``prefix``.
+                If ``False``, keys are used as file names unchanged, as in the
+                legacy layout: do not use it with keys you do not trust.
+                ``None`` is the same as ``True``. Defaults to ``True``.
+            archive (bool, optional): if ``True``, ``prefix`` is a file, and a
+                zero-filled archive is created there and loaded back with
+                ``load_memmap(prefix, mode="r+")``, so that in-place writes into
+                the result reach the archive. Nested tensors are not supported.
+                Defaults to ``None``, which creates an archive if ``prefix``
+                ends with ``".tdz"``.
 
         Returns:
-            A new ``TensorDict`` instance with data stored as memory-mapped tensors if ``return_early=False``,
-            otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
+            A new memory-mapped tensordict, or a
+            :class:`~tensordict.utils.TensorDictFuture` of it if
+            ``return_early=True`` and ``num_threads > 1``.
 
         .. note::
-            This is the recommended method to write a set of large buffers
-            on disk, as :meth:`~.memmap_()` will copy the information, which can
-            be slow for large content.
+            For an archive, the result is not locked, and in-place writes do
+            not update the CRC-32 checksums of the zip entries. Call
+            :func:`~tensordict.refresh_archive_checksums` before you give the
+            archive to a tool that checks them, such as ``unzip``.
 
         Examples:
             >>> import torch
@@ -1492,25 +1614,43 @@ class _Serialization:
     def load(cls, prefix: str | Path, *args, **kwargs) -> Self:
         """Loads a tensordict that :meth:`~.save` or :meth:`~.memmap` wrote to disk.
 
-        ``load`` is :meth:`~.load_memmap`: it takes the same arguments,
-        including ``allow_pickle``, ``device`` and ``mode``. The leaves of the
-        result are memory-mapped tensors that read the files. See
-        :ref:`saving` and the example of :meth:`~.save`.
+        ``load`` calls :meth:`~.load_memmap`, which documents the other
+        arguments, such as ``device``, ``mode``, ``subpath`` and
+        ``allow_pickle``. The leaves of the result read the files lazily. See
+        :ref:`saving`.
 
         Args:
-            prefix (str or Path): the directory, or the ``".tdz"`` archive
-                file, to read.
+            prefix (str or Path): the directory, or the archive file, to read.
+            *args: passed to :meth:`~.load_memmap`.
+            **kwargs: passed to :meth:`~.load_memmap`.
+
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.arange(3), batch_size=[3])
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     _ = td.save(path)
+            ...     loaded = TensorDict.load(path)
+            ...     print(loaded["a"], loaded.batch_size)
+            MemoryMappedTensor([0, 1, 2]) torch.Size([3])
         """
         return cls.load_memmap(prefix, *args, **kwargs)
 
     @deprecated("TensorDictBase.load_()", removal="0.17", replacement="load_memmap_()")
     def load_(self, prefix: str | Path, *args, **kwargs):
-        """Loads a tensordict from disk within the current tensordict.
+        """Loads a saved tensordict into the tensordict.
 
-        This method is a proxy to :meth:`~.load_memmap_`.
+        Calls :meth:`~.load_memmap_` with the same arguments.
 
         .. deprecated:: 0.15
-            Use :meth:`~.load_memmap_` instead.
+            Use :meth:`~.load_memmap_` instead. It will be removed in
+            TensorDict 0.17.
+
+        Args:
+            prefix (str or Path): the directory, or the archive file, to read.
+            *args: passed to :meth:`~.load_memmap_`.
+            **kwargs: passed to :meth:`~.load_memmap_`.
         """
         return self.load_memmap_(prefix, *args, **kwargs)
 
@@ -1528,139 +1668,123 @@ class _Serialization:
         num_threads: int = 0,
         allow_pickle: bool | None = None,
     ) -> Self:
-        """Loads a memory-mapped tensordict from disk.
+        """Loads a tensordict that :meth:`~.memmap` or :meth:`~.save` wrote, from a directory or an archive.
+
+        The leaves of the result read the files lazily: from a directory, each
+        leaf is a :class:`~tensordict.MemoryMappedTensor` of its file, and from
+        an archive, each leaf is a view into one memory map of the archive.
+        Only the pages of the leaves that you use are read from disk. The
+        result has the class that was saved (a tensorclass is loaded as that
+        tensorclass), and it is not locked. :meth:`~.load` is this method. See
+        :ref:`saving`.
 
         Args:
-            prefix (str or Path to folder): the path to the folder where the
-                saved tensordict should be fetched, or the path to a memmap
-                archive file written through
-                ``save(..., archive=True)`` / a ``".tdz"`` prefix (or packed
-                with :func:`~tensordict.pack_memmap`). Archives are
-                memory-mapped once and every leaf is exposed as a zero-copy
-                view into the mapping: only the pages of the leaves that are
-                actually accessed are read from disk. Unlike directory-backed
-                tensordicts, in-place writes to the leaves of an
-                archive-loaded tensordict do not propagate to the file by
-                default (see ``mode``).
-            device (torch.device or equivalent, optional): if provided, the
-                data will be asynchronously cast to that device.
-                Supports `"meta"` device, in which case the data isn't loaded
-                but a set of empty "meta" tensors are created. This is
-                useful to get a sense of the total model size and structure
-                without actually opening any file.
-            non_blocking (bool, optional): if ``True``, synchronize won't be
-                called after loading tensors on device. Defaults to ``False``.
-            out (TensorDictBase, optional): optional tensordict where the data
-                should be loaded. Its nested containers are reused, but its
-                leaves are rebound to the loaded tensors, so their storage is
-                not reused. Keys of ``out`` that are missing from the saved
-                data are removed. If ``out`` has a device, the data is loaded
-                on it, and a different ``device`` raises a ``ValueError``.
-                To write the data into the preallocated storage of ``out``,
-                use ``out.update_(TensorDict.load_memmap(prefix, device=device))``
-                instead.
-            robust_key (bool, optional): if ``True`` (default), expects robust key encoding was used
-                when saving and decodes filenames accordingly. If ``False``, uses legacy
-                behavior. If ``None``, uses the default robust behavior.
-            subpath (NestedKey or str path, optional): the location of a
-                nested tensordict to load, as a nested key (e.g.
-                ``("module", "0")``, with arbitrary nesting allowed as usual)
-                or as a ``"/"``-separated string path (e.g. ``"module/0"``).
-                Only that subtree is loaded. Works both for directories
-                (equivalent to appending the path to ``prefix``) and for
-                archives. A nested key reaches the entries of a saved
-                tensorclass as ``obj.get(key)`` does, without its
-                ``_tensordict`` level.
-            mode (str, optional): how the files are memory-mapped. With
-                ``"r"``, the mapping is copy-on-write: in-place writes to the
-                leaves stay in memory. They reach the files only if the
-                tensordict is saved there, and :meth:`~.memmap_` without a
-                prefix does not write back to ``prefix``. With ``"r+"``, the
-                mapping is shared: in-place writes propagate to the files,
-                and a file that is not writable raises a
-                :class:`PermissionError`. Defaults to ``None``, which maps
-                archives as with ``"r"``, and each file of a directory as with
-                ``"r+"`` if the process can write it, as with ``"r"``
-                otherwise. Prefer ``"r"`` for data that is only read: on some
-                network file systems (e.g. Lustre), page faults on a shared
-                writable mapping take write locks, so readers on different
-                nodes block each other. On Linux, copy-on-write mappings count
-                against the memory commit limit, so a file larger than the
-                available RAM and swap can fail to map with ``"r"``. With
-                archives, ``"r+"`` requires uncompressed, aligned tensor
-                payloads (i.e. archives written by tensordict without
-                ``compression``) and is not available for nested-tensor
-                leaves. In-place writes do not update the per-entry CRC-32
-                stored by the zip format; :meth:`~.load_memmap` ignores
-                checksums, but call
-                :func:`~tensordict.refresh_archive_checksums` before handing
-                a modified archive to tools that verify them (``unzip``,
-                :func:`~tensordict.unpack_memmap`, ...).
-            num_threads (int, optional): number of threads used to decompress
-                the leaves of a compressed archive (deflate entries are
-                inflated in parallel, which scales nearly linearly). Without
-                compression, loading is a metadata-only operation and this
-                argument has no effect. Defaults to ``0`` (sequential).
-            allow_pickle (bool, optional): whether pickled non-tensor fields
-                may be loaded. Pickle can execute arbitrary code, so pass
-                ``True`` only for data from a trusted source and ``False``
-                for untrusted data. In TensorDict 0.14 and 0.15, omitting
-                this option loads pickle with a ``FutureWarning``; the
-                default will change to ``False`` in 0.16. Saves without
-                a pickle sidecar do not require this option.
+            prefix (str or Path): the directory to read, or an archive file
+                written by ``save(..., archive=True)``, by a ``".tdz"`` prefix,
+                or by :func:`~tensordict.pack_memmap`.
+            device (torch.device, str or int, optional): the device of the
+                result. The leaves are copied to it, which reads the files,
+                unless it is the CPU.
+                With ``"meta"``, no file is read: the leaves are meta tensors,
+                which show the structure and size of the data. Defaults to
+                ``None``, which keeps the leaves on the CPU, memory-mapped.
+            non_blocking (bool, optional): if ``True``, does not synchronize
+                the device after the copies to ``device``. Defaults to
+                ``False``.
 
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
-            >>> _ = td.memmap("./saved_td")
-            >>> td_load = TensorDict.load_memmap("./saved_td")
-            >>> assert (td == td_load).all()
+        Keyword Args:
+            out (TensorDictBase, optional): a tensordict to load the data into.
+                Its nested tensordicts are reused, but its leaves are replaced
+                by the loaded tensors, so their storage is not reused. Its keys
+                that are not in the saved data are removed. If ``out`` has a
+                device, the data is loaded on it, and another ``device`` raises
+                a ``ValueError``. To write the data into the storage of
+                ``out``, use
+                ``out.update_(TensorDict.load_memmap(prefix, device=device))``.
+                Defaults to ``None``.
+            robust_key (bool, optional): if ``True``, reads the
+                percent-encoded file names that :meth:`~.memmap` writes by
+                default, and falls back to the legacy names of keys that are
+                safe file names. If ``False``, reads the legacy layout only.
+                ``None`` is the same as ``True``. Defaults to ``True``.
+            subpath (NestedKey or str, optional): the nested tensordict to
+                load, as a nested key (``("module", "0")``) or as a
+                ``"/"``-separated path (``"module/0"``). Only that subtree is
+                read, from a directory or an archive. A nested key reaches the
+                entries of a saved tensorclass as ``obj.get(key)`` does.
+                Defaults to ``None``, which loads the whole tensordict.
+            mode (str, optional): how the files are mapped. With ``"r"``, the
+                mapping is copy-on-write: in-place writes into the leaves stay
+                in memory, and the files do not change. With ``"r+"``, in-place
+                writes reach the files, and a file that the process cannot
+                write raises a ``PermissionError``. Defaults to ``None``, which
+                maps an archive as with ``"r"``, and each file of a directory
+                as with ``"r+"`` if the process can write it, and as with
+                ``"r"`` otherwise. See the note below.
+            num_threads (int, optional): the number of threads that decompress
+                the leaves of a compressed archive. It has no effect on an
+                uncompressed archive or a directory. Defaults to ``0``, which
+                decompresses them one after the other.
+            allow_pickle (bool, optional): whether non-tensor data saved with
+                :mod:`pickle` may be loaded. Pickle can run arbitrary code: pass
+                ``True`` only for data you trust, and ``False`` for other data,
+                which raises a ``RuntimeError`` on pickled data. Defaults to
+                ``None``, which loads pickled data with a ``FutureWarning``.
+                Starting with TensorDict 0.16, the default will change to
+                ``False``. Data saved without pickle loads with any value.
 
-        This method also allows loading nested tensordicts.
+        Returns:
+            The loaded tensordict, or ``out`` if it is given.
 
-        Examples:
-            >>> nested = TensorDict.load_memmap("./saved_td/nested")
-            >>> assert nested["e"] == 0
+        Raises:
+            ValueError: if ``prefix`` is a file that is not an archive, if
+                ``subpath`` names no saved tensordict, or if ``mode`` is not
+                ``None``, ``"r"`` or ``"r+"``.
 
-        A tensordict can also be loaded on "meta" device or, alternatively,
-        as a fake tensor.
+        .. note::
+            Load with ``mode="r"`` data that you only read: on some network
+            file systems (for example Lustre), page faults on a shared
+            writable mapping take write locks, so readers on different nodes
+            block each other. On Linux, a copy-on-write mapping counts against
+            the memory commit limit, so a file larger than RAM plus swap can
+            fail to map with ``"r"``. With ``"r"``, :meth:`~.memmap_` without a
+            prefix does not write back to ``prefix``.
+
+        .. note::
+            An archive opened with ``mode="r+"`` must have uncompressed,
+            aligned payloads (as written by tensordict without
+            ``compression``) and no nested tensor. In-place writes do not
+            update the CRC-32 checksums of its entries: ``load_memmap`` does
+            not check them, but call
+            :func:`~tensordict.refresh_archive_checksums` before you give the
+            archive to a tool that does, such as ``unzip``.
 
         Examples:
             >>> import tempfile
-            >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(a=torch.zeros(3), nested=TensorDict(b=torch.ones(3)))
             >>> with tempfile.TemporaryDirectory() as path:
-            ...     _ = td.save(path)
-            ...     td_load = TensorDict.load_memmap(path, device="meta")
-            ...     print("meta:", td_load)
-            ...     from torch._subclasses import FakeTensorMode
+            ...     _ = td.memmap(path)
+            ...     loaded = TensorDict.load_memmap(path)
+            ...     print((loaded == td).all(), type(loaded["a"]).__name__)
+            ...     # load one nested tensordict
+            ...     print(TensorDict.load_memmap(path, subpath="nested")["b"])
+            ...     # read the structure without reading the data
+            ...     print(TensorDict.load_memmap(path, device="meta")["a"].device)
+            True MemoryMappedTensor
+            MemoryMappedTensor([1., 1., 1.])
+            meta
+
+            With a ``FakeTensorMode`` active, the leaves are fake tensors and
+            no file is read:
+
+            >>> from torch._subclasses import FakeTensorMode
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     _ = td.memmap(path)
             ...     with FakeTensorMode():
-            ...         td_load = TensorDict.load_memmap(path)
-            ...         print("fake:", td_load)
-            meta: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=meta,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=meta,
-                is_shared=False)
-            fake: TensorDict(
-                fields={
-                    a: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=cpu,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=cpu,
-                is_shared=False)
+            ...         print(type(TensorDict.load_memmap(path)["a"]).__name__)
+            FakeTensor
 
         """
         if mode not in (None, "r", "r+"):
@@ -1826,14 +1950,19 @@ class _Serialization:
         allow_pickle: bool | None = None,
         mode: str | None = None,
     ):
-        """Loads the content of a memory-mapped tensordict within the tensordict where ``load_memmap_`` is called.
+        """Loads a saved tensordict into the tensordict, and returns ``self``.
 
-        The tensordict and its nested containers are reused, but the leaves
-        are rebound to the loaded tensors, so their storage is not reused.
-        Keys that are missing from the saved data are removed. To write the
-        data into the existing storage, use
+        Calls :meth:`~.load_memmap` with ``out=self``. The tensordict and its
+        nested tensordicts are reused, but each leaf is replaced by the loaded
+        tensor, so its storage is not reused. Keys that are not in the saved
+        data are removed. To write the data into the existing storage, use
         ``td.update_(TensorDict.load_memmap(prefix, device=td.device))``
         instead.
+
+        If the tensordict is memory-mapped, it is unlocked for the load, then
+        memory-mapped again into the loaded directory, which locks it. If the
+        data has no directory (an archive, or ``mode="r"``), the tensordict
+        stays unlocked and is no longer memory-mapped.
 
         Args:
             prefix (str or Path): the directory, or the ``".tdz"`` archive
@@ -1842,16 +1971,25 @@ class _Serialization:
                 was saved. See :meth:`~.memmap`. Defaults to ``True``.
 
         Keyword Args:
-            allow_pickle (bool, optional): whether pickled non-tensor fields
-                may be loaded. Pickle can execute arbitrary code, so pass
-                ``True`` only for data from a trusted source and ``False``
-                for untrusted data. As in :meth:`~.load_memmap`, omitting
-                this option loads pickle with a ``FutureWarning`` in 0.14
-                and 0.15, and the default changes to ``False`` in 0.16.
-            mode (str, optional): the mode of the memory maps. See
+            allow_pickle (bool, optional): whether non-tensor data saved with
+                :mod:`pickle` may be loaded. Pickle can run arbitrary code: pass
+                ``True`` only for data you trust. Defaults to ``None``, which
+                loads pickled data with a ``FutureWarning``. Starting with
+                TensorDict 0.16, the default will change to ``False``. See
                 :meth:`~.load_memmap`.
+            mode (str, optional): how the files are mapped: ``"r"``, ``"r+"``
+                or ``None``. See :meth:`~.load_memmap`. Defaults to ``None``.
 
-        See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     _ = TensorDict(a=torch.ones(3)).save(path)
+            ...     td = TensorDict(a=torch.zeros(3), b=torch.zeros(3))
+            ...     out = td.load_memmap_(path)
+            ...     print(out is td, list(td.keys()), td["a"])
+            True ['a'] MemoryMappedTensor([1., 1., 1.])
         """
         is_memmap = self.is_memmap()
         if is_memmap:
@@ -1871,14 +2009,33 @@ class _Serialization:
         return self
 
     def memmap_refresh_(self, *, allow_pickle: bool | None = None):
-        """Refreshes the content of the memory-mapped tensordict if it has a :attr:`~tensordict.TensorDict.saved_path`.
+        """Reloads the tensordict from its :attr:`~.saved_path`, and returns ``self``.
 
-        This method will raise an exception if no path is associated with it.
+        Use it when another process has changed the files: added or removed
+        entries, or written non-tensor data. It calls :meth:`~.load_memmap_`
+        on :attr:`~.saved_path`, then memory-maps the tensordict there again.
 
-        Args:
-            allow_pickle (bool, optional): whether pickled non-tensor fields
-                may be loaded. See :meth:`~.load_memmap`.
+        Keyword Args:
+            allow_pickle (bool, optional): whether non-tensor data saved with
+                :mod:`pickle` may be loaded. See :meth:`~.load_memmap`.
+                Defaults to ``None``.
 
+        Raises:
+            RuntimeError: if the tensordict is not memory-mapped in a
+                directory, for example a tensordict returned by
+                :meth:`~.load_memmap` (for which :meth:`~.is_memmap` returns
+                ``False``) or by ``memmap()`` without a prefix.
+
+        Examples:
+            >>> import tempfile
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     td = TensorDict(a=torch.zeros(3)).memmap(path)
+            ...     _ = TensorDict(a=torch.ones(3), b=torch.ones(3)).memmap(path)
+            ...     _ = td.memmap_refresh_()
+            ...     print(sorted(td.keys()), td["a"])
+            ['a', 'b'] MemoryMappedTensor([1., 1., 1.])
         """
         if not self.is_memmap() or self._memmap_prefix is None:
             raise RuntimeError(

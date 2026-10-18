@@ -84,11 +84,27 @@ def _resolve_compression(compression: str | int | None) -> int:
 
 
 def is_memmap_archive(path: str | Path) -> bool:
-    """Checks whether ``path`` points to a memmap tensordict archive.
+    """Whether ``path`` is a memory-mapped tensordict archive.
 
-    Returns ``True`` if ``path`` is a zip file containing a top-level
-    ``meta.json`` entry (the marker of the memmap format), ``False``
-    otherwise. Directories always return ``False``.
+    An archive is a zip file with a top-level ``meta.json`` entry, as
+    written by :func:`pack_memmap` or by
+    :meth:`~tensordict.TensorDictBase.save` with a ``".tdz"`` path. A
+    directory, a missing path or another file gives ``False``.
+
+    Args:
+        path (str or Path): the path to check.
+
+    Examples:
+        >>> import tempfile
+        >>> from pathlib import Path
+        >>> import torch
+        >>> from tensordict import TensorDict, is_memmap_archive
+        >>> td = TensorDict(a=torch.zeros(3))
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     _ = td.save(Path(path) / "td.tdz")
+        ...     _ = td.save(Path(path) / "td")
+        ...     print(is_memmap_archive(Path(path) / "td.tdz"), is_memmap_archive(Path(path) / "td"))
+        True False
     """
     path = Path(path)
     if not path.is_file() or not zipfile.is_zipfile(path):
@@ -193,45 +209,50 @@ def pack_memmap(
 ) -> Path:
     """Packs a memory-mapped tensordict directory into a single-file zip archive.
 
-    The archive entries replicate the directory layout, so the operation is
-    the exact inverse of :func:`unpack_memmap` (and of a plain ``unzip``).
-    Tensor payloads are stored uncompressed by default and aligned to
-    64 bytes, which lets :meth:`~tensordict.TensorDictBase.load_memmap`
-    memory-map the archive and expose every leaf as a zero-copy view.
+    The entries of the archive are the files of the directory, so
+    :func:`unpack_memmap` (or ``unzip``) gives the directory back. Tensor
+    payloads are stored uncompressed by default and aligned to 64 bytes, so
+    that :meth:`~tensordict.TensorDictBase.load_memmap` can memory-map the
+    archive and make each leaf a view into the mapping, without a copy.
+    ``td.save("x.tdz")`` writes the same archive from a tensordict.
 
     Args:
-        prefix (str or Path): path to a directory previously produced by
-            :meth:`~tensordict.TensorDictBase.memmap` and similar methods.
-        archive_path (str or Path): path of the archive to create. Keep it
-            outside the source directory. It must not refer to a source file.
-            An existing file is replaced rather than rewritten in place: a
-            symlink is followed, but other hard links to the old file keep
-            the old contents. Overwriting requires write access to both the
-            existing file and its directory.
+        prefix (str or Path): a directory written by
+            :meth:`~tensordict.TensorDictBase.memmap` or a similar method.
+        archive_path (str or Path): the archive to create, outside
+            ``prefix``. An existing file is replaced by a new file, which
+            needs write access to the file and to its directory: a symlink is
+            followed, but other hard links keep the old content.
 
     Keyword Args:
-        compression (str or int, optional): one of ``"stored"`` (default),
-            ``"deflate"``, ``"bzip2"``, ``"lzma"`` or a
-            :mod:`zipfile` compression constant. Any value other than
-            ``"stored"`` trades memory-mapped (zero-copy) loading for a
-            smaller file: compressed leaves are decompressed in memory when
-            accessed.
-        compresslevel (int, optional): compression level forwarded to
-            :mod:`zipfile`.
+        compression (str or int, optional): the compression of the tensor
+            payloads: ``"stored"``, ``"deflate"``, ``"bzip2"``, ``"lzma"``, or
+            a :mod:`zipfile` constant. A compressed archive is smaller, but its
+            leaves are decompressed in memory when they are loaded, instead of
+            being memory-mapped. Defaults to ``None``, which stores them
+            uncompressed.
+        compresslevel (int, optional): the compression level, passed to
+            :mod:`zipfile`. Defaults to ``None``, which uses the default
+            level of the compression method.
 
     Returns:
-        the path to the archive.
+        The path of the archive, as a :class:`~pathlib.Path`.
+
+    Raises:
+        ValueError: if ``prefix`` has no ``meta.json`` file, or if
+            ``archive_path`` is inside ``prefix`` or is one of its files.
 
     Examples:
+        >>> import tempfile
+        >>> from pathlib import Path
         >>> import torch
         >>> from tensordict import TensorDict, pack_memmap
-        >>> td = TensorDict(a=torch.randn(3), b=TensorDict(c=torch.zeros(3, 2)))
-        >>> td = td.memmap("./saved_td")
-        >>> path = pack_memmap("./saved_td", "./saved_td.tdz")
-        >>> path
-        PosixPath('saved_td.tdz')
-        >>> td2 = TensorDict.load_memmap("./saved_td.tdz")
-        >>> assert (td == td2).all()
+        >>> td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3, 2)))
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     _ = td.memmap(Path(path) / "saved")
+        ...     archive = pack_memmap(Path(path) / "saved", Path(path) / "saved.tdz")
+        ...     print(archive.name, (TensorDict.load_memmap(archive) == td).all())
+        saved.tdz True
     """
     prefix = Path(prefix)
     archive_path = Path(archive_path)
@@ -325,21 +346,37 @@ def _pack_dir(
 
 
 def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:
-    """Extracts a memmap tensordict archive into a memmap directory.
+    """Extracts a memory-mapped tensordict archive into a directory.
 
-    This is the inverse of :func:`pack_memmap` and is equivalent to
-    ``unzip``: the resulting directory can be passed to
-    :meth:`~tensordict.TensorDictBase.load_memmap` or memory-mapped into
-    in-place.
+    The inverse of :func:`pack_memmap`, and the same as ``unzip``: the
+    directory has one file per leaf, which
+    :meth:`~tensordict.TensorDictBase.load_memmap` reads. Existing files in
+    ``prefix`` are overwritten.
 
     Args:
-        archive_path (str or Path): path to an archive produced by
-            :func:`pack_memmap` or :meth:`~tensordict.TensorDictBase.save`.
-        prefix (str or Path): directory where the content should be
-            extracted.
+        archive_path (str or Path): an archive written by :func:`pack_memmap`
+            or by :meth:`~tensordict.TensorDictBase.save`.
+        prefix (str or Path): the directory to extract into. It is created if
+            it does not exist.
 
     Returns:
-        the path to the directory.
+        The path of the directory, as a :class:`~pathlib.Path`.
+
+    Raises:
+        ValueError: if ``archive_path`` is not an archive (see
+            :func:`is_memmap_archive`).
+
+    Examples:
+        >>> import tempfile
+        >>> from pathlib import Path
+        >>> import torch
+        >>> from tensordict import TensorDict, unpack_memmap
+        >>> td = TensorDict(a=torch.zeros(3))
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     _ = td.save(Path(path) / "td.tdz")
+        ...     directory = unpack_memmap(Path(path) / "td.tdz", Path(path) / "td")
+        ...     print(sorted(p.name for p in directory.iterdir()))
+        ['a.memmap', 'meta.json']
     """
     archive_path = Path(archive_path)
     prefix = Path(prefix)
@@ -351,20 +388,42 @@ def unpack_memmap(archive_path: str | Path, prefix: str | Path) -> Path:
 
 
 def refresh_archive_checksums(archive_path: str | Path) -> Path:
-    """Recomputes the CRC-32 checksums of a memmap archive after in-place writes.
+    """Recomputes the CRC-32 checksums of a memory-mapped archive after in-place writes.
 
-    A tensordict loaded with ``TensorDict.load_memmap(path, mode="r+")``
-    writes through to the archive without updating the CRC-32 that the zip
-    format stores for each entry. :meth:`~tensordict.TensorDictBase.load_memmap`
-    does not verify checksums of uncompressed memory-mapped leaves, so this
-    is only needed before handing the modified archive to tools that do
-    (``unzip``, :mod:`zipfile`, :func:`unpack_memmap`).
+    A tensordict loaded with ``TensorDict.load_memmap(path, mode="r+")``, or
+    created by ``memmap_like`` with a ``".tdz"`` path, writes into the
+    archive without updating the CRC-32 checksum that the zip format stores
+    for each entry. :meth:`~tensordict.TensorDictBase.load_memmap` does not
+    check the checksums of uncompressed leaves, so call this function only
+    before you give the archive to a tool that checks them, such as
+    ``unzip``, :mod:`zipfile` or :func:`unpack_memmap`. The archive is
+    changed in place.
 
     Args:
-        archive_path (str or Path): path to the archive to fix up.
+        archive_path (str or Path): the archive to update.
 
     Returns:
-        the path to the archive.
+        The path of the archive, as a :class:`~pathlib.Path`.
+
+    Raises:
+        ValueError: if ``archive_path`` is not an archive (see
+            :func:`is_memmap_archive`).
+
+    Examples:
+        >>> import tempfile
+        >>> import zipfile
+        >>> from pathlib import Path
+        >>> import torch
+        >>> from tensordict import TensorDict, refresh_archive_checksums
+        >>> with tempfile.TemporaryDirectory() as path:
+        ...     archive = Path(path) / "td.tdz"
+        ...     _ = TensorDict(a=torch.zeros(3)).save(archive)
+        ...     _ = TensorDict.load_memmap(archive, mode="r+")["a"].add_(1)
+        ...     print(zipfile.ZipFile(archive).testzip())  # the first bad entry
+        ...     _ = refresh_archive_checksums(archive)
+        ...     print(zipfile.ZipFile(archive).testzip())
+        a.memmap
+        None
     """
     archive_path = Path(archive_path)
     if not is_memmap_archive(archive_path):
@@ -544,7 +603,7 @@ class _ArchiveReader:
         return self._zf.read(name)
 
     def schedule_compressed_prefetch(self, scope: str, num_threads: int) -> None:
-        """Schedules parallel decompression for the first materialized leaf."""
+        """Schedules the parallel decompression of ``scope``, run when the first compressed leaf is read."""
         self._prefetch_request = (scope, num_threads)
 
     def _run_scheduled_prefetch(self) -> None:

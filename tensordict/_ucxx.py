@@ -176,19 +176,32 @@ async def send_tensordict(
     *,
     consolidated: bool = True,
 ) -> None:
-    """Send a TensorDict over a UCXX endpoint (stateless, always sends metadata).
+    """Sends a tensordict over a UCXX endpoint, with its metadata, in one call.
 
     .. warning::
         ``send_tensordict`` is experimental: its API can change in a minor
         release without a deprecation cycle.
 
+    Unlike a :class:`TensorDictPipe`, it keeps no state: each call sends the
+    metadata (as JSON) and then the consolidated storage. The receiver calls
+    :func:`recv_tensordict`. It needs the optional ``ucxx`` package. The
+    protocol does not authenticate the peer: use it only on a trusted network.
+
     Args:
-        endpoint: a UCXX endpoint object.
-        td: the TensorDict to send.
+        endpoint (ucxx.Endpoint): the endpoint to send through, for example
+            from ``ucxx.create_endpoint``.
+        td (TensorDictBase): the tensordict to send.
 
     Keyword Args:
-        consolidated (bool): if ``True``, consolidates into a single buffer
-            before sending. Defaults to ``True``.
+        consolidated (bool, optional): if ``True``, consolidates the tensordict
+            (see :meth:`~tensordict.TensorDictBase.consolidate`) unless it is
+            already, and sends its storage as one buffer. If ``False``, sends the
+            tensor leaves at the root of the tensordict one by one, in the format
+            of a pipe with ``consolidated=False``, which :func:`recv_tensordict`
+            does not read. Defaults to ``True``.
+
+    Raises:
+        ImportError: if ``ucxx`` is not installed.
     """
     if consolidated:
         if td.is_consolidated():
@@ -220,25 +233,34 @@ async def recv_tensordict(
     *,
     device: torch.device | str | None = None,
 ) -> TensorDictBase:
-    """Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata).
+    """Receives a tensordict that :func:`send_tensordict` sends over a UCXX endpoint.
 
     .. warning::
         ``recv_tensordict`` is experimental: its API can change in a minor
         release without a deprecation cycle.
 
+    It keeps no state: each call reads the metadata, then the storage. It
+    needs the optional ``ucxx`` package. The sender controls the size of the
+    allocation: use it only on a trusted network.
+
     Args:
-        endpoint: a UCXX endpoint object.
-        td: if provided and consolidated with matching layout, storage size,
-            and device, receives directly into its storage buffer (in-place
-            update). Otherwise returns a new TensorDict without modifying ``td``.
+        endpoint (ucxx.Endpoint): the endpoint to receive from.
+        td (TensorDictBase, optional): a consolidated tensordict to receive
+            into. If its layout, storage size and device match the data, the
+            data is written into its storage, and ``td`` is returned. Otherwise
+            ``td`` is not changed, and a new tensordict is returned. Defaults to
+            ``None``.
 
     Keyword Args:
-        device: device on which to receive. If omitted, uses the storage
-            device of a consolidated ``td``, even when its layout does not
-            match. Otherwise defaults to CPU.
+        device (torch.device, str or int, optional): the device to receive on.
+            Defaults to ``None``, which uses the device of the storage of ``td``
+            if it is consolidated, and the CPU otherwise.
 
     Returns:
-        The received TensorDict.
+        The received tensordict, ``td`` or a new consolidated tensordict.
+
+    Raises:
+        ImportError: if ``ucxx`` is not installed.
     """
     from tensordict._reductions import _rebuild_tensordict_files_consolidated
 
@@ -324,33 +346,57 @@ def _compute_total_bytes(metadata: dict) -> int:
 
 
 class TensorDictPipe:
-    """A persistent point-to-point channel for streaming TensorDicts over UCXX.
+    """A channel between two processes that streams tensordicts over UCXX.
 
     .. warning::
         ``TensorDictPipe`` is experimental: its API can change in a minor
         release without a deprecation cycle.
 
     It needs the optional ``ucxx`` package. Import it from
-    ``tensordict._ucxx``: there is no public import path.
+    ``tensordict._ucxx``: there is no public import path. Create a pipe with
+    :meth:`connect` on one side and :meth:`listen` on the other, rather than
+    with the constructor. The protocol does not authenticate the peer, which
+    controls the size of the allocations: use it only on a trusted network.
+    See :ref:`distributed`.
 
-    Implements a two-phase protocol:
+    With ``consolidated=True``, a pipe sends a tensordict in two phases:
 
-    - Handshake (first send): transmits consolidation metadata and data.
-      The receiver allocates a buffer and builds a TensorDict whose leaves
-      are views into the consolidated storage.
-    - Steady state (subsequent sends with same schema): transmits only
-      the raw storage buffer. The receiver overwrites its pre-allocated
-      buffer in place, without a new allocation and without metadata parsing.
+    - The first message, and each message with a new structure (keys,
+      shapes or dtypes), carries the metadata and then the consolidated
+      storage (see :meth:`~tensordict.TensorDictBase.consolidate`). The
+      receiver allocates one buffer, and builds a tensordict whose leaves
+      are views into it.
+    - The next messages carry the storage only. The receiver writes it into
+      the buffer of the first message, without allocating memory or parsing
+      metadata.
+
+    With ``consolidated=False``, each message carries the tensor leaves at
+    the root of the tensordict, one by one, and the receiver builds a new
+    tensordict with an empty batch size each time.
+
+    A pipe is a context manager and an async context manager, which close
+    it at the end of the block, and an async iterator: ``async for td in
+    pipe`` receives until the pipe is closed.
 
     .. warning::
-        With ``consolidated=True`` (the default), every receive with the same
-        schema writes into the same TensorDict, and returns it. The next
-        receive overwrites the values of the previous one. Call ``clone()``
-        on a received TensorDict to keep it.
+        With ``consolidated=True``, every receive with the same structure
+        writes into the same tensordict, and returns it. The next receive
+        overwrites the values of the previous one. Call ``clone()`` on a
+        received tensordict to keep it.
 
     .. warning::
         ``async for td in pipe`` stops at the first error, without raising
         it. To see the error, call :meth:`arecv` or :meth:`recv` in a loop.
+
+    Args:
+        endpoint (ucxx.Endpoint): the UCXX endpoint of the connection.
+
+    Keyword Args:
+        consolidated (bool, optional): if ``True``, sends and receives
+            consolidated tensordicts, in the two phases above. Both ends must
+            pass the same value. Defaults to ``True``.
+        listener (ucxx.Listener, optional): a listener that the pipe closes
+            when it closes, as :meth:`listen` passes. Defaults to ``None``.
 
     Examples:
         The sender and the receiver run in two processes, on the same or
@@ -414,18 +460,24 @@ class TensorDictPipe:
         *,
         consolidated: bool = True,
     ) -> TensorDictPipe:
-        """Connect to a remote TensorDictPipe listener.
+        """Connects to a pipe that listens on ``host`` and ``port``, and returns the pipe.
+
+        The other process calls :meth:`listen` with the same port.
 
         Args:
-            host: hostname or IP address of the remote listener.
-            port: port number.
+            host (str): the host name or IP address of the listener.
+            port (int): the port of the listener.
 
         Keyword Args:
-            consolidated (bool): whether to use consolidated transfers.
-                Defaults to ``True``.
+            consolidated (bool, optional): if ``True``, sends and receives
+                consolidated tensordicts (see the class description). Both ends must
+                pass the same value. Defaults to ``True``.
 
         Returns:
-            A connected TensorDictPipe.
+            A connected :class:`TensorDictPipe`.
+
+        Raises:
+            ImportError: if ``ucxx`` is not installed.
         """
         endpoint = await _ucxx.create_endpoint(host, port)
         return cls(endpoint, consolidated=consolidated)
@@ -438,17 +490,24 @@ class TensorDictPipe:
         *,
         consolidated: bool = True,
     ) -> TensorDictPipe:
-        """Listen for an incoming connection and return a pipe to the first client.
+        """Listens on ``port``, and returns a pipe to the first client that connects.
+
+        Waits until a client calls :meth:`connect`. The listener stops when the
+        pipe is closed. To accept several clients, use :class:`TensorDictServer`.
 
         Args:
-            port: port number to listen on.
+            port (int): the port to listen on.
 
         Keyword Args:
-            consolidated (bool): whether to use consolidated transfers.
-                Defaults to ``True``.
+            consolidated (bool, optional): if ``True``, sends and receives
+                consolidated tensordicts (see the class description). Both ends must
+                pass the same value. Defaults to ``True``.
 
         Returns:
-            A connected TensorDictPipe for the first accepted client.
+            A connected :class:`TensorDictPipe`.
+
+        Raises:
+            ImportError: if ``ucxx`` is not installed.
         """
         pipe_future: asyncio.Future[TensorDictPipe] = (
             asyncio.get_event_loop().create_future()
@@ -463,13 +522,20 @@ class TensorDictPipe:
         return await pipe_future
 
     async def asend(self, td: TensorDictBase) -> None:
-        """Send a TensorDict through this pipe (async).
+        """Sends a tensordict through the pipe, asynchronously.
 
-        On the first call (or when the schema changes), sends metadata + data.
-        On subsequent calls with the same schema, sends only the raw buffer.
+        With ``consolidated=True``, the first call, and each call where the
+        structure of the tensordict changes, sends the metadata and then the
+        storage. The other calls send the storage only. A tensordict that is not
+        consolidated is consolidated on each call, which copies every leaf:
+        consolidate it once and refresh it with
+        :meth:`~tensordict.TensorDictBase.update_` to avoid the copy.
 
         Args:
-            td: the TensorDict to send.
+            td (TensorDictBase): the tensordict to send.
+
+        Raises:
+            RuntimeError: if the pipe is closed.
         """
         if self._closed:
             raise RuntimeError("Cannot send on a closed pipe.")
@@ -519,12 +585,14 @@ class TensorDictPipe:
         await _send_tensordict_uncollated(self._endpoint, td)
 
     def send(self, td: TensorDictBase) -> None:
-        """Send a TensorDict through this pipe (sync).
+        """Sends a tensordict through the pipe, and waits until it is sent.
 
-        Blocking wrapper around :meth:`asend`.
+        Runs :meth:`asend` in a new event loop. In a coroutine, ``await
+        pipe.asend(td)`` instead: in a thread where an event loop runs, ``send``
+        raises a ``RuntimeError``.
 
         Args:
-            td: the TensorDict to send.
+            td (TensorDictBase): the tensordict to send.
         """
         _run_coroutine_sync(self.asend(td))
 
@@ -534,27 +602,38 @@ class TensorDictPipe:
         *,
         device: torch.device | str | None = None,
     ) -> TensorDictBase:
-        """Receive a TensorDict from this pipe (async).
+        """Receives a tensordict from the pipe, asynchronously.
 
-        On the first call, receives into ``td`` if its consolidated layout
-        matches, otherwise builds a new TensorDict from the received metadata.
-        On subsequent calls with the same schema, overwrites the existing
-        storage in-place (zero allocation).
+        With ``consolidated=True``, the first message, and each message with a new
+        structure, carries the metadata: the pipe receives into ``td`` if its
+        consolidated layout matches, and builds a new tensordict otherwise. The
+        next messages carry the storage only, and the pipe writes it into the
+        same tensordict, without allocating memory. So each receive can overwrite
+        the values of the previous one: clone a tensordict to keep it.
+
+        With ``consolidated=False``, each call returns a new tensordict with an
+        empty batch size.
 
         Args:
-            td: if provided and consolidated, receives into its storage
-                when its layout matches the received data. Otherwise the
-                pipe returns a new TensorDict, or on a message with the same
-                schema its own TensorDict from the previous receive, so use
-                the return value. If ``None``, uses the internally cached
-                TensorDict from the previous receive (if any). Not used when
-                the pipe has ``consolidated=False``.
+            td (TensorDictBase, optional): a consolidated tensordict to receive
+                into, if its layout matches the data. Otherwise the pipe returns a
+                new tensordict, or the tensordict of its previous receive, so use the
+                return value. Not used with ``consolidated=False``. Defaults to
+                ``None``, which receives into the tensordict of the previous
+                receive.
 
         Keyword Args:
-            device: device for storage allocation on first receive.
+            device (torch.device, str or int, optional): the device of the storage
+                that the pipe allocates for a new structure. Defaults to ``None``,
+                which uses the device of the sender with ``consolidated=True``, and
+                the CPU otherwise.
 
         Returns:
-            The received TensorDict.
+            The received tensordict.
+
+        Raises:
+            RuntimeError: if the pipe is closed, or if the sender and the receiver
+                are out of sync.
         """
         if self._closed:
             raise RuntimeError("Cannot recv on a closed pipe.")
@@ -719,27 +798,32 @@ class TensorDictPipe:
         *,
         device: torch.device | str | None = None,
     ) -> TensorDictBase:
-        """Receive a TensorDict from this pipe (sync).
+        """Receives a tensordict from the pipe, and waits until it is received.
 
-        Blocking wrapper around :meth:`arecv`.
+        Runs :meth:`arecv` in a new event loop, with the same arguments. In a
+        coroutine, ``await pipe.arecv()`` instead: in a thread where an event loop
+        runs, ``recv`` raises a ``RuntimeError``.
 
         Args:
-            td: if provided, receives into this TensorDict in-place when
-                it is consolidated and its layout matches the received data.
-                Otherwise the pipe returns a new TensorDict or its own
-                TensorDict from the previous receive, so use the return
-                value.
+            td (TensorDictBase, optional): a consolidated tensordict to receive
+                into, if its layout matches the data. See :meth:`arecv`. Defaults to
+                ``None``.
 
         Keyword Args:
-            device: device for storage allocation on first receive.
+            device (torch.device, str or int, optional): the device of the storage
+                that the pipe allocates for a new structure. See :meth:`arecv`.
+                Defaults to ``None``.
 
         Returns:
-            The received TensorDict.
+            The received tensordict.
         """
         return _run_coroutine_sync(self.arecv(td, device=device))
 
     async def aclose(self) -> None:
-        """Close this pipe (async)."""
+        """Closes the pipe, its endpoint and its listener (if any), asynchronously.
+
+        Closing a closed pipe does nothing.
+        """
         if not self._closed:
             self._closed = True
             if self._listener is not None:
@@ -747,11 +831,17 @@ class TensorDictPipe:
             await self._endpoint.close()
 
     def close(self) -> None:
-        """Close this pipe (sync)."""
+        """Closes the pipe, and waits until it is closed.
+
+        Runs :meth:`aclose` in a new event loop. In a coroutine, ``await
+        pipe.aclose()`` instead. A pipe also closes at the end of a ``with`` or
+        ``async with`` block, and when it is garbage collected.
+        """
         _run_coroutine_sync(self.aclose())
 
     @property
     def closed(self) -> bool:
+        """Whether the pipe is closed."""
         return self._closed
 
     def __aiter__(self) -> TensorDictPipe:
@@ -794,16 +884,30 @@ class TensorDictPipe:
 
 
 class TensorDictServer:
-    """A one-to-many listener that accepts connections and yields TensorDictPipe instances.
+    """A listener that accepts several clients, and gives a :class:`TensorDictPipe` for each.
 
     .. warning::
         ``TensorDictServer`` is experimental: its API can change in a minor
         release without a deprecation cycle.
 
-    Wraps ``ucxx.create_listener`` to provide a server that can handle
-    multiple clients, each getting their own :class:`TensorDictPipe`.
     It needs the optional ``ucxx`` package. Import it from
-    ``tensordict._ucxx``.
+    ``tensordict._ucxx``: there is no public import path. Get the pipes with
+    :meth:`serve`, or with ``async for pipe in server``. It starts
+    listening when you do either. The protocol does not authenticate the
+    clients: use it only on a trusted network. A server is an async context
+    manager, which closes it at the end of the block.
+
+    Args:
+        port (int): the port to listen on.
+
+    Keyword Args:
+        consolidated (bool, optional): the ``consolidated`` argument of the
+            pipes (see :class:`TensorDictPipe`). The clients must pass the
+            same value to :meth:`TensorDictPipe.connect`. Defaults to
+            ``True``.
+
+    Raises:
+        ImportError: if ``ucxx`` is not installed.
 
     Examples:
         Each client connects with :meth:`TensorDictPipe.connect`. This
@@ -836,13 +940,15 @@ class TensorDictServer:
         self,
         on_connect: Callable[[TensorDictPipe], Awaitable[None]],
     ) -> None:
-        """Accept connections and call ``on_connect`` for each new client.
+        """Accepts connections, and runs ``on_connect`` on the pipe of each new client.
 
-        This runs indefinitely until :meth:`close` is called.
+        Runs until :meth:`close` is called. Each ``on_connect`` call runs as
+        its own task, so that the clients are served at the same time. ``async
+        for pipe in server`` is the other way to get the pipes.
 
         Args:
-            on_connect: an async callable that receives a :class:`TensorDictPipe`
-                for each new client connection.
+            on_connect (Callable): a coroutine function that takes the
+                :class:`TensorDictPipe` of a client.
         """
         queue: asyncio.Queue[TensorDictPipe] = asyncio.Queue()
 
@@ -876,13 +982,16 @@ class TensorDictServer:
             yield pipe
 
     def close(self) -> None:
-        """Close the server and stop accepting connections."""
+        """Closes the server: it stops accepting connections, and :meth:`serve` returns.
+
+        The pipes of the clients stay open.
+        """
         self._closed = True
         if self._listener is not None:
             self._listener.close()
 
     async def aclose(self) -> None:
-        """Close the server (async)."""
+        """Closes the server, as :meth:`close` does, in a coroutine."""
         self.close()
 
     async def __aenter__(self) -> TensorDictServer:
