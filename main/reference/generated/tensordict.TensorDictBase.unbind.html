@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,12 +1642,13 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.unbind">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">unbind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.unbind" title="Link to this definition">#</a></dt>
-<dd><p>Returns a tuple of indexed tensordicts, unbound along the indicated dimension.</p>
-<p>The tensordicts of the result hold views of the original tensors.</p>
+<dd><p>Returns a tuple of the tensordicts along a batch dimension, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.unbind()</span></code></a> does.</p>
+<p>The tensordicts of the result hold views of the original tensors. They
+are locked if the tensordict is shared or memory-mapped.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the batch dimension to remove. The result has
-<code class="docutils literal notranslate"><span class="pre">self.batch_size[dim]</span></code> tensordicts.</p>
+<code class="docutils literal notranslate"><span class="pre">batch_size[dim]</span></code> tensordicts.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2030,7 +2031,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.unbind",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.unbind",
        "url": "/reference/generated/tensordict.TensorDictBase.unbind.html",
-       "articleBody": "TensorDictBase.unbind# TensorDictBase.unbind(dim: int) \u2192 tuple[TensorDictBase, ...]# Returns a tuple of indexed tensordicts, unbound along the indicated dimension. The tensordicts of the result hold views of the original tensors. Parameters: dim (int) \u2013 the batch dimension to remove. The result has self.batch_size[dim] tensordicts. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(12).reshape(3, 4), ... }, batch_size=[3, 4]) \u003e\u003e\u003e td0, td1, td2 = td.unbind(0) \u003e\u003e\u003e td0[\u0027x\u0027] tensor([0, 1, 2, 3]) \u003e\u003e\u003e td1[\u0027x\u0027] tensor([4, 5, 6, 7]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unbind# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.unbind# TensorDictBase.unbind(dim: int) \u2192 tuple[TensorDictBase, ...]# Returns a tuple of the tensordicts along a batch dimension, as torch.Tensor.unbind() does. The tensordicts of the result hold views of the original tensors. They are locked if the tensordict is shared or memory-mapped. Parameters: dim (int) \u2013 the batch dimension to remove. The result has batch_size[dim] tensordicts. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(12).reshape(3, 4), ... }, batch_size=[3, 4]) \u003e\u003e\u003e td0, td1, td2 = td.unbind(0) \u003e\u003e\u003e td0[\u0027x\u0027] tensor([0, 1, 2, 3]) \u003e\u003e\u003e td1[\u0027x\u0027] tensor([4, 5, 6, 7]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unbind# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

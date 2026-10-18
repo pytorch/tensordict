@@ -15,7 +15,7 @@ with examples, see [TypedTensorDict](../typed_tensordict.html#typed-tensordict-g
 `TypedTensorDict` has the methods of [`TensorDictBase`](generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase),
 listed by task in [Methods by task](td.html#api-tensordict-methods).
 
-| [`TypedTensorDict`](generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict)(*args, **kwargs) | A TensorDictBase subclass with typed field declarations and backend composition. |
+| [`TypedTensorDict`](generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict)(*args, **kwargs) | A [`TensorDictBase`](generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass whose fields are declared as class annotations. |
 | --- | --- |
 
 ## See also

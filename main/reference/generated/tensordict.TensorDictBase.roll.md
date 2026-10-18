@@ -2,32 +2,35 @@
 
 TensorDictBase.roll(*shifts: [int](https://docs.python.org/3/builtins/functions.html#int) | [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), ...]*, *dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), ...] = None*, ***, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Roll the tensordict along the given dimensions.
+Returns a tensordict with the elements rolled along batch dimensions, as [`torch.roll()`](https://docs.pytorch.org/docs/stable/generated/torch.roll.html#torch.roll) does.
 
-Elements that are shifted beyond the last position are re-introduced at
-the first position.
+Elements shifted past the last position come back at the first one.
+The batch size and the names do not change, and the feature dimensions
+are not rolled. The data is copied.
+
+It can be used as a context manager, as [`unsqueeze()`](tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze) can: when
+the `with` block exits, the entries of the block are written back to
+the tensordict with the inverse operation.
 
 Parameters:
 
-- **shifts** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of**ints*) - The number of places by which the elements
-of the tensordict are shifted. If shifts is a tuple, dims must be a
-tuple of the same size, and each dimension will be rolled by the
-corresponding value.
-- **dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of**ints**,**optional*) - Axis along which to roll.
-By default, the tensordict is flattened before rolling.
+- **shifts** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)) - the number of places to shift the
+elements by. With a tuple, `dims` is a tuple of the same
+size, and each dimension is rolled by its own shift.
+- **dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch dimensions to roll.
+Defaults to `None`, which rolls the flattened batch and
+restores its shape.
 
 Keyword Arguments:
 
-**inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, this tensordict's identity
-and key set are preserved; each leaf storage is replaced by
-its rolled counterpart one leaf at a time, keeping peak memory
-close to `1x`. The batch_size is unchanged by `roll`.
-Defaults to `False`.
+**inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns `self`. See [In-place operations](../../concepts/operations.html#inplace-conventions). Defaults
+to `False`.
 
 Returns:
 
-a new tensordict with elements rolled. When `inplace=True` this
-is `self`.
+The rolled tensordict, or `self` with `inplace=True`.
 
 Examples
 

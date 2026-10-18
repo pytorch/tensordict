@@ -2,18 +2,17 @@
 
 TensorDictBase.__xor__(*other: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self | [bool](https://docs.python.org/3/builtins/functions.html#bool)
 
-XOR operation over two tensordicts, for evey key.
+Computes `self ^ other` leaf by leaf and returns a new tensordict.
 
-The two tensordicts must have the same key set.
+The operation is a logical XOR for boolean leaves and a bitwise XOR for
+integer leaves. `other` is paired as in [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__): a
+tensordict or `dict` must have the same keys, or a `KeyError` is
+raised.
 
 Parameters:
 
-**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*, or*[*float*](https://docs.python.org/3/builtins/functions.html#float)) - the value to compare against.
-
-Returns:
-
-a new TensorDict instance with all tensors are boolean
-tensors of the same shape as the original tensors.
+**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the other
+operand.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

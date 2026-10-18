@@ -14,11 +14,22 @@ reference is sent, not the data. [`memmap()`](tensordict.TensorDictBase.memmap.h
 turns every leaf of a tensordict into a MemoryMappedTensor. See
 [Save and load tensordicts](../../saving.html#saving) and [Load data and share it between processes](../../data_loading.html#data-loading).
 
-Build one with `from_tensor()`, `empty()`, `zeros()`,
-`ones()`, `full()`, their `*_like` variants, or
-`from_filename()` for an existing file. Indexing a MemoryMappedTensor
-gives a MemoryMappedTensor on the same storage. Other operations
-(`mmap + 1`, for example) give a regular [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor).
+Build one with a class method rather than with the constructor:
+
+- `from_tensor()` copies a tensor;
+- `empty()`, `zeros()`, `ones()` and `full()` make a new
+tensor of a given shape, and `empty_like()`, `zeros_like()`,
+`ones_like()` and `full_like()` one with the shape and dtype of
+another tensor;
+- `from_filename()` maps an existing file, and `from_storage()`
+wraps an existing storage.
+
+The methods that write new data take a `filename`: with one, the data
+is in that file; without one, it is in anonymous shared memory, and
+`filename` raises an error. Indexing a MemoryMappedTensor, `unbind()`,
+`chunk()` and `split()` give MemoryMappedTensors on the same
+storage. Other operations (`x + 1`, for example) give a regular
+[`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor).
 
 A MemoryMappedTensor has these constraints:
 
@@ -33,7 +44,29 @@ Existing symbolic links are rejected, but path-based memory mapping
 cannot prevent another process with directory write access from
 replacing a path after it has been validated.
 
-MemoryMappedTensor supports multiple construction methods.
+The `index` and `handler` arguments are internal.
+
+Parameters:
+
+**source** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*TypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.TypedStorage)*or*[*UntypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.UntypedStorage)) - the data. With `filename`, the tensor is copied to that file, as
+`from_tensor()` does. A storage is passed to
+`from_storage()` with the other arguments. A tensor without
+`filename` is wrapped as it is: the result shares its memory but
+has no file or shared-memory handle, so it cannot be pickled.
+
+Keyword Arguments:
+
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - with a storage, the dtype of the
+tensor, as in `from_storage()`. Not accepted with `filename`.
+Defaults to `None`.
+- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the shape of the result, as in
+`from_tensor()` or `from_storage()`. Ignored for a tensor
+without `filename`. Defaults to `None`, which keeps the shape
+of `source`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or `"cpu"`;
+another device raises a `ValueError`. Defaults to `None`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to copy `source` to.
+Defaults to `None`.
 
 Examples
 
@@ -42,83 +75,122 @@ Examples
 >>> import tempfile
 >>> import torch
 >>> from tensordict import MemoryMappedTensor
->>> # from an existing tensor
->>> tensor = torch.randn(3)
 >>> with tempfile.TemporaryDirectory() as tmpdir:
-... memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=os.path.join(tmpdir, "tensor.memmap"))
-... assert memmap_tensor.filename is not None
->>> # without a filename, the tensor lives in anonymous shared memory and has no filename
->>> tensor = torch.randn(3)
->>> memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
->>> memmap_tensor.filename
-Traceback (most recent call last):
-...
-RuntimeError: The MemoryMappedTensor has no file associated.
->>> # one can create an empty tensor too
->>> with tempfile.TemporaryDirectory() as tmpdir:
-... memmap_tensor_empty = MemoryMappedTensor.empty_like(tensor, filename=os.path.join(tmpdir, "empty.memmap"))
->>> with tempfile.TemporaryDirectory() as tmpdir:
-... memmap_tensor_zero = MemoryMappedTensor.zeros_like(tensor, filename=os.path.join(tmpdir, "zeros.memmap"))
->>> with tempfile.TemporaryDirectory() as tmpdir:
-... memmap_tensor = MemoryMappedTensor.ones_like(tensor, filename=os.path.join(tmpdir, "ones.memmap"))
+... filename = os.path.join(tmpdir, "x.memmap")
+... x = MemoryMappedTensor.from_tensor(torch.arange(4.0), filename=filename)
+... x[0] = 10.0 # writes to the file
+... print(MemoryMappedTensor.from_filename(filename, dtype=torch.float32, shape=(4,)))
+MemoryMappedTensor([10., 1., 2., 3.])
 ```
 
-chunk(*chunks*, *dim=0*) → List of Tensors
+Without a filename, the data is in anonymous shared memory:
 
-See [`torch.chunk()`](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html#torch.chunk)
+```
+>>> z = MemoryMappedTensor.zeros(2, 3)
+>>> z.shape, z.dtype
+(torch.Size([2, 3]), torch.float32)
+>>> type(z[0]).__name__, type(z + 1).__name__
+('MemoryMappedTensor', 'Tensor')
+```
+
+chunk(*chunks*, *dim=0*)
+
+Splits the tensor into `chunks` views, as [`torch.Tensor.chunk()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.chunk.html#torch.Tensor.chunk) does.
+
+The chunks are MemoryMappedTensors on the same storage, so they keep
+the file and can be pickled. Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), they are
+regular tensors.
 
 *classmethod*empty(**size*, *dtype=None*, *device=None*, *filename=None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 *classmethod*empty(*shape*, ***, *dtype=None*, *device=None*, *filename=None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Creates a tensor with empty content, specific shape, dtype and filename.
+Returns an uninitialized MemoryMappedTensor of the given shape.
 
 Parameters:
 
-**shape** (*integers**or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the shape of the tensor.
+***size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**sequence**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the
+shape, as ints (`2, 3`) or as one sequence (`(2, 3)`). It
+can also be passed as the `shape` keyword. A 2-D tensor gives
+a nested tensor, with the shape of each element in one row.
 
 Keyword Arguments:
 
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the tensor.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device of the tensor. Only None and "cpu"
-are accepted, any other device will raise an exception.
-- **filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether it is ok to overwrite an existing file.
-Defaults to `False`.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of the tensor. Defaults to
+`None`, which uses the default dtype
+([`torch.get_default_dtype()`](https://docs.pytorch.org/docs/stable/generated/torch.get_default_dtype.html#torch.get_default_dtype)).
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or
+`"cpu"`; another device raises a `RuntimeError`. Defaults
+to `None`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+Defaults to `None`, which keeps the data in anonymous shared
+memory.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, an existing file at
+`filename` is overwritten. If `False`, it raises a
+`RuntimeError`. Defaults to `False`.
+
+Examples
+
+```
+>>> import os
+>>> import tempfile
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... filename = os.path.join(tmpdir, "x.memmap")
+... x = MemoryMappedTensor.empty((2, 3), dtype=torch.int64, filename=filename)
+... print(x.shape, os.path.getsize(filename))
+torch.Size([2, 3]) 48
+```
 
 *classmethod*empty_like(*input*, ***, *filename=None*)
 
-Creates a tensor with no content but the same shape and dtype as the input tensor.
+Returns an uninitialized MemoryMappedTensor with the shape and dtype of `input`.
 
 Parameters:
 
-**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor to use as an example.
+**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor whose shape and dtype the result
+takes.
 
 Keyword Arguments:
 
-**filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
+**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+It must not exist. Defaults to `None`, which keeps the data
+in anonymous shared memory.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> x = MemoryMappedTensor.empty_like(torch.zeros(2, 3, dtype=torch.int64))
+>>> x.shape, x.dtype
+(torch.Size([2, 3]), torch.int64)
+```
 
 *property*filename
 
-The filename of the tensor, if it has one.
+The absolute path of the file that holds the data.
 
-Raises an exception otherwise.
+Raises a `RuntimeError` if the data is in anonymous shared memory.
 
 *classmethod*from_filename(*filename*, *dtype*, *shape*, *index=None*, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Loads a MemoryMappedTensor from a given filename.
+Returns a MemoryMappedTensor that maps an existing file.
+
+The file holds raw data with no header, so the dtype and the shape
+must be given. [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) records them
+in the `meta.json` file of the directory it writes.
 
 Parameters:
 
-- **filename** (*path**or**equivalent*) - the path to the file.
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the tensor.
-- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the shape of the tensor. If
-a tensor is provided, it is assumed that the tensor is a nested_tensor
-instance.
-- **index** (*torch-compatible index type*) - an index to use to build the
-tensor.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the path to the file.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the data.
+- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**sequence**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the shape of
+the tensor. A 2-D tensor gives a nested tensor, with the shape
+of each element in one row.
+- **index** (*index**,**optional*) - an index applied to the result, as in
+`tensor[index]`. Defaults to `None`.
 - **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - `"r"` maps the file copy-on-write:
 in-place writes stay in memory. `"r+"` maps it shared:
 in-place writes reach the file, and a [`PermissionError`](https://docs.python.org/3/builtins/exceptions.html#PermissionError)
@@ -126,25 +198,102 @@ is raised if the file is not writable. Defaults to `None`,
 which maps the file shared if it is writable and copy-on-write
 otherwise.
 
+Raises:
+
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `mode` is not `None`, `"r"` or `"r+"`.
+- [**PermissionError**](https://docs.python.org/3/builtins/exceptions.html#PermissionError) - if `mode="r+"` and the file is not writable.
+
+Examples
+
+```
+>>> import os
+>>> import tempfile
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... filename = os.path.join(tmpdir, "x.memmap")
+... _ = MemoryMappedTensor.from_tensor(torch.arange(6), filename=filename)
+... x = MemoryMappedTensor.from_filename(filename, torch.int64, (2, 3), mode="r")
+... x[0, 0] = 100 # copy-on-write: the file is unchanged
+... print(MemoryMappedTensor.from_filename(filename, torch.int64, (2, 3)))
+MemoryMappedTensor([[0, 1, 2],
+ [3, 4, 5]])
+```
+
 *classmethod*from_handler(*handler*, *dtype*, *shape*, *index=None*)
 
-Loads a MemoryMappedTensor from a given handler.
+Rebuilds a MemoryMappedTensor from a shared-memory handler.
 
 Deprecated since version 0.15: The handler is private, and this method has no replacement.
 
 Parameters:
 
-- **handler** (*compatible file handler*) - the handler for the tensor.
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the tensor.
-- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the shape of the tensor. If
-a tensor is provided, it is assumed that the tensor is a nested_tensor
-instance.
-- **index** (*torch-compatible index type**,**optional*) - an index to use to build the
+- **handler** - the shared-memory handler of the data.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the data.
+- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the shape of the tensor, or
+a 2-D tensor with the shape of each element of a nested
 tensor.
+- **index** (*index**,**optional*) - an index applied to the result.
+Defaults to `None`.
+
+*classmethod*from_storage(*storage*, ***, *shape: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *index: IndexType | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *filename: Path | [str](https://docs.python.org/3/builtins/stdtypes.html#str) = None*, *handler: _handler = None*)
+
+Returns a MemoryMappedTensor that views an existing storage.
+
+The data is not copied: writes to the result change the storage. If
+the storage was mapped from a file (for example with
+[`torch.UntypedStorage.from_file()`](https://docs.pytorch.org/docs/stable/storage.html#torch.UntypedStorage.from_file)), the result keeps that file
+and can be pickled; other storages give a tensor that cannot be
+pickled.
+
+Parameters:
+
+**storage** ([*UntypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.UntypedStorage)*or*[*TypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.TypedStorage)) - the storage
+to view.
+
+Keyword Arguments:
+
+- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - the shape of the
+result. A tensor gives a nested tensor with one shape per
+row. Defaults to `None`, which gives a 1-D tensor.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype to read the storage
+with. Defaults to `None`, which reads an untyped storage as
+`torch.int64` and accepts a typed storage only if its dtype
+is the default dtype ([`torch.get_default_dtype()`](https://docs.pytorch.org/docs/stable/generated/torch.get_default_dtype.html#torch.get_default_dtype)). Pass
+`dtype` to read another dtype.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or `"cpu"`.
+Defaults to `None`.
+- **index** (*index**,**optional*) - an index applied to the result. Defaults
+to `None`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file of the storage, if it
+has one and does not record it. Defaults to `None`.
+- **handler** - internal.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the storage has a file and `filename` names
+ another one.
+
+Examples
+
+```
+>>> import os
+>>> import tempfile
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... filename = os.path.join(tmpdir, "x.memmap")
+... _ = MemoryMappedTensor.from_tensor(torch.arange(6.0), filename=filename)
+... storage = torch.UntypedStorage.from_file(filename, shared=True, nbytes=24)
+... x = MemoryMappedTensor.from_storage(storage, dtype=torch.float32, shape=(2, 3))
+... print(x, x.filename == filename)
+MemoryMappedTensor([[0., 1., 2.],
+ [3., 4., 5.]]) True
+```
 
 *classmethod*from_tensor(*input*, ***, *filename: [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) = None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *copy_data: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *shape: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Creates a MemoryMappedTensor with the same content as another tensor.
+Returns a MemoryMappedTensor with a copy of the content of `input`.
 
 If `input` is a MemoryMappedTensor, it is returned unchanged in two
 cases: `filename` is `None` and `input` has no file, or
@@ -155,32 +304,42 @@ copied to anonymous shared memory. In all other cases, a new
 
 Parameters:
 
-**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor which content must be copied onto
-the MemoryMappedTensor.
+**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor to copy. A nested tensor must
+have the `torch.strided` layout.
 
 Keyword Arguments:
 
-- **filename** (*path to a file*) - the path to the file where the tensor
-is stored. If `None`, the tensor lives in anonymous
-shared memory.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the file will overwrite
-an existing file. Defaults to `False`.
-- **copy_existing** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and the provided input
-is a MemoryMappedTensor with an associated filename, copying
-the content to the new location is permitted. Otherwise, an
-exception is thrown. This behaviour exists to prevent
-inadvertently duplicating data on disk.
-- **copy_data** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the content of the tensor
-will be copied on the storage. Defaults to `True`.
-- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a shape to override the tensor
-shape. If a tensor is passed, it must represent the nested shapes of a
-nested tensor.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+Defaults to `None`, which keeps the data in anonymous shared
+memory.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, an existing file at
+`filename` is overwritten. If `False`, it raises an error.
+Defaults to `False`.
+- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a MemoryMappedTensor
+with a file can be copied to another file. If `False`, this
+raises an error, so that data is not duplicated on disk by
+mistake. Defaults to `False`.
+- **copy_data** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, the result has the
+shape and dtype of `input` but its content is not written.
+Defaults to `True`.
+- **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - the shape of the
+result, when it differs from that of `input`; `input` is
+broadcast to it. For a nested tensor, a tensor with the shape
+of each element, one per row. Defaults to `None`, which keeps
+the shape of `input`.
+
+Returns:
+
+A MemoryMappedTensor, which is `input` itself in the two cases
+above.
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `input` requires gradients, or if `input` has
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `input` requires gradients, if `input` has
  a file, `filename` is another file and `copy_existing` is
+ `False`, or if `filename` exists and `existsok` is
  `False`.
+- [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `input` is a NumPy array.
 
 Examples
 
@@ -202,36 +361,63 @@ True
 
 *classmethod*full(*shape*, ***, *fill_value*, *dtype=None*, *device=None*, *filename=None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Creates a tensor with a single content specified by fill_value, specific shape, dtype and filename.
+Returns a MemoryMappedTensor of the given shape filled with `fill_value`.
 
 Parameters:
 
-**shape** (*integers**or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the shape of the tensor.
+***size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**sequence**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the shape, as ints
+(`2, 3`) or as one sequence (`(2, 3)`). It can also be
+passed as the `shape` keyword.
 
 Keyword Arguments:
 
-- **fill_value** ([*float*](tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float)*or**equivalent*) - content of the tensor.
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the tensor.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device of the tensor. Only None and "cpu"
-are accepted, any other device will raise an exception.
-- **filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether it is ok to overwrite an existing file.
-Defaults to `False`.
+- **fill_value** (*number**or*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - the value of every element.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of the tensor. Defaults to
+`None`, which uses the default dtype
+([`torch.get_default_dtype()`](https://docs.pytorch.org/docs/stable/generated/torch.get_default_dtype.html#torch.get_default_dtype)).
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or
+`"cpu"`; another device raises a `RuntimeError`. Defaults
+to `None`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+Defaults to `None`, which keeps the data in anonymous shared
+memory.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, an existing file at
+`filename` is overwritten. If `False`, it raises a
+`RuntimeError`. Defaults to `False`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> MemoryMappedTensor.full(3, fill_value=2, dtype=torch.int64)
+MemoryMappedTensor([2, 2, 2])
+```
 
 *classmethod*full_like(*input*, *fill_value*, ***, *filename=None*)
 
-Creates a tensor with a single content indicated by the fill_value argument, but the same shape and dtype as the input tensor.
+Returns a MemoryMappedTensor filled with `fill_value`, with the shape and dtype of `input`.
 
 Parameters:
 
-- **input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor to use as an example.
-- **fill_value** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*or**equivalent*) - content of the tensor.
+- **input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor whose shape and dtype the result
+takes.
+- **fill_value** (*number**or*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - the value of every element.
 
 Keyword Arguments:
 
-**filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
+**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+It must not exist. Defaults to `None`, which keeps the data
+in anonymous shared memory.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> MemoryMappedTensor.full_like(torch.zeros(3, dtype=torch.int64), 7)
+MemoryMappedTensor([7, 7, 7])
+```
 
 *property*index*: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*
 
@@ -243,34 +429,62 @@ Deprecated since version 0.15: This is internal to pickling and has no replaceme
 
 *classmethod*ones(*shape*, ***, *dtype=None*, *device=None*, *filename=None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Creates a tensor with a 1-filled content, specific shape, dtype and filename.
+Returns a MemoryMappedTensor of the given shape filled with ones.
 
 Parameters:
 
-**shape** (*integers**or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the shape of the tensor.
+***size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**sequence**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the
+shape, as ints (`2, 3`) or as one sequence (`(2, 3)`). It
+can also be passed as the `shape` keyword. A 2-D tensor gives
+a nested tensor, with the shape of each element in one row.
 
 Keyword Arguments:
 
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the tensor.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device of the tensor. Only None and "cpu"
-are accepted, any other device will raise an exception.
-- **filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether it is ok to overwrite an existing file.
-Defaults to `False`.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of the tensor. Defaults to
+`None`, which uses the default dtype
+([`torch.get_default_dtype()`](https://docs.pytorch.org/docs/stable/generated/torch.get_default_dtype.html#torch.get_default_dtype)).
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or
+`"cpu"`; another device raises a `RuntimeError`. Defaults
+to `None`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+Defaults to `None`, which keeps the data in anonymous shared
+memory.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, an existing file at
+`filename` is overwritten. If `False`, it raises a
+`RuntimeError`. Defaults to `False`.
+
+Examples
+
+```
+>>> from tensordict import MemoryMappedTensor
+>>> MemoryMappedTensor.ones(2, 3)
+MemoryMappedTensor([[1., 1., 1.],
+ [1., 1., 1.]])
+```
 
 *classmethod*ones_like(*input*, ***, *filename=None*)
 
-Creates a tensor with a 1-filled content, but the same shape and dtype as the input tensor.
+Returns a MemoryMappedTensor filled with ones, with the shape and dtype of `input`.
 
 Parameters:
 
-**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor to use as an example.
+**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor whose shape and dtype the result
+takes.
 
 Keyword Arguments:
 
-**filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
+**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+It must not exist. Defaults to `None`, which keeps the data
+in anonymous shared memory.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> MemoryMappedTensor.ones_like(torch.zeros(3))
+MemoryMappedTensor([1., 1., 1.])
+```
 
 *property*parent_shape*: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*
 
@@ -280,44 +494,81 @@ Deprecated since version 0.15: This is internal to pickling and has no replaceme
 
 split(*split_size*, *dim=0*)
 
-See [`torch.split()`](https://docs.pytorch.org/docs/stable/generated/torch.split.html#torch.split)
+Splits the tensor into views of `split_size`, as [`torch.Tensor.split()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.split.html#torch.Tensor.split) does.
 
-unbind(*dim=0*) → seq
+The parts are MemoryMappedTensors on the same storage, so they keep
+the file and can be pickled. Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), they are
+regular tensors.
 
-See [`torch.unbind()`](https://docs.pytorch.org/docs/stable/generated/torch.unbind.html#torch.unbind)
+unbind(*dim*)
+
+Removes a dimension and returns the slices along it, as [`torch.Tensor.unbind()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind) does.
+
+The slices are MemoryMappedTensors on the same storage, so they keep
+the file and can be pickled. Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), they are
+regular tensors. Unlike [`torch.Tensor.unbind()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind), `dim` has no
+default.
 
 *classmethod*zeros(**size*, *dtype=None*, *device=None*, *filename=None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
 *classmethod*zeros(*shape*, ***, *dtype=None*, *device=None*, *filename=None*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Creates a tensor with a 0-filled content, specific shape, dtype and filename.
+Returns a MemoryMappedTensor of the given shape filled with zeros.
 
 Parameters:
 
-**shape** (*integers**or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the shape of the tensor.
+***size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**sequence**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the
+shape, as ints (`2, 3`) or as one sequence (`(2, 3)`). It
+can also be passed as the `shape` keyword. A 2-D tensor gives
+a nested tensor, with the shape of each element in one row.
 
 Keyword Arguments:
 
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - the dtype of the tensor.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)) - the device of the tensor. Only None and "cpu"
-are accepted, any other device will raise an exception.
-- **filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether it is ok to overwrite an existing file.
-Defaults to `False`.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of the tensor. Defaults to
+`None`, which uses the default dtype
+([`torch.get_default_dtype()`](https://docs.pytorch.org/docs/stable/generated/torch.get_default_dtype.html#torch.get_default_dtype)).
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or
+`"cpu"`; another device raises a `RuntimeError`. Defaults
+to `None`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+Defaults to `None`, which keeps the data in anonymous shared
+memory.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, an existing file at
+`filename` is overwritten. If `False`, it raises a
+`RuntimeError`. Defaults to `False`.
+
+Examples
+
+```
+>>> from tensordict import MemoryMappedTensor
+>>> MemoryMappedTensor.zeros(2, 3)
+MemoryMappedTensor([[0., 0., 0.],
+ [0., 0., 0.]])
+```
 
 *classmethod*zeros_like(*input*, ***, *filename=None*)
 
-Creates a tensor with a 0-filled content, but the same shape and dtype as the input tensor.
+Returns a MemoryMappedTensor filled with zeros, with the shape and dtype of `input`.
 
 Parameters:
 
-**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor to use as an example.
+**input** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor whose shape and dtype the result
+takes.
 
 Keyword Arguments:
 
-**filename** (*path**or**equivalent*) - the path to the file, if any. If
-`None`, the tensor lives in anonymous shared memory.
+**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to write the data to.
+It must not exist. Defaults to `None`, which keeps the data
+in anonymous shared memory.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import MemoryMappedTensor
+>>> MemoryMappedTensor.zeros_like(torch.ones(3))
+MemoryMappedTensor([0., 0., 0.])
+```
 
 ## Tutorials that use `MemoryMappedTensor`
 

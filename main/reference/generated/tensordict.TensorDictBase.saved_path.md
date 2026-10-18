@@ -2,9 +2,12 @@
 
 *property*TensorDictBase.saved_path
 
-Returns the path where a memmap saved TensorDict is being stored.
+The directory where a memory-mapped tensordict stores its files, as a [`Path`](https://docs.python.org/3/library/pathlib.html#pathlib.Path).
 
-This argument valishes as soon as is_memmap() returns `False` (e.g., when the tensordict is unlocked).
+Raises:
+
+[**AttributeError**](https://docs.python.org/3/builtins/exceptions.html#AttributeError) - if [`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap) returns `False`, for
+ example after [`unlock_()`](tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_).
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

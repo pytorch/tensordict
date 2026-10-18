@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,19 +1642,37 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.norm">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">norm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.norm" title="Link to this definition">#</a></dt>
-<dd><p>Computes the norm of each tensor in the tensordict.</p>
+<dd><p>Returns a tensordict with the norm of each leaf.</p>
+<p>Each tensor leaf is replaced by its 2-norm, computed over all its
+elements, so the result has an empty batch size. Non-tensor data is
+kept as it is.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a><em>, </em><em>optional</em>) – the output tensordict.</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em>, </em><em>optional</em>) – the output dtype.</p></li>
-<li><p><strong>key_transform</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>]</em><em>, </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>]</em><em>, </em><em>optional</em>) – A function to transform key names.
-If provided, all keys in the result will be transformed using this function.
-For string keys, the function receives a string. For tuple keys, it receives a tuple.
-Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a tensordict to write the norms
+into, with the keys of the tensordict and an empty batch size.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em>, </em><em>optional</em>) – the dtype of the norms. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, which keeps the dtype of each leaf.</p></li>
+<li><p><strong>key_transform</strong> (<em>Callable</em><em>, </em><em>optional</em>) – a function that renames the
+keys of the result. It is called on each string key, level by
+level: <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code> becomes
+<code class="docutils literal notranslate"><span class="pre">(key_transform(&quot;a&quot;),</span> <span class="pre">key_transform(&quot;b&quot;))</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, which keeps the keys.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="mf">2.0</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">norms</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">norm</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">norms</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">norms</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">],</span> <span class="n">norms</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">(tensor(6.9282), tensor(1.7321), torch.Size([]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">key_transform</span><span class="o">=</span><span class="k">lambda</span> <span class="n">key</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">_norm"</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+<span class="go">['a_norm', ('b_norm', 'c_norm')]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2015,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.norm",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.norm",
        "url": "/reference/generated/tensordict.TensorDictBase.norm.html",
-       "articleBody": "TensorDictBase.norm# TensorDictBase.norm(*, out=None, dtype: dtype | None = None, key_transform: Callable[[NestedKey], NestedKey] | None = None) \u2192 Self# Computes the norm of each tensor in the tensordict. Keyword Arguments: out (TensorDict, optional) \u2013 the output tensordict. dtype (dtype, optional) \u2013 the output dtype. key_transform (Callable[[NestedKey], NestedKey], optional) \u2013 A function to transform key names. If provided, all keys in the result will be transformed using this function. For string keys, the function receives a string. For tuple keys, it receives a tuple. Default: None. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.norm# TensorDictBase.norm(*, out=None, dtype: dtype | None = None, key_transform: Callable[[NestedKey], NestedKey] | None = None) \u2192 Self# Returns a tensordict with the norm of each leaf. Each tensor leaf is replaced by its 2-norm, computed over all its elements, so the result has an empty batch size. Non-tensor data is kept as it is. Keyword Arguments: out (TensorDictBase, optional) \u2013 a tensordict to write the norms into, with the keys of the tensordict and an empty batch size. Defaults to None. dtype (dtype, optional) \u2013 the dtype of the norms. Defaults to None, which keeps the dtype of each leaf. key_transform (Callable, optional) \u2013 a function that renames the keys of the result. It is called on each string key, level by level: (\"a\", \"b\") becomes (key_transform(\"a\"), key_transform(\"b\")). Defaults to None, which keeps the keys. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.full((3, 4), 2.0), b=TensorDict(c=torch.ones(3)), batch_size=[3]) \u003e\u003e\u003e norms = td.norm() \u003e\u003e\u003e norms[\"a\"], norms[\"b\", \"c\"], norms.batch_size (tensor(6.9282), tensor(1.7321), torch.Size([])) \u003e\u003e\u003e list(td.norm(key_transform=lambda key: f\"{key}_norm\").keys(True, True)) [\u0027a_norm\u0027, (\u0027b_norm\u0027, \u0027c_norm\u0027)] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

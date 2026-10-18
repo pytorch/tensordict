@@ -4,18 +4,18 @@ TensorDictBase.rename_keys(*mapping: [Mapping](https://docs.python.org/3/library
 
 Returns a tensordict with several keys renamed at once.
 
-`self` is not modified. The result has a new tree of sub-tensordicts and
-shares every leaf with `self`, tensors and non-tensor data alike. Its
-batch size, device and dim names are those of `self`, and it is not
-locked.
+The tensordict is not modified. The result has a new tree of nested
+tensordicts and shares every leaf with the tensordict, tensors and
+non-tensor data alike. Its batch size, device and dimension names are
+those of the tensordict, and it is not locked.
 
 Every source is read before any destination is written, so swaps
 (`{"a": "b", "b": "a"}`) and chains (`{"a": "b", "b": "c"}`) work.
-A sub-tensordict that the renaming leaves empty is removed. Other empty
-sub-tensordicts are kept.
+A nested tensordict that the renaming leaves empty is removed. Other
+empty nested tensordicts are kept.
 
 A lazy stack renames the keys in each of its tensordicts, and removes a
-sub-tensordict only if the renaming empties it in all of them. A
+nested tensordict only if the renaming empties it in all of them. A
 tensorclass returns the same class, its destinations must be fields,
 and its fields are never removed.
 [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) and the stores raise
@@ -26,19 +26,19 @@ To rename a single key in place, see [`rename_key_()`](tensordict.TensorDictBase
 Parameters:
 
 **mapping** (*Mapping**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*]*) - the old key of each entry
-mapped to its new key. Both sides can be nested keys, so an entry
-can move to another sub-tensordict and a whole sub-tensordict can
-be renamed.
+mapped to its new key. Both sides can be nested keys, so an
+entry can move to another nested tensordict and a whole nested
+tensordict can be renamed.
 
 Keyword Arguments:
 
-**strict** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a source missing from `self`
-raises `KeyError`. If `False`, it is skipped. Defaults to
-`True`.
+**strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a source missing from the
+tensordict raises `KeyError`. If `False`, it is skipped.
+Defaults to `True`.
 
 Returns:
 
-a new tensordict of the same type as `self`, except that a
+A new tensordict of the same type as `self`, except that a
 sub-tensordict view and a `TensorDictParams`
 return a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), as [`exclude()`](tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude) does.
 

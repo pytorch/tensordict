@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,21 +1642,44 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.refresh_archive_checksums">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">refresh_archive_checksums</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">archive_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></span><a class="headerlink" href="#tensordict.refresh_archive_checksums" title="Link to this definition">#</a></dt>
-<dd><p>Recomputes the CRC-32 checksums of a memmap archive after in-place writes.</p>
-<p>A tensordict loaded with <code class="docutils literal notranslate"><span class="pre">TensorDict.load_memmap(path,</span> <span class="pre">mode=&quot;r+&quot;)</span></code>
-writes through to the archive without updating the CRC-32 that the zip
-format stores for each entry. <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>
-does not verify checksums of uncompressed memory-mapped leaves, so this
-is only needed before handing the modified archive to tools that do
-(<code class="docutils literal notranslate"><span class="pre">unzip</span></code>, <a class="reference external" href="https://docs.python.org/3/library/zipfile.html#module-zipfile" title="(in Python v3.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">zipfile</span></code></a>, <a class="reference internal" href="tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>).</p>
+<dd><p>Recomputes the CRC-32 checksums of a memory-mapped archive after in-place writes.</p>
+<p>A tensordict loaded with <code class="docutils literal notranslate"><span class="pre">TensorDict.load_memmap(path,</span> <span class="pre">mode=&quot;r+&quot;)</span></code>, or
+created by <code class="docutils literal notranslate"><span class="pre">memmap_like</span></code> with a <code class="docutils literal notranslate"><span class="pre">&quot;.tdz&quot;</span></code> path, writes into the
+archive without updating the CRC-32 checksum that the zip format stores
+for each entry. <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> does not
+check the checksums of uncompressed leaves, so call this function only
+before you give the archive to a tool that checks them, such as
+<code class="docutils literal notranslate"><span class="pre">unzip</span></code>, <a class="reference external" href="https://docs.python.org/3/library/zipfile.html#module-zipfile" title="(in Python v3.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">zipfile</span></code></a> or <a class="reference internal" href="tensordict.unpack_memmap.html#tensordict.unpack_memmap" title="tensordict.unpack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpack_memmap()</span></code></a>. The archive is
+changed in place.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – path to the archive to fix up.</p>
+<dd class="field-odd"><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the archive to update.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the path to the archive.</p>
+<dd class="field-even"><p>The path of the archive, as a <a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">archive_path</span></code> is not an archive (see
+    <a class="reference internal" href="tensordict.is_memmap_archive.html#tensordict.is_memmap_archive" title="tensordict.is_memmap_archive"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_memmap_archive()</span></code></a>).</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">zipfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">refresh_archive_checksums</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">archive</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td.tdz"</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">archive</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">archive</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r+"</span><span class="p">)[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">archive</span><span class="p">)</span><span class="o">.</span><span class="n">testzip</span><span class="p">())</span>  <span class="c1"># the first bad entry</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">refresh_archive_checksums</span><span class="p">(</span><span class="n">archive</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">archive</span><span class="p">)</span><span class="o">.</span><span class="n">testzip</span><span class="p">())</span>
+<span class="go">a.memmap</span>
+<span class="go">None</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2015,7 +2038,7 @@ is only needed before handing the modified archive to tools that do
        "headline": "refresh_archive_checksums",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - refresh_archive_checksums",
        "url": "/reference/generated/tensordict.refresh_archive_checksums.html",
-       "articleBody": "refresh_archive_checksums# tensordict.refresh_archive_checksums(archive_path: str | Path) \u2192 Path# Recomputes the CRC-32 checksums of a memmap archive after in-place writes. A tensordict loaded with TensorDict.load_memmap(path, mode=\"r+\") writes through to the archive without updating the CRC-32 that the zip format stores for each entry. load_memmap() does not verify checksums of uncompressed memory-mapped leaves, so this is only needed before handing the modified archive to tools that do (unzip, zipfile, unpack_memmap()). Parameters: archive_path (str or Path) \u2013 path to the archive to fix up. Returns: the path to the archive.",
+       "articleBody": "refresh_archive_checksums# tensordict.refresh_archive_checksums(archive_path: str | Path) \u2192 Path# Recomputes the CRC-32 checksums of a memory-mapped archive after in-place writes. A tensordict loaded with TensorDict.load_memmap(path, mode=\"r+\"), or created by memmap_like with a \".tdz\" path, writes into the archive without updating the CRC-32 checksum that the zip format stores for each entry. load_memmap() does not check the checksums of uncompressed leaves, so call this function only before you give the archive to a tool that checks them, such as unzip, zipfile or unpack_memmap(). The archive is changed in place. Parameters: archive_path (str or Path) \u2013 the archive to update. Returns: The path of the archive, as a Path. Raises: ValueError \u2013 if archive_path is not an archive (see is_memmap_archive()). Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import zipfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, refresh_archive_checksums \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... archive = Path(path) / \"td.tdz\" ... _ = TensorDict(a=torch.zeros(3)).save(archive) ... _ = TensorDict.load_memmap(archive, mode=\"r+\")[\"a\"].add_(1) ... print(zipfile.ZipFile(archive).testzip()) # the first bad entry ... _ = refresh_archive_checksums(archive) ... print(zipfile.ZipFile(archive).testzip()) a.memmap None",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

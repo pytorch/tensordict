@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,47 +1642,59 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.from_dict_instance">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">from_dict_instance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.from_dict_instance" title="Link to this definition">#</a></dt>
-<dd><p>Instance method version of <a class="reference internal" href="tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict" title="tensordict.TensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a>.</p>
-<p>Unlike <a class="reference internal" href="tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict" title="tensordict.TensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a>, this method will
-attempt to keep the tensordict types within the existing tree (for
-any existing leaf).</p>
+<dd><p>Builds a tensordict from a dictionary, with the types of the entries of this tensordict.</p>
+<p>Works like <a class="reference internal" href="tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict" title="tensordict.TensorDict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a>, except for the
+nested dicts: a nested dict whose key is a nested tensordict or
+tensorclass of this tensordict is converted to that type, recursively.
+The other nested dicts become <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
+instances. Use it to turn the output of <a class="reference internal" href="tensordict.TensorDictBase.to_dict.html#tensordict.TensorDictBase.to_dict" title="tensordict.TensorDictBase.to_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_dict()</span></code></a> back into
+tensorclasses. The values of this tensordict are not used, and the
+result is a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>input_dict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a>) – the dictionary to convert. Nested dicts become
+nested entries.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>auto_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, sets the batch size
+to the largest leading shape that all the entries share.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which behaves like <code class="docutils literal notranslate"><span class="pre">False</span></code> unless
+<code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> is given.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size of
+the result: the leading dimensions that all its entries
+share. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which gives an empty batch size
+unless the batch size is computed.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the
+result. Leaves on another device are moved to it. <code class="docutils literal notranslate"><span class="pre">None</span></code>
+leaves each leaf where it is, and the result has no device.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, the maximum
+number of batch dimensions. Turns on <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code> when
+that is <code class="docutils literal notranslate"><span class="pre">None</span></code>. Exclusive with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>names</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the names of the batch dimensions,
+one per dimension. Used only with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>: when the
+batch size is empty or computed, the names are dropped.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if both <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> and <code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> are given.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensorclass</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt;</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensorclass</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
 <span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">MyClass</span><span class="p">:</span>
 <span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
-<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="n">y</span><span class="o">=</span><span class="mi">1</span><span class="p">)})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">from_dict_instance</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: MyClass(</span>
-<span class="go">            x=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">            y=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="n">b</span><span class="o">=</span><span class="n">MyClass</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(()),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(())}}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">from_dict_instance</span><span class="p">(</span><span class="n">data</span><span class="p">)[</span><span class="s2">"b"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span>
+<span class="go">'MyClass'</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)[</span><span class="s2">"b"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span>
+<span class="go">'TensorDict'</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2045,7 +2057,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_dict_instance",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_dict_instance",
        "url": "/reference/generated/tensordict.TensorDictBase.from_dict_instance.html",
-       "articleBody": "TensorDictBase.from_dict_instance# TensorDictBase.from_dict_instance(input_dict, *, auto_batch_size: bool | None = None, batch_size=None, device=None, batch_dims=None, names=None)# Instance method version of from_dict(). Unlike from_dict(), this method will attempt to keep the tensordict types within the existing tree (for any existing leaf). Examples \u003e\u003e\u003e from tensordict import TensorDict, tensorclass \u003e\u003e\u003e import torch \u003e\u003e\u003e \u003e\u003e\u003e @tensorclass ... class MyClass: ... x: torch.Tensor ... y: int \u003e\u003e\u003e \u003e\u003e\u003e td = TensorDict({\"a\": torch.randn(()), \"b\": MyClass(x=torch.zeros(()), y=1)}) \u003e\u003e\u003e print(td.from_dict_instance(td.to_dict())) TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), b: MyClass( x=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), y=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e print(td.from_dict(td.to_dict())) TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.from_dict_instance# TensorDictBase.from_dict_instance(input_dict, *, auto_batch_size: bool | None = None, batch_size=None, device=None, batch_dims=None, names=None)# Builds a tensordict from a dictionary, with the types of the entries of this tensordict. Works like from_dict(), except for the nested dicts: a nested dict whose key is a nested tensordict or tensorclass of this tensordict is converted to that type, recursively. The other nested dicts become TensorDict instances. Use it to turn the output of to_dict() back into tensorclasses. The values of this tensordict are not used, and the result is a TensorDict. Parameters: input_dict (dict) \u2013 the dictionary to convert. Nested dicts become nested entries. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Defaults to None, which behaves like False unless batch_dims is given. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Defaults to None, which gives an empty batch size unless the batch size is computed. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Turns on auto_batch_size when that is None. Exclusive with batch_size. Defaults to None. names (list of str, optional) \u2013 the names of the batch dimensions, one per dimension. Used only with batch_size: when the batch size is empty or computed, the names are dropped. Defaults to None. Raises: ValueError \u2013 if both batch_size and batch_dims are given. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, tensorclass \u003e\u003e\u003e @tensorclass ... class MyClass: ... x: torch.Tensor \u003e\u003e\u003e td = TensorDict(a=torch.zeros(()), b=MyClass(x=torch.zeros(()))) \u003e\u003e\u003e data = {\"a\": torch.ones(()), \"b\": {\"x\": torch.ones(())}} \u003e\u003e\u003e type(td.from_dict_instance(data)[\"b\"]).__name__ \u0027MyClass\u0027 \u003e\u003e\u003e type(TensorDict.from_dict(data)[\"b\"]).__name__ \u0027TensorDict\u0027 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

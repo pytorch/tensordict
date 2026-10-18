@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1654,18 +1654,18 @@ different keys or entry shapes at the top level, the result is a
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>td_list</strong> (<em>List</em><em> of </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><em>LazyStackedTensorDict</em></a>) – the
+<li><p><strong>td_list</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, or </em><a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><em>LazyStackedTensorDict</em></a>) – the
 tensordicts to stack. A <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> is
 returned unchanged.</p></li>
 <li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the dimension to stack them along. Required if
 <code class="docutils literal notranslate"><span class="pre">td_list</span></code> is a list: without it, a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> is raised.
 Ignored if <code class="docutils literal notranslate"><span class="pre">td_list</span></code> is a
 <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, whose <code class="docutils literal notranslate"><span class="pre">stack_dim</span></code> is
-used.</p></li>
+used. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> (or the class of the stacked
+<dd class="field-even"><p>A <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> (or the class of the stacked
 tensordicts) if they can be stacked densely, a
 <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> otherwise.</p>
 </dd>
@@ -1674,53 +1674,28 @@ tensordicts) if they can be stacked densely, a
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">lazy_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">assert_allclose_td</span><span class="p">,</span> <span class="n">dense_stack_tds</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)},[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_lazy</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_container</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"lazy"</span><span class="p">:</span> <span class="n">td_lazy</span><span class="p">},</span> <span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_container</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"lazy"</span><span class="p">:</span> <span class="n">td_lazy</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_container_clone</span> <span class="o">=</span> <span class="n">td_container</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span>
-<span class="go">LazyStackedTensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        lazy: LazyStackedTensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            exclusive_fields={</span>
-<span class="go">            },</span>
-<span class="go">            batch_size=torch.Size([2, 2]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False,</span>
-<span class="go">            stack_dim=0)},</span>
-<span class="go">    exclusive_fields={</span>
-<span class="go">    },</span>
-<span class="go">    batch_size=torch.Size([2]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False,</span>
-<span class="go">    stack_dim=0)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span> <span class="o">=</span> <span class="n">dense_stack_tds</span><span class="p">(</span><span class="n">td_stack</span><span class="p">)</span> <span class="c1"># Automatically use the LazyStackedTensorDict stack_dim</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_stack</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        lazy: LazyStackedTensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            exclusive_fields={</span>
-<span class="go">                1 -&gt;</span>
-<span class="go">                    b: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([2, 2]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False,</span>
-<span class="go">            stack_dim=1)},</span>
-<span class="go">    batch_size=torch.Size([2]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Note that</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># (1) td_stack is now a TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># (2) this has pushed the stack_dim of "lazy" (0 -&gt; 1)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># (3) this has revealed the exclusive keys.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">assert_allclose_td</span><span class="p">(</span><span class="n">td_stack</span><span class="p">,</span> <span class="n">dense_stack_tds</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># This shows it is the same to pass a list or a LazyStackedTensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_dense</span> <span class="o">=</span> <span class="n">dense_stack_tds</span><span class="p">(</span><span class="n">td_stack</span><span class="p">)</span>  <span class="c1"># uses the stack_dim of td_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">td_dense</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">td_dense</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">('TensorDict', torch.Size([2]))</span>
+</pre></div>
+</div>
+<p>The nested lazy stack is now stacked along its dimension <code class="docutils literal notranslate"><span class="pre">1</span></code>, and
+each of its tensordicts keeps its own keys:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td_dense</span><span class="p">[</span><span class="s2">"lazy"</span><span class="p">]</span><span class="o">.</span><span class="n">stack_dim</span>
+<span class="go">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_dense</span><span class="p">[</span><span class="s2">"lazy"</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">][</span><span class="s2">"b"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([2, 2])</span>
+</pre></div>
+</div>
+<p>Passing the list of tensordicts and <code class="docutils literal notranslate"><span class="pre">dim</span></code> gives the same result:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">assert_allclose_td</span><span class="p">(</span><span class="n">td_dense</span><span class="p">,</span> <span class="n">dense_stack_tds</span><span class="p">([</span><span class="n">td_container</span><span class="p">,</span> <span class="n">td_container_clone</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="go">True</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2081,7 +2056,7 @@ tensordicts) if they can be stacked densely, a
        "headline": "dense_stack_tds",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - dense_stack_tds",
        "url": "/reference/generated/tensordict.dense_stack_tds.html",
-       "articleBody": "dense_stack_tds# tensordict.dense_stack_tds(td_list: Sequence[TensorDictBase] | LazyStackedTensorDict, dim: int | None = None) \u2192 T# Stacks a list of tensordicts, or the tensordicts of a lazy stack, densely if possible. Use it to turn a LazyStackedTensorDict into a dense TensorDict when its tensordicts have the same keys and entry shapes. It is useful when the tensordicts are lazy stacks themselves, or hold lazy stacks among their nested entries: then lazy_stack(td_list).to_tensordict() is not possible. This function calls maybe_dense_stack(). So if the tensordicts have different keys or entry shapes at the top level, the result is a LazyStackedTensorDict. See Stacking and variable-size data. Parameters: td_list (List of TensorDictBase or LazyStackedTensorDict) \u2013 the tensordicts to stack. A TensorDict is returned unchanged. dim (int, optional) \u2013 the dimension to stack them along. Required if td_list is a list: without it, a ValueError is raised. Ignored if td_list is a LazyStackedTensorDict, whose stack_dim is used. Returns: a TensorDict (or the class of the stacked tensordicts) if they can be stacked densely, a LazyStackedTensorDict otherwise. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, lazy_stack \u003e\u003e\u003e from tensordict import assert_allclose_td, dense_stack_tds \u003e\u003e\u003e td0 = TensorDict({\"a\": torch.zeros(3)},[]) \u003e\u003e\u003e td1 = TensorDict({\"a\": torch.zeros(4), \"b\": torch.zeros(2)},[]) \u003e\u003e\u003e td_lazy = lazy_stack([td0, td1], dim=0) \u003e\u003e\u003e td_container = TensorDict({\"lazy\": td_lazy}, []) \u003e\u003e\u003e td_container_clone = td_container.clone() \u003e\u003e\u003e td_stack = lazy_stack([td_container, td_container_clone], dim=0) \u003e\u003e\u003e td_stack LazyStackedTensorDict( fields={ lazy: LazyStackedTensorDict( fields={ a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)}, exclusive_fields={ }, batch_size=torch.Size([2, 2]), device=None, is_shared=False, stack_dim=0)}, exclusive_fields={ }, batch_size=torch.Size([2]), device=None, is_shared=False, stack_dim=0) \u003e\u003e\u003e td_stack = dense_stack_tds(td_stack) # Automatically use the LazyStackedTensorDict stack_dim \u003e\u003e\u003e td_stack TensorDict( fields={ lazy: LazyStackedTensorDict( fields={ a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)}, exclusive_fields={ 1 -\u003e b: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([2, 2]), device=None, is_shared=False, stack_dim=1)}, batch_size=torch.Size([2]), device=None, is_shared=False) \u003e\u003e\u003e # Note that \u003e\u003e\u003e # (1) td_stack is now a TensorDict \u003e\u003e\u003e # (2) this has pushed the stack_dim of \"lazy\" (0 -\u003e 1) \u003e\u003e\u003e # (3) this has revealed the exclusive keys. \u003e\u003e\u003e assert assert_allclose_td(td_stack, dense_stack_tds([td_container, td_container_clone], dim=0)) \u003e\u003e\u003e # This shows it is the same to pass a list or a LazyStackedTensorDict",
+       "articleBody": "dense_stack_tds# tensordict.dense_stack_tds(td_list: Sequence[TensorDictBase] | LazyStackedTensorDict, dim: int | None = None) \u2192 T# Stacks a list of tensordicts, or the tensordicts of a lazy stack, densely if possible. Use it to turn a LazyStackedTensorDict into a dense TensorDict when its tensordicts have the same keys and entry shapes. It is useful when the tensordicts are lazy stacks themselves, or hold lazy stacks among their nested entries: then lazy_stack(td_list).to_tensordict() is not possible. This function calls maybe_dense_stack(). So if the tensordicts have different keys or entry shapes at the top level, the result is a LazyStackedTensorDict. See Stacking and variable-size data. Parameters: td_list (list of TensorDictBase, or LazyStackedTensorDict) \u2013 the tensordicts to stack. A TensorDict is returned unchanged. dim (int, optional) \u2013 the dimension to stack them along. Required if td_list is a list: without it, a ValueError is raised. Ignored if td_list is a LazyStackedTensorDict, whose stack_dim is used. Defaults to None. Returns: A TensorDict (or the class of the stacked tensordicts) if they can be stacked densely, a LazyStackedTensorDict otherwise. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, lazy_stack \u003e\u003e\u003e from tensordict import assert_allclose_td, dense_stack_tds \u003e\u003e\u003e td0 = TensorDict({\"a\": torch.zeros(3)}) \u003e\u003e\u003e td1 = TensorDict({\"a\": torch.zeros(4), \"b\": torch.zeros(2)}) \u003e\u003e\u003e td_lazy = lazy_stack([td0, td1], dim=0) \u003e\u003e\u003e td_container = TensorDict({\"lazy\": td_lazy}) \u003e\u003e\u003e td_container_clone = td_container.clone() \u003e\u003e\u003e td_stack = lazy_stack([td_container, td_container_clone], dim=0) \u003e\u003e\u003e td_dense = dense_stack_tds(td_stack) # uses the stack_dim of td_stack \u003e\u003e\u003e type(td_dense).__name__, td_dense.batch_size (\u0027TensorDict\u0027, torch.Size([2])) The nested lazy stack is now stacked along its dimension 1, and each of its tensordicts keeps its own keys: \u003e\u003e\u003e td_dense[\"lazy\"].stack_dim 1 \u003e\u003e\u003e td_dense[\"lazy\"][:, 1][\"b\"].shape torch.Size([2, 2]) Passing the list of tensordicts and dim gives the same result: \u003e\u003e\u003e assert_allclose_td(td_dense, dense_stack_tds([td_container, td_container_clone], dim=0)) True",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

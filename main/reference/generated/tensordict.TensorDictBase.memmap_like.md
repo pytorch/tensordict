@@ -4,67 +4,71 @@ TensorDictBase.memmap_like(*prefix: [str](https://docs.python.org/3/builtins/std
 
 Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
 
-The files are filled with zeros. Write the values into the result
-afterwards, for example with [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) or indexing.
+Use it to preallocate a large buffer on disk, then fill it with
+[`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) or by indexing: [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) would write every
+value first. New files are filled with zeros. A file that already
+exists at the path of a leaf (with `existsok=True`) keeps its
+content. The tensordict is not changed. See [Save and load tensordicts](../../saving.html#saving).
+
+The result is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)): you can write into its
+leaves in place, but you cannot add, remove or replace an entry. Once
+it is unlocked, [`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap) returns `False`.
 
 Parameters:
 
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - directory prefix where the memory-mapped tensors will
-be stored. The directory tree structure will mimic the tensordict's.
-If `prefix` ends with `".tdz"` (or `archive=True` is
-passed), a preallocated single-file archive is created
-instead. See `archive` below.
-- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - If False (default), an exception will be raised if an
-entry in the tensordict is already a tensor stored on disk
-with an associated file, but is not saved in the correct
-location according to prefix.
-If `True`, any existing Tensor will be copied to the new location.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory to write to. If it
+ends with `".tdz"`, a single archive file is written instead
+(see `archive`). Defaults to `None`, which allocates the
+leaves in anonymous shared memory, which has no file name and
+lasts as long as the process.
+- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - accepted for symmetry with
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap). It has no effect, since no value is copied.
+Defaults to `False`.
 
 Keyword Arguments:
 
-- **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of threads used to write the memmap
-tensors. Defaults to 0.
-- **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and `num_threads>0`,
-the method will return a future of the tensordict.
-- **share_non_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the non-tensor data will be
-shared between the processes and writing operation (such as inplace update
-or set) on any of the workers within a single node will update the value
-on all other workers. If the number of non-tensor leaves is high (e.g.,
-sharing large stacks of non-tensor data) this may result in OOM or similar
-errors. Defaults to `False`.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `False`, an exception will be raised if a tensor already
-exists in the same path. Defaults to `True`.
-- **robust_key** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` (default), uses robust key encoding that safely
-handles keys with path separators and special characters. If `False`,
-uses legacy behavior (keys used as-is). If `None`, uses the default
-robust behavior.
-- **archive** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, `prefix` designates a
-single file and a preallocated, zero-filled memmap archive is
-created and loaded back with
-`load_memmap(prefix, mode="r+")`: the returned tensordict
-writes through to the archive. If `None` (default), archive
-mode is enabled when `prefix` ends with `".tdz"`.
-In-place writes leave the zip per-entry checksums stale; call
-[`refresh_archive_checksums()`](tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums) before handing
-the archive to tools that verify them. Nested tensors are not
-supported in this mode.
-
-The TensorDict is then locked, meaning that any writing operations that
-isn't in-place will throw an exception (eg, rename, set or remove an
-entry).
-Once the tensordict is unlocked, the memory-mapped attribute is turned to `False`,
-because cross-process identity is not guaranteed anymore.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, a file that already exists
+at the path of a leaf (or at the archive path) raises a
+`RuntimeError`. If `True`, it is reused. Defaults to
+`True`.
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that create the
+files. `0` and `1` create them one after the other in the
+calling thread. Defaults to `0`.
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `num_threads > 1`,
+returns a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) at once,
+while the threads create the files: `future.result()` waits
+for them and returns the tensordict. Not supported for an
+archive. Defaults to `False`.
+- **share_non_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, non-tensor data is
+shared between the processes of the node, so that an in-place
+write of a non-tensor entry in one process is seen by the
+others. Many non-tensor leaves (for example a large stack of
+non-tensor data) can use up the memory. Defaults to `False`.
+- **robust_key** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, keys are percent-encoded
+in file and directory names (`"a/b"` is written to
+`a%2Fb.memmap`), so that every file stays inside `prefix`.
+If `False`, keys are used as file names unchanged, as in the
+legacy layout: do not use it with keys you do not trust.
+`None` is the same as `True`. Defaults to `True`.
+- **archive** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, `prefix` is a file, and a
+zero-filled archive is created there and loaded back with
+`load_memmap(prefix, mode="r+")`, so that in-place writes into
+the result reach the archive. Nested tensors are not supported.
+Defaults to `None`, which creates an archive if `prefix`
+ends with `".tdz"`.
 
 Returns:
 
-A new `TensorDict` instance with data stored as memory-mapped tensors if `return_early=False`,
-otherwise a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) instance.
+A new memory-mapped tensordict, or a
+[`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) of it if
+`return_early=True` and `num_threads > 1`.
 
 Note
 
-This is the recommended method to write a set of large buffers
-on disk, as [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_) will copy the information, which can
-be slow for large content.
+For an archive, the result is not locked, and in-place writes do
+not update the CRC-32 checksums of the zip entries. Call
+[`refresh_archive_checksums()`](tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums) before you give the
+archive to a tool that checks them, such as `unzip`.
 
 Examples
 

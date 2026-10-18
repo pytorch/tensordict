@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,24 +1642,31 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.default_is_leaf">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">default_is_leaf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.15)"><span class="pre">Type</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.default_is_leaf" title="Link to this definition">#</a></dt>
-<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if a type is not a tensor collection (tensordict or tensorclass), or is a pass-through type.</p>
-<p>Pass-through types (like UnbatchedTensor) have <code class="docutils literal notranslate"><span class="pre">_pass_through=True</span></code> and are considered leaves
-because their shape doesn’t conform to batch dimensions.</p>
-<p>Note: NonTensorData types are NOT considered leaves here (they have <code class="docutils literal notranslate"><span class="pre">_is_non_tensor=True</span></code>
-but not <code class="docutils literal notranslate"><span class="pre">_pass_through=True</span></code>), so they are excluded from leaves when <code class="docutils literal notranslate"><span class="pre">leaves_only=True</span></code>.</p>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if a type is a leaf: anything but a tensordict or a tensorclass.</p>
+<p>This is the default <code class="docutils literal notranslate"><span class="pre">is_leaf</span></code> of <a class="reference internal" href="tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys" title="tensordict.TensorDictBase.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a>
+and the methods that walk the nested entries. A
+<a class="reference internal" href="tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> is a leaf too. A
+<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> is not, so <code class="docutils literal notranslate"><span class="pre">leaves_only=True</span></code> skips
+the non-tensor entries. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cls</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a>) – the type of an entry, as returned by
+<a class="reference internal" href="tensordict.TensorDictBase.entry_class.html#tensordict.TensorDictBase.entry_class" title="tensordict.TensorDictBase.entry_class"><code class="xref py py-meth docutils literal notranslate"><span class="pre">entry_class()</span></code></a>.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">default_is_leaf</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">{},</span> <span class="n">b</span><span class="o">=</span><span class="s2">"a string!"</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">default_is_leaf</span><span class="p">))</span>
-<span class="go">_TensorDictKeysView(['c'],</span>
-<span class="go">    include_nested=False,</span>
-<span class="go">    leaves_only=True)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">default_is_leaf</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">default_is_leaf</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">),</span> <span class="n">default_is_leaf</span><span class="p">(</span><span class="n">NonTensorData</span><span class="p">),</span> <span class="n">default_is_leaf</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">)</span>
+<span class="go">(True, False, False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">{},</span> <span class="n">b</span><span class="o">=</span><span class="s2">"a string!"</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_leaf</span><span class="o">=</span><span class="n">default_is_leaf</span><span class="p">))</span>
+<span class="go">['c']</span>
 </pre></div>
 </div>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a>.</p>
+<p><a class="reference internal" href="tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor" title="tensordict.is_leaf_nontensor"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_leaf_nontensor()</span></code></a>.</p>
 </div>
 </dd></dl>
 
@@ -2019,7 +2026,7 @@ but not <code class="docutils literal notranslate"><span class="pre">_pass_throu
        "headline": "default_is_leaf",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - default_is_leaf",
        "url": "/reference/generated/tensordict.default_is_leaf.html",
-       "articleBody": "default_is_leaf# tensordict.default_is_leaf(cls: Type) \u2192 bool# Returns True if a type is not a tensor collection (tensordict or tensorclass), or is a pass-through type. Pass-through types (like UnbatchedTensor) have _pass_through=True and are considered leaves because their shape doesn\u2019t conform to batch dimensions. Note: NonTensorData types are NOT considered leaves here (they have _is_non_tensor=True but not _pass_through=True), so they are excluded from leaves when leaves_only=True. Examples \u003e\u003e\u003e from tensordict import TensorDict, default_is_leaf \u003e\u003e\u003e import torch \u003e\u003e\u003e td = TensorDict(a={}, b=\"a string!\", c=torch.randn(())) \u003e\u003e\u003e print(td.keys(leaves_only=True, is_leaf=default_is_leaf)) _TensorDictKeysView([\u0027c\u0027], include_nested=False, leaves_only=True) See also is_leaf_nontensor().",
+       "articleBody": "default_is_leaf# tensordict.default_is_leaf(cls: Type) \u2192 bool# Returns True if a type is a leaf: anything but a tensordict or a tensorclass. This is the default is_leaf of keys() and the methods that walk the nested entries. A UnbatchedTensor is a leaf too. A NonTensorData is not, so leaves_only=True skips the non-tensor entries. See Keys, nested keys, and locking. Parameters: cls (type) \u2013 the type of an entry, as returned by entry_class(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, NonTensorData, default_is_leaf \u003e\u003e\u003e default_is_leaf(torch.Tensor), default_is_leaf(NonTensorData), default_is_leaf(TensorDict) (True, False, False) \u003e\u003e\u003e td = TensorDict(a={}, b=\"a string!\", c=torch.zeros(())) \u003e\u003e\u003e list(td.keys(leaves_only=True, is_leaf=default_is_leaf)) [\u0027c\u0027] See also is_leaf_nontensor().",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

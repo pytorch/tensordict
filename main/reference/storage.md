@@ -25,7 +25,7 @@ methods that they add, such as `from_store`, `close`, and
 `clear_redis`. `STORE_BACKENDS` is the type of their `backend`
 argument.
 
-| [`TensorDictStore`](generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore)(*[, backend, host, port, ...]) | A TensorDict whose entries live on a Redis-compatible server. |
+| [`TensorDictStore`](generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore)(*[, backend, host, port, ...]) | A tensordict whose entries live on a Redis-compatible server. |
 | --- | --- |
 | [`LazyStackedTensorDictStore`](generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore)(*[, backend, ...]) | A lazy stack of tensordicts whose entries live on a Redis-compatible server. |
 
@@ -63,13 +63,13 @@ and receive through a pipe.
 Import these names from `tensordict._ucxx`. It is their only import
 path for now, although the module name starts with an underscore.
 
-| [`TensorDictPipe`](generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe)(endpoint, *[, consolidated, ...]) | A persistent point-to-point channel for streaming TensorDicts over UCXX. |
+| [`TensorDictPipe`](generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe)(endpoint, *[, consolidated, ...]) | A channel between two processes that streams tensordicts over UCXX. |
 | --- | --- |
-| [`TensorDictServer`](generated/tensordict._ucxx.TensorDictServer.html#tensordict._ucxx.TensorDictServer)(port, *[, consolidated]) | A one-to-many listener that accepts connections and yields TensorDictPipe instances. |
+| [`TensorDictServer`](generated/tensordict._ucxx.TensorDictServer.html#tensordict._ucxx.TensorDictServer)(port, *[, consolidated]) | A listener that accepts several clients, and gives a [`TensorDictPipe`](generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe) for each. |
 
-| [`send_tensordict`](generated/tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict)(endpoint, td, *[, consolidated]) | Send a TensorDict over a UCXX endpoint (stateless, always sends metadata). |
+| [`send_tensordict`](generated/tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict)(endpoint, td, *[, consolidated]) | Sends a tensordict over a UCXX endpoint, with its metadata, in one call. |
 | --- | --- |
-| [`recv_tensordict`](generated/tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict)(endpoint[, td, device]) | Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata). |
+| [`recv_tensordict`](generated/tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict)(endpoint[, td, device]) | Receives a tensordict that [`send_tensordict()`](generated/tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict) sends over a UCXX endpoint. |
 
 ## See also
 

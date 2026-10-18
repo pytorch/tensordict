@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1647,10 +1647,16 @@ document.write(`
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>allow_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the option was never
-set, <code class="docutils literal notranslate"><span class="pre">None</span></code> is returned instead of the default (<code class="docutils literal notranslate"><span class="pre">False</span></code>).
+set, returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of the default (<code class="docutils literal notranslate"><span class="pre">False</span></code>).
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">capture_non_tensor_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">capture_non_tensor_stack</span><span class="p">()</span>
+<span class="go">False</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2009,7 +2015,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
        "headline": "capture_non_tensor_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - capture_non_tensor_stack",
        "url": "/reference/generated/tensordict.capture_non_tensor_stack.html",
-       "articleBody": "capture_non_tensor_stack# tensordict.capture_non_tensor_stack(allow_none=False)# Returns whether stacking identical non-tensor data gives one value instead of a stack. See set_capture_non_tensor_stack. Parameters: allow_none (bool, optional) \u2013 if True and the option was never set, None is returned instead of the default (False). Defaults to False.",
+       "articleBody": "capture_non_tensor_stack# tensordict.capture_non_tensor_stack(allow_none=False)# Returns whether stacking identical non-tensor data gives one value instead of a stack. See set_capture_non_tensor_stack. Parameters: allow_none (bool, optional) \u2013 if True and the option was never set, returns None instead of the default (False). Defaults to False. Examples \u003e\u003e\u003e from tensordict import capture_non_tensor_stack \u003e\u003e\u003e capture_non_tensor_stack() False",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

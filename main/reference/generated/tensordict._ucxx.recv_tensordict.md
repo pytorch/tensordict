@@ -2,26 +2,36 @@
 
 *async*tensordict._ucxx.recv_tensordict(*endpoint*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Receive a TensorDict from a UCXX endpoint (stateless, always expects metadata).
+Receives a tensordict that [`send_tensordict()`](tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict) sends over a UCXX endpoint.
 
 Warning
 
 `recv_tensordict` is experimental: its API can change in a minor
 release without a deprecation cycle.
 
+It keeps no state: each call reads the metadata, then the storage. It
+needs the optional `ucxx` package. The sender controls the size of the
+allocation: use it only on a trusted network.
+
 Parameters:
 
-- **endpoint** - a UCXX endpoint object.
-- **td** - if provided and consolidated with matching layout, storage size,
-and device, receives directly into its storage buffer (in-place
-update). Otherwise returns a new TensorDict without modifying `td`.
+- **endpoint** (*ucxx.Endpoint*) - the endpoint to receive from.
+- **td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a consolidated tensordict to receive
+into. If its layout, storage size and device match the data, the
+data is written into its storage, and `td` is returned. Otherwise
+`td` is not changed, and a new tensordict is returned. Defaults to
+`None`.
 
 Keyword Arguments:
 
-**device** - device on which to receive. If omitted, uses the storage
-device of a consolidated `td`, even when its layout does not
-match. Otherwise defaults to CPU.
+**device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device to receive on.
+Defaults to `None`, which uses the device of the storage of `td`
+if it is consolidated, and the CPU otherwise.
 
 Returns:
 
-The received TensorDict.
+The received tensordict, `td` or a new consolidated tensordict.
+
+Raises:
+
+[**ImportError**](https://docs.python.org/3/builtins/exceptions.html#ImportError) - if `ucxx` is not installed.

@@ -2,85 +2,58 @@
 
 TensorDictBase.flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Converts a nested tensordict into a flat one, recursively.
+Returns a tensordict with the nested entries moved to the top level, under joined keys.
 
-The TensorDict type will be lost and the result will be a simple TensorDict instance.
+The leaf at `("a", "b", "c")` gets the key `"a.b.c"` with the
+default separator. The leaves are not copied. The result has the batch
+size, device and dimension names of the tensordict, and the type of
+[`empty()`](tensordict.TensorDictBase.empty.html#tensordict.TensorDictBase.empty): a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) for most types, a
+lazy stack for a lazy stack. Two keys that become the same once joined
+raise a `KeyError`. [`unflatten_keys()`](tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys) does the reverse.
+
+It can be used as a context manager: the changes made to the flat
+tensordict in the `with` block are written back to the tensordict
+when the block exits.
 
 Parameters:
 
-- **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the separator between the nested items.
-- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the resulting tensordict will
-have the same identity as the one where the call has been made.
-Defaults to `False`.
-- **is_leaf** (*callable**,**optional*) - a function that takes a class and
+- **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the string that joins the parts of a
+nested key. Defaults to `"."`.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the entries are moved in
+the tensordict itself, which is returned. Defaults to `False`.
+- **is_leaf** (*Callable**,**optional*) - a function that takes a class and
 returns `True` if values of that class count as leaves. Here
-it stops the flattening: a sub-tensordict whose class is a
-leaf is kept as one value under its key. By default,
-tensordicts and tensorclasses are not leaves. See
-[`is_leaf_nontensor()`](tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor) and
-[`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is_leaf).
+it stops the flattening: a nested tensordict whose class is a
+leaf is kept as one value under its key. Defaults to `None`,
+which uses [`is_leaf_nontensor()`](tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor): tensors and
+non-tensor data are leaves, tensordicts and tensorclasses are
+flattened.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> data = TensorDict({"a": 1, ("b", "c"): 2, ("e", "f", "g"): 3}, batch_size=[])
->>> data.flatten_keys(separator=" - ")
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b - c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- e - f - g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> td = TensorDict({"a": 1, ("b", "c"): 2, ("e", "f", "g"): 3})
+>>> list(td.flatten_keys().keys())
+['a', 'b.c', 'e.f.g']
+>>> list(td.flatten_keys(separator="/").keys())
+['a', 'b/c', 'e/f/g']
+>>> with td.flatten_keys() as flat:
+... flat["b.c"] += 1
+>>> td["b", "c"]
+tensor(3)
 ```
 
-This method and [`unflatten_keys()`](tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys) are particularly useful when
-handling state-dicts, as they make it possible to seamlessly convert
-flat dictionaries into data structures that mimic the structure of the
-model.
-
-Examples
+With [`unflatten_keys()`](tensordict.TensorDictBase.unflatten_keys.html#tensordict.TensorDictBase.unflatten_keys), it converts a state dict to a
+nested tensordict and back:
 
 ```
->>> model = torch.nn.Sequential(torch.nn.Linear(3 ,4))
->>> ddp_model = torch.ao.quantization.QuantWrapper(model)
->>> state_dict = TensorDict(ddp_model.state_dict(), batch_size=[]).unflatten_keys(".")
->>> print(state_dict)
-TensorDict(
- fields={
- module: TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> model_state_dict = state_dict.get("module")
->>> print(model_state_dict)
-TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> _ = model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
+>>> model = torch.nn.Sequential(torch.nn.Linear(3, 4))
+>>> params = TensorDict(model.state_dict()).unflatten_keys(".")
+>>> sorted(params.keys(include_nested=True, leaves_only=True))
+[('0', 'bias'), ('0', 'weight')]
+>>> _ = model.load_state_dict(params.flatten_keys(".").to_dict())
 ```
 
 Every tensordict class and every tensorclass has this method. For the

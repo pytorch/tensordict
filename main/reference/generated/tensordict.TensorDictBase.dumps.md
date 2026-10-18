@@ -4,25 +4,49 @@ TensorDictBase.dumps(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
-`save` (and its alias `dumps`) is [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap): it takes the
-same arguments. `self` is not changed. Read the result back with
-[`load()`](tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load). See [Save and load tensordicts](../../saving.html#saving).
+`save` (and its alias `dumps`) calls [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) with
+`existsok=True`. [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) documents the arguments in full.
+The tensordict is not changed. Read the files back with [`load()`](tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load).
+See [Save and load tensordicts](../../saving.html#saving).
 
 Parameters:
 
-**prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the directory where the tensordict is
-written, one file per leaf. If `prefix` ends with `".tdz"`
-or `archive=True`, a single archive file is written instead.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory where the tensordict
+is written, one file per leaf. If `prefix` ends with
+`".tdz"` or `archive=True`, a single archive file is
+written instead. Defaults to `None`, which writes into the
+directory of the tensordict if it is already memory-mapped
+there, and otherwise into anonymous shared memory, which has no
+file name and lasts as long as the process.
+- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, a leaf that is
+already a memory-mapped tensor with a file at another path
+raises a `RuntimeError`. If `True`, the file is copied to
+the new path. Defaults to `False`.
 
 Keyword Arguments:
 
-- **archive** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, write a single archive file.
-Defaults to `None`, which writes an archive if `prefix`
-ends with `".tdz"`.
-- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the compression of the
-archive. See [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap).
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that write the
+files. Defaults to `0`, which writes them in the calling
+thread.
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `num_threads > 1`,
+returns a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) while
+the threads write the files. Defaults to `False`.
+- **share_non_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, non-tensor data is
+shared between the processes of the node. Defaults to
+`False`.
+- **robust_key** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, keys are percent-encoded
+in file names, so that every file stays inside `prefix`.
+Defaults to `True`.
+- **archive** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, writes a single archive
+file. Defaults to `None`, which writes an archive if
+`prefix` ends with `".tdz"`.
+- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression of the
+archive entries. Defaults to `None`, which stores them
+uncompressed.
 
-All the other arguments are those of [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap).
+Returns:
+
+A new memory-mapped tensordict, as [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) returns.
 
 Examples
 

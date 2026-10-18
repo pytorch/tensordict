@@ -8,12 +8,12 @@ Parameters:
 
 - **values** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the logits, or the probabilities if
 `do_softmax=False`, along the last dimension.
-- **do_softmax** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, apply a softmax to `values`
-first. Defaults to `True`.
+- **do_softmax** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, applies a softmax to
+`values` first. Defaults to `True`.
 
 Returns:
 
-a `torch.long` tensor with the shape of `values`, with one `1`
+A `torch.long` tensor with the shape of `values`, with one `1`
 per row of the last dimension.
 
 Examples

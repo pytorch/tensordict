@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,14 @@ document.write(`
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.set_capture_non_tensor_stack">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_capture_non_tensor_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_capture_non_tensor_stack" title="Link to this definition">#</a></dt>
-<dd><p>Controls whether identical non-tensor data should be captured when stacked.</p>
+<dd><p>Sets whether stacking identical non-tensor data gives one value instead of a stack.</p>
+<p>By default, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> of <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>
+returns a <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>, even when all the values
+are equal. With <code class="docutils literal notranslate"><span class="pre">mode=True</span></code>, a stack of equal values gives a single
+<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>. The <code class="docutils literal notranslate"><span class="pre">CAPTURE_NONTENSOR_STACK</span></code>
+environment variable sets the mode at import. Use it as a context manager
+or a decorator, or call <code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(mode).set()</span></code> to
+change the mode for the rest of the program.</p>
 <div class="deprecated">
 <p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Capturing identical non-tensor data (<code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(True)</span></code>
 or <code class="docutils literal notranslate"><span class="pre">CAPTURE_NONTENSOR_STACK=1</span></code>) is deprecated and will be removed in
@@ -1650,6 +1657,21 @@ TensorDict 0.17. Use <a class="reference internal" href="tensordict.NonTensorSta
 to get the single value of a stack of identical values.
 <code class="docutils literal notranslate"><span class="pre">set_capture_non_tensor_stack(False)</span></code>, the default, does not warn,
 and will keep working, doing nothing, after the removal.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, stacking identical non-tensor data gives one
+value, and the call emits a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">set_capture_non_tensor_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_capture_non_tensor_stack</span><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">stack</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">NonTensorData</span><span class="p">(</span><span class="s2">"a"</span><span class="p">),</span> <span class="n">NonTensorData</span><span class="p">(</span><span class="s2">"a"</span><span class="p">)])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">stack</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">stack</span><span class="o">.</span><span class="n">data</span>
+<span class="go">('NonTensorStack', 'a')</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -2009,7 +2031,7 @@ and will keep working, doing nothing, after the removal.</p>
        "headline": "set_capture_non_tensor_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_capture_non_tensor_stack",
        "url": "/reference/generated/tensordict.set_capture_non_tensor_stack.html",
-       "articleBody": "set_capture_non_tensor_stack# class tensordict.set_capture_non_tensor_stack(mode: bool)# Controls whether identical non-tensor data should be captured when stacked. Deprecated since version 0.15: Capturing identical non-tensor data (set_capture_non_tensor_stack(True) or CAPTURE_NONTENSOR_STACK=1) is deprecated and will be removed in TensorDict 0.17. Use NonTensorStack.data to get the single value of a stack of identical values. set_capture_non_tensor_stack(False), the default, does not warn, and will keep working, doing nothing, after the removal.",
+       "articleBody": "set_capture_non_tensor_stack# class tensordict.set_capture_non_tensor_stack(mode: bool)# Sets whether stacking identical non-tensor data gives one value instead of a stack. By default, torch.stack() of NonTensorData returns a NonTensorStack, even when all the values are equal. With mode=True, a stack of equal values gives a single NonTensorData. The CAPTURE_NONTENSOR_STACK environment variable sets the mode at import. Use it as a context manager or a decorator, or call set_capture_non_tensor_stack(mode).set() to change the mode for the rest of the program. Deprecated since version 0.15: Capturing identical non-tensor data (set_capture_non_tensor_stack(True) or CAPTURE_NONTENSOR_STACK=1) is deprecated and will be removed in TensorDict 0.17. Use NonTensorStack.data to get the single value of a stack of identical values. set_capture_non_tensor_stack(False), the default, does not warn, and will keep working, doing nothing, after the removal. Parameters: mode (bool) \u2013 if True, stacking identical non-tensor data gives one value, and the call emits a DeprecationWarning. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import NonTensorData, set_capture_non_tensor_stack \u003e\u003e\u003e with set_capture_non_tensor_stack(False): ... stack = torch.stack([NonTensorData(\"a\"), NonTensorData(\"a\")]) \u003e\u003e\u003e type(stack).__name__, stack.data (\u0027NonTensorStack\u0027, \u0027a\u0027)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

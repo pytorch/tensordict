@@ -15,10 +15,26 @@ Use it to keep strings, numbers that must not become tensors, or any
 other object next to the tensors of a tensordict: a task name, a file
 path, a configuration. Each batch element has the value: indexing a
 tensordict keeps the value in every element, and stacking gives a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per element. To keep
-one value for the whole batch through stacking and unsqueezing, use
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per element. The value
+is not copied by stacking, expanding and similar operations. To keep one
+value for the whole batch through stacking and unsqueezing, use
 [`MetaData`](tensordict.MetaData.html#tensordict.MetaData) instead. [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data) explains
 the non-tensor classes.
+
+Parameters:
+
+**data** (*Any*) - the value. A `NonTensorData` is unwrapped: its
+value is used.
+
+Keyword Arguments:
+
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the entry, usually that of the tensordict that holds it. Defaults
+to `torch.Size([])`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the entry.
+The value itself is not moved. Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions, one
+per dimension. Defaults to `None`.
 
 You rarely build a `NonTensorData` yourself. Assigning a value
 that is not a tensor to a key creates one, and reading the key returns
@@ -27,7 +43,7 @@ the value. [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBas
 
 ```
 >>> import torch
->>> from tensordict import NonTensorData, NonTensorStack, TensorDict
+>>> from tensordict import NonTensorData, TensorDict
 >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
 >>> td["b"] = "a string!"
 >>> td["b"]
@@ -38,108 +54,54 @@ the value. [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBas
 NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None)
 ```
 
-You can also build one explicitly, or with
-[`set_non_tensor()`](tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor):
+[`set_non_tensor()`](tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor) and
+[`get_non_tensor()`](tensordict.TensorDictBase.get_non_tensor.html#tensordict.TensorDictBase.get_non_tensor) write and read the value
+of a nested key. Assigning a list to a key gives a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one item per batch element
+instead. `filter_non_tensor()` removes the
+non-tensor entries of a tensordict.
+
+Comparisons
+
+Unlike other tensorclasses, `NonTensorData` supports `==`,
+`!=`, `^` and `|` between two non-tensor entries. The result is a
+boolean tensor with the batch size of the entry. `==` and `!=` also
+compare with a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of the same batch
+size, element by element, unless the value is an array or a tensor. A
+comparison with any other object returns an empty
+[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), for compatibility with
+`<a tensordict> == <float_number>`.
 
 ```
->>> non_tensor = NonTensorData("a string!", batch_size=[])
->>> data = TensorDict({}, batch_size=[3])
->>> _ = data.set_non_tensor(("nested", "key"), "a string!")
->>> assert isinstance(data.get(("nested", "key")), NonTensorData)
->>> assert data.get_non_tensor(("nested", "key")) == "a string!"
-```
-
-If the data passed to `NonTensorData` is a `NonTensorData`
-itself, the data from the nested object is used:
-
-```
->>> non_tensor = NonTensorData(NonTensorData("a string!"))
->>> assert non_tensor.data == "a string!"
-```
-
-Note
-
-If you assign a list to a key, each element of the list becomes the
-value of one batch element, in a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack).
-Reading the key returns a [`LinkedList`](tensordict.utils.LinkedList.html#tensordict.utils.LinkedList) of
-the values:
-
-```
->>> td = TensorDict(batch_size=(3,))
->>> td["foo"] = ["a", "b", "c"]
->>> td["foo"]
-LinkedList(['a', 'b', 'c'])
->>> td.get("foo").tolist()
-['a', 'b', 'c']
-```
-
-Note
-
-Unlike other tensorclass classes, `NonTensorData` supports
-comparisons of two non-tensor data through [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__), [`__ne__()`](tensordict.TensorDictBase.__ne__.html#tensordict.TensorDictBase.__ne__),
-[`__xor__()`](tensordict.TensorDictBase.__xor__.html#tensordict.TensorDictBase.__xor__) or [`__or__()`](tensordict.TensorDictBase.__or__.html#tensordict.TensorDictBase.__or__). These operations return a tensor
-of shape batch_size. [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__) and [`__ne__()`](tensordict.TensorDictBase.__ne__.html#tensordict.TensorDictBase.__ne__) also compare
-with a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of the same batch size, element
-by element when their values can be compared, unless the data is an array
-or a tensor. For compatibility with `<a tensordict> == <float_number>`,
-a comparison with any other object returns an empty
-[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict).
-
-```
->>> a = NonTensorData(True)
->>> b = NonTensorData(True)
->>> assert a == b
->>> assert not (a != b)
->>> assert not (a ^ b)
->>> assert a | b
->>> # The output is a tensor of shape batch-size
 >>> a = NonTensorData(True, batch_size=[3])
 >>> b = NonTensorData(True, batch_size=[3])
->>> print(a == b)
+>>> a == b
 tensor([True, True, True])
+>>> a ^ b
+tensor([False, False, False])
 ```
-
-Note
-
-Stacking `NonTensorData` instances gives a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) instance. The data is not copied
-during stacking, expansion and similar operations. To keep a single
-value instead of a stack, use [`MetaData`](tensordict.MetaData.html#tensordict.MetaData).
-
-```
->>> stack = torch.stack([NonTensorData(1) for _ in range(10)])
->>> stack
-NonTensorStack(
- [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
- batch_size=torch.Size([10]),
- device=None)
-```
-
-Note
-
-Non-tensor data can be filtered out from a tensordict using
-`filter_non_tensor()`.
 
 Saving
 
 [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) and the related methods save
 a `NonTensorData`, and [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap)
-loads it. If JSON can encode the value, it goes to the `meta.json`
-file of the entry (a tuple is loaded back as a list). Other values, such
-as a `set` or an instance of another class, are pickled to an
-`other.pickle` file. The classes `dict`, `collections.OrderedDict`,
-`list` and `tuple`, which [`from_pytree()`](tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree)
-records, are pickled for older versions and also saved by name, and
-[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) reads them without pickle.
-Pickle can execute arbitrary code when it loads, so
-[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) warns when it loads a
-pickled value. Pass `allow_pickle=True` for data that you trust. From
-TensorDict 0.16, the default is `allow_pickle=False`, which raises a
-`RuntimeError` for pickled values.
+loads it. A value that JSON can encode goes to the `meta.json` file of
+the entry (a tuple is loaded back as a list). Other values, such as a
+`set` or an instance of another class, are pickled to an
+`other.pickle` file. Pickle can execute arbitrary code when it loads,
+so pass `allow_pickle=True` to
+[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) only for data that you
+trust. Without it, loading a pickled value warns. Starting with
+TensorDict 0.16, the default will change to `allow_pickle=False`,
+which raises a `RuntimeError` for pickled values. The `dict`,
+`collections.OrderedDict`, `list` and `tuple` classes that
+[`from_pytree()`](tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree) records are also saved by
+name, and load without pickle.
 
 ```
 >>> import tempfile
 >>> from fractions import Fraction
+>>> data = TensorDict(batch_size=[3])
 >>> _ = data.set_non_tensor("picklable", Fraction(1, 3))
 >>> with tempfile.TemporaryDirectory() as tmpdir:
 ... _ = data.memmap(tmpdir)
@@ -152,147 +114,116 @@ Preallocation
 
 A tensordict can hold one `NonTensorData` with a batch size, then
 receive different values for some batch elements. The entry then
-becomes a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack):
+becomes a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), and `td[key]` returns
+a `tensordict.utils.LinkedList` of the values instead of one value:
 
 ```
 >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
->>> print(td)
-TensorDict(
- fields={
- val: NonTensorData(data=0, batch_size=torch.Size([10]), device=None)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
->>> print(td["val"])
+>>> td["val"]
 0
->>> newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
->>> td[1::2] = newdata
->>> print(td)
-TensorDict(
- fields={
- val: NonTensorStack(
- [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
- batch_size=torch.Size([10]),
- device=None)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
+>>> td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+>>> type(td.get("val")).__name__
+'NonTensorStack'
 >>> td["val"]
 LinkedList([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
 ```
-
-If the value is the same for every element, `td[key]` returns that
-value. If the entry is a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack),
-`td[key]` returns the values as a [`LinkedList`](tensordict.utils.LinkedList.html#tensordict.utils.LinkedList).
-The reason is that a single `NonTensorData` with a batch size
-carries metadata for the whole tensordict, and a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) carries one value per batch element.
 
 Sharing between processes
 
 [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_) and
 [`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_) make a
-`NonTensorData` that other processes can read. To write a new
-value, use [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) with
-`inplace=True`, [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) or
-[`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_). Assigning the key raises
-an error, because the shared tensordict is locked:
+`NonTensorData` that other processes can read. The shared
+tensordict is locked, so assigning the key raises an error. To write a
+new value, use [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_),
+[`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_) or
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) with `inplace=True`.
+`share_memory_` starts a `multiprocessing.Manager` process for
+the values, so these examples need a process that can start child
+processes.
 
 ```
 >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
->>> _ = td.share_memory_()
->>> _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
->>> _ = td.update(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []), inplace=True)
->>> td["val"] = 1
+>>> _ = td.share_memory_() 
+>>> _ = td.update_(TensorDict({"val": NonTensorData(data=1)}, [])) 
+>>> td["val"] 
+1
+>>> td["val"] = 2 
 Traceback (most recent call last):
  ...
 RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 ```
 
-A shared `NonTensorData` is writable if its value is a `str`,
-`int`, `float`, `bool`, `dict` or `list`. Other values (a
-dataclass instance, for example) do not raise an error in `memmap_` or
-`share_memory_`, but writing a new value raises a
-`NotImplementedError`:
-
-```
->>> from dataclasses import dataclass
->>> @dataclass
-... class MyClass:
-... string: str
->>> td = TensorDict({"val": MyClass("a string!")}, [])
->>> _ = td.share_memory_()
->>> _ = td.update_(TensorDict({"val": MyClass("another string!")}, []))
-Traceback (most recent call last):
- ...
-NotImplementedError: Updating MyClass within a shared/memmaped structure is not supported.
-```
-
-A shared [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) is writable too, if it was
-preallocated: the entry must be a stack before the tensordict is
-shared.
+A shared value can be written if it is a `str`, `int`, `float`,
+`bool`, `dict` or `list`. For a value of another type (a
+dataclass instance, for example), `update_` skips the entry and warns.
+A shared [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) can be written too, if the
+entry was a stack before the tensordict was shared:
 
 ```
 >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
 >>> td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
->>> _ = td.share_memory_()
->>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
->>> td["val"]
+>>> _ = td.share_memory_() 
+>>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5]) 
+>>> td["val"] 
 LinkedList([0, 2, 0, 2, 0, 2, 0, 2, 0, 2])
 ```
 
-If the entry is still a single `NonTensorData` when the
-tensordict is shared, writing different values to some elements raises
-an error:
-
-```
->>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
->>> _ = td.share_memory_()
->>> td[1::2] = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
-Traceback (most recent call last):
- ...
-RuntimeError: You're attempting to update a leaf in-place with a shared tensordict, but the new value does not match the previous. If you're using NonTensorData, see the class documentation to see how to properly pre-allocate memory in shared contexts.
-```
+If it is still a single `NonTensorData` when the tensordict is
+shared, writing different values to some elements raises a
+`RuntimeError`.
 
 A memory-mapped `NonTensorData` writes the new value to its JSON
-file on disk at each update, which takes time. If the data does not need
-to stay on disk, use `share_memory_` instead. A value that JSON can
-encode stays in the JSON file, so the directory loads with
-`allow_pickle=False`:
+file at each update, which takes time. If the data does not need to stay
+on disk, use `share_memory_` instead:
 
 ```
 >>> with tempfile.TemporaryDirectory() as tmpdir:
 ... td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
 ... _ = td.memmap_(tmpdir)
 ... _ = td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
-... td_load = TensorDict.load_memmap(tmpdir, allow_pickle=False)
-... print(td_load["val"])
+... print(TensorDict.load_memmap(tmpdir, allow_pickle=False)["val"])
 1
 ```
 
 Callables
 
-A `NonTensorData` can hold a callable. Calling the
-`NonTensorData` calls its `data`:
+Calling a `NonTensorData` calls its value. This lets
+[`apply()`](tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply) take a tensordict of functions:
 
 ```
->>> td0 = TensorDict({"a": 0, "b": 0})
->>> td1 = TensorDict({"a": 1, "b": 1})
->>> td_func = TensorDict({"a": lambda x, y: x-y, "b": lambda x, y: x+y})
->>> td = td0.apply(lambda x, y, func: func(x, y), td1, td_func)
->>> assert td["a"] == -1
->>> assert td["b"] == 1
+>>> x = TensorDict({"a": 1, "b": 1})
+>>> funcs = TensorDict({"a": lambda v: v - 1, "b": lambda v: v + 1})
+>>> out = x.apply(lambda v, func: func(v), funcs)
+>>> out["a"], out["b"]
+(tensor(0), tensor(2))
 ```
 
 expand(**args*, ***kwargs*) → T
 
-Expands the batch dims of the NonTensorData to the given shape, as [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) does.
+Returns the entry expanded to a new batch size, as [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) does.
 
+If the batch size changes, the result is a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) whose elements share the value.
 A shape that [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) rejects (fewer sizes than
-batch dims, or a size that differs from a batch dim that is not 1)
-warns, and the batch size of the result can differ from the shape.
-Starting with TensorDict 0.17, the default will change to raising a
-RuntimeError for such shapes, as [`TensorDict.expand()`](tensordict.TensorDictBase.expand.html#tensordict.TensorDictBase.expand) does.
+batch dimensions, or a size that differs from a batch dimension that
+is not 1) warns, and the batch size of the result can differ from the
+shape. Starting with TensorDict 0.17, the default will change to
+raising a RuntimeError for such shapes, as
+[`expand()`](tensordict.TensorDictBase.expand.html#tensordict.TensorDictBase.expand) does.
+
+Parameters:
+
+***shape** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the new batch size. `-1` keeps the
+size of a batch dimension.
+
+Examples
+
+```
+>>> from tensordict import NonTensorData
+>>> expanded = NonTensorData("a", batch_size=[2]).expand(3, 2)
+>>> expanded.batch_size, expanded.tolist()
+(torch.Size([3, 2]), [['a', 'a'], ['a', 'a'], ['a', 'a']])
+```
 
 *classmethod*fields() → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[Field](https://docs.python.org/3/library/dataclasses.html#dataclasses.Field), ...]
 
@@ -303,7 +234,7 @@ Deprecated since version 0.15: Use `dataclasses.fields(cls)` instead. It returns
 
 from_module(*as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a tensordict that holds the parameters and buffers of a module.
 
 The entries are the parameters and buffers of the module themselves,
 not copies. Submodules become nested tensordicts.
@@ -316,7 +247,7 @@ The function [`tensordict.from_module()`](tensordict.from_module.html#tensordict
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `TensorDictParams`
 instance is returned, which can be used to store parameters
 within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
@@ -333,7 +264,7 @@ Defaults to `True`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
 `TensorDictParams` if `as_module=True`.
 
 Examples
@@ -366,10 +297,17 @@ Parameters:
 
 - **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict that holds the tensor fields.
 - **non_tensordict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - the values of the non-tensor fields. The
-fields that neither argument holds are set to `None`.
-- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
-raise an error if `tensordict` is not a [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase).
-Without it, such a tensordict raises an error.
+fields that neither argument holds are set to `None`. Defaults
+to `None`.
+- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - deprecated in 0.15, will be removed in TensorDict 0.17.
+If `False`, skips the check that `tensordict` is a
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase). By default, the check runs, and
+another type raises a `RuntimeError`.
+
+Returns:
+
+A new instance of the class, whose fields are the entries of
+`tensordict`.
 
 Examples
 
@@ -398,9 +336,17 @@ Otherwise, the result has the value of `self` everywhere.
 
 `out` receives the result if it can hold it. A `NonTensorData`
 `out` cannot hold a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack): the stack is returned,
-and `out` is left as it is. [`TensorDict.where()`](tensordict.TensorDictBase.where.html#tensordict.TensorDictBase.where) then writes the
-stack in place of the entry of its own `out`. See
-[`TensorDictBase.where()`](tensordict.TensorDictBase.where.html#tensordict.TensorDictBase.where) for the arguments.
+and `out` is left as it is. [`TensorDict.where`](tensordict.TensorDictBase.where.html#tensordict.TensorDictBase.where) then writes the stack in place of
+the entry of its own `out`. See
+[`where()`](tensordict.TensorDictBase.where.html#tensordict.TensorDictBase.where) for the keyword arguments
+`out`, `pad` and `update_batch_size`.
+
+Parameters:
+
+- **condition** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a boolean tensor with the batch size of
+the entry.
+- **other** (*Any*) - the non-tensor entry or tensor collection used where
+`condition` is `False`.
 
 Examples
 

@@ -30,13 +30,13 @@ every entry of `padded` is unpadded. Defaults to `None`.
 
 Keyword Arguments:
 
-**pad_dim** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the `pad_dim` given to
+**pad_dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the `pad_dim` given to
 [`pad_sequence()`](tensordict.pad_sequence.html#tensordict.pad_sequence), counted from the first
 dimension of each sample's entries. Defaults to `0`.
 
 Returns:
 
-a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) that stacks the samples
+A [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) that stacks the samples
 along its first dimension. Each sample has the batch size of the
 original sample, and its entries are views of `padded`.
 

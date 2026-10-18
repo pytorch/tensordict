@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,12 +1642,19 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.get_defaults_to_none">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">get_defaults_to_none</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.get_defaults_to_none" title="Link to this definition">#</a></dt>
-<dd><p>Returns the status of <cite>get</cite> default value.</p>
+<dd><p>Returns whether <a class="reference internal" href="tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> for a missing key.</p>
+<p><code class="docutils literal notranslate"><span class="pre">False</span></code> means that <code class="docutils literal notranslate"><span class="pre">get</span></code> raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> when no default is
+passed. See <a class="reference internal" href="tensordict.set_get_defaults_to_none.html#tensordict.set_get_defaults_to_none" title="tensordict.set_get_defaults_to_none"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_get_defaults_to_none()</span></code></a>.</p>
 <div class="deprecated">
 <p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Since v0.7, <a class="reference internal" href="tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> for a
 missing key by default. This function is deprecated and will be removed in
 TensorDict 0.17. Use <code class="docutils literal notranslate"><span class="pre">td[key]</span></code> to raise a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for a missing key.</p>
 </div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>set_to_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – ignored. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -2006,7 +2013,7 @@ TensorDict 0.17. Use <code class="docutils literal notranslate"><span class="pre
        "headline": "get_defaults_to_none",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - get_defaults_to_none",
        "url": "/reference/generated/tensordict.get_defaults_to_none.html",
-       "articleBody": "get_defaults_to_none# tensordict.get_defaults_to_none(set_to_none: bool = True)# Returns the status of get default value. Deprecated since version 0.15: Since v0.7, get() returns None for a missing key by default. This function is deprecated and will be removed in TensorDict 0.17. Use td[key] to raise a KeyError for a missing key.",
+       "articleBody": "get_defaults_to_none# tensordict.get_defaults_to_none(set_to_none: bool = True)# Returns whether get() returns None for a missing key. False means that get raises a KeyError when no default is passed. See set_get_defaults_to_none(). Deprecated since version 0.15: Since v0.7, get() returns None for a missing key by default. This function is deprecated and will be removed in TensorDict 0.17. Use td[key] to raise a KeyError for a missing key. Parameters: set_to_none (bool, optional) \u2013 ignored. Defaults to True.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

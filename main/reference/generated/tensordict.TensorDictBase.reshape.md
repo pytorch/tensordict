@@ -7,29 +7,29 @@ Returns a tensordict whose batch dimensions are reshaped to `shape`.
 Each leaf is reshaped with [`torch.Tensor.reshape()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.reshape.html#torch.Tensor.reshape), and keeps its
 feature dimensions. As with [`torch.Tensor.reshape()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.reshape.html#torch.Tensor.reshape), a leaf of
 the result is a view of the original leaf when the memory layout
-allows it, and a copy otherwise.
+allows it, and a copy otherwise. The result has no names.
 
 Parameters:
 
-***shape** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - new batch size of the resulting tensordict, as
-integers or as one list, tuple or `torch.Size`. One
-dimension can be `-1`. The shape is positional only:
-`reshape(shape=...)` raises `TypeError`.
+***shape** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the new batch size, as integers or as one list,
+tuple or `torch.Size`. One dimension can be `-1`. The shape
+is positional only: `reshape(shape=...)` raises
+`TypeError`.
 
 Keyword Arguments:
 
-**inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, this tensordict's identity
-and key set are preserved; each leaf is reshaped one at a
-time. Note that the underlying `Tensor.reshape` may return
-a view of the original leaf (when memory layout permits) or
-a copy (otherwise); in the view case `inplace=True` keeps
-the leaves sharing storage with the originals and the
-memory benefit does not materialize. Defaults to `False`.
+**inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns `self`. A leaf keeps its storage when the
+reshape can return a view of it. A lazy stack, or a tensordict
+that holds one, raises a `NotImplementedError`: call
+[`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. See [In-place operations](../../concepts/operations.html#inplace-conventions).
+Defaults to `False`.
 
 Returns:
 
-A TensorDict with reshaped keys. When `inplace=True` this is
-`self`.
+A tensordict with the new batch size, or `self` when
+`inplace=True` or when the batch size does not change.
 
 Examples
 

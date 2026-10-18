@@ -2,13 +2,25 @@
 
 *classmethod*TensorDictBase.maybe_dense_stack(*input*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, ***, *out=None*, ***kwargs*)
 
-Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required.
+Stacks tensordicts densely if possible, or into a lazy stack otherwise.
 
 The result is a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) if the tensordicts
 have the same keys and shapes, and a
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) otherwise. See
-[Stacking and variable-size data](../../concepts/stacking.html#stacking), and [`tensordict.maybe_dense_stack()`](tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack) for the
-arguments.
+[Stacking and variable-size data](../../concepts/stacking.html#stacking).
+
+Parameters:
+
+- **input** (*sequence**of*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordicts to stack.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the new batch dimension. Defaults to `0`.
+
+Keyword Arguments:
+
+- **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
+into. Defaults to `None`.
+- ****kwargs** - passed to
+[`LazyStackedTensorDict.maybe_dense_stack`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.maybe_dense_stack), for
+example `strict`.
 
 Examples
 

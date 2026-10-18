@@ -1,0 +1,13 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorDictBase.is_meta
+======================
+
+.. autoproperty:: TensorDictBase.is_meta
+
+Every tensordict class and every tensorclass has this method. For the
+other methods, see :ref:`api-tensordict-methods`.
+
+.. minigallery:: tensordict.TensorDict.is_meta tensordict.TensorDictBase.is_meta
+    :add-heading: Tutorials that use ``is_meta``

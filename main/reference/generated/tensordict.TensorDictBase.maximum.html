@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,19 +1642,22 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.maximum">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">maximum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorCollection.html#tensordict.TensorCollection" title="tensordict.TensorCollection"><span class="pre">TensorCollection</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="tensordict.TensorCollection.html#tensordict.TensorCollection" title="tensordict.TensorCollection"><span class="pre">TensorCollection</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.maximum" title="Link to this definition">#</a></dt>
-<dd><p>Computes the element-wise maximum of <code class="docutils literal notranslate"><span class="pre">self</span></code> and <code class="xref py py-attr docutils literal notranslate"><span class="pre">other</span></code>.</p>
+<dd><p>Returns a new tensordict with the element-wise maximum of every leaf and <code class="docutils literal notranslate"><span class="pre">other</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a><em> or </em><em>Tensor</em>) – the other input tensordict or tensor.</p>
+<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>Number</em>) – the other operand. A
+tensordict is paired with the tensordict key by key. A tensor is
+aligned with the batch dimensions of each leaf and expanded over
+its feature dimensions. Batch sizes that differ are broadcast
+together.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>default</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the value to use for an
-entry that only one of the two tensordicts has. If <code class="docutils literal notranslate"><span class="pre">None</span></code>
-(default), the two tensordicts must have the same keys, and a
-missing key raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. If <code class="docutils literal notranslate"><span class="pre">&quot;intersection&quot;</span></code>, only
-the keys that both tensordicts have are computed, and the
-other keys are dropped. Any other value replaces the missing
-entries on both sides of the operation.</p>
+<dd class="field-even"><p><strong>default</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – what to do with the keys
+that only one of the two tensordicts has. <code class="docutils literal notranslate"><span class="pre">None</span></code> requires the
+same keys and raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> otherwise.
+<code class="docutils literal notranslate"><span class="pre">&quot;intersection&quot;</span></code> computes the keys that both have and drops
+the others. A tensor stands in for the missing entry on either
+side, and the result has the keys of both. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2017,7 +2020,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.maximum",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.maximum",
        "url": "/reference/generated/tensordict.TensorDictBase.maximum.html",
-       "articleBody": "TensorDictBase.maximum# TensorDictBase.maximum(other: TensorCollection | Tensor, *, default: str | Tensor | TensorCollection | None = None) \u2192 Self# Computes the element-wise maximum of self and other. Parameters: other (TensorDict or Tensor) \u2013 the other input tensordict or tensor. Keyword Arguments: default (Tensor or str, optional) \u2013 the value to use for an entry that only one of the two tensordicts has. If None (default), the two tensordicts must have the same keys, and a missing key raises KeyError. If \"intersection\", only the keys that both tensordicts have are computed, and the other keys are dropped. Any other value replaces the missing entries on both sides of the operation. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.maximum# TensorDictBase.maximum(other: TensorCollection | Tensor, *, default: str | Tensor | TensorCollection | None = None) \u2192 Self# Returns a new tensordict with the element-wise maximum of every leaf and other. Parameters: other (TensorDictBase, Tensor or Number) \u2013 the other operand. A tensordict is paired with the tensordict key by key. A tensor is aligned with the batch dimensions of each leaf and expanded over its feature dimensions. Batch sizes that differ are broadcast together. Keyword Arguments: default (Tensor or str, optional) \u2013 what to do with the keys that only one of the two tensordicts has. None requires the same keys and raises a KeyError otherwise. \"intersection\" computes the keys that both have and drops the others. A tensor stands in for the missing entry on either side, and the result has the keys of both. Defaults to None. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

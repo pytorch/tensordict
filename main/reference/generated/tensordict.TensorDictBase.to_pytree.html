@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,9 +1642,23 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_pytree">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_pytree</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.to_pytree" title="Link to this definition">#</a></dt>
-<dd><p>Converts a tensordict to a PyTree.</p>
-<p>If the tensordict was not created from a pytree, this method just returns <code class="docutils literal notranslate"><span class="pre">self</span></code> without modification.</p>
-<p>See <a class="reference internal" href="tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree" title="tensordict.TensorDictBase.from_pytree"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pytree()</span></code></a> for more information and examples.</p>
+<dd><p>Rebuilds the pytree that <a class="reference internal" href="tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree" title="tensordict.TensorDictBase.from_pytree"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pytree()</span></code></a> converted to this tensordict.</p>
+<p>If the tensordict has no <code class="docutils literal notranslate"><span class="pre">&quot;_pytree_type&quot;</span></code> entry, that is, if it was
+not created by <a class="reference internal" href="tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree" title="tensordict.TensorDictBase.from_pytree"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pytree()</span></code></a>, this method returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.
+A nested tensordict without that entry is kept as a tensordict in the
+pytree.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.from_pytree.html#tensordict.TensorDictBase.from_pytree" title="tensordict.TensorDictBase.from_pytree"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_pytree()</span></code></a> for the supported types.</p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_pytree</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">)]})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">to_pytree</span><span class="p">()</span>
+<span class="go">{'a': [tensor([0., 0.]), tensor([1., 1.])]}</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2005,7 +2019,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_pytree",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_pytree",
        "url": "/reference/generated/tensordict.TensorDictBase.to_pytree.html",
-       "articleBody": "TensorDictBase.to_pytree# TensorDictBase.to_pytree()# Converts a tensordict to a PyTree. If the tensordict was not created from a pytree, this method just returns self without modification. See from_pytree() for more information and examples. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_pytree# TensorDictBase.to_pytree()# Rebuilds the pytree that from_pytree() converted to this tensordict. If the tensordict has no \"_pytree_type\" entry, that is, if it was not created by from_pytree(), this method returns self. A nested tensordict without that entry is kept as a tensordict in the pytree. See also from_pytree() for the supported types. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict.from_pytree({\"a\": [torch.zeros(2), torch.ones(2)]}) \u003e\u003e\u003e td.to_pytree() {\u0027a\u0027: [tensor([0., 0.]), tensor([1., 1.])]} Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,59 +1642,49 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_zarr">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_pickle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.to_zarr" title="Link to this definition">#</a></dt>
-<dd><p>Converts a tensordict to a PersistentTensorDict with the zarr backend.</p>
-<p>Requires <code class="docutils literal notranslate"><span class="pre">zarr&gt;=3.0</span></code> to be installed. The batch size (and dimension
-names) are persisted in the store attributes such that
-<a class="reference internal" href="tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> restores them without inference.</p>
+<dd><p>Writes the tensordict to a new zarr store and returns a tensordict backed by it.</p>
+<p>Each leaf becomes an array of the store, and each nested tensordict a
+group. An existing store at <code class="docutils literal notranslate"><span class="pre">filename</span></code> is overwritten. The batch
+size and the names of the batch dimensions are saved in the store
+attributes, so that <a class="reference internal" href="tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> restores them. Requires
+<code class="docutils literal notranslate"><span class="pre">zarr&gt;=3.0</span></code>. See <a class="reference internal" href="../../saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>path</em><em> or </em><em>zarr store</em>) – path to the zarr store (a
+<li><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>path</em><em> or </em><em>zarr store</em>) – the path of the zarr store (a
 directory), or a <code class="docutils literal notranslate"><span class="pre">zarr.abc.store.Store</span></code> instance (e.g. a
 <code class="docutils literal notranslate"><span class="pre">zarr.storage.ZipStore</span></code>).</p></li>
-<li><p><strong>**kwargs</strong> – kwargs to be passed to <a class="reference external" href="https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array" title="(in zarr-python v0.0.0)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code></a>.
-By default each tensor is stored as a single uncompressed chunk;
-pass <code class="docutils literal notranslate"><span class="pre">chunks=...</span></code> and/or <code class="docutils literal notranslate"><span class="pre">compressors=...</span></code> to override (e.g.
-for out-of-core row access or on-disk compression). Since leaves
-have different ranks, <code class="docutils literal notranslate"><span class="pre">chunks</span></code> constrains the leading
-dimensions of each leaf and trailing dimensions are left whole
-(e.g. <code class="docutils literal notranslate"><span class="pre">chunks=(16,)</span></code> chunks every leaf along its first
-dimension in blocks of 16).</p></li>
+<li><p><strong>**kwargs</strong> – passed to <a class="reference external" href="https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array" title="(in zarr-python v0.0.0)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zarr.Group.create_array()</span></code></a>. By default
+each tensor is stored as one uncompressed chunk. Pass
+<code class="docutils literal notranslate"><span class="pre">chunks=...</span></code> or <code class="docutils literal notranslate"><span class="pre">compressors=...</span></code> to change that (for
+example to read rows without loading the whole array, or to
+compress on disk). <code class="docutils literal notranslate"><span class="pre">chunks</span></code> applies to the leading
+dimensions of each leaf, and the trailing dimensions are left
+whole: <code class="docutils literal notranslate"><span class="pre">chunks=(16,)</span></code> chunks every leaf along its first
+dimension in blocks of 16.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>allow_pickle</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><em>None</em></a><em>, </em><em>optional</em>) – read policy for the returned
-handle. <code class="docutils literal notranslate"><span class="pre">None</span></code> (default) trusts the values just written, as
-does <code class="docutils literal notranslate"><span class="pre">True</span></code>. <code class="docutils literal notranslate"><span class="pre">False</span></code> rejects reads of pickled non-tensor
-values. Reopening the store with <a class="reference internal" href="tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> uses that
-call’s policy, not the writer’s.</p>
+<dd class="field-even"><p><strong>allow_pickle</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – the read policy of the returned
+tensordict for pickled non-tensor values. <code class="docutils literal notranslate"><span class="pre">False</span></code> rejects
+them. <code class="docutils literal notranslate"><span class="pre">None</span></code> and <code class="docutils literal notranslate"><span class="pre">True</span></code> read them, since this call wrote
+them. Opening the store again with <a class="reference internal" href="tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> uses
+the policy of that call. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> instance linked to the newly created store.</p>
+<dd class="field-odd"><p>A <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> backed by the new store.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
-<span class="gp">... </span>    <span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="s2">"b"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span>
-<span class="gp">... </span><span class="p">},</span> <span class="p">[</span><span class="mi">1000</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_zarr</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span> <span class="o">+</span> <span class="s2">"/store.zarr"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td_zarr</span><span class="p">)</span>
-<span class="go">PersistentTensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([1000]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: PersistentTensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([1000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([1000]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([1000]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1000</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td_zarr</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s2">"store.zarr"</span><span class="p">),</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">100</span><span class="p">,))</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">td_zarr</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">td_zarr</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">td_zarr</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="go">PersistentTensorDict torch.Size([1000]) torch.Size([1000, 3])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2067,7 +2057,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_zarr",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_zarr",
        "url": "/reference/generated/tensordict.TensorDictBase.to_zarr.html",
-       "articleBody": "TensorDictBase.to_zarr# TensorDictBase.to_zarr(filename, *, allow_pickle: bool | None = None, **kwargs) \u2192 Any# Converts a tensordict to a PersistentTensorDict with the zarr backend. Requires zarr\u003e=3.0 to be installed. The batch size (and dimension names) are persisted in the store attributes such that from_zarr() restores them without inference. Parameters: filename (str, path or zarr store) \u2013 path to the zarr store (a directory), or a zarr.abc.store.Store instance (e.g. a zarr.storage.ZipStore). **kwargs \u2013 kwargs to be passed to zarr.Group.create_array(). By default each tensor is stored as a single uncompressed chunk; pass chunks=... and/or compressors=... to override (e.g. for out-of-core row access or on-disk compression). Since leaves have different ranks, chunks constrains the leading dimensions of each leaf and trailing dimensions are left whole (e.g. chunks=(16,) chunks every leaf along its first dimension in blocks of 16). Keyword Arguments: allow_pickle (bool or None, optional) \u2013 read policy for the returned handle. None (default) trusts the values just written, as does True. False rejects reads of pickled non-tensor values. Reopening the store with from_zarr() uses that call\u2019s policy, not the writer\u2019s. Returns: A PersistentTensorDict instance linked to the newly created store. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.zeros(1000), ... \"b\": {\"c\": torch.zeros(1000, 3)}, ... }, [1000]) \u003e\u003e\u003e td_zarr = td.to_zarr(tempfile.mkdtemp() + \"/store.zarr\") \u003e\u003e\u003e print(td_zarr) PersistentTensorDict( fields={ a: Tensor(shape=torch.Size([1000]), device=cpu, dtype=torch.float32, is_shared=False), b: PersistentTensorDict( fields={ c: Tensor(shape=torch.Size([1000, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([1000]), device=None, is_shared=False)}, batch_size=torch.Size([1000]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use to_zarr# Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Storing TensorDicts in zarr Storing TensorDicts in zarr",
+       "articleBody": "TensorDictBase.to_zarr# TensorDictBase.to_zarr(filename, *, allow_pickle: bool | None = None, **kwargs) \u2192 Any# Writes the tensordict to a new zarr store and returns a tensordict backed by it. Each leaf becomes an array of the store, and each nested tensordict a group. An existing store at filename is overwritten. The batch size and the names of the batch dimensions are saved in the store attributes, so that from_zarr() restores them. Requires zarr\u003e=3.0. See Save and load tensordicts. Parameters: filename (str, path or zarr store) \u2013 the path of the zarr store (a directory), or a zarr.abc.store.Store instance (e.g. a zarr.storage.ZipStore). **kwargs \u2013 passed to zarr.Group.create_array(). By default each tensor is stored as one uncompressed chunk. Pass chunks=... or compressors=... to change that (for example to read rows without loading the whole array, or to compress on disk). chunks applies to the leading dimensions of each leaf, and the trailing dimensions are left whole: chunks=(16,) chunks every leaf along its first dimension in blocks of 16. Keyword Arguments: allow_pickle (bool, optional) \u2013 the read policy of the returned tensordict for pickled non-tensor values. False rejects them. None and True read them, since this call wrote them. Opening the store again with from_zarr() uses the policy of that call. Defaults to None. Returns: A PersistentTensorDict backed by the new store. Examples \u003e\u003e\u003e import os \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(1000), b={\"c\": torch.zeros(1000, 3)}, batch_size=[1000]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... td_zarr = td.to_zarr(os.path.join(tmpdir, \"store.zarr\"), chunks=(100,)) ... print(type(td_zarr).__name__, td_zarr.batch_size, td_zarr[\"b\", \"c\"].shape) PersistentTensorDict torch.Size([1000]) torch.Size([1000, 3]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use to_zarr# Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Storing TensorDicts in zarr Storing TensorDicts in zarr",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

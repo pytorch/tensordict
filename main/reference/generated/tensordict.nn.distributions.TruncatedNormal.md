@@ -4,11 +4,9 @@
 
 Bases: [`TruncatedStandardNormal`](tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.html#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal)
 
-Truncated Normal distribution.
+A normal distribution of mean `loc` and standard deviation `scale`, restricted to `[a, b]`.
 
-A normal distribution of mean `loc` and standard deviation `scale`,
-restricted to the interval `[a, b]`. Its samples are reparameterized
-(`rsample`).
+Its samples are reparameterized (`rsample`).
 
 Source: [https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf](https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf)
 
@@ -24,7 +22,11 @@ same units as `loc`.
 - **b** (*Number**or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the upper bound of the support, in the
 same units as `loc`.
 - **validate_args** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - passed to
-`Distribution`.
+`Distribution`. Defaults to `None`.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `a` is not smaller than `b` everywhere.
 
 Examples
 

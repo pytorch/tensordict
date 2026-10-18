@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,11 +1642,16 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.maximum_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">maximum_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorCollection.html#tensordict.TensorCollection" title="tensordict.TensorCollection"><span class="pre">TensorCollection</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.maximum_" title="Link to this definition">#</a></dt>
-<dd><p>In-place version of <a class="reference internal" href="tensordict.TensorDictBase.maximum.html#tensordict.TensorDictBase.maximum" title="tensordict.TensorDictBase.maximum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">maximum()</span></code></a>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Inplace <code class="docutils literal notranslate"><span class="pre">maximum</span></code> does not support <code class="docutils literal notranslate"><span class="pre">default</span></code> keyword argument.</p>
-</div>
+<dd><p>Replaces every leaf with its element-wise maximum with <code class="docutils literal notranslate"><span class="pre">other</span></code> in place and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>The in-place version of <a class="reference internal" href="tensordict.TensorDictBase.maximum.html#tensordict.TensorDictBase.maximum" title="tensordict.TensorDictBase.maximum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">maximum()</span></code></a>. It has no <code class="docutils literal notranslate"><span class="pre">default</span></code>: a
+tensordict <code class="docutils literal notranslate"><span class="pre">other</span></code> must have every key of the tensordict, and its
+other keys are ignored.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><em>Number</em>) – the other operand, paired with
+the leaves as in <a class="reference internal" href="tensordict.TensorDictBase.maximum.html#tensordict.TensorDictBase.maximum" title="tensordict.TensorDictBase.maximum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">maximum()</span></code></a>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2007,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.maximum",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.maximum",
        "url": "/reference/generated/tensordict.TensorDictBase.maximum_.html",
-       "articleBody": "TensorDictBase.maximum# TensorDictBase.maximum_(other: TensorCollection | Tensor) \u2192 Self# In-place version of maximum(). Note Inplace maximum does not support default keyword argument. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.maximum# TensorDictBase.maximum_(other: TensorCollection | Tensor) \u2192 Self# Replaces every leaf with its element-wise maximum with other in place and returns self. The in-place version of maximum(). It has no default: a tensordict other must have every key of the tensordict, and its other keys are ignored. Parameters: other (TensorDictBase or Number) \u2013 the other operand, paired with the leaves as in maximum(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

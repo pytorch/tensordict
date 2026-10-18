@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,13 +1642,9 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.__invert__">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__invert__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.__invert__" title="Link to this definition">#</a></dt>
-<dd><p>Returns a new TensorDict instance with all tensors inverted (i.e., bitwise NOT operation).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A new TensorDict instance with the same key set as the original,
-but with all tensors having their bits inverted.</p>
-</dd>
-</dl>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">~td</span></code>, a new tensordict with <code class="docutils literal notranslate"><span class="pre">~</span></code> applied to every leaf.</p>
+<p>The operation is a logical NOT for boolean leaves and a bitwise NOT for
+integer leaves.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2009,7 +2005,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__invert__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__invert__",
        "url": "/reference/generated/tensordict.TensorDictBase.__invert__.html",
-       "articleBody": "TensorDictBase.__invert__# TensorDictBase.__invert__() \u2192 Self# Returns a new TensorDict instance with all tensors inverted (i.e., bitwise NOT operation). Returns: A new TensorDict instance with the same key set as the original, but with all tensors having their bits inverted. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__invert__# TensorDictBase.__invert__() \u2192 Self# Returns ~td, a new tensordict with ~ applied to every leaf. The operation is a logical NOT for boolean leaves and a bitwise NOT for integer leaves. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

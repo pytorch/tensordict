@@ -2,38 +2,31 @@
 
 *classmethod*TensorDictBase.from_remote_init(*src: [int](https://docs.python.org/3/builtins/functions.html#int)*, *group: 'ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *use_broadcast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
-Creates a new tensordict instance initialized from remotely sent metadata.
+Receives a tensordict that [`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote) sends, and returns it.
 
-This class method receives consolidated metadata and a single storage buffer
-sent by [`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote), then reconstructs the full tensordict.
-
-Two transport modes are available (must match the sender's choice):
-
-- **Point-to-point** (default): uses `recv_object_list` +
-`dist.recv`. Only sender and receiver participate.
-- **Broadcast** (`use_broadcast=True`): delegates to
-[`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast). All ranks must participate.
+The result is consolidated (see [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)): receive the next
+batches into it with `recv(consolidated=True)`, which allocates no new
+memory. A tensorclass arrives as the same tensorclass, if this process can
+import its class. The metadata is unpickled: use it only with ranks you
+trust. See [`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote) for an example, and [Distributed tensordicts](../../distributed.html#distributed).
 
 Parameters:
 
-- **src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - The rank of the source process that sent the metadata.
-- **group** (*"ProcessGroup"**,**optional*) - The process group to use for communication. Defaults to None.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device to use for tensor operations. Defaults to None.
-- **use_broadcast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - If `True`, use [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast) instead
-of point-to-point recv. Must match the sender's setting.
-Defaults to `False`.
+- **src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank of the sender.
+- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
+Defaults to `None`, the default process group.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the result.
+Point-to-point, it is also the device that the metadata goes
+through, as in [`torch.distributed.recv_object_list()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.recv_object_list).
+Defaults to `None`, which is the CPU point-to-point, and the
+device of the sender's storage with `use_broadcast=True`.
+- **use_broadcast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, receives with
+[`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast). It must match the sender's value. Defaults to
+`False`.
 
 Returns:
 
-A new tensordict instance initialized with the received metadata and content.
-
-Return type:
-
-[*TensorDict*](tensordict.TensorDict.html#tensordict.TensorDict)
-
-See also
-
-The sending process should have called ~.init_remote to send the metadata and content.
+A new consolidated tensordict, of the class that was sent.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

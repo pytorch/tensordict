@@ -2,7 +2,7 @@
 
 tensordict.from_module(*module*, *as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a locked tensordict that holds the parameters and buffers of a module.
 
 Same as [`tensordict.TensorDict.from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module), except for the default
 of `lock`: this function locks the result by default, and the method
@@ -11,7 +11,7 @@ module themselves, not copies. Submodules become nested tensordicts.
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a
 `TensorDictParams` instance is returned,
 which can be used to store parameters within a
@@ -29,7 +29,7 @@ If `False`, they get an empty tensordict. Defaults to
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
 `TensorDictParams` if `as_module=True`.
 
 Examples

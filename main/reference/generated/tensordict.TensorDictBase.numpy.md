@@ -2,34 +2,29 @@
 
 TensorDictBase.numpy() → [ndarray](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray) | [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]
 
-Converts a tensordict to a (possibly nested) dictionary of numpy arrays.
+Returns a nested dict of NumPy arrays with the entries of the tensordict.
 
-Non-tensor data is exposed as such.
+Each tensor becomes a NumPy array with [`torch.Tensor.numpy()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numpy.html#torch.Tensor.numpy),
+so the arrays share memory with the tensors, and a tensor that
+requires gradients or is not on the CPU raises a `RuntimeError` or
+`TypeError`: call [`detach()`](tensordict.TensorDictBase.detach.html#tensordict.TensorDictBase.detach) or [`cpu()`](tensordict.TensorDictBase.cpu.html#tensordict.TensorDictBase.cpu) first. A nested
+tensor becomes a tuple of arrays. Non-tensor data is returned as its
+Python value. The `None` fields of tensorclasses are dropped.
+
+See also
+
+[`to_struct_array()`](tensordict.TensorDictBase.to_struct_array.html#tensordict.TensorDictBase.to_struct_array) to convert to a NumPy
+structured array, and [`to_dict()`](tensordict.TensorDictBase.to_dict.html#tensordict.TensorDictBase.to_dict).
 
 Examples
 
 ```
->>> from tensordict import TensorDict
 >>> import torch
+>>> from tensordict import TensorDict
 >>> data = TensorDict({"a": {"b": torch.zeros(()), "c": "a string!"}})
->>> print(data)
-TensorDict(
- fields={
- a: TensorDict(
- fields={
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> print(data.numpy())
+>>> data.numpy()
 {'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}
 ```
-
-seealso: [`to_struct_array()`](tensordict.TensorDictBase.to_struct_array.html#tensordict.TensorDictBase.to_struct_array) to convert to a struct array.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

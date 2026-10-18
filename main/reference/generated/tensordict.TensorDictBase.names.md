@@ -7,11 +7,12 @@ The dimension names of the tensordict, one per batch dimension.
 A dimension without a name is `None`. The names can be set at
 construction time using the `names` argument, or by assignment
 (`td.names = [...]`). The names must be unique. Shape operations and
-indexing keep the names of the dimensions that remain. See
-[Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size).
+indexing keep the names of the dimensions that remain. Assigning
+`None` removes the names. See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size).
 
-See also [`refine_names()`](tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names) for details on how to set the names after
-construction.
+See also
+
+[`refine_names()`](tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names) and [`rename_()`](tensordict.TensorDictBase.rename_.html#tensordict.TensorDictBase.rename_).
 
 Examples
 

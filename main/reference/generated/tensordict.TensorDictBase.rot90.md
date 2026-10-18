@@ -2,18 +2,22 @@
 
 TensorDictBase.rot90(*k: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *dims: [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), [int](https://docs.python.org/3/builtins/functions.html#int)] = (0, 1)*)
 
-Rotate the tensordict by 90 degrees in the plane specified by dims.
+Returns a tensordict rotated by 90 degrees in the plane of two batch dimensions.
 
-Rotation direction is from the first towards the second axis.
+As for [`torch.rot90()`](https://docs.pytorch.org/docs/stable/generated/torch.rot90.html#torch.rot90), the rotation goes from the first dimension
+of `dims` towards the second. The tensordict needs at least 2 batch
+dimensions, or a `RuntimeError` is raised. The feature dimensions are
+not rotated, the names follow their dimensions, and the data is copied.
+
+It can be used as a context manager, as [`unsqueeze()`](tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze) can: when
+the `with` block exits, the entries of the block are written back to
+the tensordict with the inverse operation.
 
 Parameters:
 
-- **k** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - Number of times to rotate. Default: 1.
-- **dims** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of**two ints*) - The plane to rotate in. Default: (0, 1).
-
-Returns:
-
-a new tensordict rotated by 90 degrees.
+- **k** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of rotations. Defaults to `1`.
+- **dims** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the two batch dimensions of the
+plane. Defaults to `(0, 1)`.
 
 Examples
 

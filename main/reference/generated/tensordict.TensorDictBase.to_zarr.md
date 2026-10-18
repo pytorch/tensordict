@@ -2,62 +2,52 @@
 
 TensorDictBase.to_zarr(*filename*, ***, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [Any](https://docs.python.org/3/library/typing.html#typing.Any)
 
-Converts a tensordict to a PersistentTensorDict with the zarr backend.
+Writes the tensordict to a new zarr store and returns a tensordict backed by it.
 
-Requires `zarr>=3.0` to be installed. The batch size (and dimension
-names) are persisted in the store attributes such that
-[`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) restores them without inference.
+Each leaf becomes an array of the store, and each nested tensordict a
+group. An existing store at `filename` is overwritten. The batch
+size and the names of the batch dimensions are saved in the store
+attributes, so that [`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) restores them. Requires
+`zarr>=3.0`. See [Save and load tensordicts](../../saving.html#saving).
 
 Parameters:
 
-- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**path**or**zarr store*) - path to the zarr store (a
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**path**or**zarr store*) - the path of the zarr store (a
 directory), or a `zarr.abc.store.Store` instance (e.g. a
 `zarr.storage.ZipStore`).
-- ****kwargs** - kwargs to be passed to [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array).
-By default each tensor is stored as a single uncompressed chunk;
-pass `chunks=...` and/or `compressors=...` to override (e.g.
-for out-of-core row access or on-disk compression). Since leaves
-have different ranks, `chunks` constrains the leading
-dimensions of each leaf and trailing dimensions are left whole
-(e.g. `chunks=(16,)` chunks every leaf along its first
-dimension in blocks of 16).
+- ****kwargs** - passed to [`zarr.Group.create_array()`](https://zarr.readthedocs.io/en/stable/api/zarr/group/#zarr.Group.create_array). By default
+each tensor is stored as one uncompressed chunk. Pass
+`chunks=...` or `compressors=...` to change that (for
+example to read rows without loading the whole array, or to
+compress on disk). `chunks` applies to the leading
+dimensions of each leaf, and the trailing dimensions are left
+whole: `chunks=(16,)` chunks every leaf along its first
+dimension in blocks of 16.
 
 Keyword Arguments:
 
-**allow_pickle** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - read policy for the returned
-handle. `None` (default) trusts the values just written, as
-does `True`. `False` rejects reads of pickled non-tensor
-values. Reopening the store with [`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) uses that
-call's policy, not the writer's.
+**allow_pickle** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the read policy of the returned
+tensordict for pickled non-tensor values. `False` rejects
+them. `None` and `True` read them, since this call wrote
+them. Opening the store again with [`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) uses
+the policy of that call. Defaults to `None`.
 
 Returns:
 
-A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) instance linked to the newly created store.
+A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) backed by the new store.
 
 Examples
 
 ```
+>>> import os
 >>> import tempfile
 >>> import torch
 >>> from tensordict import TensorDict
->>> td = TensorDict({
-... "a": torch.zeros(1000),
-... "b": {"c": torch.zeros(1000, 3)},
-... }, [1000])
->>> td_zarr = td.to_zarr(tempfile.mkdtemp() + "/store.zarr")
->>> print(td_zarr)
-PersistentTensorDict(
- fields={
- a: Tensor(shape=torch.Size([1000]), device=cpu, dtype=torch.float32, is_shared=False),
- b: PersistentTensorDict(
- fields={
- c: Tensor(shape=torch.Size([1000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([1000]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([1000]),
- device=None,
- is_shared=False)
+>>> td = TensorDict(a=torch.zeros(1000), b={"c": torch.zeros(1000, 3)}, batch_size=[1000])
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... td_zarr = td.to_zarr(os.path.join(tmpdir, "store.zarr"), chunks=(100,))
+... print(type(td_zarr).__name__, td_zarr.batch_size, td_zarr["b", "c"].shape)
+PersistentTensorDict torch.Size([1000]) torch.Size([1000, 3])
 ```
 
 Every tensordict class and every tensorclass has this method. For the

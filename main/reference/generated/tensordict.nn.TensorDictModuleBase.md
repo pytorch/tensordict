@@ -4,25 +4,20 @@
 
 Bases: [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
 
-Base class to TensorDict modules.
+Base class of the tensordict modules, which read `in_keys` from a tensordict and write `out_keys`.
 
-TensorDictModule subclasses are characterized by `in_keys` and `out_keys`
-key-lists that indicate what input entries are to be read and what output
-entries should be expected to be written.
+Subclass it to write a module whose `forward` takes a tensordict and
+returns a tensordict (`tensordict_out = module(tensordict_in)`). Set
+`in_keys` and `out_keys` as class attributes or in `__init__`:
+[`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) and the other modules read
+them to know which entries the module reads and writes. To wrap a
+module that takes and returns tensors, use
+[`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) instead. See
+[Modules: TensorDictModule and tensordict.nn](../../modules.html#modules-guide).
 
-The forward method input/output signature should always follow the
-convention:
-
-```
-tensordict_out = module.forward(tensordict_in)
-```
-
-Unlike [`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule), TensorDictModuleBase is typically used via subclassing:
-you can wrap any python function in a TensorDictModuleBase subclass, as long as the subclass forward reads and
-writes tensordict (or related types) instances.
-
-The in_keys and out_keys should be properly specified. For example, out_keys can be dynamically reduced using
-`select_out_keys()`.
+The base class gives every module `select_out_keys()` and
+`reset_out_keys()`, to choose which outputs a call keeps, and
+`reset_parameters_recursive()`.
 
 Examples
 
@@ -46,7 +41,8 @@ tensor(1)
 >>> td = mod(TensorDict(a=0))
 >>> td["c"]
 tensor(1)
->>> assert "b" not in td
+>>> "b" in td
+False
 ```
 
 *property*in_keys
@@ -55,16 +51,14 @@ The keys that the module reads from the input tensordict.
 
 *static*is_tdmodule_compatible(*module*)
 
-Checks if a module is compatible with TensorDictModule API.
+Returns `True` if `module` has both an `in_keys` and an `out_keys` attribute.
+
+[`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) wraps the callables that
+fail this check in a [`WrapModule`](tensordict.nn.WrapModule.html#tensordict.nn.WrapModule).
 
 Parameters:
 
 **module** ([*object*](https://docs.python.org/3/builtins/functions.html#object)) - the object to check.
-
-Returns:
-
-`True` if `module` has both an `in_keys` and an `out_keys`
-attribute.
 
 *property*out_keys
 
@@ -79,187 +73,156 @@ All the keys that the module writes, before `select_out_keys()`.
 
 reset_out_keys()
 
-Resets the `out_keys` attribute to its original value.
+Undoes `select_out_keys()`: the module writes all its `out_keys` again.
 
-Returns: the same module, with its original `out_keys` values.
+Returns:
+
+`self`.
 
 Examples
 
 ```
->>> from tensordict import TensorDict
->>> from tensordict.nn import TensorDictModule, TensorDictSequential
 >>> import torch
->>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule
+>>> mod = TensorDictModule(
+... lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+... )
 >>> _ = mod.select_out_keys("d")
->>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
->>> mod(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> mod.out_keys
+['d']
 >>> _ = mod.reset_out_keys()
->>> mod(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> mod.out_keys
+['c', 'd']
+>>> td = mod(TensorDict(a=torch.zeros(()), b=torch.ones(())))
+>>> sorted(td.keys())
+['a', 'b', 'c', 'd']
 ```
 
 reset_parameters_recursive(*parameters: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Recursively reset the parameters of the module and its children.
+Resets the parameters of every submodule that has a `reset_parameters` method.
+
+Without `parameters`, the parameters of the module are reset in
+place. With `parameters`, the module is left as it is: the values in
+`parameters` are reset in place, as if they were loaded into the
+module (see [`to_module()`](tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module)). Use this
+for parameters kept outside the module, for example in a functional
+call. Values that share their storage with the module parameters,
+such as those of [`from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module), reset
+the module too.
 
 Parameters:
 
-**parameters** ([*TensorDict*](tensordict.TensorDict.html#tensordict.TensorDict)*of**parameters**,**optional*) - If set to None, the module will reset using self.parameters().
-Otherwise, we will reset the parameters in the tensordict in-place. This is
-useful for functional modules where the parameters are not stored in the module itself.
+**parameters** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - the parameters to reset,
+with the structure of
+[`from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module) and an empty batch
+size. Defaults to `None`, which resets the parameters of the
+module.
 
 Returns:
 
-A tensordict of the new parameters, only if parameters was not None.
+`None` without `parameters`. Otherwise a new tensordict of
+tensors that share their storage with `parameters` and require
+gradients.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `parameters` has batch dimensions.
+
+Without `parameters`, the call warns if no submodule has a
+`reset_parameters` method.
 
 Examples
 
 ```
->>> from tensordict.nn import TensorDictModule
->>> from torch import nn
->>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
->>> old_param = net[0].weight.clone()
->>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
->>> module.reset_parameters_recursive()
->>> (old_param == net[0].weight).any()
-tensor(False)
-```
-
-This method also supports functional parameter sampling:
-
-```
+>>> import torch
 >>> from tensordict import TensorDict
 >>> from tensordict.nn import TensorDictModule
 >>> from torch import nn
->>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
->>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
->>> params = TensorDict.from_module(module)
->>> old_params = params.clone(recurse=True)
+>>> net = nn.Sequential(nn.Linear(2, 3), nn.ReLU())
+>>> old_weight = net[0].weight.clone()
+>>> module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+>>> module.reset_parameters_recursive()
+>>> torch.equal(old_weight, net[0].weight)
+False
+```
+
+The parameters can also live outside the module:
+
+```
+>>> params = TensorDict.from_module(module).clone()
+>>> old_params = params.clone()
 >>> _ = module.reset_parameters_recursive(params)
 >>> (old_params == params).any()
 False
+>>> torch.equal(net[0].weight, old_params["module", "0", "weight"])
+True
 ```
 
 select_out_keys(**out_keys*) → TensorDictModuleBase
 
-Selects the keys that will be found in the output tensordict.
+Keeps only some of the `out_keys` in the output of the module, and returns the module.
 
-This is useful whenever one wants to get rid of intermediate keys in a
-complicated graph, or when the presence of these keys may trigger unexpected
-behaviours. The module removes only the out-keys that are not selected:
-the other entries of the input tensordict stay in place.
-
-The original `out_keys` can still be accessed via `module.out_keys_source`.
+Use it to drop intermediate outputs, for example those of a
+[`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). The module changes in
+place: `out_keys` becomes the selected keys, and
+`out_keys_source` keeps the full list. A call still computes all
+the outputs, and then removes the ones that are not selected. It
+removes nothing else, so the input entries stay in the output. When
+you call the module with tensors (see [`dispatch()`](tensordict.nn.dispatch.html#tensordict.nn.dispatch)),
+it returns only the selected outputs. `reset_out_keys()` undoes
+the selection.
 
 Parameters:
 
-***out_keys** (*a sequence**of**strings**or**tuples**of**strings*) - the
-out_keys that should be found in the output tensordict.
+***out_keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the keys to keep. Each one must be in
+`out_keys`.
 
-Returns: the same module, modified in-place with updated `out_keys`.
+Returns:
 
-The simplest usage is with [`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule):
+`self`.
+
+Raises:
+
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if a single key is given and it is not in
+ `out_keys`.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if several keys are given and one of them is not in
+ `out_keys`.
 
 Examples
 
 ```
->>> from tensordict import TensorDict
->>> from tensordict.nn import TensorDictModule, TensorDictSequential
 >>> import torch
->>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
->>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
->>> mod(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule
+>>> mod = TensorDictModule(
+... lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+... )
 >>> _ = mod.select_out_keys("d")
->>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
->>> mod(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-```
-
-This feature will also work with dispatched arguments:
-
-```
+>>> mod.out_keys, mod.out_keys_source
+(['d'], ['c', 'd'])
+>>> td = mod(TensorDict(a=torch.zeros(()), b=torch.ones(())))
+>>> sorted(td.keys())
+['a', 'b', 'd']
 >>> mod(torch.zeros(()), torch.ones(()))
 tensor(3.)
-```
-
-This change will occur in-place (ie the same module will be returned
-with an updated list of out_keys). It can be reverted using the
-`TensorDictModuleBase.reset_out_keys()` method.
-
-```
 >>> _ = mod.reset_out_keys()
->>> mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> sorted(mod(TensorDict(a=torch.zeros(()), b=torch.ones(()))).keys())
+['a', 'b', 'c', 'd']
 ```
 
-This will work with other classes too, such as Sequential:
+It works on a [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) too:
 
 ```
 >>> from tensordict.nn import TensorDictSequential
 >>> seq = TensorDictSequential(
-... TensorDictModule(lambda x: x+1, in_keys=["x"], out_keys=["y"]),
-... TensorDictModule(lambda x: x+1, in_keys=["y"], out_keys=["z"]),
+... TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"]),
+... TensorDictModule(lambda y: y + 1, in_keys=["y"], out_keys=["z"]),
 ... )
->>> td = TensorDict({"x": torch.zeros(())}, [])
->>> seq(td)
-TensorDict(
- fields={
- x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
 >>> _ = seq.select_out_keys("z")
->>> td = TensorDict({"x": torch.zeros(())}, [])
->>> seq(td)
-TensorDict(
- fields={
- x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> sorted(seq(TensorDict(x=torch.zeros(()))).keys())
+['x', 'z']
 ```
 
 ## Tutorials that use `TensorDictModuleBase`

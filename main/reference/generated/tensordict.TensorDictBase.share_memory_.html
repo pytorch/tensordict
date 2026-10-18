@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,18 +1642,28 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.share_memory_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">share_memory_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.share_memory_" title="Link to this definition">#</a></dt>
-<dd><p>Places all the tensors in shared memory.</p>
-<p>The TensorDict is then locked, meaning that any writing operations that
-isn’t in-place will throw an exception (eg, rename, set or remove an
-entry).
-Conversely, once the tensordict is unlocked, the share_memory attribute
-is turned to <code class="docutils literal notranslate"><span class="pre">False</span></code>, because cross-process identity is not
-guaranteed anymore.</p>
+<dd><p>Moves the leaves to shared memory, locks the tensordict, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>Processes that receive the tensordict, for example through
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/multiprocessing.html#module-torch.multiprocessing" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.multiprocessing</span></code></a>, then read and write the same tensors.
+The lock forbids adding, removing or replacing entries, but in-place
+writes work (see <a class="reference internal" href="../../concepts/keys.html#keys-locking"><span class="std std-ref">Locking and temporary changes</span></a>). On a tensordict whose device is
+CUDA, the call does nothing: CUDA tensors are shared already, and the
+tensordict is not locked. After
+<a class="reference internal" href="tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_" title="tensordict.TensorDictBase.unlock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_()</span></code></a>, <a class="reference internal" href="tensordict.TensorDictBase.is_shared.html#tensordict.TensorDictBase.is_shared" title="tensordict.TensorDictBase.is_shared"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_shared()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, although the
+tensors stay in shared memory.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>self</p>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is memory-mapped.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span><span class="o">.</span><span class="n">is_shared</span><span class="p">(),</span> <span class="n">td</span><span class="o">.</span><span class="n">is_locked</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span>
+<span class="go">(True, True, True)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2014,7 +2024,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.share_memory",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.share_memory",
        "url": "/reference/generated/tensordict.TensorDictBase.share_memory_.html",
-       "articleBody": "TensorDictBase.share_memory# TensorDictBase.share_memory_() \u2192 Self# Places all the tensors in shared memory. The TensorDict is then locked, meaning that any writing operations that isn\u2019t in-place will throw an exception (eg, rename, set or remove an entry). Conversely, once the tensordict is unlocked, the share_memory attribute is turned to False, because cross-process identity is not guaranteed anymore. Returns: self Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.share_memory# TensorDictBase.share_memory_() \u2192 Self# Moves the leaves to shared memory, locks the tensordict, and returns self. Processes that receive the tensordict, for example through torch.multiprocessing, then read and write the same tensors. The lock forbids adding, removing or replacing entries, but in-place writes work (see Locking and temporary changes). On a tensordict whose device is CUDA, the call does nothing: CUDA tensors are shared already, and the tensordict is not locked. After unlock_(), is_shared() returns False, although the tensors stay in shared memory. Raises: RuntimeError \u2013 if the tensordict is memory-mapped. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e td.share_memory_().is_shared(), td.is_locked, td[\"a\"].is_shared() (True, True, True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

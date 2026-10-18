@@ -32,11 +32,13 @@ Keyword Arguments:
 
 **layout** ([*PackLayout*](tensordict.PackLayout.html#tensordict.PackLayout)*,**optional*) - a layout to pack into. The columns
 then follow its key order, and a missing, extra or reshaped
-leaf raises. `dim` must match the layout's dim.
+leaf raises. `dim` must match the layout's dim. Defaults to
+`None`, which builds a new layout in sorted key order.
 
 Returns:
 
-the packed tensor and its [`PackLayout`](tensordict.PackLayout.html#tensordict.PackLayout).
+A tuple of the packed tensor and its
+[`PackLayout`](tensordict.PackLayout.html#tensordict.PackLayout).
 
 Examples
 

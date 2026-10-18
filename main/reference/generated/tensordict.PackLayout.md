@@ -68,7 +68,7 @@ dimension `dim`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or an instance of `cls`,
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or an instance of `cls`,
 on the device of `flat` if the packed tensordict had a device.
 
 Examples

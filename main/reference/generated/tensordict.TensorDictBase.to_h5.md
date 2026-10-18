@@ -2,45 +2,36 @@
 
 TensorDictBase.to_h5(*filename*, ***kwargs*) → [Any](https://docs.python.org/3/library/typing.html#typing.Any)
 
-Converts a tensordict to a PersistentTensorDict with the h5 backend.
+Writes the tensordict to a new HDF5 file and returns a tensordict backed by it.
+
+Each leaf becomes a dataset of the file, and each nested tensordict a
+group. An existing file at `filename` is overwritten. The batch size
+and the names of the batch dimensions are kept. Requires `h5py`.
+[`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5) opens the file again. See [Save and load tensordicts](../../saving.html#saving).
 
 Parameters:
 
-- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**path*) - path to the h5 file.
-- ****kwargs** - kwargs to be passed to `h5py.File.create_dataset()`.
+- **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**path*) - the path of the HDF5 file.
+- ****kwargs** - passed to `h5py.Group.create_dataset()`, for example
+`compression="gzip"`.
 
 Returns:
 
-A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) instance linked to the newly created file.
+A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) backed by the new file.
 
 Examples
 
 ```
->>> import torch
+>>> import os
 >>> import tempfile
->>> import timeit
->>>
->>> from tensordict import TensorDict, MemoryMappedTensor
->>> td = TensorDict({
-... "a": MemoryMappedTensor.from_tensor(torch.zeros(()).expand(1_000_000)),
-... "b": {"c": MemoryMappedTensor.from_tensor(torch.zeros(()).expand(1_000_000, 3))},
-... }, [1_000_000])
->>>
->>> file = tempfile.NamedTemporaryFile()
->>> td_h5 = td.to_h5(file.name, compression="gzip", compression_opts=9)
->>> print(td_h5)
-PersistentTensorDict(
- fields={
- a: Tensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float32, is_shared=False),
- b: PersistentTensorDict(
- fields={
- c: Tensor(shape=torch.Size([1000000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([1000000]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([1000000]),
- device=None,
- is_shared=False)
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(1000), b={"c": torch.zeros(1000, 3)}, batch_size=[1000])
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... td_h5 = td.to_h5(os.path.join(tmpdir, "data.h5"), compression="gzip")
+... print(type(td_h5).__name__, td_h5.batch_size, td_h5["b", "c"].shape)
+... td_h5.close()
+PersistentTensorDict torch.Size([1000]) torch.Size([1000, 3])
 ```
 
 Every tensordict class and every tensorclass has this method. For the

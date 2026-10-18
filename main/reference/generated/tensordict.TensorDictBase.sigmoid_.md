@@ -2,7 +2,7 @@
 
 TensorDictBase.sigmoid_() → Self
 
-Computes the [`sigmoid()`](https://docs.pytorch.org/docs/stable/generated/torch.sigmoid.html#torch.sigmoid) value of each element of the TensorDict in-place.
+Applies [`torch.sigmoid()`](https://docs.pytorch.org/docs/stable/generated/torch.sigmoid.html#torch.sigmoid) to every leaf in place and returns `self`.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,10 +1642,23 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.record_stream">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">record_stream</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.streams.Stream.html#torch.cuda.streams.Stream" title="(in PyTorch v2.14)"><span class="pre">Stream</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.record_stream" title="Link to this definition">#</a></dt>
-<dd><p>Marks the tensordict as having been used by this stream.</p>
-<p>When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work
-queued on stream at the time of deallocation is complete.</p>
-<p>See <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html#torch.Tensor.record_stream" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">record_stream()</span></code></a> for more information.`</p>
+<dd><p>Marks the tensor leaves of the tensordict as used by <code class="docutils literal notranslate"><span class="pre">stream</span></code>.</p>
+<p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html#torch.Tensor.record_stream" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">record_stream()</span></code></a> on every tensor leaf: when
+a leaf is freed, its memory is not reused until the work queued on
+<code class="docutils literal notranslate"><span class="pre">stream</span></code> at that time is complete. A tensordict can be marked with
+one stream only.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stream</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.14)"><em>Stream</em></a>) – the stream that uses the leaves.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is already marked with another
+    stream.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2006,7 +2019,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.record_stream",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.record_stream",
        "url": "/reference/generated/tensordict.TensorDictBase.record_stream.html",
-       "articleBody": "TensorDictBase.record_stream# TensorDictBase.record_stream(stream: Stream) \u2192 Self# Marks the tensordict as having been used by this stream. When the tensordict is deallocated, ensure the tensor memory is not reused for other tensors until all work queued on stream at the time of deallocation is complete. See record_stream() for more information.` Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.record_stream# TensorDictBase.record_stream(stream: Stream) \u2192 Self# Marks the tensor leaves of the tensordict as used by stream. Calls record_stream() on every tensor leaf: when a leaf is freed, its memory is not reused until the work queued on stream at that time is complete. A tensordict can be marked with one stream only. Parameters: stream (Stream) \u2013 the stream that uses the leaves. Returns: self. Raises: RuntimeError \u2013 if the tensordict is already marked with another stream. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

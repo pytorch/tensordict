@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,19 +1642,20 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.masked_fill_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">masked_fill_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.masked_fill_" title="Link to this definition">#</a></dt>
-<dd><p>Fills the values corresponding to the mask with the desired value.</p>
-<p>The values are written into the existing leaves, which keep their
-storage. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.</p>
+<dd><p>Writes <code class="docutils literal notranslate"><span class="pre">value</span></code> into every leaf where <code class="docutils literal notranslate"><span class="pre">mask</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, in place.</p>
+<p>The leaves keep their storage, and the call works on a locked
+tensordict. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mask</strong> (<em>boolean torch.Tensor</em>) – mask of values to be filled. Its
-shape must match the leading dims of the batch size.</p></li>
-<li><p><strong>value</strong> – value to used to fill the tensors.</p></li>
+<li><p><strong>mask</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – a boolean mask over the leading batch
+dimensions: its shape is the batch size, or its first
+dimensions. It is expanded to the shape of each leaf.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – the value to write.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>self</p>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2030,7 +2031,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.masked_fill",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.masked_fill",
        "url": "/reference/generated/tensordict.TensorDictBase.masked_fill_.html",
-       "articleBody": "TensorDictBase.masked_fill# TensorDictBase.masked_fill_(mask: Tensor, value: float | bool) \u2192 Self# Fills the values corresponding to the mask with the desired value. The values are written into the existing leaves, which keep their storage. See In-place operations. Parameters: mask (boolean torch.Tensor) \u2013 mask of values to be filled. Its shape must match the leading dims of the batch size. value \u2013 value to used to fill the tensors. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(source={\u0027a\u0027: torch.zeros(3, 4)}, ... batch_size=[3]) \u003e\u003e\u003e mask = torch.tensor([True, False, False]) \u003e\u003e\u003e _ = td.masked_fill_(mask, 1.0) \u003e\u003e\u003e td.get(\"a\") tensor([[1., 1., 1., 1.], [0., 0., 0., 0.], [0., 0., 0., 0.]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.masked_fill# TensorDictBase.masked_fill_(mask: Tensor, value: float | bool) \u2192 Self# Writes value into every leaf where mask is True, in place. The leaves keep their storage, and the call works on a locked tensordict. See In-place operations. Parameters: mask (Tensor) \u2013 a boolean mask over the leading batch dimensions: its shape is the batch size, or its first dimensions. It is expanded to the shape of each leaf. value (float or bool) \u2013 the value to write. Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(source={\u0027a\u0027: torch.zeros(3, 4)}, ... batch_size=[3]) \u003e\u003e\u003e mask = torch.tensor([True, False, False]) \u003e\u003e\u003e _ = td.masked_fill_(mask, 1.0) \u003e\u003e\u003e td.get(\"a\") tensor([[1., 1., 1., 1.], [0., 0., 0., 0.], [0., 0., 0., 0.]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -2,10 +2,19 @@
 
 TensorDictBase.expand_as(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → Self
 
-Broadcasts the shape of the tensordict to the shape of other and expands it accordingly.
+Returns the tensordict expanded to the shape of `other`.
 
-If the input is a tensor collection (tensordict or tensorclass),
-the leaves will be expanded on a one-to-one basis.
+If `other` is a tensor, this is `expand(other.shape)`: the batch
+size of the result is the shape of `other`. If `other` is a
+tensordict or a tensorclass, each leaf is expanded to the shape of the
+leaf with the same key in `other`, with
+[`torch.Tensor.expand_as()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand_as.html#torch.Tensor.expand_as), and the result has the batch size of
+`other`. The leaves of the result are views of the original leaves.
+
+Parameters:
+
+**other** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensor or the
+tensordict whose shape to expand to.
 
 Examples
 
@@ -23,20 +32,13 @@ Examples
 ... batch_size=[2, 3],
 ... )
 >>> expanded = td0.expand_as(td1)
->>> assert (expanded==1).all()
->>> print(expanded)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3, 5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- b: TensorDict(
- fields={
- c: Tensor(shape=torch.Size([2, 3, 2, 6, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)
+>>> assert (expanded == 1).all()
+>>> expanded.batch_size
+torch.Size([2, 3])
+>>> expanded["a"].shape, expanded["b", "c"].shape
+(torch.Size([2, 3, 5, 4]), torch.Size([2, 3, 2, 6, 4]))
+>>> td0.expand_as(torch.zeros(2, 3)).batch_size
+torch.Size([2, 3])
 ```
 
 Every tensordict class and every tensorclass has this method. For the

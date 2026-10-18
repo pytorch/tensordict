@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,24 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.is_tensorclass">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">is_tensorclass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><span class="pre">type</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.is_tensorclass" title="Link to this definition">#</a></dt>
-<dd><p>Returns True if obj is either a tensorclass or an instance of a tensorclass.</p>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="docutils literal notranslate"><span class="pre">obj</span></code> is a tensorclass type or an instance of one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>obj</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><em>object</em></a>) – the class or the object to check.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">is_tensorclass</span><span class="p">,</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">Data</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">is_tensorclass</span><span class="p">(</span><span class="n">Data</span><span class="p">),</span> <span class="n">is_tensorclass</span><span class="p">(</span><span class="n">Data</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)))</span>
+<span class="go">(True, True)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">is_tensorclass</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">())</span>
+<span class="go">False</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2001,7 +2018,7 @@ document.write(`
        "headline": "is_tensorclass",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - is_tensorclass",
        "url": "/reference/generated/tensordict.is_tensorclass.html",
-       "articleBody": "is_tensorclass# tensordict.is_tensorclass(obj: type | Any) \u2192 bool# Returns True if obj is either a tensorclass or an instance of a tensorclass.",
+       "articleBody": "is_tensorclass# tensordict.is_tensorclass(obj: type | Any) \u2192 bool# Returns True if obj is a tensorclass type or an instance of one. Parameters: obj (type or object) \u2013 the class or the object to check. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, is_tensorclass, tensorclass \u003e\u003e\u003e @tensorclass ... class Data: ... x: torch.Tensor \u003e\u003e\u003e is_tensorclass(Data), is_tensorclass(Data(x=torch.zeros(2))) (True, True) \u003e\u003e\u003e is_tensorclass(TensorDict()) False",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

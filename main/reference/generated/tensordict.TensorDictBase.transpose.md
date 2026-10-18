@@ -2,12 +2,12 @@
 
 TensorDictBase.transpose(*dim0*, *dim1*)
 
-Returns a tensordict that is a transposed version of input. The given dimensions `dim0` and `dim1` are swapped.
+Returns a tensordict with the batch dimensions `dim0` and `dim1` swapped.
 
-In-place modifications of the transposed tensordict will impact the
-original tensordict too as the memory is shared. To map out-place
-modifications (such as new entries) back on the original tensordict,
-use the transposed tensordict as a context manager.
+The leaves of the result are views of the original leaves, so an
+in-place change of the result changes the tensordict too. The names
+are swapped with the dimensions. To write new entries back to the
+tensordict, use the result as a context manager.
 
 Parameters:
 
@@ -19,12 +19,12 @@ Examples
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
+>>> tensordict = TensorDict({"a": torch.zeros(3, 4, 5)}, [3, 4])
 >>> tensordict_transpose = tensordict.transpose(0, 1)
 >>> print(tensordict_transpose.shape)
 torch.Size([4, 3])
 >>> with tensordict.transpose(0, 1) as tensordict_transpose:
-... tensordict_transpose["b"] = torch.randn(4, 3)
+... tensordict_transpose["b"] = torch.zeros(4, 3)
 >>> print(tensordict.get("b").shape)
 torch.Size([3, 4])
 ```

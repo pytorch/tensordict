@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1645,7 +1645,11 @@ document.write(`
 <dd><p>Sets the device of the tensordict and its sub-tensordicts to <code class="docutils literal notranslate"><span class="pre">None</span></code>, and returns it.</p>
 <p>The leaves are not moved. After this call, you can set leaves on any
 device. See <a class="reference internal" href="../../concepts/devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>.</p>
-<p>Returns: self</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2024,7 +2028,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.clear_device",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.clear_device",
        "url": "/reference/generated/tensordict.TensorDictBase.clear_device_.html",
-       "articleBody": "TensorDictBase.clear_device# TensorDictBase.clear_device_() \u2192 Self# Sets the device of the tensordict and its sub-tensordicts to None, and returns it. The leaves are not moved. After this call, you can set leaves on any device. See Devices, dtypes, and memory. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3], device=\"cpu\") \u003e\u003e\u003e td = td.clear_device_() \u003e\u003e\u003e print(td.device) None \u003e\u003e\u003e td[\"a\"].device device(type=\u0027cpu\u0027) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use clear_device_# Devices and memory-mapped tensors Devices and memory-mapped tensors",
+       "articleBody": "TensorDictBase.clear_device# TensorDictBase.clear_device_() \u2192 Self# Sets the device of the tensordict and its sub-tensordicts to None, and returns it. The leaves are not moved. After this call, you can set leaves on any device. See Devices, dtypes, and memory. Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3], device=\"cpu\") \u003e\u003e\u003e td = td.clear_device_() \u003e\u003e\u003e print(td.device) None \u003e\u003e\u003e td[\"a\"].device device(type=\u0027cpu\u0027) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use clear_device_# Devices and memory-mapped tensors Devices and memory-mapped tensors",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

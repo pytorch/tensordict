@@ -2,7 +2,7 @@
 
 tensordict.lazy_stack(*input: Sequence['T']*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, ***, *out=None*, ***kwargs*) → T
 
-Stacks tensordicts in a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict).
+Stacks tensordicts into a lazy stack ([`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict)).
 
 The result keeps each input as a separate tensordict, so the inputs can
 have different keys, entry shapes and batch sizes. Use it for data whose
@@ -10,7 +10,7 @@ size changes from one sample to the next. [Stacking and variable-size data](../.
 function with [`stack()`](tensordict.stack.html#tensordict.stack) and
 [`maybe_dense_stack()`](tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack). Same as
 [`tensordict.LazyStackedTensorDict.lazy_stack()`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.lazy_stack), which takes the same
-arguments.
+arguments and documents the ones for lists of tensors.
 
 Parameters:
 
@@ -27,15 +27,17 @@ an `IndexError`, as for a tensor.
 Keyword Arguments:
 
 - **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a lazy stack to write the result
-into. Its batch size must be the stacked batch size.
-- **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - a name for the stacked dimension.
-- **strict_shape** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch sizes of the
+into. Its batch size must be the stacked batch size. Defaults to
+`None`.
+- **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the name of the stack dimension.
+Defaults to `None`.
+- **strict_shape** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the batch sizes of the
 inputs must be equal, or a `RuntimeError` is raised. Defaults
 to `False`.
 
 Returns:
 
-a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict). Tensorclass inputs give
+A [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict). Tensorclass inputs give
 an instance of their class that holds a lazy stack.
 
 Examples

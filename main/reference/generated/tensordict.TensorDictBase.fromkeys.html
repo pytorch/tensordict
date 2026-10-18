@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,15 +1642,31 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.fromkeys">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">fromkeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.fromkeys" title="Link to this definition">#</a></dt>
-<dd><p>Creates a tensordict from a list of keys and a single value.</p>
+<dd><p>Creates a tensordict with the same value for every key, like <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict.fromkeys" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dict.fromkeys()</span></code></a>.</p>
+<p>The result is a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with an empty batch
+size. A nested key creates nested tensordicts. A Python number becomes
+a tensor for each key, and a tensor is stored as it is: every key then
+holds the same tensor object.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>keys</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – An iterable specifying the keys of the new dictionary.</p></li>
-<li><p><strong>value</strong> (<em>compatible type</em><em>, </em><em>optional</em>) – The value for all keys. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p><strong>keys</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the keys of the result.</p></li>
+<li><p><strong>value</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value of every key: a tensor, a number,
+or any value that the <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
+constructor takes. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">([</span><span class="s2">"a"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">)],</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span>
+<span class="go">tensor([0., 0., 0.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span>
+<span class="go">True</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2011,7 +2027,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.fromkeys",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.fromkeys",
        "url": "/reference/generated/tensordict.TensorDictBase.fromkeys.html",
-       "articleBody": "TensorDictBase.fromkeys# classmethod TensorDictBase.fromkeys(keys: List[NestedKey], value: Any = 0)# Creates a tensordict from a list of keys and a single value. Parameters: keys (list of NestedKey) \u2013 An iterable specifying the keys of the new dictionary. value (compatible type, optional) \u2013 The value for all keys. Defaults to 0. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.fromkeys# classmethod TensorDictBase.fromkeys(keys: List[NestedKey], value: Any = 0)# Creates a tensordict with the same value for every key, like dict.fromkeys(). The result is a TensorDict with an empty batch size. A nested key creates nested tensordicts. A Python number becomes a tensor for each key, and a tensor is stored as it is: every key then holds the same tensor object. Parameters: keys (list of NestedKey) \u2013 the keys of the result. value (Any, optional) \u2013 the value of every key: a tensor, a number, or any value that the TensorDict constructor takes. Defaults to 0. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict.fromkeys([\"a\", (\"b\", \"c\")], torch.zeros(3)) \u003e\u003e\u003e td[\"b\", \"c\"] tensor([0., 0., 0.]) \u003e\u003e\u003e td[\"a\"] is td[\"b\", \"c\"] True Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

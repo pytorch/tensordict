@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,56 +1642,47 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.utils.remove_duplicates">
 <span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">remove_duplicates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.utils.remove_duplicates" title="Link to this definition">#</a></dt>
-<dd><p>Removes indices duplicated in <cite>key</cite> along the specified dimension.</p>
-<p>This method detects duplicate elements in the tensor associated with the specified <cite>key</cite> along the specified
-<cite>dim</cite> and removes elements in the same indices in all other tensors within the TensorDict. It is expected for
-<cite>dim</cite> to be one of the dimensions within the batch size of the input TensorDict to ensure consistency in all
-tensors. Otherwise, an error will be raised.</p>
+<dd><p>Returns a tensordict without the elements whose <code class="docutils literal notranslate"><span class="pre">key</span></code> value repeats an earlier one.</p>
+<p>The entry <code class="docutils literal notranslate"><span class="pre">key</span></code> is cut into slices along <code class="docutils literal notranslate"><span class="pre">dim</span></code>. For each group of
+equal slices, the first element is kept, and the same indices are kept in
+every other entry. The result is sorted by the value of <code class="docutils literal notranslate"><span class="pre">key</span></code>, not in
+the original order, and its entries are new tensors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – The TensorDict containing potentially duplicate elements.</p></li>
-<li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – The key of the tensor along which duplicate elements should be identified and removed. It
-must be one of the leaf keys within the TensorDict, pointing to a tensor and not to another TensorDict.</p></li>
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – The dimension along which duplicate elements should be identified and removed. It must be one of
-the dimensions within the batch size of the input TensorDict. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
-<li><p><strong>return_indices</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the indices of the unique elements in the input tensor will be
-returned as well. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>input</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensordict to deduplicate.</p></li>
+<li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the tensor that defines duplicates. It
+must hold a tensor, not a tensordict.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch dimension along which to look for
+duplicates. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><dl class="simple">
-<dt>input tensordict with the indices corrsponding to duplicated elements</dt><dd><p>in tensor <cite>key</cite> along dimension <cite>dim</cite> removed.</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>return_indices</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, also returns, for each
+element of <code class="docutils literal notranslate"><span class="pre">input</span></code> along <code class="docutils literal notranslate"><span class="pre">dim</span></code>, the index of its value in the
+result. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
-<dt>unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the</dt><dd><p>input tensordict for the specified <cite>key</cite> along the specified <cite>dim</cite>. Only provided if <cite>return_indices</cite> is True.</p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The deduplicated tensordict, or a tuple of the tensordict and the
+indices if <code class="docutils literal notranslate"><span class="pre">return_indices=True</span></code>.</p>
 </dd>
-</dl>
-</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>output (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>)</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">key</span></code> is missing or does not hold a tensor.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">dim</span></code> is not a batch dimension.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">remove_duplicates</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span>
-<span class="gp">... </span>        <span class="s2">"tensor1"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]]),</span>
-<span class="gp">... </span>        <span class="s2">"tensor2"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span> <span class="p">[</span><span class="mi">30</span><span class="p">,</span> <span class="mi">40</span><span class="p">],</span> <span class="p">[</span><span class="mi">40</span><span class="p">,</span> <span class="mi">50</span><span class="p">],</span> <span class="p">[</span><span class="mi">50</span><span class="p">,</span> <span class="mi">60</span><span class="p">]]),</span>
-<span class="gp">... </span>    <span class="p">},</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output_tensordict</span> <span class="o">=</span> <span class="n">remove_duplicates</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"tensor1"</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">expected_output</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span>
-<span class="gp">... </span>        <span class="s2">"tensor1"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]]),</span>
-<span class="gp">... </span>        <span class="s2">"tensor2"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span> <span class="p">[</span><span class="mi">30</span><span class="p">,</span> <span class="mi">40</span><span class="p">],</span> <span class="p">[</span><span class="mi">50</span><span class="p">,</span> <span class="mi">60</span><span class="p">]]),</span>
-<span class="gp">... </span>    <span class="p">},</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">output_tensordict</span> <span class="o">==</span> <span class="n">expected_output</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">7</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">3</span><span class="p">]),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">remove_duplicates</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out</span><span class="p">[</span><span class="s2">"y"</span><span class="p">]</span>
+<span class="go">(tensor([1, 3, 7]), tensor([1, 3, 0]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span>
+<span class="go">tensor([2, 0, 2, 1])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2052,7 +2043,7 @@ returned as well. Defaults to <code class="docutils literal notranslate"><span c
        "headline": "remove_duplicates",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - remove_duplicates",
        "url": "/reference/generated/tensordict.utils.remove_duplicates.html",
-       "articleBody": "remove_duplicates# tensordict.utils.remove_duplicates(input: TensorDictBase, key: NestedKey, dim: int = 0, *, return_indices: bool = False) \u2192 TensorDictBase# Removes indices duplicated in key along the specified dimension. This method detects duplicate elements in the tensor associated with the specified key along the specified dim and removes elements in the same indices in all other tensors within the TensorDict. It is expected for dim to be one of the dimensions within the batch size of the input TensorDict to ensure consistency in all tensors. Otherwise, an error will be raised. Parameters: input (TensorDictBase) \u2013 The TensorDict containing potentially duplicate elements. key (NestedKey) \u2013 The key of the tensor along which duplicate elements should be identified and removed. It must be one of the leaf keys within the TensorDict, pointing to a tensor and not to another TensorDict. dim (int, optional) \u2013 The dimension along which duplicate elements should be identified and removed. It must be one of the dimensions within the batch size of the input TensorDict. Defaults to 0. return_indices (bool, optional) \u2013 If True, the indices of the unique elements in the input tensor will be returned as well. Defaults to False. Returns: input tensordict with the indices corrsponding to duplicated elementsin tensor key along dimension dim removed. unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in theinput tensordict for the specified key along the specified dim. Only provided if return_indices is True. Return type: output (TensorDictBase) Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.utils import remove_duplicates \u003e\u003e\u003e td = TensorDict( ... { ... \"tensor1\": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]), ... \"tensor2\": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]), ... }, ... batch_size=[4], ... ) \u003e\u003e\u003e output_tensordict = remove_duplicates(td, key=\"tensor1\", dim=0) \u003e\u003e\u003e expected_output = TensorDict( ... { ... \"tensor1\": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), ... \"tensor2\": torch.tensor([[10, 20], [30, 40], [50, 60]]), ... }, ... batch_size=[3], ... ) \u003e\u003e\u003e assert (output_tensordict == expected_output).all()",
+       "articleBody": "remove_duplicates# tensordict.utils.remove_duplicates(input: TensorDictBase, key: NestedKey, dim: int = 0, *, return_indices: bool = False) \u2192 TensorDictBase# Returns a tensordict without the elements whose key value repeats an earlier one. The entry key is cut into slices along dim. For each group of equal slices, the first element is kept, and the same indices are kept in every other entry. The result is sorted by the value of key, not in the original order, and its entries are new tensors. Parameters: input (TensorDictBase) \u2013 the tensordict to deduplicate. key (NestedKey) \u2013 the key of the tensor that defines duplicates. It must hold a tensor, not a tensordict. dim (int, optional) \u2013 the batch dimension along which to look for duplicates. Defaults to 0. Keyword Arguments: return_indices (bool, optional) \u2013 if True, also returns, for each element of input along dim, the index of its value in the result. Defaults to False. Returns: The deduplicated tensordict, or a tuple of the tensordict and the indices if return_indices=True. Raises: KeyError \u2013 if key is missing or does not hold a tensor. ValueError \u2013 if dim is not a batch dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.utils import remove_duplicates \u003e\u003e\u003e td = TensorDict(x=torch.tensor([7, 1, 7, 3]), y=torch.arange(4), batch_size=[4]) \u003e\u003e\u003e out, indices = remove_duplicates(td, key=\"x\", return_indices=True) \u003e\u003e\u003e out[\"x\"], out[\"y\"] (tensor([1, 3, 7]), tensor([1, 3, 0])) \u003e\u003e\u003e indices tensor([2, 0, 2, 1])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

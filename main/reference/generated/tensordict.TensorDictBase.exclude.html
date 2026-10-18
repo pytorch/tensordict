@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,48 +1642,40 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.exclude">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">exclude</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.exclude" title="Link to this definition">#</a></dt>
-<dd><p>Excludes the keys of the tensordict and returns a new tensordict without these entries.</p>
-<p>The values are not copied. The result shares its tensors with the
-original, so an in-place change to a tensor in one tensordict shows in
-the other. Unlike <a class="reference internal" href="tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select" title="tensordict.TensorDictBase.select"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select()</span></code></a>, a missing key is ignored: there is
-no <code class="docutils literal notranslate"><span class="pre">strict</span></code> argument. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
+<dd><p>Returns a tensordict without the entries of <code class="docutils literal notranslate"><span class="pre">keys</span></code>.</p>
+<p>The values are not copied: the result holds the same tensors as the
+tensordict, so an in-place change to a tensor shows in both. A nested
+key removes one entry of a nested tensordict, and the key of a nested
+tensordict removes all its entries. Unlike <a class="reference internal" href="tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select" title="tensordict.TensorDictBase.select"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select()</span></code></a>, a missing
+key is ignored. The result is not locked. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>*keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – keys to exclude.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the keys are removed from this
-tensordict, and this tensordict is returned.
-Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>*keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the keys to remove.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new tensordict (or the same if <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>) without the excluded entries.</p>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, removes the entries from the
+tensordict and returns it. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A tensordict of the same type, or <code class="docutils literal notranslate"><span class="pre">self</span></code> if <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">    },</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">"this key does not exist"</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-<span class="go">['a', 'b']</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="nb">next</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sub</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">"action"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"next"</span><span class="p">,</span> <span class="s2">"obs"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">sub</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['obs', ('next', 'reward')]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sub</span><span class="p">[</span><span class="s2">"obs"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"obs"</span><span class="p">]</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">"missing"</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['action', 'next', 'obs']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2053,7 +2045,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.exclude",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.exclude",
        "url": "/reference/generated/tensordict.TensorDictBase.exclude.html",
-       "articleBody": "TensorDictBase.exclude# TensorDictBase.exclude(*keys: NestedKey, inplace: bool = False) \u2192 Self# Excludes the keys of the tensordict and returns a new tensordict without these entries. The values are not copied. The result shares its tensors with the original, so an in-place change to a tensor in one tensordict shows in the other. Unlike select(), a missing key is ignored: there is no strict argument. See Keys, nested keys, and locking. Parameters: *keys (NestedKey) \u2013 keys to exclude. inplace (bool) \u2013 if True, the keys are removed from this tensordict, and this tensordict is returned. Default is False. Returns: A new tensordict (or the same if inplace=True) without the excluded entries. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": 0, \"b\": {\"c\": 1, \"d\": 2}}, []) \u003e\u003e\u003e td.exclude(\"a\", (\"b\", \"c\")) TensorDict( fields={ b: TensorDict( fields={ d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e td.exclude(\"a\", \"b\") TensorDict( fields={ }, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e list(td.exclude(\"this key does not exist\").keys()) [\u0027a\u0027, \u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use exclude# Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.exclude# TensorDictBase.exclude(*keys: NestedKey, inplace: bool = False) \u2192 Self# Returns a tensordict without the entries of keys. The values are not copied: the result holds the same tensors as the tensordict, so an in-place change to a tensor shows in both. A nested key removes one entry of a nested tensordict, and the key of a nested tensordict removes all its entries. Unlike select(), a missing key is ignored. The result is not locked. See Keys, nested keys, and locking. Parameters: *keys (NestedKey) \u2013 the keys to remove. Keyword Arguments: inplace (bool, optional) \u2013 if True, removes the entries from the tensordict and returns it. Defaults to False. Returns: A tensordict of the same type, or self if inplace=True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... obs=torch.zeros(3, 4), ... action=torch.zeros(3, 2), ... next=TensorDict(obs=torch.zeros(3, 4), reward=torch.zeros(3, 1)), ... batch_size=[3], ... ) \u003e\u003e\u003e sub = td.exclude(\"action\", (\"next\", \"obs\")) \u003e\u003e\u003e list(sub.keys(include_nested=True, leaves_only=True)) [\u0027obs\u0027, (\u0027next\u0027, \u0027reward\u0027)] \u003e\u003e\u003e sub[\"obs\"] is td[\"obs\"] True \u003e\u003e\u003e sorted(td.exclude(\"missing\").keys()) [\u0027action\u0027, \u0027next\u0027, \u0027obs\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use exclude# Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

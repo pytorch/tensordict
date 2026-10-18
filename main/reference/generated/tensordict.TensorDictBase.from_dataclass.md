@@ -2,47 +2,73 @@
 
 *classmethod*TensorDictBase.from_dataclass(*dataclass*, ***, *dest_cls: [Type](https://docs.python.org/3/library/typing.html#typing.Type) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *as_tensorclass: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Converts a dataclass into a TensorDict instance.
+Converts a dataclass instance to a tensordict, with one entry per field.
+
+Each field value is converted with [`from_any()`](tensordict.TensorDictBase.from_any.html#tensordict.TensorDictBase.from_any), so a nested
+dataclass or dict becomes a nested tensordict and a number becomes a
+tensor. With `as_tensorclass=True`, the conversion is that of the
+function [`from_dataclass()`](tensordict.from_dataclass.html#tensordict.from_dataclass) instead, which returns a
+tensorclass.
 
 Parameters:
 
-**dataclass** - The dataclass instance to be converted.
+**dataclass** - the dataclass instance to convert. With
+`as_tensorclass=True`, it can also be a dataclass type.
 
 Keyword Arguments:
 
-- **dest_cls** ([*tensorclass*](tensordict.tensorclass.html#tensordict.tensorclass)*,**optional*) - A tensorclass type to be used to map the data. If not provided, a new
-class is created. Without effect if `obj` is a type or as_tensorclass is False.
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, automatically determines and applies batch size to the
-resulting TensorDict. Defaults to `False`.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **as_tensorclass** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, delegates the conversion to the free function
-[`from_dataclass()`](tensordict.from_dataclass.html#tensordict.from_dataclass) and returns a tensor-compatible class ([`tensorclass()`](tensordict.tensorclass.html#tensordict.tensorclass))
-or instance instead of a TensorDict. Defaults to `False`.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
+- **dest_cls** ([*type*](https://docs.python.org/3/builtins/functions.html#type)*,**optional*) - with `as_tensorclass=True`, the
+tensorclass to convert to. Ignored otherwise. Defaults to
+`None`, which creates a new tensorclass with the fields of
+the dataclass.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`. Defaults to `None`.
+- **as_tensorclass** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns a
+tensorclass instance (or a tensorclass type, for a dataclass
+type) through [`from_dataclass()`](tensordict.from_dataclass.html#tensordict.from_dataclass). Defaults to
+`False`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
-Defaults to `None`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`, an
+empty batch size.
 
 Returns:
 
-A TensorDict instance derived from the provided dataclass, unless as_tensorclass is True, in which case a tensor-compatible class or instance is returned.
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a tensorclass instance or
+type if `as_tensorclass=True`.
 
 Raises:
 
-[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - If the provided input is not a dataclass instance.
+[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `dataclass` is not a dataclass and
+ `as_tensorclass=False`, or if both `auto_batch_size=True`
+ and `batch_size` are given.
 
-Warning
+Examples
 
-This method is distinct from the free function from_dataclass and serves a different purpose.
-While the free function returns a tensor-compatible class or instance, this method returns a TensorDict instance.
-
-Note
-
-- This method creates a new TensorDict instance with keys corresponding to the fields of the input dataclass.
-- Each key in the resulting TensorDict is initialized using the cls.from_any method.
-- The auto_batch_size option allows for automatic batch size determination and application to the
-resulting TensorDict.
+```
+>>> import dataclasses
+>>> import torch
+>>> from tensordict import TensorDict
+>>> @dataclasses.dataclass
+... class Data:
+... obs: torch.Tensor
+... reward: torch.Tensor
+>>> data = Data(obs=torch.zeros(3, 4), reward=torch.ones(3))
+>>> td = TensorDict.from_dataclass(data, auto_batch_size=True)
+>>> type(td).__name__, td.batch_size
+('TensorDict', torch.Size([3]))
+>>> tc = TensorDict.from_dataclass(data, as_tensorclass=True, batch_size=[3])
+>>> type(tc).__name__, tc.batch_size
+('Data_tc', torch.Size([3]))
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

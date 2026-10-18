@@ -2,7 +2,7 @@
 
 tensordict.save(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
-Saves a tensordict to disk, as memory-mapped files.
+Saves a tensordict to disk, and returns a memory-mapped copy of it.
 
 Same as [`memmap()`](tensordict.memmap.html#tensordict.memmap), and as
 [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap), which holds the full text of
@@ -16,29 +16,30 @@ Parameters:
 
 - **data** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**tensorclass instance*) - the tensordict to save.
 - **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the directory to write to, or a file name that
-ends with `".tdz"`. If `None`, the tensors are written to
-anonymous shared memory and nothing is saved to disk.
+ends with `".tdz"`. Defaults to `None`, which writes the
+tensors to anonymous shared memory and saves nothing to disk.
 - **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, an entry that is already
 memory-mapped to a file outside `prefix` raises an error. If
 `True`, it is copied. Defaults to `False`.
 
 Keyword Arguments:
 
-- **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of threads that write the
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that write the
 files. Defaults to `0`.
-- **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and `num_threads > 0`,
-a future of the result is returned. Defaults to `False`.
-- **share_non_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, non-tensor entries are
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `num_threads > 1`,
+returns a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) at once, while
+the threads write the files. Defaults to `False`.
+- **share_non_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, non-tensor entries are
 shared between the processes of a node. Defaults to `False`.
-- **robust_key** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, keys that hold path
+- **robust_key** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, keys that hold path
 separators or special characters are encoded in the file names.
 Defaults to `True`.
-- **archive** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, `prefix` is a file and the
+- **archive** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, `prefix` is a file and the
 tensordict is written as a single zip archive that
 [`load()`](tensordict.load.html#tensordict.load) can memory-map. If `None`, an archive
 is written when `prefix` ends with `".tdz"`. Defaults to
 `None`.
-- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the compression of the archive
+- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression of the archive
 entries: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"` or a
 [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. Only valid for an archive. Defaults to
 `None`, which stores them uncompressed. Only uncompressed
@@ -46,7 +47,7 @@ entries load without a copy.
 
 Returns:
 
-a new, locked tensordict whose leaves are
+A new, locked tensordict whose leaves are
 [`MemoryMappedTensor`](tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) instances backed by the
 saved files. `data` itself is not changed.
 

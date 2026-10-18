@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1644,30 +1644,33 @@ document.write(`
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__getitem__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.__getitem__" title="Link to this definition">#</a></dt>
 <dt class="sig sig-object py">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__getitem__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IndexType</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span></dt>
-<dd><p>Indexes all tensors according to the provided index.</p>
-<p>The index can be a (nested) key or any valid shape index given the
-tensordict batch size.</p>
-<p>If the index is a nested key and the result is a <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>
-object, the content of the non-tensor is returned.</p>
+<dd><p>Returns the entry at a key, or the tensordict indexed along its batch dimensions.</p>
+<p>A string or a tuple of strings reads an entry, as <a class="reference internal" href="tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> does,
+except that a missing key raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. A non-tensor entry
+returns its content (the string, not the
+<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>), and a stack of non-tensor data
+returns a list. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
+<p>Any other index (an int, a slice, a tensor, a boolean mask, <code class="docutils literal notranslate"><span class="pre">...</span></code>,
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, or a tuple of these) applies to the batch dimensions of every
+entry, as it would to a tensor of shape <a class="reference internal" href="tensordict.TensorDictBase.batch_size.html#tensordict.TensorDictBase.batch_size" title="tensordict.TensorDictBase.batch_size"><code class="xref py py-attr docutils literal notranslate"><span class="pre">batch_size</span></code></a>, and
+returns a tensordict. See <a class="reference internal" href="../../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the key is missing.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"root"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="p">(</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"entry"</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">2</span><span class="p">)},</span> <span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"root"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="p">(</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"entry"</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">2</span><span class="p">)},</span> <span class="p">[</span><span class="mi">2</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"root"</span><span class="p">]</span>
 <span class="go">tensor([0, 1])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"entry"</span><span class="p">]</span>
 <span class="go">tensor([0, 1])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        nested: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                entry: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([1]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        root: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([1]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">td</span><span class="p">[:</span><span class="mi">1</span><span class="p">][</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"entry"</span><span class="p">]</span>
+<span class="go">(torch.Size([1]), tensor([0]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])][</span><span class="s2">"root"</span><span class="p">]</span>
+<span class="go">tensor([0])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2030,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__getitem__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__getitem__",
        "url": "/reference/generated/tensordict.TensorDictBase.__getitem__.html",
-       "articleBody": "TensorDictBase.__getitem__# TensorDictBase.__getitem__(index: str | tuple[str, ...]) \u2192 Any# TensorDictBase.__getitem__(index: IndexType) \u2192 Self Indexes all tensors according to the provided index. The index can be a (nested) key or any valid shape index given the tensordict batch size. If the index is a nested key and the result is a NonTensorData object, the content of the non-tensor is returned. Examples \u003e\u003e\u003e td = TensorDict({\"root\": torch.arange(2), (\"nested\", \"entry\"): torch.arange(2)}, [2]) \u003e\u003e\u003e td[\"root\"] tensor([0, 1]) \u003e\u003e\u003e td[\"nested\", \"entry\"] tensor([0, 1]) \u003e\u003e\u003e td[:1] TensorDict( fields={ nested: TensorDict( fields={ entry: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([1]), device=None, is_shared=False), root: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([1]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__getitem__# TensorDictBase.__getitem__(index: str | tuple[str, ...]) \u2192 Any# TensorDictBase.__getitem__(index: IndexType) \u2192 Self Returns the entry at a key, or the tensordict indexed along its batch dimensions. A string or a tuple of strings reads an entry, as get() does, except that a missing key raises KeyError. A non-tensor entry returns its content (the string, not the NonTensorData), and a stack of non-tensor data returns a list. See Keys, nested keys, and locking. Any other index (an int, a slice, a tensor, a boolean mask, ..., None, or a tuple of these) applies to the batch dimensions of every entry, as it would to a tensor of shape batch_size, and returns a tensordict. See Batch size, shapes, and indexing. Raises: KeyError \u2013 if the key is missing. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"root\": torch.arange(2), (\"nested\", \"entry\"): torch.arange(2)}, [2]) \u003e\u003e\u003e td[\"root\"] tensor([0, 1]) \u003e\u003e\u003e td[\"nested\", \"entry\"] tensor([0, 1]) \u003e\u003e\u003e td[:1].batch_size, td[:1][\"nested\", \"entry\"] (torch.Size([1]), tensor([0])) \u003e\u003e\u003e td[torch.tensor([True, False])][\"root\"] tensor([0]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -2,24 +2,22 @@
 
 TensorDictBase.clone(*recurse: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, ***kwargs*) → Self
 
-Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.
+Returns a copy of the tensordict, of the same type.
 
-To create a TensorDict instance from any other TensorDictBase subtype, call the [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) method
-instead.
+With `recurse=True`, every tensor leaf is copied. The result is not
+locked, even if the tensordict is: a clone is usually made to be
+modified. To get a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) from any other type,
+call [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) instead.
 
 Parameters:
 
-**recurse** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, each tensor contained in the
-TensorDict will be copied too. Otherwise only the TensorDict
-tree structure is copied: the sub-tensordicts are new objects,
-but the leaves are the same tensors as in `self`. Defaults to
-`True`.
-
-Note
-
-Unlike many other ops (pointwise arithmetic, shape operations, ...) `clone` does not inherit the
-original lock attribute. This design choice is made such that a clone can be created to be modified,
-which is the most frequent usage.
+- **recurse** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the leaves are copied too.
+If `False`, only the tree of nested tensordicts is copied:
+the nested tensordicts are new objects, and the leaves are the
+same tensors as in the tensordict. Defaults to `True`.
+- ****kwargs** - options of the class, for example `newfile`, the
+destination file of a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)
+cloned with `recurse=True`.
 
 Examples
 

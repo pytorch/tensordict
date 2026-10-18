@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.unravel_key_to_tuple">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">unravel_key_to_tuple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.unravel_key_to_tuple" title="Link to this definition">#</a></dt>
-<dd><p>Unravel a nested key into a flat tuple of str.</p>
+<dd><p>Unravels a nested key into a flat tuple of str.</p>
 <p>Unlike <a class="reference internal" href="tensordict.unravel_key.html#tensordict.unravel_key" title="tensordict.unravel_key"><code class="xref py py-func docutils literal notranslate"><span class="pre">unravel_key()</span></code></a>, a str key gives a one-element
 tuple, and an invalid key gives <code class="docutils literal notranslate"><span class="pre">()</span></code> instead of raising.</p>
 <dl class="field-list simple">
@@ -1650,7 +1650,7 @@ tuple, and an invalid key gives <code class="docutils literal notranslate"><span
 <dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key to unravel.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a flat tuple of str, or <code class="docutils literal notranslate"><span class="pre">()</span></code> if <code class="docutils literal notranslate"><span class="pre">key</span></code> is not a valid nested key.</p>
+<dd class="field-even"><p>A flat tuple of str, or <code class="docutils literal notranslate"><span class="pre">()</span></code> if <code class="docutils literal notranslate"><span class="pre">key</span></code> is not a valid nested key.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2023,7 +2023,7 @@ tuple, and an invalid key gives <code class="docutils literal notranslate"><span
        "headline": "unravel_key_to_tuple",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - unravel_key_to_tuple",
        "url": "/reference/generated/tensordict.unravel_key_to_tuple.html",
-       "articleBody": "unravel_key_to_tuple# tensordict.unravel_key_to_tuple(key: NestedKey) \u2192 tuple[str, ...]# Unravel a nested key into a flat tuple of str. Unlike unravel_key(), a str key gives a one-element tuple, and an invalid key gives () instead of raising. Parameters: key (NestedKey) \u2013 the key to unravel. Returns: a flat tuple of str, or () if key is not a valid nested key. Examples \u003e\u003e\u003e from tensordict import unravel_key_to_tuple \u003e\u003e\u003e unravel_key_to_tuple(\"a\") (\u0027a\u0027,) \u003e\u003e\u003e unravel_key_to_tuple((\"a\", (\"b\", (\"c\",)))) (\u0027a\u0027, \u0027b\u0027, \u0027c\u0027) \u003e\u003e\u003e unravel_key_to_tuple((\"a\", 1)) () \u003e\u003e\u003e unravel_key_to_tuple(1) ()",
+       "articleBody": "unravel_key_to_tuple# tensordict.unravel_key_to_tuple(key: NestedKey) \u2192 tuple[str, ...]# Unravels a nested key into a flat tuple of str. Unlike unravel_key(), a str key gives a one-element tuple, and an invalid key gives () instead of raising. Parameters: key (NestedKey) \u2013 the key to unravel. Returns: A flat tuple of str, or () if key is not a valid nested key. Examples \u003e\u003e\u003e from tensordict import unravel_key_to_tuple \u003e\u003e\u003e unravel_key_to_tuple(\"a\") (\u0027a\u0027,) \u003e\u003e\u003e unravel_key_to_tuple((\"a\", (\"b\", (\"c\",)))) (\u0027a\u0027, \u0027b\u0027, \u0027c\u0027) \u003e\u003e\u003e unravel_key_to_tuple((\"a\", 1)) () \u003e\u003e\u003e unravel_key_to_tuple(1) ()",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

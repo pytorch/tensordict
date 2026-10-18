@@ -7,9 +7,14 @@ Bases: [`list`](https://docs.python.org/3/builtins/stdtypes.html#list)
 A list of the values of a non-tensor entry that writes item assignments back to the tensordict.
 
 `td[key]` returns a `LinkedList` when the entry is a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack). Setting an item
-(`values[0] = "z"`) writes the value to the tensordict. `append` and
-`extend` change the list only, and unlink it from the tensordict.
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), and so does
+[`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist) with `as_linked_list=True`.
+Setting an item (`values[0] = "z"`) writes the value to the tensordict.
+The methods that change the length of the list (`append`, `extend`,
+`insert`, `pop`, `remove`, `clear` and `del`) change the list
+only, and unlink it from the tensordict: later item assignments no longer
+write back. A `LinkedList` compares equal to a list with the same
+items.
 
 Examples
 
@@ -25,28 +30,24 @@ Examples
 
 append(*object: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Append object to the end of the list.
+Appends `object` to the list and unlinks the list from the tensordict.
 
 clear() → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Remove all items from list.
+Removes every item and unlinks the list from the tensordict.
 
 extend(*object: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Extend list by appending elements from the iterable.
+Extends the list with the items of `object` and unlinks it from the tensordict.
 
 insert(*index: [int](https://docs.python.org/3/builtins/functions.html#int)*, *object: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Insert object before index.
+Inserts `object` before `index` and unlinks the list from the tensordict.
 
 pop(*index: [int](https://docs.python.org/3/builtins/functions.html#int) = -1*) → [Any](https://docs.python.org/3/library/typing.html#typing.Any)
 
-Remove and return item at index (default last).
-
-Raises IndexError if list is empty or index is out of range.
+Removes and returns the item at `index` and unlinks the list from the tensordict.
 
 remove(*value: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Remove first occurrence of value.
-
-Raises ValueError if the value is not present.
+Removes the first item equal to `value` and unlinks the list from the tensordict.

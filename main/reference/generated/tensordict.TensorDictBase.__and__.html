@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,16 +1642,25 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.__and__">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__and__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorCollection.html#tensordict.TensorCollection" title="tensordict.TensorCollection"><span class="pre">TensorCollection</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.__and__" title="Link to this definition">#</a></dt>
-<dd><p>Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value.</p>
+<dd><p>Computes <code class="docutils literal notranslate"><span class="pre">self</span> <span class="pre">&amp;</span> <span class="pre">other</span></code> leaf by leaf and returns a new tensordict.</p>
+<p>The operation is a logical AND for boolean leaves and a bitwise AND for
+integer leaves. A tensordict <code class="docutils literal notranslate"><span class="pre">other</span></code> is paired with the tensordict key
+by key and must have the same keys, or a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> is raised.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>other</strong> – The value to perform the AND operation with.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new TensorDict instance with the same key set as the original,
-but with all tensors having performed a AND operation with the given value.</p>
+<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>Number</em>) – the other operand.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">((</span><span class="n">td</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">td</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">))[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([False,  True, False])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="o">~</span><span class="p">(</span><span class="n">td</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">))[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([ True, False, False])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2012,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__and__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__and__",
        "url": "/reference/generated/tensordict.TensorDictBase.__and__.html",
-       "articleBody": "TensorDictBase.__and__# TensorDictBase.__and__(other: TensorCollection | Tensor | float) \u2192 Self# Returns a new TensorDict instance with all tensors performing a logical or bitwise AND operation with the given value. Parameters: other \u2013 The value to perform the AND operation with. Returns: A new TensorDict instance with the same key set as the original, but with all tensors having performed a AND operation with the given value. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__and__# TensorDictBase.__and__(other: TensorCollection | Tensor | float) \u2192 Self# Computes self \u0026 other leaf by leaf and returns a new tensordict. The operation is a logical AND for boolean leaves and a bitwise AND for integer leaves. A tensordict other is paired with the tensordict key by key and must have the same keys, or a KeyError is raised. Parameters: other (TensorDictBase, Tensor or Number) \u2013 the other operand. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.tensor([1.0, 2.0, 3.0]), batch_size=[3]) \u003e\u003e\u003e ((td \u003e 1) \u0026 (td \u003c 3))[\"a\"] tensor([False, True, False]) \u003e\u003e\u003e (~(td \u003e 1))[\"a\"] tensor([ True, False, False]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

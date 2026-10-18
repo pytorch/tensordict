@@ -2,35 +2,40 @@
 
 TensorDictBase.load_state_dict(*state_dict: [OrderedDict](https://docs.python.org/3/library/typing.html#typing.OrderedDict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]*, *strict=True*, *assign=False*, *from_flatten=None*) → Self
 
-Loads a state-dict, formatted as in [`state_dict()`](tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict), into the tensordict.
+Loads a state dict, as [`state_dict()`](tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict) returns it, into the tensordict, and returns `self`.
 
-Supports the flat format (with `_metadata`, the default output of
-[`state_dict()`](tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict)), the nested format (with per-level `_metadata`),
-and the legacy format (with `__batch_size`/`__device` sentinel
-keys).
-
-When `from_flatten` is `None` (the default), the format is
-auto-detected: if `_metadata` is present and the state_dict keys
-don't match this tensordict's keys, the state_dict is unflattened
-before loading.
+Reads the flat format (the default of [`state_dict()`](tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict)), the
+nested format (`flatten=False`), and the legacy format, with
+`"__batch_size"` and `"__device"` keys. The batch size of the
+tensordict is set to the one stored in the state dict, if any.
 
 Parameters:
 
-- **state_dict** (*OrderedDict*) - the state_dict of to be copied.
-- **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether to strictly enforce that the keys
-in [`state_dict`](tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict) match the keys returned by this tensordict's
-[`torch.nn.Module.state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) function. Default: `True`
-- **assign** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether to assign items in the state
-dictionary to their corresponding keys in the tensordict instead
-of copying them inplace into the tensordict's current tensors.
-When `False`, the properties of the tensors in the current
-module are preserved while when `True`, the properties of the
-Tensors in the state dict are preserved.
-Default: `False`
-- **from_flatten** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the input state_dict is
-assumed to be flattened and will be unflattened before loading.
-If `None` (default), auto-detects based on `_metadata` and
-key comparison.
+- **state_dict** (*OrderedDict*) - the state dict to load.
+- **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a state dict whose keys are
+not those of the tensordict raises a `RuntimeError` (empty
+nested tensordicts excepted). If `False`, the keys of the
+state dict are written and the other entries of the
+tensordict are kept. Defaults to `True`.
+- **assign** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, the values are copied in
+place into the existing tensors, which keep their storage,
+dtype and device. If `True`, the tensors of the state dict
+replace them. Defaults to `False`.
+- **from_flatten** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the state dict is read
+as flat, with `"."`-joined keys. If `False`, as nested.
+Defaults to `None`, which reads it as flat if it has a
+`_metadata` attribute and its keys differ from those of the
+tensordict.
+
+Returns:
+
+`self`.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `strict=True` and the keys do not match, or if
+ the state dict was saved on another device than that of the
+ tensordict.
 
 Examples
 

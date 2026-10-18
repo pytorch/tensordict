@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,16 +1643,31 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.load">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.load" title="Link to this definition">#</a></dt>
 <dd><p>Loads a tensordict that <a class="reference internal" href="tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a> or <a class="reference internal" href="tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> wrote to disk.</p>
-<p><code class="docutils literal notranslate"><span class="pre">load</span></code> is <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>: it takes the same arguments,
-including <code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code> and <code class="docutils literal notranslate"><span class="pre">mode</span></code>. The leaves of the
-result are memory-mapped tensors that read the files. See
-<a class="reference internal" href="../../saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a> and the example of <a class="reference internal" href="tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">load</span></code> calls <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>, which documents the other
+arguments, such as <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">mode</span></code>, <code class="docutils literal notranslate"><span class="pre">subpath</span></code> and
+<code class="docutils literal notranslate"><span class="pre">allow_pickle</span></code>. The leaves of the result read the files lazily. See
+<a class="reference internal" href="../../saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the directory, or the <code class="docutils literal notranslate"><span class="pre">&quot;.tdz&quot;</span></code> archive
-file, to read.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the directory, or the archive file, to read.</p></li>
+<li><p><strong>*args</strong> – passed to <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p></li>
+<li><p><strong>**kwargs</strong> – passed to <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p></li>
+</ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">loaded</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">loaded</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+<span class="go">MemoryMappedTensor([0, 1, 2]) torch.Size([3])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2013,7 +2028,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.load",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.load",
        "url": "/reference/generated/tensordict.TensorDictBase.load.html",
-       "articleBody": "TensorDictBase.load# classmethod TensorDictBase.load(prefix: str | Path, *args, **kwargs) \u2192 Self# Loads a tensordict that save() or memmap() wrote to disk. load is load_memmap(): it takes the same arguments, including allow_pickle, device and mode. The leaves of the result are memory-mapped tensors that read the files. See Save and load tensordicts and the example of save(). Parameters: prefix (str or Path) \u2013 the directory, or the \".tdz\" archive file, to read. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.load# classmethod TensorDictBase.load(prefix: str | Path, *args, **kwargs) \u2192 Self# Loads a tensordict that save() or memmap() wrote to disk. load calls load_memmap(), which documents the other arguments, such as device, mode, subpath and allow_pickle. The leaves of the result read the files lazily. See Save and load tensordicts. Parameters: prefix (str or Path) \u2013 the directory, or the archive file, to read. *args \u2013 passed to load_memmap(). **kwargs \u2013 passed to load_memmap(). Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.arange(3), batch_size=[3]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = td.save(path) ... loaded = TensorDict.load(path) ... print(loaded[\"a\"], loaded.batch_size) MemoryMappedTensor([0, 1, 2]) torch.Size([3]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

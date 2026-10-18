@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,10 +1642,29 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.is_memmap_archive">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">is_memmap_archive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.is_memmap_archive" title="Link to this definition">#</a></dt>
-<dd><p>Checks whether <code class="docutils literal notranslate"><span class="pre">path</span></code> points to a memmap tensordict archive.</p>
-<p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="docutils literal notranslate"><span class="pre">path</span></code> is a zip file containing a top-level
-<code class="docutils literal notranslate"><span class="pre">meta.json</span></code> entry (the marker of the memmap format), <code class="docutils literal notranslate"><span class="pre">False</span></code>
-otherwise. Directories always return <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">path</span></code> is a memory-mapped tensordict archive.</p>
+<p>An archive is a zip file with a top-level <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> entry, as
+written by <a class="reference internal" href="tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">pack_memmap()</span></code></a> or by
+<a class="reference internal" href="tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a> with a <code class="docutils literal notranslate"><span class="pre">&quot;.tdz&quot;</span></code> path. A
+directory, a missing path or another file gives <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the path to check.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">is_memmap_archive</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td.tdz"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">is_memmap_archive</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td.tdz"</span><span class="p">),</span> <span class="n">is_memmap_archive</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td"</span><span class="p">))</span>
+<span class="go">True False</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2004,7 +2023,7 @@ otherwise. Directories always return <code class="docutils literal notranslate">
        "headline": "is_memmap_archive",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - is_memmap_archive",
        "url": "/reference/generated/tensordict.is_memmap_archive.html",
-       "articleBody": "is_memmap_archive# tensordict.is_memmap_archive(path: str | Path) \u2192 bool# Checks whether path points to a memmap tensordict archive. Returns True if path is a zip file containing a top-level meta.json entry (the marker of the memmap format), False otherwise. Directories always return False.",
+       "articleBody": "is_memmap_archive# tensordict.is_memmap_archive(path: str | Path) \u2192 bool# Whether path is a memory-mapped tensordict archive. An archive is a zip file with a top-level meta.json entry, as written by pack_memmap() or by save() with a \".tdz\" path. A directory, a missing path or another file gives False. Parameters: path (str or Path) \u2013 the path to check. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, is_memmap_archive \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3)) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = td.save(Path(path) / \"td.tdz\") ... _ = td.save(Path(path) / \"td\") ... print(is_memmap_archive(Path(path) / \"td.tdz\"), is_memmap_archive(Path(path) / \"td\")) True False",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

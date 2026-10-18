@@ -2,7 +2,7 @@
 
 tensordict.unravel_key_to_tuple(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), ...]
 
-Unravel a nested key into a flat tuple of str.
+Unravels a nested key into a flat tuple of str.
 
 Unlike [`unravel_key()`](tensordict.unravel_key.html#tensordict.unravel_key), a str key gives a one-element
 tuple, and an invalid key gives `()` instead of raising.
@@ -13,7 +13,7 @@ Parameters:
 
 Returns:
 
-a flat tuple of str, or `()` if `key` is not a valid nested key.
+A flat tuple of str, or `()` if `key` is not a valid nested key.
 
 Examples
 

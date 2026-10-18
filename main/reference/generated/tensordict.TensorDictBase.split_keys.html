@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,51 +1642,55 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.split_keys">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">split_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">key_sets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">NO_DEFAULT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reproduce_struct</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.split_keys" title="Link to this definition">#</a></dt>
-<dd><p>Splits the tensordict in subsets given one or more set of keys.</p>
-<p>The method will return <code class="docutils literal notranslate"><span class="pre">N+1</span></code> tensordicts, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the number of
-the arguments provided. The last tensordict holds the keys that are in
-no set.</p>
+<dd><p>Splits the tensordict into one tensordict per set of keys, plus one for the remaining entries.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">+</span> <span class="pre">1</span></code> tensordicts for <code class="docutils literal notranslate"><span class="pre">N</span></code> key sets: the last one holds
+the entries that no set took. The values are not copied. Each set
+takes its entries from what the earlier sets left. Empty nested
+tensordicts are removed from the last tensordict, unless
+<code class="docutils literal notranslate"><span class="pre">reproduce_struct=True</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>key_sets</strong> (<em>sequence</em><em> of </em><em>keys</em><em>, </em><em>Dict</em><em>[</em><em>in_key</em><em>, </em><em>out_key</em><em>] or </em><em>callable</em>) – the
-splits, applied in order. A list or dict selects keys (a dict
-also renames them). A callable <code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code>
-selects every tensor leaf that no earlier set took and for
-which <code class="docutils literal notranslate"><span class="pre">fn</span></code> returns <code class="docutils literal notranslate"><span class="pre">True</span></code>. <code class="docutils literal notranslate"><span class="pre">key</span></code> is the leaf’s nested key
-as a tuple of str, for example <code class="docutils literal notranslate"><span class="pre">(&quot;observation&quot;,)</span></code> or
-<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code>, and <code class="docutils literal notranslate"><span class="pre">value</span></code> is the leaf as <code class="docutils literal notranslate"><span class="pre">get</span></code>
-returns it. <code class="docutils literal notranslate"><span class="pre">fn</span></code> is not called on sub-tensordicts or
-non-tensor data: select a whole sub-tensordict with its key in
-a list, and non-tensor entries stay in the last tensordict
-unless a list names them. <code class="docutils literal notranslate"><span class="pre">fn</span></code> is called once per leaf,
-outside any graph, so it should test metadata (key, dtype,
-shape, device) rather than tensor values.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the keys are removed from <code class="docutils literal notranslate"><span class="pre">self</span></code>
-in-place. The leaves a callable selects are removed too.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value to be returned when a key is missing.
-If not specified and <code class="docutils literal notranslate"><span class="pre">strict=True</span></code>, an exception is raised.
-Applies to keys in lists and dicts only: a callable never
-selects a missing key.</p></li>
-<li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an exception is raised when a key
-is missing. Applies to keys in lists and dicts only.
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>reproduce_struct</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, all tensordict returned have
-the same tree structure as <code class="docutils literal notranslate"><span class="pre">self</span></code>, even if some sub-tensordicts
-contain no leaves. Non-tensor entries are not copied: each
-one goes to the output whose key set names it, or to the last
-one, as with <code class="docutils literal notranslate"><span class="pre">reproduce_struct=False</span></code>.</p></li>
+<dd class="field-odd"><p><strong>*key_sets</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em> or </em><em>Callable</em>) – the sets of keys,
+applied in order. A list selects keys, and a dict selects its
+keys and renames each to its value. A callable
+<code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code> selects every tensor leaf that no
+earlier set took and for which <code class="docutils literal notranslate"><span class="pre">fn</span></code> returns <code class="docutils literal notranslate"><span class="pre">True</span></code>. <code class="docutils literal notranslate"><span class="pre">key</span></code>
+is the nested key of the leaf as a tuple of str, for example
+<code class="docutils literal notranslate"><span class="pre">(&quot;observation&quot;,)</span></code> or <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code>, and <code class="docutils literal notranslate"><span class="pre">value</span></code> is
+the leaf as <code class="docutils literal notranslate"><span class="pre">get</span></code> returns it. <code class="docutils literal notranslate"><span class="pre">fn</span></code> is not called on nested
+tensordicts or non-tensor data: select a whole nested
+tensordict with its key in a list, and non-tensor entries stay
+in the last tensordict unless a list names them. <code class="docutils literal notranslate"><span class="pre">fn</span></code> is
+called once per leaf, outside any graph, so it should test
+metadata (key, dtype, shape, device) rather than tensor values.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the selected entries are
+removed from the tensordict, which is returned as the last
+tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">strict=False</span></code>, the value put in
+the output for a missing key. By default, a missing key is
+skipped. A <code class="docutils literal notranslate"><span class="pre">default</span></code> of <code class="docutils literal notranslate"><span class="pre">None</span></code> also skips the key. Applies to the keys in lists and dicts only: a
+callable never selects a missing key.</p></li>
+<li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a missing key raises a
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>, and <code class="docutils literal notranslate"><span class="pre">default</span></code> is ignored. Applies to the keys in
+lists and dicts only. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>reproduce_struct</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, every returned
+tensordict has the tree of nested tensordicts of the
+tensordict, even where a nested tensordict holds no leaves.
+Non-tensor entries are not copied: each one goes to the output
+whose key set names it, or to the last one, as with
+<code class="docutils literal notranslate"><span class="pre">reproduce_struct=False</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A tuple of <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">+</span> <span class="pre">1</span></code> tensordicts.</p>
 </dd>
 </dl>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><code class="docutils literal notranslate"><span class="pre">None</span></code> non-tensor values will be ignored and not returned.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>The method does not check for duplicates in the provided lists.</p>
+<p>Duplicate keys in the sets are not checked.</p>
 </div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -1699,7 +1703,7 @@ one, as with <code class="docutils literal notranslate"><span class="pre">reprod
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_a</span><span class="p">,</span> <span class="n">td_bc</span><span class="p">,</span> <span class="n">td_d</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">split_keys</span><span class="p">([</span><span class="s2">"a"</span><span class="p">],</span> <span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">td_a</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">td_bc</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">td_d</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 <span class="go">(['a'], ['b', 'c'], ['d'])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># with inplace=True, the last tensordict is ``td`` itself</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># with inplace=True, the last tensordict is td itself</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_a</span><span class="p">,</span> <span class="n">rest</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">split_keys</span><span class="p">([</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">rest</span> <span class="ow">is</span> <span class="n">td</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 <span class="go">(True, ['b', 'c', 'd'])</span>
@@ -2090,7 +2094,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.split_keys",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.split_keys",
        "url": "/reference/generated/tensordict.TensorDictBase.split_keys.html",
-       "articleBody": "TensorDictBase.split_keys# TensorDictBase.split_keys(*key_sets, inplace=False, default: Any = NO_DEFAULT, strict: bool = True, reproduce_struct: bool = False) \u2192 Tuple[T, ...]# Splits the tensordict in subsets given one or more set of keys. The method will return N+1 tensordicts, where N is the number of the arguments provided. The last tensordict holds the keys that are in no set. Parameters: key_sets (sequence of keys, Dict[in_key, out_key] or callable) \u2013 the splits, applied in order. A list or dict selects keys (a dict also renames them). A callable fn(key, value) -\u003e bool selects every tensor leaf that no earlier set took and for which fn returns True. key is the leaf\u2019s nested key as a tuple of str, for example (\"observation\",) or (\"next\", \"done\"), and value is the leaf as get returns it. fn is not called on sub-tensordicts or non-tensor data: select a whole sub-tensordict with its key in a list, and non-tensor entries stay in the last tensordict unless a list names them. fn is called once per leaf, outside any graph, so it should test metadata (key, dtype, shape, device) rather than tensor values. inplace (bool, optional) \u2013 if True, the keys are removed from self in-place. The leaves a callable selects are removed too. Defaults to False. default (Any, optional) \u2013 the value to be returned when a key is missing. If not specified and strict=True, an exception is raised. Applies to keys in lists and dicts only: a callable never selects a missing key. strict (bool, optional) \u2013 if True, an exception is raised when a key is missing. Applies to keys in lists and dicts only. Defaults to True. reproduce_struct (bool, optional) \u2013 if True, all tensordict returned have the same tree structure as self, even if some sub-tensordicts contain no leaves. Non-tensor entries are not copied: each one goes to the output whose key set names it, or to the last one, as with reproduce_struct=False. Note None non-tensor values will be ignored and not returned. Note The method does not check for duplicates in the provided lists. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=0, ... b=0, ... c=0, ... d=0, ... ) \u003e\u003e\u003e td_a, td_bc, td_d = td.split_keys([\"a\"], [\"b\", \"c\"]) \u003e\u003e\u003e sorted(td_a.keys()), sorted(td_bc.keys()), sorted(td_d.keys()) ([\u0027a\u0027], [\u0027b\u0027, \u0027c\u0027], [\u0027d\u0027]) \u003e\u003e\u003e # with inplace=True, the last tensordict is ``td`` itself \u003e\u003e\u003e td_a, rest = td.split_keys([\"a\"], inplace=True) \u003e\u003e\u003e rest is td, sorted(td.keys()) (True, [\u0027b\u0027, \u0027c\u0027, \u0027d\u0027]) \u003e\u003e\u003e # a callable selects leaves by key and value; the first match wins \u003e\u003e\u003e import torch \u003e\u003e\u003e td = TensorDict( ... s=torch.zeros(10), ... v=torch.zeros(10, 3), ... m=torch.zeros(10, 4, 4), ... nested=TensorDict(t=torch.zeros(10, 3), batch_size=[10]), ... batch_size=[10], ... ) \u003e\u003e\u003e nb = td.batch_dims \u003e\u003e\u003e scalars, vectors, rest = td.split_keys( ... lambda k, v: v.ndim == nb, lambda k, v: v.ndim == nb + 1 ... ) \u003e\u003e\u003e sorted(scalars.keys(True, True), key=str) [\u0027s\u0027] \u003e\u003e\u003e sorted(vectors.keys(True, True), key=str) [(\u0027nested\u0027, \u0027t\u0027), \u0027v\u0027] \u003e\u003e\u003e sorted(rest.keys(True, True), key=str) [\u0027m\u0027] \u003e\u003e\u003e # lists and callables mix: the nested key goes first \u003e\u003e\u003e nested, vectors, rest = td.split_keys( ... [\"nested\"], lambda k, v: v.ndim == nb + 1 ... ) \u003e\u003e\u003e sorted(vectors.keys()) [\u0027v\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.split_keys# TensorDictBase.split_keys(*key_sets, inplace=False, default: Any = NO_DEFAULT, strict: bool = True, reproduce_struct: bool = False) \u2192 Tuple[T, ...]# Splits the tensordict into one tensordict per set of keys, plus one for the remaining entries. Returns N + 1 tensordicts for N key sets: the last one holds the entries that no set took. The values are not copied. Each set takes its entries from what the earlier sets left. Empty nested tensordicts are removed from the last tensordict, unless reproduce_struct=True. Parameters: *key_sets (list of NestedKey, dict or Callable) \u2013 the sets of keys, applied in order. A list selects keys, and a dict selects its keys and renames each to its value. A callable fn(key, value) -\u003e bool selects every tensor leaf that no earlier set took and for which fn returns True. key is the nested key of the leaf as a tuple of str, for example (\"observation\",) or (\"next\", \"done\"), and value is the leaf as get returns it. fn is not called on nested tensordicts or non-tensor data: select a whole nested tensordict with its key in a list, and non-tensor entries stay in the last tensordict unless a list names them. fn is called once per leaf, outside any graph, so it should test metadata (key, dtype, shape, device) rather than tensor values. Keyword Arguments: inplace (bool, optional) \u2013 if True, the selected entries are removed from the tensordict, which is returned as the last tensordict. Defaults to False. default (Any, optional) \u2013 with strict=False, the value put in the output for a missing key. By default, a missing key is skipped. A default of None also skips the key. Applies to the keys in lists and dicts only: a callable never selects a missing key. strict (bool, optional) \u2013 if True, a missing key raises a KeyError, and default is ignored. Applies to the keys in lists and dicts only. Defaults to True. reproduce_struct (bool, optional) \u2013 if True, every returned tensordict has the tree of nested tensordicts of the tensordict, even where a nested tensordict holds no leaves. Non-tensor entries are not copied: each one goes to the output whose key set names it, or to the last one, as with reproduce_struct=False. Defaults to False. Returns: A tuple of N + 1 tensordicts. Note Duplicate keys in the sets are not checked. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=0, ... b=0, ... c=0, ... d=0, ... ) \u003e\u003e\u003e td_a, td_bc, td_d = td.split_keys([\"a\"], [\"b\", \"c\"]) \u003e\u003e\u003e sorted(td_a.keys()), sorted(td_bc.keys()), sorted(td_d.keys()) ([\u0027a\u0027], [\u0027b\u0027, \u0027c\u0027], [\u0027d\u0027]) \u003e\u003e\u003e # with inplace=True, the last tensordict is td itself \u003e\u003e\u003e td_a, rest = td.split_keys([\"a\"], inplace=True) \u003e\u003e\u003e rest is td, sorted(td.keys()) (True, [\u0027b\u0027, \u0027c\u0027, \u0027d\u0027]) \u003e\u003e\u003e # a callable selects leaves by key and value; the first match wins \u003e\u003e\u003e import torch \u003e\u003e\u003e td = TensorDict( ... s=torch.zeros(10), ... v=torch.zeros(10, 3), ... m=torch.zeros(10, 4, 4), ... nested=TensorDict(t=torch.zeros(10, 3), batch_size=[10]), ... batch_size=[10], ... ) \u003e\u003e\u003e nb = td.batch_dims \u003e\u003e\u003e scalars, vectors, rest = td.split_keys( ... lambda k, v: v.ndim == nb, lambda k, v: v.ndim == nb + 1 ... ) \u003e\u003e\u003e sorted(scalars.keys(True, True), key=str) [\u0027s\u0027] \u003e\u003e\u003e sorted(vectors.keys(True, True), key=str) [(\u0027nested\u0027, \u0027t\u0027), \u0027v\u0027] \u003e\u003e\u003e sorted(rest.keys(True, True), key=str) [\u0027m\u0027] \u003e\u003e\u003e # lists and callables mix: the nested key goes first \u003e\u003e\u003e nested, vectors, rest = td.split_keys( ... [\"nested\"], lambda k, v: v.ndim == nb + 1 ... ) \u003e\u003e\u003e sorted(vectors.keys()) [\u0027v\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

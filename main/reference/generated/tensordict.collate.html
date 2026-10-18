@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1666,7 +1666,7 @@ non-empty list is returned as is, for example the tensordict
 that a batch sampler reads in one index operation.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the collated batch.</p>
+<dd class="field-even"><p>The collated batch.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2041,7 +2041,7 @@ that a batch sampler reads in one index operation.</p>
        "headline": "collate",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - collate",
        "url": "/reference/generated/tensordict.collate.html",
-       "articleBody": "collate# tensordict.collate(batch: Any) \u2192 Any# Collates a list of samples into a batch, for DataLoader. Pass it as collate_fn when the samples are tensordicts or tensorclasses, or tuples or dicts that hold them, such as (td, label) pairs. The default collate_fn of a DataLoader cannot read a tensordict (see Load data and share it between processes). The samples are collated by the type of the first one: tensordicts and tensorclasses go through maybe_dense_stack(): the batch is a dense stack if the samples have the same keys and entry shapes, and a LazyStackedTensorDict otherwise. A tensorclass keeps its type. tensors go through torch.stack(). mappings give a dict and tuples a tuple (a namedtuple keeps its type), with each entry collated across the samples. anything else goes through torch.utils.data.default_collate(). Parameters: batch (list) \u2013 the samples of one batch. Anything other than a non-empty list is returned as is, for example the tensordict that a batch sampler reads in one index operation. Returns: the collated batch. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch.utils.data import DataLoader \u003e\u003e\u003e from tensordict import TensorDict, collate \u003e\u003e\u003e samples = [(TensorDict(x=torch.randn(3)), i) for i in range(10)] \u003e\u003e\u003e td, label = next(iter(DataLoader(samples, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e td.batch_size, label (torch.Size([4]), tensor([0, 1, 2, 3])) \u003e\u003e\u003e clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)] \u003e\u003e\u003e batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e type(batch).__name__, batch.batch_size (\u0027LazyStackedTensorDict\u0027, torch.Size([4]))",
+       "articleBody": "collate# tensordict.collate(batch: Any) \u2192 Any# Collates a list of samples into a batch, for DataLoader. Pass it as collate_fn when the samples are tensordicts or tensorclasses, or tuples or dicts that hold them, such as (td, label) pairs. The default collate_fn of a DataLoader cannot read a tensordict (see Load data and share it between processes). The samples are collated by the type of the first one: tensordicts and tensorclasses go through maybe_dense_stack(): the batch is a dense stack if the samples have the same keys and entry shapes, and a LazyStackedTensorDict otherwise. A tensorclass keeps its type. tensors go through torch.stack(). mappings give a dict and tuples a tuple (a namedtuple keeps its type), with each entry collated across the samples. anything else goes through torch.utils.data.default_collate(). Parameters: batch (list) \u2013 the samples of one batch. Anything other than a non-empty list is returned as is, for example the tensordict that a batch sampler reads in one index operation. Returns: The collated batch. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch.utils.data import DataLoader \u003e\u003e\u003e from tensordict import TensorDict, collate \u003e\u003e\u003e samples = [(TensorDict(x=torch.randn(3)), i) for i in range(10)] \u003e\u003e\u003e td, label = next(iter(DataLoader(samples, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e td.batch_size, label (torch.Size([4]), tensor([0, 1, 2, 3])) \u003e\u003e\u003e clouds = [TensorDict(points=torch.randn(n, 3)) for n in (5, 2, 7, 3)] \u003e\u003e\u003e batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e type(batch).__name__, batch.batch_size (\u0027LazyStackedTensorDict\u0027, torch.Size([4]))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

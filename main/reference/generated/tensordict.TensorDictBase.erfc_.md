@@ -2,7 +2,7 @@
 
 TensorDictBase.erfc_() → Self
 
-Computes the [`erfc()`](https://docs.pytorch.org/docs/stable/generated/torch.erfc.html#torch.erfc) value of each element of the TensorDict in-place.
+Applies [`torch.erfc()`](https://docs.pytorch.org/docs/stable/generated/torch.erfc.html#torch.erfc) to every leaf in place and returns `self`.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

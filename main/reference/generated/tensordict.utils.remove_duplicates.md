@@ -2,36 +2,36 @@
 
 tensordict.utils.remove_duplicates(*input: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, ***, *return_indices: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Removes indices duplicated in key along the specified dimension.
+Returns a tensordict without the elements whose `key` value repeats an earlier one.
 
-This method detects duplicate elements in the tensor associated with the specified key along the specified
-dim and removes elements in the same indices in all other tensors within the TensorDict. It is expected for
-dim to be one of the dimensions within the batch size of the input TensorDict to ensure consistency in all
-tensors. Otherwise, an error will be raised.
+The entry `key` is cut into slices along `dim`. For each group of
+equal slices, the first element is kept, and the same indices are kept in
+every other entry. The result is sorted by the value of `key`, not in
+the original order, and its entries are new tensors.
 
 Parameters:
 
-- **input** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The TensorDict containing potentially duplicate elements.
-- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - The key of the tensor along which duplicate elements should be identified and removed. It
-must be one of the leaf keys within the TensorDict, pointing to a tensor and not to another TensorDict.
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - The dimension along which duplicate elements should be identified and removed. It must be one of
-the dimensions within the batch size of the input TensorDict. Defaults to `0`.
-- **return_indices** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - If `True`, the indices of the unique elements in the input tensor will be
-returned as well. Defaults to `False`.
+- **input** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict to deduplicate.
+- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the tensor that defines duplicates. It
+must hold a tensor, not a tensordict.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch dimension along which to look for
+duplicates. Defaults to `0`.
+
+Keyword Arguments:
+
+**return_indices** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, also returns, for each
+element of `input` along `dim`, the index of its value in the
+result. Defaults to `False`.
 
 Returns:
 
-input tensordict with the indices corrsponding to duplicated elements
+The deduplicated tensordict, or a tuple of the tensordict and the
+indices if `return_indices=True`.
 
-in tensor key along dimension dim removed.
+Raises:
 
-unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
-
-input tensordict for the specified key along the specified dim. Only provided if return_indices is True.
-
-Return type:
-
-output ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase))
+- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if `key` is missing or does not hold a tensor.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `dim` is not a batch dimension.
 
 Examples
 
@@ -39,20 +39,10 @@ Examples
 >>> import torch
 >>> from tensordict import TensorDict
 >>> from tensordict.utils import remove_duplicates
->>> td = TensorDict(
-... {
-... "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
-... "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
-... },
-... batch_size=[4],
-... )
->>> output_tensordict = remove_duplicates(td, key="tensor1", dim=0)
->>> expected_output = TensorDict(
-... {
-... "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
-... "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
-... },
-... batch_size=[3],
-... )
->>> assert (output_tensordict == expected_output).all()
+>>> td = TensorDict(x=torch.tensor([7, 1, 7, 3]), y=torch.arange(4), batch_size=[4])
+>>> out, indices = remove_duplicates(td, key="x", return_indices=True)
+>>> out["x"], out["y"]
+(tensor([1, 3, 7]), tensor([1, 3, 0]))
+>>> indices
+tensor([2, 0, 2, 1])
 ```

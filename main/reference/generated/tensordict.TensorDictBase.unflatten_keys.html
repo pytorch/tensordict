@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,92 +1642,48 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.unflatten_keys">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">unflatten_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">separator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.unflatten_keys" title="Link to this definition">#</a></dt>
-<dd><p>Converts a flat tensordict into a nested one, recursively.</p>
-<p>The TensorDict type will be lost and the result will be a simple TensorDict instance.
-The metadata of the nested tensordicts will be inferred from the root:
-all instances across the data tree will share the same batch-size,
-dimension names and device.</p>
+<dd><p>Returns a tensordict with the keys that hold the separator split into nested keys.</p>
+<p>The leaf at <code class="docutils literal notranslate"><span class="pre">&quot;a.b.c&quot;</span></code> moves to <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;,</span> <span class="pre">&quot;c&quot;)</span></code> with the default
+separator. The leaves are not copied. The new nested tensordicts take
+the batch size, dimension names and device of the tensordict. The
+result has the type of the tensordict for a
+<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> and a lazy stack. A split key that
+would overwrite an existing entry raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.
+<a class="reference internal" href="tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys" title="tensordict.TensorDictBase.flatten_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten_keys()</span></code></a> does the reverse.</p>
+<p>It can be used as a context manager: the changes made to the nested
+tensordict in the <code class="docutils literal notranslate"><span class="pre">with</span></code> block are written back to the tensordict
+when the block exits.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the separator between the nested items.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting tensordict will
-have the same identity as the one where the call has been made.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the string that separates the parts of
+a nested key. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code>.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the entries are moved in
+the tensordict itself, which is returned. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"b - c"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"e - f - g"</span><span class="p">:</span> <span class="mi">3</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="n">separator</span><span class="o">=</span><span class="s2">" - "</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        e: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                f: TensorDict(</span>
-<span class="go">                    fields={</span>
-<span class="go">                        g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">                    batch_size=torch.Size([]),</span>
-<span class="go">                    device=None,</span>
-<span class="go">                    is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"b.c"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"e.f.g"</span><span class="p">:</span> <span class="mi">3</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">nested</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['a', ('b', 'c'), ('e', 'f', 'g')]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span><span class="p">[</span><span class="s2">"e"</span><span class="p">,</span> <span class="s2">"f"</span><span class="p">,</span> <span class="s2">"g"</span><span class="p">]</span>
+<span class="go">tensor(3)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a/b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([3])</span>
 </pre></div>
 </div>
-<p>This method and <a class="reference internal" href="#tensordict.TensorDictBase.unflatten_keys" title="tensordict.TensorDictBase.unflatten_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unflatten_keys()</span></code></a> are particularly useful when
-handling state-dicts, as they make it possible to seamlessly convert
-flat dictionaries into data structures that mimic the structure of the
-model.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span> <span class="p">,</span><span class="mi">4</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ddp_model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ao</span><span class="o">.</span><span class="n">quantization</span><span class="o">.</span><span class="n">QuantWrapper</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">state_dict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">ddp_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        module: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                0: TensorDict(</span>
-<span class="go">                    fields={</span>
-<span class="go">                        bias: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                        weight: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">                    batch_size=torch.Size([]),</span>
-<span class="go">                    device=None,</span>
-<span class="go">                    is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model_state_dict</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"module"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">model_state_dict</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        0: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                bias: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                weight: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">model_state_dict</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">"."</span><span class="p">)))</span>
+<p>With <a class="reference internal" href="tensordict.TensorDictBase.flatten_keys.html#tensordict.TensorDictBase.flatten_keys" title="tensordict.TensorDictBase.flatten_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flatten_keys()</span></code></a>, it converts a state dict to a nested
+tensordict and back:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">())</span><span class="o">.</span><span class="n">unflatten_keys</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[('0', 'bias'), ('0', 'weight')]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2097,7 +2053,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.unflatten_keys",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.unflatten_keys",
        "url": "/reference/generated/tensordict.TensorDictBase.unflatten_keys.html",
-       "articleBody": "TensorDictBase.unflatten_keys# TensorDictBase.unflatten_keys(separator: str = \u0027.\u0027, inplace: bool = False) \u2192 Self# Converts a flat tensordict into a nested one, recursively. The TensorDict type will be lost and the result will be a simple TensorDict instance. The metadata of the nested tensordicts will be inferred from the root: all instances across the data tree will share the same batch-size, dimension names and device. Parameters: separator (str, optional) \u2013 the separator between the nested items. inplace (bool, optional) \u2013 if True, the resulting tensordict will have the same identity as the one where the call has been made. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({\"a\": 1, \"b - c\": 2, \"e - f - g\": 3}, batch_size=[]) \u003e\u003e\u003e data.unflatten_keys(separator=\" - \") TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), e: TensorDict( fields={ f: TensorDict( fields={ g: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) This method and unflatten_keys() are particularly useful when handling state-dicts, as they make it possible to seamlessly convert flat dictionaries into data structures that mimic the structure of the model. Examples \u003e\u003e\u003e model = torch.nn.Sequential(torch.nn.Linear(3 ,4)) \u003e\u003e\u003e ddp_model = torch.ao.quantization.QuantWrapper(model) \u003e\u003e\u003e state_dict = TensorDict(ddp_model.state_dict(), batch_size=[]).unflatten_keys(\".\") \u003e\u003e\u003e print(state_dict) TensorDict( fields={ module: TensorDict( fields={ 0: TensorDict( fields={ bias: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False), weight: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e model_state_dict = state_dict.get(\"module\") \u003e\u003e\u003e print(model_state_dict) TensorDict( fields={ 0: TensorDict( fields={ bias: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False), weight: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e _ = model.load_state_dict(dict(model_state_dict.flatten_keys(\".\"))) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unflatten_keys# Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.unflatten_keys# TensorDictBase.unflatten_keys(separator: str = \u0027.\u0027, inplace: bool = False) \u2192 Self# Returns a tensordict with the keys that hold the separator split into nested keys. The leaf at \"a.b.c\" moves to (\"a\", \"b\", \"c\") with the default separator. The leaves are not copied. The new nested tensordicts take the batch size, dimension names and device of the tensordict. The result has the type of the tensordict for a TensorDict and a lazy stack. A split key that would overwrite an existing entry raises a KeyError. flatten_keys() does the reverse. It can be used as a context manager: the changes made to the nested tensordict in the with block are written back to the tensordict when the block exits. Parameters: separator (str, optional) \u2013 the string that separates the parts of a nested key. Defaults to \".\". inplace (bool, optional) \u2013 if True, the entries are moved in the tensordict itself, which is returned. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": 1, \"b.c\": 2, \"e.f.g\": 3}) \u003e\u003e\u003e nested = td.unflatten_keys() \u003e\u003e\u003e list(nested.keys(include_nested=True, leaves_only=True, sort=True)) [\u0027a\u0027, (\u0027b\u0027, \u0027c\u0027), (\u0027e\u0027, \u0027f\u0027, \u0027g\u0027)] \u003e\u003e\u003e nested[\"e\", \"f\", \"g\"] tensor(3) \u003e\u003e\u003e td = TensorDict({\"a/b\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e td.unflatten_keys(\"/\")[\"a\"].batch_size torch.Size([3]) With flatten_keys(), it converts a state dict to a nested tensordict and back: \u003e\u003e\u003e model = torch.nn.Sequential(torch.nn.Linear(3, 4)) \u003e\u003e\u003e params = TensorDict(model.state_dict()).unflatten_keys(\".\") \u003e\u003e\u003e sorted(params.keys(include_nested=True, leaves_only=True)) [(\u00270\u0027, \u0027bias\u0027), (\u00270\u0027, \u0027weight\u0027)] \u003e\u003e\u003e _ = model.load_state_dict(params.flatten_keys(\".\").to_dict()) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unflatten_keys# Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

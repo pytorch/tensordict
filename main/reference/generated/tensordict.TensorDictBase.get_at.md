@@ -4,27 +4,31 @@ TensorDictBase.get_at(*key*, *index*)
 
 TensorDictBase.get_at(*key*, *index*, *default*)
 
-Get the value of a tensordict from the key key at the index idx.
+Returns the entry at `key`, indexed with `index`.
+
+`td.get_at(key, index)` is the same as `td.get(key)[index]`, but a
+tensordict stored on disk or in a store reads only the indexed part.
 
 Parameters:
 
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be retrieved.
-- **index** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**iterable*) - index of the tensor.
-- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - default value to return if the key is
-not present in the tensordict.
-
-Returns:
-
-indexed tensor.
+- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to read.
+- **index** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)) - the index to apply to
+the entry.
+- **default** (*Any**,**optional*) - the value returned if the key is missing.
+Defaults to `None`.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> td = TensorDict({"x": torch.arange(3)}, batch_size=[])
->>> td.get_at("x", index=1)
+>>> td = TensorDict({"x": torch.arange(3)}, batch_size=[3])
+>>> td.get_at("x", 1)
 tensor(1)
+>>> td.get_at("x", torch.tensor([True, False, True]))
+tensor([0, 2])
+>>> print(td.get_at("y", 1))
+None
 ```
 
 Every tensordict class and every tensorclass has this method. For the

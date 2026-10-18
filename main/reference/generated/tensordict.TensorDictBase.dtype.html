@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.dtype">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#tensordict.TensorDictBase.dtype" title="Link to this definition">#</a></dt>
-<dd><p>Returns the dtype of the leaves, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the leaves have different dtypes.</p>
+<dd><p>The dtype of the leaves, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if they have different dtypes or there is no leaf.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.dtype",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.dtype",
        "url": "/reference/generated/tensordict.TensorDictBase.dtype.html",
-       "articleBody": "TensorDictBase.dtype# property TensorDictBase.dtype# Returns the dtype of the leaves, or None if the leaves have different dtypes. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.dtype# property TensorDictBase.dtype# The dtype of the leaves, or None if they have different dtypes or there is no leaf. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

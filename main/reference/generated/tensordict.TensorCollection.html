@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,10 +1643,9 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorCollection">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">TensorCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorCollection" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>A base class for TensorDictBase and TensorClass.</p>
-<p>This is an abstract base class that provides the foundation for tensor collections
-like TensorDict and TensorClass. It serves as a common interface for all tensor
-collection types in the tensordict library.</p>
+<p>The abstract base class of tensordicts and tensorclasses.</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> and <a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a>
+inherit from it. It cannot be instantiated.</p>
 <p>Use it in type hints and <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> checks for “a tensordict or a
 tensorclass”. Classes decorated with <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> do not inherit from
 it, only subclasses of <a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> do; to check both,
@@ -2066,7 +2065,7 @@ use <a class="reference internal" href="tensordict.is_tensor_collection.html#ten
        "headline": "TensorCollection",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorCollection",
        "url": "/reference/generated/tensordict.TensorCollection.html",
-       "articleBody": "TensorCollection# class tensordict.TensorCollection(*args, **kwargs)# Bases: object A base class for TensorDictBase and TensorClass. This is an abstract base class that provides the foundation for tensor collections like TensorDict and TensorClass. It serves as a common interface for all tensor collection types in the tensordict library. Use it in type hints and isinstance checks for \u201ca tensordict or a tensorclass\u201d. Classes decorated with @tensorclass do not inherit from it, only subclasses of TensorClass do; to check both, use is_tensor_collection(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass, TensorCollection, TensorDict \u003e\u003e\u003e class Data(TensorClass): ... x: torch.Tensor \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e isinstance(td, TensorCollection) True \u003e\u003e\u003e isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection) True \u003e\u003e\u003e isinstance(torch.zeros(3), TensorCollection) False Tutorials that use TensorCollection# Using TensorDict for datasets Using TensorDict for datasets Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Building tensordicts from streams Building tensordicts from streams Using tensorclasses for datasets Using tensorclasses for datasets Batched data loading with tensorclasses Batched data loading with tensorclasses Getting, setting, and nesting keys Getting, setting, and nesting keys Devices and memory-mapped tensors Devices and memory-mapped tensors Building models with TensorDictModule Building models with TensorDictModule Filling a TensorDict row by row Filling a TensorDict row by row Changing the shape of a TensorDict Changing the shape of a TensorDict Slicing, indexing, and masking Slicing, indexing, and masking Storing TensorDicts in zarr Storing TensorDicts in zarr",
+       "articleBody": "TensorCollection# class tensordict.TensorCollection(*args, **kwargs)# Bases: object The abstract base class of tensordicts and tensorclasses. TensorDictBase and TensorClass inherit from it. It cannot be instantiated. Use it in type hints and isinstance checks for \u201ca tensordict or a tensorclass\u201d. Classes decorated with @tensorclass do not inherit from it, only subclasses of TensorClass do; to check both, use is_tensor_collection(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass, TensorCollection, TensorDict \u003e\u003e\u003e class Data(TensorClass): ... x: torch.Tensor \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e isinstance(td, TensorCollection) True \u003e\u003e\u003e isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection) True \u003e\u003e\u003e isinstance(torch.zeros(3), TensorCollection) False Tutorials that use TensorCollection# Using TensorDict for datasets Using TensorDict for datasets Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Building tensordicts from streams Building tensordicts from streams Using tensorclasses for datasets Using tensorclasses for datasets Batched data loading with tensorclasses Batched data loading with tensorclasses Getting, setting, and nesting keys Getting, setting, and nesting keys Devices and memory-mapped tensors Devices and memory-mapped tensors Building models with TensorDictModule Building models with TensorDictModule Filling a TensorDict row by row Filling a TensorDict row by row Changing the shape of a TensorDict Changing the shape of a TensorDict Slicing, indexing, and masking Slicing, indexing, and masking Storing TensorDicts in zarr Storing TensorDicts in zarr",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

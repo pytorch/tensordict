@@ -2,33 +2,41 @@
 
 TensorDictBase.view(**shape: [int](https://docs.python.org/3/builtins/functions.html#int)*, *size: [list](https://docs.python.org/3/builtins/stdtypes.html#list) | [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple) | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict batch_size.
+Returns a tensordict with a new batch size, whose leaves are views of the original leaves.
 
-Each leaf keeps its feature dimensions, and is a view of the original
-leaf: they share storage. As for [`torch.Tensor.view()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.view.html#torch.Tensor.view), the
-leaves must have a compatible memory layout. Otherwise, use
-[`reshape()`](tensordict.TensorDictBase.reshape.html#tensordict.TensorDictBase.reshape).
+Each leaf keeps its feature dimensions and shares storage with the
+original leaf. As for [`torch.Tensor.view()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.view.html#torch.Tensor.view), the leaves must have a
+compatible memory layout: otherwise, use [`reshape()`](tensordict.TensorDictBase.reshape.html#tensordict.TensorDictBase.reshape). The result
+has no names, and the tensordict itself is returned when the batch
+size does not change.
 
-Alternatively, a dtype can be provided as a first unnamed argument. In that case, all tensors will be viewed
-with the according dtype. Note that this assume that the new shapes will be compatible with the provided dtype.
-See [`torch.Tensor.view()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.view.html#torch.Tensor.view) for more information on dtype views.
+`view(dtype)` views every leaf with another dtype instead, as
+[`torch.Tensor.view()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.view.html#torch.Tensor.view) does. The last dimension of a leaf changes
+size when the dtypes have different sizes, so the leaves then need a
+feature dimension.
+
+It can be used as a context manager, as [`unsqueeze()`](tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze) can: when
+the `with` block exits, the entries of the block are written back to
+the tensordict with the inverse operation.
 
 Parameters:
 
-- ***shape** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - new batch size of the resulting tensordict, as
-integers or as one `torch.Size`.
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)) - alternatively, a dtype to use to represent the tensor content.
+***shape** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the new batch size, as integers or as one
+`torch.Size`, list or tuple. One dimension can be `-1`.
+Alternatively, a `torch.dtype`.
 
 Keyword Arguments:
 
 - **size** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the new batch size,
-as a keyword argument instead of `*shape`.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - if a dtype is provided, the batch-size can be reset using this
-keyword argument. If the `view` is called with a shape, this is without effect.
+as a keyword argument instead of `*shape`. Defaults to
+`None`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - with a dtype, the batch size of
+the result. It is not used with a shape. Defaults to `None`,
+which keeps the batch size.
 
 Returns:
 
-a new tensordict with the desired batch_size.
+A tensordict with the new batch size.
 
 Examples
 
@@ -47,6 +55,9 @@ torch.Size([12, 10, 1])
 torch.Size([1, 4, 3, 5])
 >>> print(td_view.get("b").shape)
 torch.Size([1, 4, 3, 10, 1])
+>>> td_int = td.view(torch.int32)
+>>> td_int["a"].dtype, td_int.batch_size
+(torch.int32, torch.Size([3, 4]))
 ```
 
 Every tensordict class and every tensorclass has this method. For the

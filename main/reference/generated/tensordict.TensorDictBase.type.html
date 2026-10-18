@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,14 +1642,19 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.type">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dst_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><span class="pre">dtype</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cast_filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.type" title="Link to this definition">#</a></dt>
-<dd><p>Casts all tensors to <code class="xref py py-attr docutils literal notranslate"><span class="pre">dst_type</span></code>.</p>
+<dd><p>Returns a tensordict whose tensor leaves are cast to <code class="docutils literal notranslate"><span class="pre">dst_type</span></code>.</p>
+<p>Each leaf is cast with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.type.html#torch.Tensor.type" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.type()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dst_type</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em> or </em><em>string</em>) – the desired type</p>
+<dd class="field-odd"><p><strong>dst_type</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – the dtype, or the name of a tensor
+type such as <code class="docutils literal notranslate"><span class="pre">&quot;torch.IntTensor&quot;</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>cast_filter</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#callable" title="(in Python v3.15)"><em>callable</em></a><em>, </em><em>optional</em>) – a predicate <code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code>
-that selects the tensor leaves to cast, as in <a class="reference internal" href="tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDictBase.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a>.</p>
+<dd class="field-even"><p><strong>cast_filter</strong> (<em>Callable</em><em>, </em><em>optional</em>) – a predicate
+<code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code> that selects the tensor leaves to
+cast, as in <a class="reference internal" href="tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDictBase.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which casts every
+tensor leaf (a tensorclass uses its own <code class="docutils literal notranslate"><span class="pre">cast_filter</span></code>, if it
+declares one).</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2012,7 +2017,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.type",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.type",
        "url": "/reference/generated/tensordict.TensorDictBase.type.html",
-       "articleBody": "TensorDictBase.type# TensorDictBase.type(dst_type: dtype, *, cast_filter: Callable | None = None) \u2192 Self# Casts all tensors to dst_type. Parameters: dst_type (type or string) \u2013 the desired type Keyword Arguments: cast_filter (callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.type# TensorDictBase.type(dst_type: dtype, *, cast_filter: Callable | None = None) \u2192 Self# Returns a tensordict whose tensor leaves are cast to dst_type. Each leaf is cast with torch.Tensor.type(). Parameters: dst_type (dtype or str) \u2013 the dtype, or the name of a tensor type such as \"torch.IntTensor\". Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

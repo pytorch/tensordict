@@ -4,9 +4,42 @@
 
 Bases: [`Distribution`](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution)
 
-Truncated Standard Normal distribution.
+A standard normal distribution restricted to the interval `[a, b]`.
+
+The distribution before truncation has mean 0 and standard deviation 1.
+Its samples are reparameterized (`rsample`). For other means and
+standard deviations, use [`TruncatedNormal`](tensordict.nn.distributions.TruncatedNormal.html#tensordict.nn.distributions.TruncatedNormal).
 
 Source: [https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf](https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf)
+
+Parameters:
+
+- **a** (*Number**or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the lower bound of the support.
+- **b** (*Number**or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the upper bound of the support. `a` and
+`b` are broadcast together, and give the batch shape.
+- **validate_args** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - passed to
+`Distribution`. Defaults to `None`.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `a` and `b` have different dtypes, or if `a` is
+ not smaller than `b` everywhere.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict.nn.distributions.truncated_normal import TruncatedStandardNormal
+>>> dist = TruncatedStandardNormal(a=torch.zeros(2), b=torch.tensor([1.0, 2.0]))
+>>> dist.mean
+tensor([0.4599, 0.7228])
+>>> dist.auc
+tensor([0.3413, 0.4772])
+```
+
+*property*auc*: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*
+
+The mass of the standard normal distribution between `a` and `b`, before truncation.
 
 cdf(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 

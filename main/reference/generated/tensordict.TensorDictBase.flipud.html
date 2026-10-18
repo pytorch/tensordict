@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,15 +1642,13 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.flipud">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">flipud</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.flipud" title="Link to this definition">#</a></dt>
-<dd><p>Flip the tensordict in the up/down direction.</p>
-<p>Flip the entries in each column in the up/down direction.
-Rows are preserved, but appear in a different order than before.</p>
-<p>Requires the tensordict to have at least 1 batch dimension.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a new tensordict with the first dimension flipped.</p>
-</dd>
-</dl>
+<dd><p>Returns a tensordict with the elements reversed along batch dimension 0.</p>
+<p>It is <code class="docutils literal notranslate"><span class="pre">flip(0)</span></code>, as for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.flipud.html#torch.flipud" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.flipud()</span></code></a>. The tensordict needs at
+least 1 batch dimension, or a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> is raised. The data is
+copied.</p>
+<p>It can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> can: when
+the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, the entries of the block are written back to
+the tensordict with the inverse operation.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2023,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.flipud",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.flipud",
        "url": "/reference/generated/tensordict.TensorDictBase.flipud.html",
-       "articleBody": "TensorDictBase.flipud# TensorDictBase.flipud()# Flip the tensordict in the up/down direction. Flip the entries in each column in the up/down direction. Rows are preserved, but appear in a different order than before. Requires the tensordict to have at least 1 batch dimension. Returns: a new tensordict with the first dimension flipped. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.flipud()[\"a\"]) tensor([[3, 4, 5], [0, 1, 2]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.flipud# TensorDictBase.flipud()# Returns a tensordict with the elements reversed along batch dimension 0. It is flip(0), as for torch.flipud(). The tensordict needs at least 1 batch dimension, or a RuntimeError is raised. The data is copied. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.flipud()[\"a\"]) tensor([[3, 4, 5], [0, 1, 2]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

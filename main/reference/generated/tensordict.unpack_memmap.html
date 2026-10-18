@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,24 +1642,41 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.unpack_memmap">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">unpack_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">archive_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></span><a class="headerlink" href="#tensordict.unpack_memmap" title="Link to this definition">#</a></dt>
-<dd><p>Extracts a memmap tensordict archive into a memmap directory.</p>
-<p>This is the inverse of <a class="reference internal" href="tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">pack_memmap()</span></code></a> and is equivalent to
-<code class="docutils literal notranslate"><span class="pre">unzip</span></code>: the resulting directory can be passed to
-<a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> or memory-mapped into
-in-place.</p>
+<dd><p>Extracts a memory-mapped tensordict archive into a directory.</p>
+<p>The inverse of <a class="reference internal" href="tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">pack_memmap()</span></code></a>, and the same as <code class="docutils literal notranslate"><span class="pre">unzip</span></code>: the
+directory has one file per leaf, which
+<a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> reads. Existing files in
+<code class="docutils literal notranslate"><span class="pre">prefix</span></code> are overwritten.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – path to an archive produced by
-<a class="reference internal" href="tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">pack_memmap()</span></code></a> or <a class="reference internal" href="tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</p></li>
-<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – directory where the content should be
-extracted.</p></li>
+<li><p><strong>archive_path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – an archive written by <a class="reference internal" href="tensordict.pack_memmap.html#tensordict.pack_memmap" title="tensordict.pack_memmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">pack_memmap()</span></code></a>
+or by <a class="reference internal" href="tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</p></li>
+<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the directory to extract into. It is created if
+it does not exist.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the path to the directory.</p>
+<dd class="field-even"><p>The path of the directory, as a <a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">archive_path</span></code> is not an archive (see
+    <a class="reference internal" href="tensordict.is_memmap_archive.html#tensordict.is_memmap_archive" title="tensordict.is_memmap_archive"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_memmap_archive()</span></code></a>).</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">unpack_memmap</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td.tdz"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">directory</span> <span class="o">=</span> <span class="n">unpack_memmap</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td.tdz"</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"td"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">directory</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()))</span>
+<span class="go">['a.memmap', 'meta.json']</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2018,7 +2035,7 @@ extracted.</p></li>
        "headline": "unpack_memmap",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - unpack_memmap",
        "url": "/reference/generated/tensordict.unpack_memmap.html",
-       "articleBody": "unpack_memmap# tensordict.unpack_memmap(archive_path: str | Path, prefix: str | Path) \u2192 Path# Extracts a memmap tensordict archive into a memmap directory. This is the inverse of pack_memmap() and is equivalent to unzip: the resulting directory can be passed to load_memmap() or memory-mapped into in-place. Parameters: archive_path (str or Path) \u2013 path to an archive produced by pack_memmap() or save(). prefix (str or Path) \u2013 directory where the content should be extracted. Returns: the path to the directory.",
+       "articleBody": "unpack_memmap# tensordict.unpack_memmap(archive_path: str | Path, prefix: str | Path) \u2192 Path# Extracts a memory-mapped tensordict archive into a directory. The inverse of pack_memmap(), and the same as unzip: the directory has one file per leaf, which load_memmap() reads. Existing files in prefix are overwritten. Parameters: archive_path (str or Path) \u2013 an archive written by pack_memmap() or by save(). prefix (str or Path) \u2013 the directory to extract into. It is created if it does not exist. Returns: The path of the directory, as a Path. Raises: ValueError \u2013 if archive_path is not an archive (see is_memmap_archive()). Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, unpack_memmap \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3)) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = td.save(Path(path) / \"td.tdz\") ... directory = unpack_memmap(Path(path) / \"td.tdz\", Path(path) / \"td\") ... print(sorted(p.name for p in directory.iterdir())) [\u0027a.memmap\u0027, \u0027meta.json\u0027]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

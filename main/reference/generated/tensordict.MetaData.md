@@ -26,7 +26,22 @@ and its source hold different objects.
 stack.
 
 `MetaData[cls]` makes a subclass that raises a `TypeError` if the
-value is not an instance of `cls`.
+value is not an instance of `cls`. See [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data).
+
+Parameters:
+
+**data** (*Any*) - the value. A [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) is
+unwrapped: its value is used.
+
+Keyword Arguments:
+
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the entry, usually that of the tensordict that holds it. Defaults
+to `torch.Size([])`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the entry.
+The value itself is not moved. Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions, one
+per dimension. Defaults to `None`.
 
 Examples
 
@@ -58,7 +73,7 @@ Deprecated since version 0.15: Use `dataclasses.fields(cls)` instead. It returns
 
 from_module(*as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a tensordict that holds the parameters and buffers of a module.
 
 The entries are the parameters and buffers of the module themselves,
 not copies. Submodules become nested tensordicts.
@@ -71,7 +86,7 @@ The function [`tensordict.from_module()`](tensordict.from_module.html#tensordict
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `TensorDictParams`
 instance is returned, which can be used to store parameters
 within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
@@ -88,7 +103,7 @@ Defaults to `True`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
 `TensorDictParams` if `as_module=True`.
 
 Examples
@@ -121,10 +136,17 @@ Parameters:
 
 - **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict that holds the tensor fields.
 - **non_tensordict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - the values of the non-tensor fields. The
-fields that neither argument holds are set to `None`.
-- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
-raise an error if `tensordict` is not a [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase).
-Without it, such a tensordict raises an error.
+fields that neither argument holds are set to `None`. Defaults
+to `None`.
+- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - deprecated in 0.15, will be removed in TensorDict 0.17.
+If `False`, skips the check that `tensordict` is a
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase). By default, the check runs, and
+another type raises a `RuntimeError`.
+
+Returns:
+
+A new instance of the class, whose fields are the entries of
+`tensordict`.
 
 Examples
 

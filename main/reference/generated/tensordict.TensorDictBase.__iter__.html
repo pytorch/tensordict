@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,6 +1643,9 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.__iter__">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__iter__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Iterator" title="(in Python v3.15)"><span class="pre">Iterator</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.__iter__" title="Link to this definition">#</a></dt>
 <dd><p>Iterates over the first batch dimension of the tensordict.</p>
+<p>Each item is a tensordict with the remaining batch dimensions, as
+returned by <code class="docutils literal notranslate"><span class="pre">td.unbind(0)</span></code>. To iterate over the keys, use
+<a class="reference internal" href="tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys" title="tensordict.TensorDictBase.keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">keys()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – if the tensordict has no batch dimensions, as <code class="docutils literal notranslate"><span class="pre">iter()</span></code>
@@ -2009,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__iter__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__iter__",
        "url": "/reference/generated/tensordict.TensorDictBase.__iter__.html",
-       "articleBody": "TensorDictBase.__iter__# TensorDictBase.__iter__() \u2192 Iterator[TensorDictBase]# Iterates over the first batch dimension of the tensordict. Raises: TypeError \u2013 if the tensordict has no batch dimensions, as iter() does for a 0-d tensor. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__iter__# TensorDictBase.__iter__() \u2192 Iterator[TensorDictBase]# Iterates over the first batch dimension of the tensordict. Each item is a tensordict with the remaining batch dimensions, as returned by td.unbind(0). To iterate over the keys, use keys(). Raises: TypeError \u2013 if the tensordict has no batch dimensions, as iter() does for a 0-d tensor. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

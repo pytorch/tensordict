@@ -2,47 +2,38 @@
 
 TensorDictBase.to_lazystack(*dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*)
 
-Converts a TensorDict to a LazyStackedTensorDict or equivalent.
+Returns a lazy stack of the slices of the tensordict along `dim`.
 
-Note
-
-This method can be used to swap the stack dimension of a LazyStackedTensorDict.
-For example, if you have a LazyStackedTensorDict with stack_dim=1, you can use this method to swap it to stack_dim=0:
-
-```
->>> import torch
->>> from tensordict import LazyStackedTensorDict, TensorDict
->>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
->>> td2 = td.to_lazystack()
->>> td2.batch_size
-torch.Size([2, 3])
->>> assert isinstance(td2, LazyStackedTensorDict)
->>> assert td2.stack_dim == 0
->>> td3 = td2.to_lazystack(1)
->>> assert td3.stack_dim == 1
->>> td3.batch_size
-torch.Size([2, 3])
-```
+The tensordict is unbound along `dim` and the slices are stacked in
+a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) (see [Stacking and variable-size data](../../concepts/stacking.html#stacking)).
+The slices are views: writing into a tensordict of the stack in place
+writes into the original data. The batch size does not change. A lazy
+stack along `dim` is returned as it is, and a lazy stack along
+another dimension is restacked, which changes its stack dimension.
 
 Parameters:
 
-**dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dimension along which to stack the tensordict.
-Defaults to `0`.
+**dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dimension to stack along. Defaults to
+`0`.
 
 Returns:
 
-A LazyStackedTensorDict instance.
+A lazy stack with `stack_dim == dim`, or `self` when the
+tensordict is already one.
 
 Examples
 
 ```
 >>> import torch
->>> from tensordict import LazyStackedTensorDict, TensorDict
->>> td = TensorDict({"a": torch.zeros(2, 3), "b": torch.ones(2, 3)}, batch_size=(2, 3))
->>> td2 = td.to_lazystack()
->>> td2.batch_size
-torch.Size([2, 3])
->>> assert isinstance(td2, LazyStackedTensorDict)
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(2, 3), batch_size=(2, 3))
+>>> stack = td.to_lazystack()
+>>> type(stack).__name__, stack.batch_size, stack.stack_dim
+('LazyStackedTensorDict', torch.Size([2, 3]), 0)
+>>> stack.to_lazystack(1).stack_dim
+1
+>>> stack.to_lazystack(0) is stack
+True
 ```
 
 Every tensordict class and every tensorclass has this method. For the

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,20 +1642,25 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_pandas">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_pandas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">separator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.to_pandas" title="Link to this definition">#</a></dt>
-<dd><p>Converts this TensorDict to a pandas DataFrame.</p>
-<p>Each leaf key becomes a column. Tensor values are converted to numpy
-arrays, <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> values are converted to
-Python lists.</p>
+<dd><p>Converts the tensordict to a pandas DataFrame, with one column per leaf.</p>
+<p>Each leaf must hold one value per row: a tensor of shape
+<code class="docutils literal notranslate"><span class="pre">[num_rows]</span></code>, or non-tensor data. Tensors are copied to the CPU and
+converted to NumPy arrays. Non-tensor data becomes a column of Python
+values. Requires pandas.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – If provided, nested keys are joined
-with this separator to produce flat column names. For example,
-<code class="docutils literal notranslate"><span class="pre">td[&quot;obs&quot;,</span> <span class="pre">&quot;x&quot;]</span></code> becomes column <code class="docutils literal notranslate"><span class="pre">&quot;obs.x&quot;</span></code> with
-<code class="docutils literal notranslate"><span class="pre">separator=&quot;.&quot;</span></code>. Required when the TensorDict contains
-nested sub-TensorDicts. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dd class="field-odd"><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – if given, joins the keys of nested
+entries with it to build the column names: with
+<code class="docutils literal notranslate"><span class="pre">separator=&quot;.&quot;</span></code>, the entry <code class="docutils literal notranslate"><span class="pre">(&quot;obs&quot;,</span> <span class="pre">&quot;x&quot;)</span></code> becomes the
+column <code class="docutils literal notranslate"><span class="pre">&quot;obs.x&quot;</span></code>. Required when the tensordict has nested
+tensordicts. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A pandas DataFrame.</p>
+<dd class="field-even"><p>A <code class="docutils literal notranslate"><span class="pre">pd.DataFrame</span></code> with one row per element of the tensordict.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if the tensordict has a nested tensordict and no
+    <code class="docutils literal notranslate"><span class="pre">separator</span></code>, or if a tensor has more than one dimension.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2030,7 +2035,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_pandas",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_pandas",
        "url": "/reference/generated/tensordict.TensorDictBase.to_pandas.html",
-       "articleBody": "TensorDictBase.to_pandas# TensorDictBase.to_pandas(*, separator: str | None = None)# Converts this TensorDict to a pandas DataFrame. Each leaf key becomes a column. Tensor values are converted to numpy arrays, NonTensorData values are converted to Python lists. Keyword Arguments: separator (str, optional) \u2013 If provided, nested keys are joined with this separator to produce flat column names. For example, td[\"obs\", \"x\"] becomes column \"obs.x\" with separator=\".\". Required when the TensorDict contains nested sub-TensorDicts. Defaults to None. Returns: A pandas DataFrame. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(3), \"b\": torch.zeros(3)}, [3]) \u003e\u003e\u003e df = td.to_pandas() \u003e\u003e\u003e print(df) a b 0 0 0.0 1 1 0.0 2 2 0.0 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_pandas# TensorDictBase.to_pandas(*, separator: str | None = None)# Converts the tensordict to a pandas DataFrame, with one column per leaf. Each leaf must hold one value per row: a tensor of shape [num_rows], or non-tensor data. Tensors are copied to the CPU and converted to NumPy arrays. Non-tensor data becomes a column of Python values. Requires pandas. Keyword Arguments: separator (str, optional) \u2013 if given, joins the keys of nested entries with it to build the column names: with separator=\".\", the entry (\"obs\", \"x\") becomes the column \"obs.x\". Required when the tensordict has nested tensordicts. Defaults to None. Returns: A pd.DataFrame with one row per element of the tensordict. Raises: ValueError \u2013 if the tensordict has a nested tensordict and no separator, or if a tensor has more than one dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(3), \"b\": torch.zeros(3)}, [3]) \u003e\u003e\u003e df = td.to_pandas() \u003e\u003e\u003e print(df) a b 0 0 0.0 1 1 0.0 2 2 0.0 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

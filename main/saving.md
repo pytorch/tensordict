@@ -106,7 +106,8 @@ replaces the leaves of the tensordict itself.
 - [`load()`](reference/generated/tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load) and
 [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) are one method.
 
-`memmap`, `memmap_`, and `save` lock the tensordict that they return.
+`memmap`, `memmap_`, and `save` lock the tensordict that they return,
+except when `memmap` or `save` writes a `.tdz` archive.
 You can write into its tensors in place, but you cannot add, remove, or
 replace an entry (see [Locking and temporary changes](concepts/keys.html#keys-locking)).
 
@@ -535,9 +536,10 @@ fixed name in a shared `/tmp`.
 directory, also for keys that contain `/` or `..`. `robust_key=False`
 turns this off for old layouts. Do not use it with keys or metadata that
 you do not trust.
-- A save overwrites a leaf file that exists. To get an error instead, pass
-`existsok=False`. `save` still rewrites the metadata files of a
-directory that it reuses.
+- A save overwrites a leaf file that exists. To get an error instead, call
+`memmap` with `existsok=False`: `save` has no `existsok`
+argument. `memmap` still rewrites the metadata files of a directory
+that it reuses.
 
 Two other features unpickle what they receive: the Redis backend of
 [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) (see [Share data between nodes with Redis](storage.html#storage-redis)) and the

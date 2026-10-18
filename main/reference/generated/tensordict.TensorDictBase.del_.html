@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,19 +1642,20 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.del_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">del_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.del_" title="Link to this definition">#</a></dt>
-<dd><p>Deletes a key of the tensordict.</p>
-<p>A locked tensordict raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> (see <a class="reference internal" href="tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>).</p>
+<dd><p>Deletes an entry of the tensordict in place and returns the tensordict.</p>
+<p>A locked tensordict raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> (see <a class="reference internal" href="tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>).
+<code class="docutils literal notranslate"><span class="pre">del</span> <span class="pre">td[key]</span></code> does the same.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – key to be deleted. A missing key raises
+<dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key to delete. A missing key raises
 <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>, and a key whose path runs through an entry that
-is not a tensordict raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. Until 0.17, the
-stores and the zarr backend of
+is not a tensordict raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. Until TensorDict
+0.17, the stores and the zarr backend of
 <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> warn and do nothing
 for a missing key.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>self</p>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2032,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.del",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.del",
        "url": "/reference/generated/tensordict.TensorDictBase.del_.html",
-       "articleBody": "TensorDictBase.del# TensorDictBase.del_(key: NestedKey) \u2192 Self# Deletes a key of the tensordict. A locked tensordict raises RuntimeError (see lock_()). Parameters: key (NestedKey) \u2013 key to be deleted. A missing key raises KeyError, and a key whose path runs through an entry that is not a tensordict raises ValueError. Until 0.17, the stores and the zarr backend of PersistentTensorDict warn and do nothing for a missing key. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3))) \u003e\u003e\u003e list(td.del_((\"b\", \"c\")).keys(True)) [\u0027a\u0027, \u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use del_# Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.del# TensorDictBase.del_(key: NestedKey) \u2192 Self# Deletes an entry of the tensordict in place and returns the tensordict. A locked tensordict raises RuntimeError (see lock_()). del td[key] does the same. Parameters: key (NestedKey) \u2013 the key to delete. A missing key raises KeyError, and a key whose path runs through an entry that is not a tensordict raises ValueError. Until TensorDict 0.17, the stores and the zarr backend of PersistentTensorDict warn and do nothing for a missing key. Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3))) \u003e\u003e\u003e list(td.del_((\"b\", \"c\")).keys(True)) [\u0027a\u0027, \u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use del_# Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,24 +1642,26 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.stack_tensors">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">stack_tensors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_entries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.stack_tensors" title="Link to this definition">#</a></dt>
-<dd><p>Stacks entries into a new entry and possibly remove the original values.</p>
+<dd><p>Stacks entries of the tensordict into a new entry, and removes them by default.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>keys</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – entries to stack.</p>
+<dd class="field-odd"><p><strong>*keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the entries to stack, with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>out_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – new key name for the stacked inputs.</p></li>
-<li><p><strong>keep_entries</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, entries in <code class="docutils literal notranslate"><span class="pre">keys</span></code> will be deleted.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>. Entries are deleted only after the result
-has been written. If stacking fails, or if the result cannot
-be written, every input entry is kept with its original value.</p></li>
-<li><p><strong>dim</strong> (<a class="reference internal" href="tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a><em>, </em><em>optional</em>) – the dimension along which the stack must occur.
-Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p><strong>out_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the result.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the new dimension, counted in the dimensions
+of the result. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p><strong>keep_entries</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, removes the entries
+of <code class="docutils literal notranslate"><span class="pre">keys</span></code> once the result is written. If the stack or the
+write fails, every entry is kept with its original value.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+</dd>
 </dl>
-<p>Returns: self</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2029,7 +2031,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.stack_tensors",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.stack_tensors",
        "url": "/reference/generated/tensordict.TensorDictBase.stack_tensors.html",
-       "articleBody": "TensorDictBase.stack_tensors# TensorDictBase.stack_tensors(*keys: NestedKey, out_key: NestedKey, dim: int = 0, keep_entries: bool = False) \u2192 Self# Stacks entries into a new entry and possibly remove the original values. Parameters: keys (sequence of NestedKey) \u2013 entries to stack. Keyword Arguments: out_key (NestedKey) \u2013 new key name for the stacked inputs. keep_entries (bool, optional) \u2013 if False, entries in keys will be deleted. Defaults to False. Entries are deleted only after the result has been written. If stacking fails, or if the result cannot be written, every input entry is kept with its original value. dim (int, optional) \u2013 the dimension along which the stack must occur. Defaults to 0. Returns: self Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(()), b=torch.ones(())) \u003e\u003e\u003e _ = td.stack_tensors(\"a\", \"b\", out_key=\"c\") \u003e\u003e\u003e assert \"a\" not in td \u003e\u003e\u003e assert (td[\"c\"] == torch.tensor([0, 1])).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.stack_tensors# TensorDictBase.stack_tensors(*keys: NestedKey, out_key: NestedKey, dim: int = 0, keep_entries: bool = False) \u2192 Self# Stacks entries of the tensordict into a new entry, and removes them by default. Parameters: *keys (NestedKey) \u2013 the entries to stack, with torch.stack(). Keyword Arguments: out_key (NestedKey) \u2013 the key of the result. dim (int, optional) \u2013 the new dimension, counted in the dimensions of the result. Defaults to 0. keep_entries (bool, optional) \u2013 if False, removes the entries of keys once the result is written. If the stack or the write fails, every entry is kept with its original value. Defaults to False. Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(()), b=torch.ones(())) \u003e\u003e\u003e _ = td.stack_tensors(\"a\", \"b\", out_key=\"c\") \u003e\u003e\u003e assert \"a\" not in td \u003e\u003e\u003e assert (td[\"c\"] == torch.tensor([0, 1])).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

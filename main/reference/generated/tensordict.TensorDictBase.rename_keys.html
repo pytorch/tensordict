@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,16 +1643,16 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.rename_keys">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">rename_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.15)"><span class="pre">Mapping</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.rename_keys" title="Link to this definition">#</a></dt>
 <dd><p>Returns a tensordict with several keys renamed at once.</p>
-<p><code class="docutils literal notranslate"><span class="pre">self</span></code> is not modified. The result has a new tree of sub-tensordicts and
-shares every leaf with <code class="docutils literal notranslate"><span class="pre">self</span></code>, tensors and non-tensor data alike. Its
-batch size, device and dim names are those of <code class="docutils literal notranslate"><span class="pre">self</span></code>, and it is not
-locked.</p>
+<p>The tensordict is not modified. The result has a new tree of nested
+tensordicts and shares every leaf with the tensordict, tensors and
+non-tensor data alike. Its batch size, device and dimension names are
+those of the tensordict, and it is not locked.</p>
 <p>Every source is read before any destination is written, so swaps
 (<code class="docutils literal notranslate"><span class="pre">{&quot;a&quot;:</span> <span class="pre">&quot;b&quot;,</span> <span class="pre">&quot;b&quot;:</span> <span class="pre">&quot;a&quot;}</span></code>) and chains (<code class="docutils literal notranslate"><span class="pre">{&quot;a&quot;:</span> <span class="pre">&quot;b&quot;,</span> <span class="pre">&quot;b&quot;:</span> <span class="pre">&quot;c&quot;}</span></code>) work.
-A sub-tensordict that the renaming leaves empty is removed. Other empty
-sub-tensordicts are kept.</p>
+A nested tensordict that the renaming leaves empty is removed. Other
+empty nested tensordicts are kept.</p>
 <p>A lazy stack renames the keys in each of its tensordicts, and removes a
-sub-tensordict only if the renaming empties it in all of them. A
+nested tensordict only if the renaming empties it in all of them. A
 tensorclass returns the same class, its destinations must be fields,
 and its fields are never removed.
 <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> and the stores raise
@@ -1661,17 +1661,17 @@ and its fields are never removed.
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>mapping</strong> (<em>Mapping</em><em>[</em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>]</em>) – the old key of each entry
-mapped to its new key. Both sides can be nested keys, so an entry
-can move to another sub-tensordict and a whole sub-tensordict can
-be renamed.</p>
+mapped to its new key. Both sides can be nested keys, so an
+entry can move to another nested tensordict and a whole nested
+tensordict can be renamed.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>strict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a source missing from <code class="docutils literal notranslate"><span class="pre">self</span></code>
-raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, it is skipped. Defaults to
-<code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<dd class="field-even"><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a source missing from the
+tensordict raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, it is skipped.
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a new tensordict of the same type as <code class="docutils literal notranslate"><span class="pre">self</span></code>, except that a
+<dd class="field-odd"><p>A new tensordict of the same type as <code class="docutils literal notranslate"><span class="pre">self</span></code>, except that a
 sub-tensordict view and a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code>
 return a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, as <a class="reference internal" href="tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude" title="tensordict.TensorDictBase.exclude"><code class="xref py py-meth docutils literal notranslate"><span class="pre">exclude()</span></code></a> does.</p>
 </dd>
@@ -2066,7 +2066,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.rename_keys",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.rename_keys",
        "url": "/reference/generated/tensordict.TensorDictBase.rename_keys.html",
-       "articleBody": "TensorDictBase.rename_keys# TensorDictBase.rename_keys(mapping: Mapping[NestedKey, NestedKey], *, strict: bool = True) \u2192 Self# Returns a tensordict with several keys renamed at once. self is not modified. The result has a new tree of sub-tensordicts and shares every leaf with self, tensors and non-tensor data alike. Its batch size, device and dim names are those of self, and it is not locked. Every source is read before any destination is written, so swaps ({\"a\": \"b\", \"b\": \"a\"}) and chains ({\"a\": \"b\", \"b\": \"c\"}) work. A sub-tensordict that the renaming leaves empty is removed. Other empty sub-tensordicts are kept. A lazy stack renames the keys in each of its tensordicts, and removes a sub-tensordict only if the renaming empties it in all of them. A tensorclass returns the same class, its destinations must be fields, and its fields are never removed. PersistentTensorDict and the stores raise NotImplementedError: call to_tensordict() first. To rename a single key in place, see rename_key_(). Parameters: mapping (Mapping[NestedKey, NestedKey]) \u2013 the old key of each entry mapped to its new key. Both sides can be nested keys, so an entry can move to another sub-tensordict and a whole sub-tensordict can be renamed. Keyword Arguments: strict (bool, optional) \u2013 if True, a source missing from self raises KeyError. If False, it is skipped. Defaults to True. Returns: a new tensordict of the same type as self, except that a sub-tensordict view and a TensorDictParams return a TensorDict, as exclude() does. Raises: KeyError \u2013 if strict=True and a source is missing, or if a key is empty. ValueError \u2013 if two sources have the same destination, if a source lies inside another source or a destination inside another destination, or if a destination is already present and is not renamed away. AttributeError \u2013 if self is a tensorclass and a destination is not one of its fields. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(()), b=torch.ones(())) \u003e\u003e\u003e out = td.rename_keys({\"a\": \"b\", \"b\": \"a\"}) \u003e\u003e\u003e out[\"a\"], td[\"a\"] (tensor(1.), tensor(0.)) \u003e\u003e\u003e td = TensorDict(raw=TensorDict(p=torch.zeros(3), u=torch.ones(3))) \u003e\u003e\u003e out = td.rename_keys({(\"raw\", \"p\"): \"pressure\", (\"raw\", \"u\"): \"velocity\"}) \u003e\u003e\u003e sorted(out.keys(include_nested=True)) # \"raw\" was emptied and removed [\u0027pressure\u0027, \u0027velocity\u0027] \u003e\u003e\u003e out = td.rename_keys({\"raw\": \"solution\"}) \u003e\u003e\u003e sorted(out.keys(include_nested=True, leaves_only=True)) [(\u0027solution\u0027, \u0027p\u0027), (\u0027solution\u0027, \u0027u\u0027)] \u003e\u003e\u003e td.rename_keys({(\"raw\", \"zz\"): \"z\", (\"raw\", \"p\"): \"p\"}, strict=False)[\"p\"] tensor([0., 0., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.rename_keys# TensorDictBase.rename_keys(mapping: Mapping[NestedKey, NestedKey], *, strict: bool = True) \u2192 Self# Returns a tensordict with several keys renamed at once. The tensordict is not modified. The result has a new tree of nested tensordicts and shares every leaf with the tensordict, tensors and non-tensor data alike. Its batch size, device and dimension names are those of the tensordict, and it is not locked. Every source is read before any destination is written, so swaps ({\"a\": \"b\", \"b\": \"a\"}) and chains ({\"a\": \"b\", \"b\": \"c\"}) work. A nested tensordict that the renaming leaves empty is removed. Other empty nested tensordicts are kept. A lazy stack renames the keys in each of its tensordicts, and removes a nested tensordict only if the renaming empties it in all of them. A tensorclass returns the same class, its destinations must be fields, and its fields are never removed. PersistentTensorDict and the stores raise NotImplementedError: call to_tensordict() first. To rename a single key in place, see rename_key_(). Parameters: mapping (Mapping[NestedKey, NestedKey]) \u2013 the old key of each entry mapped to its new key. Both sides can be nested keys, so an entry can move to another nested tensordict and a whole nested tensordict can be renamed. Keyword Arguments: strict (bool, optional) \u2013 if True, a source missing from the tensordict raises KeyError. If False, it is skipped. Defaults to True. Returns: A new tensordict of the same type as self, except that a sub-tensordict view and a TensorDictParams return a TensorDict, as exclude() does. Raises: KeyError \u2013 if strict=True and a source is missing, or if a key is empty. ValueError \u2013 if two sources have the same destination, if a source lies inside another source or a destination inside another destination, or if a destination is already present and is not renamed away. AttributeError \u2013 if self is a tensorclass and a destination is not one of its fields. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(()), b=torch.ones(())) \u003e\u003e\u003e out = td.rename_keys({\"a\": \"b\", \"b\": \"a\"}) \u003e\u003e\u003e out[\"a\"], td[\"a\"] (tensor(1.), tensor(0.)) \u003e\u003e\u003e td = TensorDict(raw=TensorDict(p=torch.zeros(3), u=torch.ones(3))) \u003e\u003e\u003e out = td.rename_keys({(\"raw\", \"p\"): \"pressure\", (\"raw\", \"u\"): \"velocity\"}) \u003e\u003e\u003e sorted(out.keys(include_nested=True)) # \"raw\" was emptied and removed [\u0027pressure\u0027, \u0027velocity\u0027] \u003e\u003e\u003e out = td.rename_keys({\"raw\": \"solution\"}) \u003e\u003e\u003e sorted(out.keys(include_nested=True, leaves_only=True)) [(\u0027solution\u0027, \u0027p\u0027), (\u0027solution\u0027, \u0027u\u0027)] \u003e\u003e\u003e td.rename_keys({(\"raw\", \"zz\"): \"z\", (\"raw\", \"p\"): \"p\"}, strict=False)[\"p\"] tensor([0., 0., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

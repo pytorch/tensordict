@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,50 +1642,49 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.recv">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">recv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="s"><span class="pre">'TensorDictPipe'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'torch.distributed.ProcessGroup'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_src</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init_tag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pseudo_rand</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">consolidated</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.recv" title="Link to this definition">#</a></dt>
-<dd><p>Receives the content of a tensordict and updates content with it.</p>
-<p>Check the example in the <cite>send</cite> method for context.</p>
+<dd><p>Receives the leaves that <a class="reference internal" href="tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> sends, and writes them into the tensordict in place.</p>
+<p>The tensordict must have the keys, shapes and dtypes of the tensordict
+that the sender sends. See <a class="reference internal" href="tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> for an example, and
+<a class="reference internal" href="../../distributed.html#distributed"><span class="std std-ref">Distributed tensordicts</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><em>TensorDictPipe</em></a><em>, </em><em>optional</em>) – the global rank of the
-source worker, or a
-<a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a> for UCXX-based
-transport.  When a pipe is passed, the data is received
-in-place into this tensordict’s consolidated storage (if
-available and its layout matches the received data);
-otherwise the pipe returns a tensordict of its own, so use
-the returned value. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">group_src</span></code>;
-exactly one of the two must be provided.</p>
+<dd class="field-odd"><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><em>TensorDictPipe</em></a><em>, </em><em>optional</em>) – the global rank of the sender,
+or a <a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a> to receive from
+with UCXX, which ignores the other arguments. Exclusive with
+<code class="docutils literal notranslate"><span class="pre">group_src</span></code>: pass exactly one of them. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – if set, the specified process group
-will be used for communication. Otherwise, the default process group
-will be used.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>group_src</strong> (<a class="reference internal" href="tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a><em>, </em><em>optional</em>) – the rank of the source worker <em>relative
-to</em> <code class="docutils literal notranslate"><span class="pre">group</span></code>. Requires <code class="docutils literal notranslate"><span class="pre">group</span></code> to be passed and is mutually
-exclusive with <code class="docutils literal notranslate"><span class="pre">src</span></code>. When set, the p2p calls are issued
-directly on the group’s backend, so <code class="docutils literal notranslate"><span class="pre">group</span></code> may be a
-standalone <code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessGroup</span></code> built
-against a store (never registered through
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">init_process_group()</span></code></a> or
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">new_group()</span></code></a>).
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>init_tag</strong> (<a class="reference internal" href="tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a>) – the <code class="docutils literal notranslate"><span class="pre">init_tag</span></code> used by the source worker.</p></li>
-<li><p><strong>pseudo_rand</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a>) – if True, the sequence of tags will be pseudo-
-random, allowing to send multiple data from different nodes
-without overlap. Notice that the generation of these pseudo-random
-numbers is expensive (1e-5 sec/number), meaning that it could
-slow down the runtime of your algorithm.
-This value must match the one passed to <a class="reference internal" href="tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-func docutils literal notranslate"><span class="pre">send()</span></code></a>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>consolidated</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a>) – if True, receives a single consolidated storage
-tensor directly into <code class="docutils literal notranslate"><span class="pre">self._consolidated[&quot;storage&quot;]</span></code>. The
-tensordict must already be consolidated (e.g. from a prior
-<a class="reference internal" href="tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init" title="tensordict.TensorDictBase.from_remote_init"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_remote_init()</span></code></a> call). All leaf tensor views update
-in-place automatically.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group.</p></li>
+<li><p><strong>group_src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the rank of the sender in <code class="docutils literal notranslate"><span class="pre">group</span></code>, which
+must be given. Exclusive with <code class="docutils literal notranslate"><span class="pre">src</span></code>. The messages then go through
+the backend of <code class="docutils literal notranslate"><span class="pre">group</span></code> directly, so <code class="docutils literal notranslate"><span class="pre">group</span></code> can be a standalone
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessGroup</span></code> built on a store, never
+registered by <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">init_process_group()</span></code></a> or
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">new_group()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>init_tag</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">init_tag</span></code> that the sender passed.
+Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p><strong>pseudo_rand</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">pseudo_rand</span></code> that the sender
+passed. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>consolidated</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, receives one message into
+the consolidated storage of the tensordict, which updates all its
+leaves, as sent by <code class="docutils literal notranslate"><span class="pre">send(consolidated=True)</span></code>. The tensordict must
+be consolidated already, for example by
+<code class="docutils literal notranslate"><span class="pre">consolidate(metadata=True)</span></code> or <a class="reference internal" href="tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init" title="tensordict.TensorDictBase.from_remote_init"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_remote_init()</span></code></a>;
+otherwise an <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> is raised. <code class="docutils literal notranslate"><span class="pre">init_tag</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pseudo_rand</span></code> are ignored. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>With a pipe, the received tensordict, which is <code class="docutils literal notranslate"><span class="pre">self</span></code> only if the
+tensordict is consolidated with the layout of the data, so use the
+return value. With <code class="docutils literal notranslate"><span class="pre">consolidated=True</span></code>, <code class="docutils literal notranslate"><span class="pre">None</span></code>. Otherwise, the
+tag of the last leaf received.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if both or none of <code class="docutils literal notranslate"><span class="pre">src</span></code> and <code class="docutils literal notranslate"><span class="pre">group_src</span></code> are given, or
+    if <code class="docutils literal notranslate"><span class="pre">group_src</span></code> is given without <code class="docutils literal notranslate"><span class="pre">group</span></code>.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2048,7 +2047,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.recv",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.recv",
        "url": "/reference/generated/tensordict.TensorDictBase.recv.html",
-       "articleBody": "TensorDictBase.recv# TensorDictBase.recv(src: int | \u0027TensorDictPipe\u0027 | None = None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, group_src: int | None = None, init_tag: int = 0, pseudo_rand: bool = False, consolidated: bool = False) \u2192 int# Receives the content of a tensordict and updates content with it. Check the example in the send method for context. Parameters: src (int or TensorDictPipe, optional) \u2013 the global rank of the source worker, or a TensorDictPipe for UCXX-based transport. When a pipe is passed, the data is received in-place into this tensordict\u2019s consolidated storage (if available and its layout matches the received data); otherwise the pipe returns a tensordict of its own, so use the returned value. Mutually exclusive with group_src; exactly one of the two must be provided. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 if set, the specified process group will be used for communication. Otherwise, the default process group will be used. Defaults to None. group_src (int, optional) \u2013 the rank of the source worker relative to group. Requires group to be passed and is mutually exclusive with src. When set, the p2p calls are issued directly on the group\u2019s backend, so group may be a standalone ProcessGroup built against a store (never registered through init_process_group() or new_group()). Defaults to None. init_tag (int) \u2013 the init_tag used by the source worker. pseudo_rand (bool) \u2013 if True, the sequence of tags will be pseudo- random, allowing to send multiple data from different nodes without overlap. Notice that the generation of these pseudo-random numbers is expensive (1e-5 sec/number), meaning that it could slow down the runtime of your algorithm. This value must match the one passed to send(). Defaults to False. consolidated (bool) \u2013 if True, receives a single consolidated storage tensor directly into self._consolidated[\"storage\"]. The tensordict must already be consolidated (e.g. from a prior from_remote_init() call). All leaf tensor views update in-place automatically. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.recv# TensorDictBase.recv(src: int | \u0027TensorDictPipe\u0027 | None = None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, group_src: int | None = None, init_tag: int = 0, pseudo_rand: bool = False, consolidated: bool = False) \u2192 int# Receives the leaves that send() sends, and writes them into the tensordict in place. The tensordict must have the keys, shapes and dtypes of the tensordict that the sender sends. See send() for an example, and Distributed tensordicts. Parameters: src (int or TensorDictPipe, optional) \u2013 the global rank of the sender, or a TensorDictPipe to receive from with UCXX, which ignores the other arguments. Exclusive with group_src: pass exactly one of them. Defaults to None. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. group_src (int, optional) \u2013 the rank of the sender in group, which must be given. Exclusive with src. The messages then go through the backend of group directly, so group can be a standalone ProcessGroup built on a store, never registered by init_process_group() or new_group(). Defaults to None. init_tag (int, optional) \u2013 the init_tag that the sender passed. Defaults to 0. pseudo_rand (bool, optional) \u2013 the pseudo_rand that the sender passed. Defaults to False. consolidated (bool, optional) \u2013 if True, receives one message into the consolidated storage of the tensordict, which updates all its leaves, as sent by send(consolidated=True). The tensordict must be consolidated already, for example by consolidate(metadata=True) or from_remote_init(); otherwise an AttributeError is raised. init_tag and pseudo_rand are ignored. Defaults to False. Returns: With a pipe, the received tensordict, which is self only if the tensordict is consolidated with the layout of the data, so use the return value. With consolidated=True, None. Otherwise, the tag of the last leaf received. Raises: ValueError \u2013 if both or none of src and group_src are given, or if group_src is given without group. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

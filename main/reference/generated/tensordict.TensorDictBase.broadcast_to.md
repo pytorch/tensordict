@@ -2,17 +2,16 @@
 
 TensorDictBase.broadcast_to(*shape: [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), ...]*)
 
-Broadcasts the tensordict to a new shape.
+Returns the tensordict broadcast to the batch size `shape`, as [`torch.broadcast_to()`](https://docs.pytorch.org/docs/stable/generated/torch.broadcast_to.html#torch.broadcast_to) does.
 
-The new shape must be compatible with the original shape.
+As for [`expand()`](tensordict.TensorDictBase.expand.html#tensordict.TensorDictBase.expand), the new shape can add leading dimensions and
+expand the dimensions of size 1, and `-1` keeps the size of a
+dimension. The leaves of the result are views of the original leaves,
+and the result has no names.
 
 Parameters:
 
-**shape** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of**ints*) - The desired shape.
-
-Returns:
-
-a new tensordict with the shape broadcast.
+**shape** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the new batch size.
 
 Examples
 

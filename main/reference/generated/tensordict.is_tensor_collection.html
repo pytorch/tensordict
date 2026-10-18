@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,15 +1642,17 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.is_tensor_collection">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">is_tensor_collection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datatype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><span class="pre">type</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.is_tensor_collection" title="Link to this definition">#</a></dt>
-<dd><p>Checks if a data object or a type is a tensor container from the tensordict lib.</p>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if an object or a type is a tensordict or a tensorclass.</p>
+<p>A tensor, a dict and any other object return <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> if the input is a TensorDictBase subclass, a tensorclass or an istance of these.
-<code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>datatype</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><em>object</em></a>) – the type to check, or an object whose type
+is checked.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">is_tensor_collection</span><span class="p">,</span> <span class="n">tensorclass</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">is_tensor_collection</span><span class="p">,</span> <span class="n">tensorclass</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">TensorDictBase</span><span class="p">)</span>
 <span class="go">True</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">())</span>
@@ -1663,6 +1665,8 @@ document.write(`
 <span class="go">True</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">MyClass</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[]))</span>
 <span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)),</span> <span class="n">is_tensor_collection</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+<span class="go">(False, False)</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2023,7 +2027,7 @@ document.write(`
        "headline": "is_tensor_collection",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - is_tensor_collection",
        "url": "/reference/generated/tensordict.is_tensor_collection.html",
-       "articleBody": "is_tensor_collection# tensordict.is_tensor_collection(datatype: type | Any) \u2192 bool# Checks if a data object or a type is a tensor container from the tensordict lib. Returns: True if the input is a TensorDictBase subclass, a tensorclass or an istance of these. False otherwise. Examples \u003e\u003e\u003e from tensordict import TensorDict, TensorDictBase, is_tensor_collection, tensorclass \u003e\u003e\u003e is_tensor_collection(TensorDictBase) True \u003e\u003e\u003e is_tensor_collection(TensorDict()) True \u003e\u003e\u003e @tensorclass ... class MyClass: ... pass ... \u003e\u003e\u003e is_tensor_collection(MyClass) True \u003e\u003e\u003e is_tensor_collection(MyClass(batch_size=[])) True",
+       "articleBody": "is_tensor_collection# tensordict.is_tensor_collection(datatype: type | Any) \u2192 bool# Returns True if an object or a type is a tensordict or a tensorclass. A tensor, a dict and any other object return False. Parameters: datatype (type or object) \u2013 the type to check, or an object whose type is checked. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, TensorDictBase, is_tensor_collection, tensorclass \u003e\u003e\u003e is_tensor_collection(TensorDictBase) True \u003e\u003e\u003e is_tensor_collection(TensorDict()) True \u003e\u003e\u003e @tensorclass ... class MyClass: ... pass ... \u003e\u003e\u003e is_tensor_collection(MyClass) True \u003e\u003e\u003e is_tensor_collection(MyClass(batch_size=[])) True \u003e\u003e\u003e is_tensor_collection(torch.zeros(3)), is_tensor_collection({\"a\": 0}) (False, False)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

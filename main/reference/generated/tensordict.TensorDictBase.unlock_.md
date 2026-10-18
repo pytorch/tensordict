@@ -2,7 +2,7 @@
 
 TensorDictBase.unlock_() → Self
 
-Unlocks the tensordict and its sub-tensordicts, and returns it.
+Unlocks the tensordict and its nested tensordicts, and returns it.
 
 After this call, entries can be added, removed and renamed again. See
 [`lock_()`](tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_) for what a lock blocks.
@@ -12,7 +12,7 @@ the `with` block exits, also if the block raises an exception.
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if this tensordict, or one of its sub-tensordicts,
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensordict, or one of its nested tensordicts,
  is also an entry of another locked tensordict. Unlock that
  parent first. The tensordict stays locked.
 

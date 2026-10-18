@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1646,10 +1646,12 @@ document.write(`
 <p>A dimension without a name is <code class="docutils literal notranslate"><span class="pre">None</span></code>. The names can be set at
 construction time using the <code class="docutils literal notranslate"><span class="pre">names</span></code> argument, or by assignment
 (<code class="docutils literal notranslate"><span class="pre">td.names</span> <span class="pre">=</span> <span class="pre">[...]</span></code>). The names must be unique. Shape operations and
-indexing keep the names of the dimensions that remain. See
-<a class="reference internal" href="../../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>.</p>
-<p>See also <a class="reference internal" href="tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names" title="tensordict.TensorDictBase.refine_names"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refine_names()</span></code></a> for details on how to set the names after
-construction.</p>
+indexing keep the names of the dimensions that remain. Assigning
+<code class="docutils literal notranslate"><span class="pre">None</span></code> removes the names. See <a class="reference internal" href="../../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.refine_names.html#tensordict.TensorDictBase.refine_names" title="tensordict.TensorDictBase.refine_names"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refine_names()</span></code></a> and <a class="reference internal" href="tensordict.TensorDictBase.rename_.html#tensordict.TensorDictBase.rename_" title="tensordict.TensorDictBase.rename_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rename_()</span></code></a>.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2021,7 +2023,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.names",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.names",
        "url": "/reference/generated/tensordict.TensorDictBase.names.html",
-       "articleBody": "TensorDictBase.names# property TensorDictBase.names# The dimension names of the tensordict, one per batch dimension. A dimension without a name is None. The names can be set at construction time using the names argument, or by assignment (td.names = [...]). The names must be unique. Shape operations and indexing keep the names of the dimensions that remain. See Batch size, shapes, and indexing. See also refine_names() for details on how to set the names after construction. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4], names=[\"time\", None]) \u003e\u003e\u003e td.names [\u0027time\u0027, None] \u003e\u003e\u003e td.names = [\"time\", \"batch\"] \u003e\u003e\u003e td[0].names [\u0027batch\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.names# property TensorDictBase.names# The dimension names of the tensordict, one per batch dimension. A dimension without a name is None. The names can be set at construction time using the names argument, or by assignment (td.names = [...]). The names must be unique. Shape operations and indexing keep the names of the dimensions that remain. Assigning None removes the names. See Batch size, shapes, and indexing. See also refine_names() and rename_(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4], names=[\"time\", None]) \u003e\u003e\u003e td.names [\u0027time\u0027, None] \u003e\u003e\u003e td.names = [\"time\", \"batch\"] \u003e\u003e\u003e td[0].names [\u0027batch\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

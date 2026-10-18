@@ -2,36 +2,46 @@
 
 *classmethod*TensorDictBase.from_pandas(*dataframe*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Converts a pandas DataFrame to a TensorDict.
+Converts a pandas DataFrame to a tensordict, with one entry per column.
 
-Numeric columns become tensors, string/object columns become
-[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData).
+The batch size is `[num_rows]`. Numeric and boolean columns become
+tensors, string and object columns become non-tensor data, a
+categorical column becomes the tensor of its codes, and a datetime
+column becomes an `int64` tensor of nanoseconds.
+[`to_pandas()`](tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas) converts back.
 
 Parameters:
 
-**dataframe** (*pd.DataFrame*) - The pandas DataFrame to convert.
+**dataframe** (*pd.DataFrame*) - the DataFrame to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, the batch size will
-be computed automatically. Defaults to `False`.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - If `auto_batch_size` is `True`,
-defines how many dimensions the output tensordict should have.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`. Defaults to `False`.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`. Defaults to `None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device for tensor data.
-Defaults to `None`.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size. Defaults to
-`[num_rows]`.
-- **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - If provided, column names are split on
-this separator to create nested TensorDicts. For example, with
-`separator="."`, a column `"obs.x"` becomes
-`td["obs", "x"]`. Defaults to `None`.
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - If provided, all numeric columns
-are cast to this dtype. Defaults to `None`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which gives `[num_rows]`.
+- **separator** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - if given, splits the column names on it
+to build nested entries: with `separator="."`, the column
+`"obs.x"` becomes the entry `("obs", "x")`. Defaults to
+`None`, which keeps the column names as keys.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - if given, casts the numeric and
+boolean columns to it. Defaults to `None`, which keeps the
+dtype of each column.
 
 Returns:
 
-A TensorDict representation of the DataFrame.
+A tensordict of the class this method is called on
+([`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
 
 Examples
 

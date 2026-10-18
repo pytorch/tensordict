@@ -29,7 +29,7 @@ that a batch sampler reads in one index operation.
 
 Returns:
 
-the collated batch.
+The collated batch.
 
 Examples
 

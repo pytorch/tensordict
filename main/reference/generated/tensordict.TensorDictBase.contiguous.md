@@ -2,25 +2,22 @@
 
 TensorDictBase.contiguous(***, *canonical: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
-Returns a new tensordict of the same type with contiguous values (or self if values are already contiguous).
+Returns a new tensordict with contiguous leaves.
 
-Parameters:
+Each leaf is replaced by [`torch.Tensor.contiguous()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.contiguous.html#torch.Tensor.contiguous): a leaf that
+is already contiguous is shared with the tensordict, the others are
+copied.
 
-- **canonical** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, every dense tensor leaf
-whose strides do not match the canonical C-row-major strides
-for its shape is rematerialized into a freshly allocated
-contiguous tensor (using `torch.contiguous_format`), even if
-[`torch.Tensor.is_contiguous()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.is_contiguous.html#torch.Tensor.is_contiguous) returns `True` (e.g.
-because of size-1 dimensions). When `False` (the default),
-the historical behavior of [`torch.Tensor.contiguous()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.contiguous.html#torch.Tensor.contiguous) is
-preserved. Defaults to `False`.
-- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - If `True`, this tensordict's identity
-and key set are preserved; each non-contiguous leaf is
-replaced by its contiguous counterpart one at a time.
-`Tensor.contiguous()` returns `self` when a leaf is
-already contiguous, so for fully-contiguous tensordicts the
-operation is effectively a no-op aside from the key walk.
-Defaults to `False`.
+Keyword Arguments:
+
+- **canonical** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a leaf whose strides are
+not the row-major strides of its shape is copied too, even if
+[`torch.Tensor.is_contiguous()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.is_contiguous.html#torch.Tensor.is_contiguous) returns `True` for it (as
+it can with dimensions of size 1). Defaults to `False`.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
+identity and keys, each leaf that is not contiguous is replaced
+by a contiguous copy, and `self` is returned. See
+[In-place operations](../../concepts/operations.html#inplace-conventions). Defaults to `False`.
 
 Note
 
@@ -38,6 +35,14 @@ Examples
 ```
 >>> import torch
 >>> from tensordict import TensorDict, lazy_stack
+>>> td = TensorDict(a=torch.zeros(4, 3).T, batch_size=[3])
+>>> td.is_contiguous(), td.contiguous().is_contiguous()
+(False, True)
+```
+
+On a lazy stack, the result loses the name of the stack dimension:
+
+```
 >>> stack = lazy_stack(
 ... [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)],
 ... stack_dim_name="s",

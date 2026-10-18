@@ -2,11 +2,11 @@
 
 *classmethod*TensorDictBase.cat(*input*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, ***, *out=None*)
 
-Concatenates tensordicts into a single tensordict along the given dimension.
+Concatenates tensordicts along an existing batch dimension `dim`.
 
-This call is equivalent to calling [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) but is compatible with torch.compile.
-The tensordicts must have the same keys, and the same batch size
-except along `dim`.
+It is equivalent to [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat), and also works under
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile). The tensordicts must have the same keys, or a
+`KeyError` is raised, and the same batch size except along `dim`.
 
 Parameters:
 
@@ -17,7 +17,7 @@ Defaults to `0`.
 Keyword Arguments:
 
 **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
-into.
+into. Defaults to `None`.
 
 Examples
 

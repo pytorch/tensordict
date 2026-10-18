@@ -4,16 +4,16 @@
 
 Bases: [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
 
-A biased softplus module.
+A softplus shifted so that it returns `bias` for a zero input and stays above `min_val`.
 
-The bias indicates the value that is to be returned when a zero-tensor is
-passed through the transform. The module computes
-`softplus(x + inv_softplus(bias - min_val)) + min_val`.
+The module computes `softplus(x + inv_softplus(bias - min_val)) + min_val`.
+[`mappings()`](tensordict.nn.mappings.html#tensordict.nn.mappings) returns it for the keys `"biased_softplus_{bias}"`
+and `"biased_softplus_{bias}_{min_val}"`.
 
 Parameters:
 
 - **bias** ([*float*](https://docs.python.org/3/builtins/functions.html#float)) - the output for a zero input.
-- **min_val** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,**optional*) - minimum value of the output. Defaults to `0.01`.
+- **min_val** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,**optional*) - the lower bound of the output. Defaults to `0.01`.
 
 Examples
 

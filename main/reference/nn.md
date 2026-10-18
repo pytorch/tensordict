@@ -27,14 +27,14 @@ a [`TensorDictModule`](generated/tensordict.nn.TensorDictModule.html#tensordict.
 - [`CudaGraphModule`](generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule) captures a module or a function in a CUDA graph
 and replays it. See [torch.compile, torch.func, torch.export, and CUDA graphs](../compile.html#compile).
 
-| [`TensorDictModuleBase`](generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)(*args, **kwargs) | Base class to TensorDict modules. |
+| [`TensorDictModuleBase`](generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)(*args, **kwargs) | Base class of the tensordict modules, which read `in_keys` from a tensordict and write `out_keys`. |
 | --- | --- |
-| [`TensorDictModule`](generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule)(module, in_keys, out_keys, *) | Wraps a callable, such as a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module), so that it reads its inputs from a tensordict and writes its outputs to it. |
+| [`TensorDictModule`](generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule)(module, in_keys, out_keys, *) | Wraps a callable so that it reads its inputs from a tensordict and writes its outputs to it. |
 | [`TensorDictSequential`](generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential)(*modules[, ...]) | Runs TensorDictModules one after the other on the same tensordict. |
-| [`WrapModule`](generated/tensordict.nn.WrapModule.html#tensordict.nn.WrapModule)(func, *[, inplace, in_keys, out_keys]) | A wrapper around any callable that processes TensorDict instances. |
-| [`TensorDictModuleWrapper`](generated/tensordict.nn.TensorDictModuleWrapper.html#tensordict.nn.TensorDictModuleWrapper)(td_module) | Wrapper class for TensorDictModule objects. |
+| [`WrapModule`](generated/tensordict.nn.WrapModule.html#tensordict.nn.WrapModule)(func, *[, inplace, in_keys, out_keys]) | Wraps a function that takes and returns a tensordict as a tensordict module. |
+| [`TensorDictModuleWrapper`](generated/tensordict.nn.TensorDictModuleWrapper.html#tensordict.nn.TensorDictModuleWrapper)(td_module) | Wraps a tensordict module and behaves like it, except for the methods that a subclass overrides. |
 
-| [`as_tensordict_module`](generated/tensordict.nn.as_tensordict_module.html#tensordict.nn.as_tensordict_module)(*, in_keys, out_keys) | A decorator that converts a function into a TensorDictModule. |
+| [`as_tensordict_module`](generated/tensordict.nn.as_tensordict_module.html#tensordict.nn.as_tensordict_module)(*, in_keys, out_keys) | Turns a function or a method into a tensordict module that reads `in_keys` and writes `out_keys`. |
 | --- | --- |
 | [`CudaGraphModule`](generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule)(module[, warmup, in_keys, ...]) | Records a function, or a TensorDictModule, as a CUDA graph and replays it. |
 
@@ -47,9 +47,9 @@ name or type.
 [`TensorClassModuleWrapper`](generated/tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper), which reads and writes a tensordict, so
 that you can put the module in a [`TensorDictSequential`](generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential).
 
-| [`TensorClassModuleBase`](generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase)(*args, **kwargs) | A TensorClassModuleBase is a base class for modules that operate on TensorClass instances. |
+| [`TensorClassModuleBase`](generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase)(*args, **kwargs) | Base class of the modules that take and return a tensorclass. |
 | --- | --- |
-| [`TensorClassModuleWrapper`](generated/tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper)(module) | Wrapper class for TensorClassModuleBase objects. |
+| [`TensorClassModuleWrapper`](generated/tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper)(module) | Wraps a [`TensorClassModuleBase`](generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase) so that it takes and returns a tensordict. |
 
 ## Probabilistic modules
 
@@ -65,14 +65,14 @@ tensor.
 
 | [`ProbabilisticTensorDictModule`](generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule)(in_keys, ...) | A module that builds a distribution from entries of a tensordict and writes a value from it. |
 | --- | --- |
-| [`ProbabilisticTensorDictSequential`](generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential)(*modules) | A [`TensorDictSequential`](generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) that contains one or more [`ProbabilisticTensorDictModule`](generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) instances, and can return their distribution. |
+| [`ProbabilisticTensorDictSequential`](generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential)(*modules) | A [`TensorDictSequential`](generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) with probabilistic modules, which can return their distribution. |
 
 | [`InteractionType`](generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType)(value[, names, module, ...]) | The rule that a probabilistic module uses to get a value from a distribution. |
 | --- | --- |
 | [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type)([type, thread_local]) | Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function. |
-| [`set_composite_lp_aggregate`](generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate)([mode, thread_local]) | Controls whether [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
+| [`set_composite_lp_aggregate`](generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate)([mode, thread_local]) | Sets whether a [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) sums its log-probabilities in one tensor. |
 
-| [`composite_lp_aggregate`](generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate)([nowarn]) | Returns whether a [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) log-probabilities and entropies will be aggregated in a single tensor. |
+| [`composite_lp_aggregate`](generated/tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate)([nowarn]) | Returns whether a [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) sums its log-probabilities in one tensor. |
 | --- | --- |
 | [`interaction_type`](generated/tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)() | Returns the interaction type set by [`set_interaction_type`](generated/tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type), or `None` outside of it. |
 
@@ -84,7 +84,7 @@ with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.
 size `num_copies`. To keep parameters as a tensordict on a module, see
 [`TensorDictParams`](generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) on [tensordict: containers and functions](td.html#api-tensordict).
 
-| [`EnsembleModule`](generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule)(module, num_copies[, ...]) | Module that wraps a module and repeats it to form an ensemble. |
+| [`EnsembleModule`](generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule)(module, num_copies[, ...]) | Runs `num_copies` copies of a module, each with its own parameters, on the same input. |
 | --- | --- |
 
 ## Compiling modules
@@ -103,14 +103,14 @@ the location and scale of a normal distribution.
 [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) groups several distributions, one for each
 entry of a tensordict.
 
-| [`AddStateIndependentNormalScale`](generated/tensordict.nn.distributions.AddStateIndependentNormalScale.html#tensordict.nn.distributions.AddStateIndependentNormalScale)([...]) | A nn.Module that adds trainable state-independent scale parameters. |
+| [`AddStateIndependentNormalScale`](generated/tensordict.nn.distributions.AddStateIndependentNormalScale.html#tensordict.nn.distributions.AddStateIndependentNormalScale)([...]) | A module that returns its input as a location, with a learned scale that does not depend on the input. |
 | --- | --- |
-| [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution)(params, ...[, ...]) | A composite distribution that groups multiple distributions together using the TensorDict interface. |
-| [`Delta`](generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta)(param[, atol, rtol, batch_shape, ...]) | Delta distribution. |
-| [`NormalParamExtractor`](generated/tensordict.nn.distributions.NormalParamExtractor.html#tensordict.nn.distributions.NormalParamExtractor)([scale_mapping, scale_lb]) | A non-parametric nn.Module that splits its input into loc and scale parameters. |
-| [`OneHotCategorical`](generated/tensordict.nn.distributions.OneHotCategorical.html#tensordict.nn.distributions.OneHotCategorical)([logits, probs]) | One-hot categorical distribution. |
-| [`TruncatedNormal`](generated/tensordict.nn.distributions.TruncatedNormal.html#tensordict.nn.distributions.TruncatedNormal)(loc, scale, a, b[, ...]) | Truncated Normal distribution. |
-| [`truncated_normal.TruncatedStandardNormal`](generated/tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.html#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal)(a, b) | Truncated Standard Normal distribution. |
+| [`CompositeDistribution`](generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution)(params, ...[, ...]) | A distribution made of several named distributions, which samples and scores tensordicts. |
+| [`Delta`](generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta)(param[, atol, rtol, batch_shape, ...]) | A distribution with all its mass on one value, `param`. |
+| [`NormalParamExtractor`](generated/tensordict.nn.distributions.NormalParamExtractor.html#tensordict.nn.distributions.NormalParamExtractor)([scale_mapping, scale_lb]) | A module without parameters that splits a tensor into the location and scale of a normal distribution. |
+| [`OneHotCategorical`](generated/tensordict.nn.distributions.OneHotCategorical.html#tensordict.nn.distributions.OneHotCategorical)([logits, probs]) | A categorical distribution whose values are one-hot tensors. |
+| [`TruncatedNormal`](generated/tensordict.nn.distributions.TruncatedNormal.html#tensordict.nn.distributions.TruncatedNormal)(loc, scale, a, b[, ...]) | A normal distribution of mean `loc` and standard deviation `scale`, restricted to `[a, b]`. |
+| [`truncated_normal.TruncatedStandardNormal`](generated/tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.html#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal)(a, b) | A standard normal distribution restricted to the interval `[a, b]`. |
 
 ## Utilities
 
@@ -127,17 +127,17 @@ of the `"expln"` key of [`mappings()`](generated/tensordict.nn.mappings.html#ten
 
 `tensordict.nn.make_tensordict` is [`tensordict.make_tensordict()`](generated/tensordict.make_tensordict.html#tensordict.make_tensordict).
 
-| [`dispatch`](generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch)([separator, source, dest, ...]) | Allows for a function expecting a TensorDict to be called using kwargs. |
+| [`dispatch`](generated/tensordict.nn.dispatch.html#tensordict.nn.dispatch)([separator, source, dest, ...]) | Lets a function that takes a tensordict be called with tensors as arguments. |
 | --- | --- |
-| [`set_skip_existing`](generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing)([mode, in_key_attr, ...]) | A context manager for skipping existing nodes in a TensorDict graph. |
-| [`biased_softplus`](generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus)(bias[, min_val]) | A biased softplus module. |
+| [`set_skip_existing`](generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing)([mode, in_key_attr, ...]) | Makes modules skip their computation when their outputs are already in the tensordict. |
+| [`biased_softplus`](generated/tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus)(bias[, min_val]) | A softplus shifted so that it returns `bias` for a zero input and stays above `min_val`. |
 
-| [`skip_existing`](generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing)() | Returns which existing entries should not be re-computed by a module. |
+| [`skip_existing`](generated/tensordict.nn.skip_existing.html#tensordict.nn.skip_existing)() | Returns the mode set by [`set_skip_existing`](generated/tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing): `False` (the default), `True`, or a list of keys. |
 | --- | --- |
-| [`mappings`](generated/tensordict.nn.mappings.html#tensordict.nn.mappings)(key) | Returns the function named by `key`. |
-| [`add_custom_mapping`](generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping)(name, mapping) | Adds a custom mapping to be used in mapping classes. |
-| [`inv_softplus`](generated/tensordict.nn.inv_softplus.html#tensordict.nn.inv_softplus)(bias) | Inverse softplus function. |
-| [`utils.expln`](generated/tensordict.nn.utils.expln.html#tensordict.nn.utils.expln)(x) | A smooth, continuous positive mapping presented in "State-Dependent Exploration for Policy Gradient Methods". |
+| [`mappings`](generated/tensordict.nn.mappings.html#tensordict.nn.mappings)(key) | Returns the function named by `key`, which maps a tensor elementwise, for example to positive values. |
+| [`add_custom_mapping`](generated/tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping)(name, mapping) | Registers `mapping` under `name`, so that [`mappings()`](generated/tensordict.nn.mappings.html#tensordict.nn.mappings) returns it. |
+| [`inv_softplus`](generated/tensordict.nn.inv_softplus.html#tensordict.nn.inv_softplus)(bias) | Returns the input of the softplus function that gives `bias`: `log(exp(bias) - 1)`. |
+| [`utils.expln`](generated/tensordict.nn.utils.expln.html#tensordict.nn.utils.expln)(x) | Maps real numbers to positive numbers: `exp(x)` for `x <= 0`, `log1p(x) + 1` for `x > 0`. |
 | [`rand_one_hot`](generated/tensordict.nn.rand_one_hot.html#tensordict.nn.rand_one_hot)(values[, do_softmax]) | Draws a one-hot sample along the last dimension of `values`. |
 
 ## FX tracing (prototype)

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,8 +1642,27 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.nn.utils.expln">
 <span class="sig-prename descclassname"><span class="pre">tensordict.nn.utils.</span></span><span class="sig-name descname"><span class="pre">expln</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.utils.expln" title="Link to this definition">#</a></dt>
-<dd><p>A smooth, continuous positive mapping presented in “State-Dependent Exploration for Policy Gradient Methods”.</p>
-<p><a class="reference external" href="https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf">https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf</a></p>
+<dd><p>Maps real numbers to positive numbers: <code class="docutils literal notranslate"><span class="pre">exp(x)</span></code> for <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&lt;=</span> <span class="pre">0</span></code>, <code class="docutils literal notranslate"><span class="pre">log1p(x)</span> <span class="pre">+</span> <span class="pre">1</span></code> for <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>.</p>
+<p>The function is smooth, and grows like a logarithm for large inputs. It
+comes from Rückstieß et al., “State-Dependent Exploration for Policy
+Gradient Methods” (ECML 2008,
+<a class="reference external" href="https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf">https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf</a>).
+<a class="reference internal" href="tensordict.nn.mappings.html#tensordict.nn.mappings" title="tensordict.nn.mappings"><code class="xref py py-func docutils literal notranslate"><span class="pre">mappings()</span></code></a> returns it for <code class="docutils literal notranslate"><span class="pre">&quot;expln&quot;</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – the input.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new tensor with the shape of <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expln</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expln</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]))</span>
+<span class="go">tensor([0.3679, 1.0000, 1.6931])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2002,7 +2021,7 @@ document.write(`
        "headline": "expln",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - expln",
        "url": "/reference/generated/tensordict.nn.utils.expln.html",
-       "articleBody": "expln# tensordict.nn.utils.expln(x)# A smooth, continuous positive mapping presented in \u201cState-Dependent Exploration for Policy Gradient Methods\u201d. https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf",
+       "articleBody": "expln# tensordict.nn.utils.expln(x)# Maps real numbers to positive numbers: exp(x) for x \u003c= 0, log1p(x) + 1 for x \u003e 0. The function is smooth, and grows like a logarithm for large inputs. It comes from R\u00fcckstie\u00df et al., \u201cState-Dependent Exploration for Policy Gradient Methods\u201d (ECML 2008, https://people.idsia.ch/~juergen/ecml2008rueckstiess.pdf). mappings() returns it for \"expln\". Parameters: x (Tensor) \u2013 the input. Returns: A new tensor with the shape of x. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn.utils import expln \u003e\u003e\u003e expln(torch.tensor([-1.0, 0.0, 1.0])) tensor([0.3679, 1.0000, 1.6931])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

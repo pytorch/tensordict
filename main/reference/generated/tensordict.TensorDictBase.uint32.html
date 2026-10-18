@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,11 +1642,14 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.uint32">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">uint32</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.uint32" title="Link to this definition">#</a></dt>
-<dd><p>Casts all tensors to <code class="docutils literal notranslate"><span class="pre">torch.uint32</span></code>.</p>
+<dd><p>Returns a tensordict whose tensor leaves are cast to <code class="docutils literal notranslate"><span class="pre">torch.uint32</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>cast_filter</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#callable" title="(in Python v3.15)"><em>callable</em></a><em>, </em><em>optional</em>) – a predicate <code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code>
-that selects the tensor leaves to cast, as in <a class="reference internal" href="tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDictBase.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a>.</p>
+<dd class="field-odd"><p><strong>cast_filter</strong> (<em>Callable</em><em>, </em><em>optional</em>) – a predicate
+<code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code> that selects the tensor leaves to
+cast, as in <a class="reference internal" href="tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDictBase.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which casts every
+tensor leaf (a tensorclass uses its own <code class="docutils literal notranslate"><span class="pre">cast_filter</span></code>, if it
+declares one).</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2009,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.uint32",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.uint32",
        "url": "/reference/generated/tensordict.TensorDictBase.uint32.html",
-       "articleBody": "TensorDictBase.uint32# TensorDictBase.uint32() \u2192 Self# Casts all tensors to torch.uint32. Keyword Arguments: cast_filter (callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.uint32# TensorDictBase.uint32() \u2192 Self# Returns a tensordict whose tensor leaves are cast to torch.uint32. Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

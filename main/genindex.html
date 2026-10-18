@@ -76,7 +76,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -182,7 +182,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1716,6 +1716,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs">attrs() (tensordict.TensorDictBase method)</a>
 </li>
+      <li><a href="reference/generated/tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.html#tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.auc">auc (tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal property)</a>
+</li>
       <li><a href="reference/generated/tensordict.TensorDictBase.auto_batch_size_.html#tensordict.TensorDictBase.auto_batch_size_">auto_batch_size_() (tensordict.TensorDictBase method)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.auto_device_.html#tensordict.TensorDictBase.auto_device_">auto_device_() (tensordict.TensorDictBase method)</a>
@@ -1824,6 +1826,8 @@ document.write(`
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe.closed">closed (tensordict._ucxx.TensorDictPipe property)</a>
+</li>
       <li><a href="reference/generated/tensordict.collate.html#tensordict.collate">collate() (in module tensordict)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.complex128.html#tensordict.TensorDictBase.complex128">complex128() (tensordict.TensorDictBase method)</a>
@@ -1910,8 +1914,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.detach_.html#tensordict.TensorDictBase.detach_">detach_() (tensordict.TensorDictBase method)</a>
 </li>
-      <li><a href="reference/generated/tensordict.nn.distributions.OneHotCategorical.html#tensordict.nn.distributions.OneHotCategorical.deterministic_sample">deterministic_sample (tensordict.nn.distributions.OneHotCategorical property)</a>
+      <li><a href="reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution.deterministic_sample">deterministic_sample (tensordict.nn.distributions.CompositeDistribution property)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.nn.distributions.OneHotCategorical.html#tensordict.nn.distributions.OneHotCategorical.deterministic_sample">(tensordict.nn.distributions.OneHotCategorical property)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential.device">device (tensordict.nn.ProbabilisticTensorDictSequential property)</a>
 
       <ul>
@@ -1979,6 +1987,8 @@ document.write(`
 </li>
       </ul></li>
       <li><a href="reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution.entropy_composite">entropy_composite() (tensordict.nn.distributions.CompositeDistribution method)</a>
+</li>
+      <li><a href="reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution.entropy_key">entropy_key (tensordict.nn.distributions.CompositeDistribution property)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.entry_class.html#tensordict.TensorDictBase.entry_class">entry_class() (tensordict.TensorDictBase method)</a>
 </li>
@@ -2244,6 +2254,8 @@ document.write(`
         <li><a href="reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema">(tensordict.TensorDictBase class method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor.from_storage">from_storage() (tensordict.MemoryMappedTensor class method)</a>
+</li>
       <li><a href="reference/generated/tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore.from_store">from_store() (tensordict.store.LazyStackedTensorDictStore class method)</a>
 
       <ul>
@@ -2462,6 +2474,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.is_memmap_archive.html#tensordict.is_memmap_archive">is_memmap_archive() (in module tensordict)</a>
 </li>
+      <li><a href="reference/generated/tensordict.TensorDictBase.is_meta.html#tensordict.TensorDictBase.is_meta">is_meta (tensordict.TensorDictBase property)</a>
+</li>
       <li><a href="reference/generated/tensordict.is_non_tensor.html#tensordict.is_non_tensor">is_non_tensor() (in module tensordict)</a>
 
       <ul>
@@ -2578,16 +2592,18 @@ document.write(`
         <li><a href="reference/generated/tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_">(tensordict.TensorDictBase method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.load_state_dict">load_state_dict() (tensordict.TensorClass method)</a>
+      <li><a href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule.load_state_dict">load_state_dict() (tensordict.nn.CudaGraphModule method)</a>
 
       <ul>
+        <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.load_state_dict">(tensordict.TensorClass method)</a>
+</li>
         <li><a href="reference/generated/tensordict.TensorDictBase.load_state_dict.html#tensordict.TensorDictBase.load_state_dict">(tensordict.TensorDictBase method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_">lock_() (tensordict.TensorDictBase method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.TensorDictBase.log.html#tensordict.TensorDictBase.log">log() (tensordict.TensorDictBase method)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.log10.html#tensordict.TensorDictBase.log10">log10() (tensordict.TensorDictBase method)</a>
@@ -2622,14 +2638,20 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution.log_prob_composite">log_prob_composite() (tensordict.nn.distributions.CompositeDistribution method)</a>
 </li>
-      <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.log_prob_key">log_prob_key (tensordict.nn.ProbabilisticTensorDictModule property)</a>
+      <li><a href="reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution.log_prob_key">log_prob_key (tensordict.nn.distributions.CompositeDistribution property)</a>
 
       <ul>
+        <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.log_prob_key">(tensordict.nn.ProbabilisticTensorDictModule property)</a>
+</li>
         <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential.log_prob_key">(tensordict.nn.ProbabilisticTensorDictSequential property)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.log_prob_keys">log_prob_keys (tensordict.nn.ProbabilisticTensorDictModule property)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential.log_prob_keys">(tensordict.nn.ProbabilisticTensorDictSequential property)</a>
 </li>
+      </ul></li>
       <li><a href="reference/utils.html#tensordict.utils.logger">logger (in module tensordict.utils)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.logical_and.html#tensordict.TensorDictBase.logical_and">logical_and() (tensordict.TensorDictBase method)</a>
@@ -2783,18 +2805,22 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.new_full.html#tensordict.TensorDictBase.new_full">new_full() (tensordict.TensorDictBase method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.TensorDictBase.new_ones.html#tensordict.TensorDictBase.new_ones">new_ones() (tensordict.TensorDictBase method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.TensorDictBase.new_tensor.html#tensordict.TensorDictBase.new_tensor">new_tensor() (tensordict.TensorDictBase method)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.new_zeros.html#tensordict.TensorDictBase.new_zeros">new_zeros() (tensordict.TensorDictBase method)</a>
 </li>
       <li><a href="reference/td.html#tensordict.base.NO_DEFAULT">NO_DEFAULT (in module tensordict.base)</a>
 </li>
-      <li><a href="reference/generated/tensordict.TensorDictBase.non_tensor_items.html#tensordict.TensorDictBase.non_tensor_items">non_tensor_items() (tensordict.TensorDictBase method)</a>
+      <li><a href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.non_tensor_items">non_tensor_items() (tensordict.LazyStackedTensorDict method)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.TensorDictBase.non_tensor_items.html#tensordict.TensorDictBase.non_tensor_items">(tensordict.TensorDictBase method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData">NonTensorData (class in tensordict)</a>
 </li>
       <li><a href="reference/generated/tensordict.NonTensorDataBase.html#tensordict.NonTensorDataBase">NonTensorDataBase (class in tensordict)</a>
@@ -2804,6 +2830,8 @@ document.write(`
       <li><a href="reference/generated/tensordict.TensorDictBase.norm.html#tensordict.TensorDictBase.norm">norm() (tensordict.TensorDictBase method)</a>
 </li>
       <li><a href="reference/generated/tensordict.nn.distributions.NormalParamExtractor.html#tensordict.nn.distributions.NormalParamExtractor">NormalParamExtractor (class in tensordict.nn.distributions)</a>
+</li>
+      <li><a href="reference/generated/tensordict.nn.ProbabilisticTensorDictSequential.html#tensordict.nn.ProbabilisticTensorDictSequential.num_samples">num_samples (tensordict.nn.ProbabilisticTensorDictSequential property)</a>
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.numel.html#tensordict.TensorDictBase.numel">numel() (tensordict.TensorDictBase method)</a>
 </li>
@@ -3140,9 +3168,11 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict._ucxx.TensorDictServer.html#tensordict._ucxx.TensorDictServer.serve">serve() (tensordict._ucxx.TensorDictServer method)</a>
 </li>
-      <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.set">set() (tensordict.TensorClass method)</a>
+      <li><a href="reference/generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate.set">set() (tensordict.nn.set_composite_lp_aggregate method)</a>
 
       <ul>
+        <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.set">(tensordict.TensorClass method)</a>
+</li>
         <li><a href="reference/generated/tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set">(tensordict.TensorDictBase method)</a>
 </li>
       </ul></li>
@@ -3224,9 +3254,11 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.TensorDictBase.stack_tensors.html#tensordict.TensorDictBase.stack_tensors">stack_tensors() (tensordict.TensorDictBase method)</a>
 </li>
-      <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.state_dict">state_dict() (tensordict.TensorClass method)</a>
+      <li><a href="reference/generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule.state_dict">state_dict() (tensordict.nn.CudaGraphModule method)</a>
 
       <ul>
+        <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.state_dict">(tensordict.TensorClass method)</a>
+</li>
         <li><a href="reference/generated/tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict">(tensordict.TensorDictBase method)</a>
 </li>
       </ul></li>
@@ -3450,10 +3482,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.PackLayout.html#tensordict.PackLayout.unpack">unpack() (tensordict.PackLayout method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap">unpack_memmap() (in module tensordict)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/tensordict.unpad_sequence.html#tensordict.unpad_sequence">unpad_sequence() (in module tensordict)</a>
 </li>
       <li><a href="reference/generated/tensordict.unravel_key.html#tensordict.unravel_key">unravel_key() (in module tensordict)</a>
@@ -3462,12 +3494,18 @@ document.write(`
 </li>
       <li><a href="reference/generated/tensordict.unravel_key_to_tuple.html#tensordict.unravel_key_to_tuple">unravel_key_to_tuple() (in module tensordict)</a>
 </li>
+      <li><a href="reference/generated/tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate.unset">unset() (tensordict.nn.set_composite_lp_aggregate method)</a>
+</li>
       <li><a href="reference/generated/tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze">unsqueeze() (tensordict.TensorDictBase method)</a>
 </li>
       <li><a href="reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor.untyped_storage">untyped_storage() (tensordict.UnbatchedTensor method)</a>
 </li>
-      <li><a href="reference/generated/tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update">update() (tensordict.TensorDictBase method)</a>
+      <li><a href="reference/generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta.update">update() (tensordict.nn.distributions.Delta method)</a>
+
+      <ul>
+        <li><a href="reference/generated/tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update">(tensordict.TensorDictBase method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass.update_">update_() (tensordict.TensorClass method)</a>
 
       <ul>

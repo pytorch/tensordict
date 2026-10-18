@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,64 +1642,38 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.merge_tensordicts">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">merge_tensordicts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">tensordicts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">callback_exist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.merge_tensordicts" title="Link to this definition">#</a></dt>
-<dd><p>Merges tensordicts together.</p>
+<dd><p>Merges the entries of several tensordicts into a new tensordict.</p>
+<p>The result has the batch size of the first tensordict and every key of
+every input. The values are not copied. For a key that several inputs
+hold, the value comes from the first input that holds it, unless
+<code class="docutils literal notranslate"><span class="pre">callback_exist</span></code> combines them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>*tensordicts</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a><em> or </em><em>equivalent</em>) – the list of tensordicts to merge together.</p>
+<dd class="field-odd"><p><strong>*tensordicts</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensordicts to merge, at least two,
+or a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> is raised.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>callback_exist</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#callable" title="(in Python v3.15)"><em>callable</em></a><em> or </em><em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#callable" title="(in Python v3.15)"><em>callable</em></a><em>]</em><em>, </em><em>optional</em>) – a callable in case an entry exists in each and every tensordict.
-If the entry is present in some but not all tensordicts, or if <code class="docutils literal notranslate"><span class="pre">callback_exist</span></code> is not passed,
-<cite>update</cite> is used and the first non-<code class="docutils literal notranslate"><span class="pre">None</span></code> value in the tensordict sequence will be used.
-If a dictionary of callables is passed, it will contain the associated callback function for some of the
-nested keys in the tensordicts passed to the function.</p>
+<dd class="field-even"><p><strong>callback_exist</strong> (<em>Callable</em><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em> of </em><em>NestedKey to Callable</em><em>, </em><em>optional</em>) – a function called as <code class="docutils literal notranslate"><span class="pre">callback_exist(*values)</span></code> for a leaf that
+every input holds; its result becomes the value of the leaf. A
+dict gives a function per key (<code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code>), and
+the keys it lacks take the first value. Leaves that only some
+inputs hold, and non-tensor entries, always take the first value.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which takes the first value for every key.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">merge_tensordicts</span><span class="p">,</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b0"</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span> <span class="s2">"c"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"d"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"e"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}},</span> <span class="s2">"common"</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b1"</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s2">"f"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"g"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"h"</span><span class="p">:</span> <span class="mi">1</span><span class="p">}},</span> <span class="s2">"common"</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b2"</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span> <span class="s2">"f"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"g"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"h"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="s2">"common"</span><span class="p">:</span> <span class="mi">2</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">merge_tensordicts</span><span class="p">(</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">,</span> <span class="n">td2</span><span class="p">,</span> <span class="n">callback_exist</span><span class="o">=</span><span class="k">lambda</span> <span class="o">*</span><span class="n">v</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">v</span><span class="p">)))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                b0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                b1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                b2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        c: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                d: TensorDict(</span>
-<span class="go">                    fields={</span>
-<span class="go">                        e: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">                    batch_size=torch.Size([]),</span>
-<span class="go">                    device=None,</span>
-<span class="go">                    is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        common: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        f: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                g: TensorDict(</span>
-<span class="go">                    fields={</span>
-<span class="go">                        h: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">                    batch_size=torch.Size([]),</span>
-<span class="go">                    device=None,</span>
-<span class="go">                    is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"common"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b0"</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span> <span class="s2">"common"</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b1"</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="s2">"f"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"common"</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td2</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b2"</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span> <span class="s2">"common"</span><span class="p">:</span> <span class="mi">2</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">merge_tensordicts</span><span class="p">(</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">,</span> <span class="n">td2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[('a', 'b0'), ('a', 'b1'), ('a', 'b2'), 'common', 'f']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"common"</span><span class="p">]</span>
+<span class="go">tensor(0)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">merge_tensordicts</span><span class="p">(</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">,</span> <span class="n">td2</span><span class="p">,</span> <span class="n">callback_exist</span><span class="o">=</span><span class="k">lambda</span> <span class="o">*</span><span class="n">v</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">v</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"common"</span><span class="p">]</span>
 <span class="go">tensor([0, 1, 2])</span>
 </pre></div>
 </div>
@@ -2061,7 +2035,7 @@ nested keys in the tensordicts passed to the function.</p>
        "headline": "merge_tensordicts",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - merge_tensordicts",
        "url": "/reference/generated/tensordict.merge_tensordicts.html",
-       "articleBody": "merge_tensordicts# tensordict.merge_tensordicts(*tensordicts: T, callback_exist: Callable[[Any], Any] | Dict[NestedKey, Callable[[Any], Any]] | None = None) \u2192 T# Merges tensordicts together. Parameters: *tensordicts (sequence of TensorDict or equivalent) \u2013 the list of tensordicts to merge together. Keyword Arguments: callback_exist (callable or Dict[str, callable], optional) \u2013 a callable in case an entry exists in each and every tensordict. If the entry is present in some but not all tensordicts, or if callback_exist is not passed, update is used and the first non-None value in the tensordict sequence will be used. If a dictionary of callables is passed, it will contain the associated callback function for some of the nested keys in the tensordicts passed to the function. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import merge_tensordicts, TensorDict \u003e\u003e\u003e td0 = TensorDict({\"a\": {\"b0\": 0}, \"c\": {\"d\": {\"e\": 0}}, \"common\": 0}) \u003e\u003e\u003e td1 = TensorDict({\"a\": {\"b1\": 1}, \"f\": {\"g\": {\"h\": 1}}, \"common\": 1}) \u003e\u003e\u003e td2 = TensorDict({\"a\": {\"b2\": 2}, \"f\": {\"g\": {\"h\": 2}}, \"common\": 2}) \u003e\u003e\u003e td = merge_tensordicts(td0, td1, td2, callback_exist=lambda *v: torch.stack(list(v))) \u003e\u003e\u003e print(td) TensorDict( fields={ a: TensorDict( fields={ b0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), b1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), b2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), c: TensorDict( fields={ d: TensorDict( fields={ e: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False), common: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False), f: TensorDict( fields={ g: TensorDict( fields={ h: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e print(td[\"common\"]) tensor([0, 1, 2])",
+       "articleBody": "merge_tensordicts# tensordict.merge_tensordicts(*tensordicts: T, callback_exist: Callable[[Any], Any] | Dict[NestedKey, Callable[[Any], Any]] | None = None) \u2192 T# Merges the entries of several tensordicts into a new tensordict. The result has the batch size of the first tensordict and every key of every input. The values are not copied. For a key that several inputs hold, the value comes from the first input that holds it, unless callback_exist combines them. Parameters: *tensordicts (TensorDictBase) \u2013 the tensordicts to merge, at least two, or a RuntimeError is raised. Keyword Arguments: callback_exist (Callable or dict of NestedKey to Callable, optional) \u2013 a function called as callback_exist(*values) for a leaf that every input holds; its result becomes the value of the leaf. A dict gives a function per key (\"a\" or (\"a\", \"b\")), and the keys it lacks take the first value. Leaves that only some inputs hold, and non-tensor entries, always take the first value. Defaults to None, which takes the first value for every key. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import merge_tensordicts, TensorDict \u003e\u003e\u003e td0 = TensorDict({\"a\": {\"b0\": 0}, \"common\": 0}) \u003e\u003e\u003e td1 = TensorDict({\"a\": {\"b1\": 1}, \"f\": 1, \"common\": 1}) \u003e\u003e\u003e td2 = TensorDict({\"a\": {\"b2\": 2}, \"common\": 2}) \u003e\u003e\u003e td = merge_tensordicts(td0, td1, td2) \u003e\u003e\u003e list(td.keys(include_nested=True, leaves_only=True, sort=True)) [(\u0027a\u0027, \u0027b0\u0027), (\u0027a\u0027, \u0027b1\u0027), (\u0027a\u0027, \u0027b2\u0027), \u0027common\u0027, \u0027f\u0027] \u003e\u003e\u003e td[\"common\"] tensor(0) \u003e\u003e\u003e td = merge_tensordicts(td0, td1, td2, callback_exist=lambda *v: torch.stack(v)) \u003e\u003e\u003e td[\"common\"] tensor([0, 1, 2])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

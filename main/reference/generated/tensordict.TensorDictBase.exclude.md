@@ -2,50 +2,45 @@
 
 TensorDictBase.exclude(**keys: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
-Excludes the keys of the tensordict and returns a new tensordict without these entries.
+Returns a tensordict without the entries of `keys`.
 
-The values are not copied. The result shares its tensors with the
-original, so an in-place change to a tensor in one tensordict shows in
-the other. Unlike [`select()`](tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select), a missing key is ignored: there is
-no `strict` argument. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
+The values are not copied: the result holds the same tensors as the
+tensordict, so an in-place change to a tensor shows in both. A nested
+key removes one entry of a nested tensordict, and the key of a nested
+tensordict removes all its entries. Unlike [`select()`](tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select), a missing
+key is ignored. The result is not locked. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
 Parameters:
 
-- ***keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - keys to exclude.
-- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - if `True`, the keys are removed from this
-tensordict, and this tensordict is returned.
-Default is `False`.
+***keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the keys to remove.
+
+Keyword Arguments:
+
+**inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, removes the entries from the
+tensordict and returns it. Defaults to `False`.
 
 Returns:
 
-A new tensordict (or the same if `inplace=True`) without the excluded entries.
+A tensordict of the same type, or `self` if `inplace=True`.
 
 Examples
 
 ```
+>>> import torch
 >>> from tensordict import TensorDict
->>> td = TensorDict({"a": 0, "b": {"c": 1, "d": 2}}, [])
->>> td.exclude("a", ("b", "c"))
-TensorDict(
- fields={
- b: TensorDict(
- fields={
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> td.exclude("a", "b")
-TensorDict(
- fields={
- },
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> list(td.exclude("this key does not exist").keys())
-['a', 'b']
+>>> td = TensorDict(
+... obs=torch.zeros(3, 4),
+... action=torch.zeros(3, 2),
+... next=TensorDict(obs=torch.zeros(3, 4), reward=torch.zeros(3, 1)),
+... batch_size=[3],
+... )
+>>> sub = td.exclude("action", ("next", "obs"))
+>>> list(sub.keys(include_nested=True, leaves_only=True))
+['obs', ('next', 'reward')]
+>>> sub["obs"] is td["obs"]
+True
+>>> sorted(td.exclude("missing").keys())
+['action', 'next', 'obs']
 ```
 
 Every tensordict class and every tensorclass has this method. For the

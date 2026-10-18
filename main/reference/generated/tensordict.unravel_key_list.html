@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1648,13 +1648,10 @@ document.write(`
 <dd class="field-odd"><p><strong>keys</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the keys to unravel.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>strings, or flat tuples of strings.</p>
+<dd class="field-even"><p>A list of the unraveled keys (strings, or flat tuples of strings).</p>
 </dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a list of keys</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">keys</span></code> is not a list or a tuple.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a key is not a valid nested key.</p></li>
 </ul>
@@ -2024,7 +2021,7 @@ document.write(`
        "headline": "unravel_key_list",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - unravel_key_list",
        "url": "/reference/generated/tensordict.unravel_key_list.html",
-       "articleBody": "unravel_key_list# tensordict.unravel_key_list(keys)# Unravels every key of a list, as unravel_key() does. Parameters: keys (list or tuple of NestedKey) \u2013 the keys to unravel. Returns: strings, or flat tuples of strings. Return type: a list of keys Raises: TypeError \u2013 if keys is not a list or a tuple. RuntimeError \u2013 if a key is not a valid nested key. Examples \u003e\u003e\u003e from tensordict import unravel_key_list \u003e\u003e\u003e unravel_key_list([\"a\", (\"b\",), (\"c\", (\"d\",))]) [\u0027a\u0027, \u0027b\u0027, (\u0027c\u0027, \u0027d\u0027)]",
+       "articleBody": "unravel_key_list# tensordict.unravel_key_list(keys)# Unravels every key of a list, as unravel_key() does. Parameters: keys (list or tuple of NestedKey) \u2013 the keys to unravel. Returns: A list of the unraveled keys (strings, or flat tuples of strings). Raises: TypeError \u2013 if keys is not a list or a tuple. RuntimeError \u2013 if a key is not a valid nested key. Examples \u003e\u003e\u003e from tensordict import unravel_key_list \u003e\u003e\u003e unravel_key_list([\"a\", (\"b\",), (\"c\", (\"d\",))]) [\u0027a\u0027, \u0027b\u0027, (\u0027c\u0027, \u0027d\u0027)]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,13 +1642,29 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.densify">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">densify</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><span class="pre">layout</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.strided</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.densify" title="Link to this definition">#</a></dt>
-<dd><p>Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested).</p>
+<dd><p>Returns the tensordict with its lazy stacks replaced by dense tensordicts.</p>
+<p>The entries of a lazy stack are stacked into one tensor when their
+shapes match, and into a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>) along the
+stack dimension otherwise. A tensordict that holds no lazy stack is
+returned as it is.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><em>layout</em></a>) – the layout of the nested tensors, if any. Defaults to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">strided</span></code>.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><em>layout</em></a><em>, </em><em>optional</em>) – the layout of the nested tensors,
+<code class="docutils literal notranslate"><span class="pre">torch.strided</span></code> or <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">torch.strided</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)),</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">))]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dense</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">densify</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">dense</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">dense</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">is_nested</span>
+<span class="go">('TensorDict', True)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2016,7 +2032,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.densify",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.densify",
        "url": "/reference/generated/tensordict.TensorDictBase.densify.html",
-       "articleBody": "TensorDictBase.densify# TensorDictBase.densify(layout: layout = torch.strided)# Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested). Keyword Arguments: layout (layout) \u2013 the layout of the nested tensors, if any. Defaults to strided. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use densify# Building tensordicts from streams Building tensordicts from streams",
+       "articleBody": "TensorDictBase.densify# TensorDictBase.densify(layout: layout = torch.strided)# Returns the tensordict with its lazy stacks replaced by dense tensordicts. The entries of a lazy stack are stacked into one tensor when their shapes match, and into a nested tensor (torch.nested) along the stack dimension otherwise. A tensordict that holds no lazy stack is returned as it is. Parameters: layout (layout, optional) \u2013 the layout of the nested tensors, torch.strided or torch.jagged. Defaults to torch.strided. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e stack = TensorDict.lazy_stack( ... [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(4))] ... ) \u003e\u003e\u003e dense = stack.densify(layout=torch.jagged) \u003e\u003e\u003e type(dense).__name__, dense[\"a\"].is_nested (\u0027TensorDict\u0027, True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use densify# Building tensordicts from streams Building tensordicts from streams",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

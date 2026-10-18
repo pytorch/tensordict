@@ -2,109 +2,113 @@
 
 TensorDictBase.to(**args*, ***kwargs*) → Self
 
-Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
+Returns a tensordict cast to another device, dtype or memory format, or with a new batch size.
 
-When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original
-dtype (including integer and boolean leaves), unless `cast_filter` selects the
-leaves to cast.
+It accepts the forms of [`torch.Tensor.to()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to), and some more:
+
+- `to(device, dtype=None)`: moves every leaf to `device` and, if
+`dtype` is given, casts it.
+- `to(dtype)`: casts every tensor leaf to `dtype`, whatever its
+original dtype (integer and boolean leaves too), unless
+`cast_filter` selects the leaves to cast.
+- `to(tensor)`: uses the device and the dtype of `tensor`.
+- `to(other=tensordict)`: uses the device of `other`, and its
+dtype if all its leaves share one. Otherwise the dtypes are kept.
+- `to(batch_size=...)`: only sets the batch size, in place, and
+returns `self`.
+- `to(td.attrs())`: casts each leaf to the device and the dtype that
+[`attrs()`](tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs) recorded for the same key. See
+[Devices, dtypes, and memory](../../concepts/devices.html#devices).
+
+The result is `self` when the device is already the device of the
+tensordict and no dtype or memory format is given. Otherwise it is a
+new tensordict, unless `inplace=True`. When only the device changes,
+a consolidated tensordict gives a consolidated result, whose leaves
+are views of one storage on the new device.
 
 Parameters:
 
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the desired device of the tensordict.
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the desired dtype of all the tensors in
-the tensordict.
-- **tensor** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - Tensor whose dtype and device are the desired
-dtype and device for all tensors in this TensorDict.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Its nested tensordicts get it too.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of the tensor leaves of
+the result.
+- **tensor** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - a tensor whose device and dtype
+are the device and dtype of the result.
 
 Keyword Arguments:
 
-- **non_blocking** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - controls how the leaves are copied.
-If `None` (default), the leaves are copied with `non_blocking=True`
-and, when the target device is not a CUDA device (e.g. device-to-host
-copies), the tensordict synchronizes once after all the copies have been
-issued; for a CPU target, only if a leaf comes from another device.
-Under [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), these copies are blocking instead.
-If `True`, the copies are non-blocking and no synchronization
-is performed: the caller is responsible for synchronizing before reading
-the results. If `False`, the copies are blocking.
-- **memory_format** ([*memory_format*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format)*,**optional*) - the desired memory
-format for the 4D and 5D tensors in this tensordict, as in
-[`torch.nn.Module.to()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to).
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - resulting batch-size of the
-output tensordict. When the device or dtype changes, every
-nested tensordict gets exactly this batch size and the names
-are erased. Starting with TensorDict 0.17, the default will
-change to setting the batch size as `to(batch_size=...)`
-does without a device: nested tensordicts with more batch
-dimensions keep their batch size, nested lazy stacks stay
-lazy stacks (or raise, as there, if they need more batch
-dimensions) and the names are kept. A `FutureWarning` is
-emitted when the result will change.
-- **other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - 
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - how the leaves are copied. `None`
+copies them with `non_blocking=True` and, when the target
+is not a CUDA device (for example a copy to the host),
+synchronizes once after all the copies are issued; for a CPU
+target, only if a leaf comes from another device. Under
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), these copies are blocking instead.
+`True` copies without synchronizing: synchronize before you
+read the results. `False` makes blocking copies. Defaults to
+`None`. Pass it by keyword: a positional value is ignored.
+- **memory_format** ([*memory_format*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format)*,**optional*) - the memory format of
+the 4D and 5D tensors of the result, as in
+[`torch.nn.Module.to()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to). Defaults to `None`, which keeps
+the memory format.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size of the result.
+When the device or dtype changes, every nested tensordict gets
+exactly this batch size and the names are erased. Starting with
+TensorDict 0.17, the default will change to setting the batch
+size as `to(batch_size=...)` does without a device: nested
+tensordicts with more batch dimensions keep their batch size,
+nested lazy stacks stay lazy stacks (or raise, as there, if
+they need more batch dimensions) and the names are kept. A
+`FutureWarning` is emitted when the result will change.
+Defaults to `None`, which keeps the batch size.
+- **other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict whose device, and
+dtype if all its leaves share one, are those of the result.
+Defaults to `None`.
+- **cast_filter** (*Callable**,**optional*) - a predicate
+`fn(key, value) -> bool` that selects the tensor leaves the
+dtype cast applies to. `key` is the nested key of the leaf as
+a tuple of str, for example `("obs",)` or
+`("next", "done")`. Leaves for which it returns `False`
+keep their dtype, but still move to the new device or memory
+format. It is not called on non-tensor data, without a dtype,
+or with an attrs tensordict. An
+[`UnbatchedTensor`](tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) leaf is passed as is.
+Helpers such as [`is_inexact()`](tensordict.is_inexact.html#tensordict.is_inexact) can be passed
+directly. Defaults to the `cast_filter` of a tensorclass that
+declares one, and to casting every leaf otherwise; pass
+`None` to cast every leaf. The dtype shorthands
+([`float()`](tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float), [`bfloat16()`](tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16), ...) take it too.
+- **non_blocking_pin** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - 
 
-TensorDict instance whose dtype
-and device are the desired dtype and device for all tensors
-in this TensorDict.
-
-Note
-
-Since [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) instances do not have
-a dtype, the dtype is gathered from the example leaves.
-If there are more than one dtype, then no dtype
-casting is done.
-- **cast_filter** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - a predicate `fn(key, value) -> bool`
-that selects the tensor leaves the dtype cast applies to.
-`key` is the nested key of the leaf as a tuple of str, for
-example `("obs",)` or `("next", "done")`. Leaves for which
-it returns `False` keep their dtype; a device or memory-format
-change still applies to them. It is not called on non-tensor
-data, nor when no dtype is given or when `to` gets an attrs
-tensordict, whose leaves give each leaf its dtype. An
-[`UnbatchedTensor`](tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) leaf is passed as is, not
-as a [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor). Helpers such as
-[`is_inexact()`](tensordict.is_inexact.html#tensordict.is_inexact) can be passed directly. Defaults
-to the `cast_filter` of a tensorclass that declares one, and to
-casting every leaf otherwise; pass `None` to cast every leaf.
-The dtype shorthands ([`float()`](tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float), [`bfloat16()`](tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16), ...) take
-it too.
-- **non_blocking_pin** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - 
-
-if `True`, the tensors are pinned before
-being sent to device. This will be done asynchronously but can be
-controlled via the `num_threads` argument.
+if `True`, pins the tensors
+before sending them to the device, in `num_threads`
+threads. Defaults to `False`.
 
 Note
 
 Each call starts and joins its pinning threads, which costs
 the same however little data there is. So
-`non_blocking_pin=True` pays off only for large tensordicts,
-with leaves of a MiB or more and tens of MiB in total. For
-smaller tensordicts, `tensordict.to("cuda")` is usually the
-fastest, and `tensordict.pin_memory().to("cuda",
-non_blocking=True)` is also faster than
-`non_blocking_pin=True`. Where the crossover lies depends on
-the machine, so measure it on yours.
-- **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - if `non_blocking_pin=True`, the number
-of threads to be used for `pin_memory`. By default,
-up to `max(1, torch.get_num_threads() // 2)` threads are
-started, and no more than one per leaf.
-`num_threads=0` will cancel any
-multithreading for the pin_memory() calls.
-- **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the data will be written in-place in the same tensordict.
-This can be significantly faster whenever building a tensordict is CPU-overhead bound.
-Defaults to `False`.
+`non_blocking_pin=True` pays off only for large
+tensordicts, with leaves of a MiB or more and tens of MiB
+in total. For smaller tensordicts, `td.to("cuda")` is
+usually the fastest, and
+`td.pin_memory().to("cuda", non_blocking=True)` is also
+faster than `non_blocking_pin=True`. Measure the
+crossover on your machine.
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `non_blocking_pin=True`, the
+number of threads that pin the leaves, at most one per leaf.
+`0` pins them on the calling thread. Defaults to `None`,
+which starts up to `max(1, torch.get_num_threads() // 2)`
+threads.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, writes the cast leaves into
+the tensordict, which keeps its identity and keys, and returns
+`self`. This can be faster when building a new tensordict is
+what costs the most. See [In-place operations](../../concepts/operations.html#inplace-conventions). Defaults
+to `False`.
 
 Returns:
 
-a new tensordict instance if the device differs from the tensordict
-device and/or if the dtype or memory format is passed. The same
-tensordict otherwise.
-`batch_size` only modifications are done in-place.
-
-Note
-
-If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
-Each new tensor will be a view on the consolidated storage cast to the desired device.
+`self` when nothing changes, with `inplace=True`, or when only
+`batch_size` is given; a new tensordict otherwise.
 
 This operation can be used as a context manager too. Inside the
 `with` block, you work on the cast tensordict. When the block exits,

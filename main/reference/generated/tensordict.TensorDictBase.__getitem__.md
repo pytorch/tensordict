@@ -4,35 +4,37 @@ TensorDictBase.__getitem__(*index: [str](https://docs.python.org/3/builtins/stdt
 
 TensorDictBase.__getitem__(*index: IndexType*) → Self
 
-Indexes all tensors according to the provided index.
+Returns the entry at a key, or the tensordict indexed along its batch dimensions.
 
-The index can be a (nested) key or any valid shape index given the
-tensordict batch size.
+A string or a tuple of strings reads an entry, as [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) does,
+except that a missing key raises `KeyError`. A non-tensor entry
+returns its content (the string, not the
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData)), and a stack of non-tensor data
+returns a list. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
-If the index is a nested key and the result is a [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData)
-object, the content of the non-tensor is returned.
+Any other index (an int, a slice, a tensor, a boolean mask, `...`,
+`None`, or a tuple of these) applies to the batch dimensions of every
+entry, as it would to a tensor of shape [`batch_size`](tensordict.TensorDictBase.batch_size.html#tensordict.TensorDictBase.batch_size), and
+returns a tensordict. See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size).
+
+Raises:
+
+[**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the key is missing.
 
 Examples
 
 ```
+>>> import torch
+>>> from tensordict import TensorDict
 >>> td = TensorDict({"root": torch.arange(2), ("nested", "entry"): torch.arange(2)}, [2])
 >>> td["root"]
 tensor([0, 1])
 >>> td["nested", "entry"]
 tensor([0, 1])
->>> td[:1]
-TensorDict(
- fields={
- nested: TensorDict(
- fields={
- entry: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([1]),
- device=None,
- is_shared=False),
- root: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([1]),
- device=None,
- is_shared=False)
+>>> td[:1].batch_size, td[:1]["nested", "entry"]
+(torch.Size([1]), tensor([0]))
+>>> td[torch.tensor([True, False])]["root"]
+tensor([0])
 ```
 
 Every tensordict class and every tensorclass has this method. For the

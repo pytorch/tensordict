@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,18 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.grad">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">grad</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></em><a class="headerlink" href="#tensordict.TensorDictBase.grad" title="Link to this definition">#</a></dt>
-<dd><p>Returns a tensordict containing the .grad attributes of the leaf tensors.</p>
+<dd><p>A tensordict of the <code class="docutils literal notranslate"><span class="pre">.grad</span></code> of every leaf, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if no leaf has one.</p>
+<p>Leaves whose <code class="docutils literal notranslate"><span class="pre">.grad</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code> are left out. Assigning <code class="docutils literal notranslate"><span class="pre">td.grad</span> <span class="pre">=</span> <span class="pre">other</span></code> sets the <code class="docutils literal notranslate"><span class="pre">.grad</span></code> of each leaf from the
+matching leaf of <code class="docutils literal notranslate"><span class="pre">other</span></code>, or copies into it if it exists.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">grad</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="s2">"y"</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<span class="go">(tensor([2., 2., 2.]), False)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2014,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.grad",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.grad",
        "url": "/reference/generated/tensordict.TensorDictBase.grad.html",
-       "articleBody": "TensorDictBase.grad# property TensorDictBase.grad: Any# Returns a tensordict containing the .grad attributes of the leaf tensors. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.grad# property TensorDictBase.grad: Any# A tensordict of the .grad of every leaf, or None if no leaf has one. Leaves whose .grad is None are left out. Assigning td.grad = other sets the .grad of each leaf from the matching leaf of other, or copies into it if it exists. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.ones(3, requires_grad=True), y=torch.ones(3, requires_grad=True), batch_size=[3]) \u003e\u003e\u003e (td[\"x\"] * 2).sum().backward() \u003e\u003e\u003e td.grad[\"x\"], \"y\" in td.grad.keys() (tensor([2., 2., 2.]), False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

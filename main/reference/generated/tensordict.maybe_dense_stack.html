@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.maybe_dense_stack">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">maybe_dense_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'T'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.maybe_dense_stack" title="Link to this definition">#</a></dt>
-<dd><p>Stacks tensordicts densely if possible, or in a lazy stack otherwise.</p>
+<dd><p>Stacks tensordicts densely if possible, or into a lazy stack otherwise.</p>
 <p>Use it when the inputs usually match, but can differ. If every input has
 the same keys, entry shapes and batch size, the result is the dense
 stack that <a class="reference internal" href="tensordict.stack.html#tensordict.stack" title="tensordict.stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a> returns. Otherwise, the result is the
@@ -1655,7 +1655,7 @@ compares these functions. Same as
 <li><p><strong>input</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><em>tensorclass instances</em>) – the
 tensordicts to stack.</p></li>
 <li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the new dimension. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>. A <code class="docutils literal notranslate"><span class="pre">dim</span></code> outside
-<code class="docutils literal notranslate"><span class="pre">[-batch_dims</span> <span class="pre">-</span> <span class="pre">1,</span> <span class="pre">batch_dims]</span></code> warns, and is used on the dims
+<code class="docutils literal notranslate"><span class="pre">[-batch_dims</span> <span class="pre">-</span> <span class="pre">1,</span> <span class="pre">batch_dims]</span></code> warns, and is used on the dimensions
 of the leaves. Starting with TensorDict 0.17, the default will
 change to raising an <code class="docutils literal notranslate"><span class="pre">IndexError</span></code>, as for a tensor.</p></li>
 </ul>
@@ -1663,13 +1663,13 @@ change to raising an <code class="docutils literal notranslate"><span class="pre
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a tensordict to write the result
-into.</p></li>
-<li><p><strong>strict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – used only with <code class="docutils literal notranslate"><span class="pre">out</span></code>. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">out</span></code>
+into. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – used only with <code class="docutils literal notranslate"><span class="pre">out</span></code>. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">out</span></code>
 must have the same keys as the inputs. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> (or the tensorclass of the inputs)
+<dd class="field-odd"><p>A <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> (or the tensorclass of the inputs)
 if the inputs can be stacked densely, a
 <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> otherwise.</p>
 </dd>
@@ -2044,7 +2044,7 @@ if the inputs can be stacked densely, a
        "headline": "maybe_dense_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - maybe_dense_stack",
        "url": "/reference/generated/tensordict.maybe_dense_stack.html",
-       "articleBody": "maybe_dense_stack# tensordict.maybe_dense_stack(input: Sequence[\u0027T\u0027], dim: int = 0, *, out=None, **kwargs) \u2192 T# Stacks tensordicts densely if possible, or in a lazy stack otherwise. Use it when the inputs usually match, but can differ. If every input has the same keys, entry shapes and batch size, the result is the dense stack that stack() returns. Otherwise, the result is the lazy stack that lazy_stack() returns. Stacking and variable-size data compares these functions. Same as tensordict.LazyStackedTensorDict.maybe_dense_stack(). Parameters: input (sequence of TensorDictBase or tensorclass instances) \u2013 the tensordicts to stack. dim (int, optional) \u2013 the new dimension. Defaults to 0. A dim outside [-batch_dims - 1, batch_dims] warns, and is used on the dims of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: out (TensorDictBase, optional) \u2013 a tensordict to write the result into. strict (bool, optional) \u2013 used only with out. If True, out must have the same keys as the inputs. Defaults to False. Returns: a TensorDict (or the tensorclass of the inputs) if the inputs can be stacked densely, a LazyStackedTensorDict otherwise. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e same = [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(3))] \u003e\u003e\u003e type(tensordict.maybe_dense_stack(same)).__name__ \u0027TensorDict\u0027 \u003e\u003e\u003e different = [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(4))] \u003e\u003e\u003e type(tensordict.maybe_dense_stack(different)).__name__ \u0027LazyStackedTensorDict\u0027",
+       "articleBody": "maybe_dense_stack# tensordict.maybe_dense_stack(input: Sequence[\u0027T\u0027], dim: int = 0, *, out=None, **kwargs) \u2192 T# Stacks tensordicts densely if possible, or into a lazy stack otherwise. Use it when the inputs usually match, but can differ. If every input has the same keys, entry shapes and batch size, the result is the dense stack that stack() returns. Otherwise, the result is the lazy stack that lazy_stack() returns. Stacking and variable-size data compares these functions. Same as tensordict.LazyStackedTensorDict.maybe_dense_stack(). Parameters: input (sequence of TensorDictBase or tensorclass instances) \u2013 the tensordicts to stack. dim (int, optional) \u2013 the new dimension. Defaults to 0. A dim outside [-batch_dims - 1, batch_dims] warns, and is used on the dimensions of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: out (TensorDictBase, optional) \u2013 a tensordict to write the result into. Defaults to None. strict (bool, optional) \u2013 used only with out. If True, out must have the same keys as the inputs. Defaults to False. Returns: A TensorDict (or the tensorclass of the inputs) if the inputs can be stacked densely, a LazyStackedTensorDict otherwise. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e same = [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(3))] \u003e\u003e\u003e type(tensordict.maybe_dense_stack(same)).__name__ \u0027TensorDict\u0027 \u003e\u003e\u003e different = [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(4))] \u003e\u003e\u003e type(tensordict.maybe_dense_stack(different)).__name__ \u0027LazyStackedTensorDict\u0027",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

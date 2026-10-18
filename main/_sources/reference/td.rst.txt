@@ -350,6 +350,7 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.clear_device_
     TensorDictBase.is_cpu
     TensorDictBase.is_cuda
+    TensorDictBase.is_meta
     TensorDictBase.pin_memory
     TensorDictBase.share_memory_
     TensorDictBase.is_shared
@@ -816,8 +817,8 @@ what to use instead.
 Deprecated functions
 ~~~~~~~~~~~~~~~~~~~~
 
-These functions still work, and each call raises a ``DeprecationWarning``.
-Their pages name the replacement and the release that removes them.
+These functions still work. Their pages name the replacement and the
+release that removes them.
 
 .. autosummary::
     :toctree: generated/

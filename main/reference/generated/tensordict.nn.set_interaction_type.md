@@ -9,7 +9,8 @@ Sets the interaction type of all probabilistic modules inside a block of code, o
 Inside the block, [`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type)
 returns `type`, and every [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) uses it
 instead of its `default_interaction_type`. When the block ends, the
-previous value comes back.
+previous value comes back. By default the interaction type applies to
+the whole process (see `thread_local`).
 
 Parameters:
 
@@ -20,21 +21,13 @@ Defaults to `InteractionType.DETERMINISTIC`.
 
 Keyword Arguments:
 
-**thread_local** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the interaction type
+**thread_local** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the interaction type
 applies to the calling thread only, and blocks that other threads
 enter do not change it. Inside the block, blocks without this flag
 that the same thread enters stay in that thread too. Threads
 started inside the block see the process-wide interaction type.
 If `False`, the interaction type applies to the whole process.
 Defaults to `False`.
-
-Note
-
-Threads. By default the interaction type is process-wide: a
-`with` block in one thread also changes what the modules running in
-other threads at that time use. Pass `thread_local=True` to keep a
-block to its own thread. A thread started inside such a block reads
-the process-wide value, not the block's.
 
 Examples
 

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,33 +1642,52 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.where">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">where</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">condition</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.where" title="Link to this definition">#</a></dt>
-<dd><p>Return a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> of elements selected from either self or other, depending on condition.</p>
+<dd><p>Returns a tensordict with the leaves where <code class="docutils literal notranslate"><span class="pre">condition</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> and <code class="docutils literal notranslate"><span class="pre">other</span></code> elsewhere.</p>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.where()</span></code></a> is applied to every leaf. <code class="docutils literal notranslate"><span class="pre">condition</span></code> is aligned
+with the batch dimensions of each leaf and expanded over its feature
+dimensions.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>condition</strong> (<em>BoolTensor</em>) – When <code class="docutils literal notranslate"><span class="pre">True</span></code> (nonzero), yields <code class="docutils literal notranslate"><span class="pre">self</span></code>,
-otherwise yields <code class="docutils literal notranslate"><span class="pre">other</span></code>.</p></li>
-<li><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><em>Scalar</em>) – value (if <code class="docutils literal notranslate"><span class="pre">other</span></code> is a scalar)
-or values selected at indices where condition is <code class="docutils literal notranslate"><span class="pre">False</span></code>.
-On a <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, a tensor
-<code class="docutils literal notranslate"><span class="pre">other</span></code> that starts with the batch shape up to the stack
-dim is split along the stack dim, one piece per member, so
-it must also have the stack size at the stack dim: expand it
-to the batch shape first.</p></li>
+<li><p><strong>condition</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – a boolean mask over the leading batch
+dimensions.</p></li>
+<li><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>Number</em>) – the values to take
+where <code class="docutils literal notranslate"><span class="pre">condition</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>. A tensordict is paired with
+the tensordict key by key. On a
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, a tensor <code class="docutils literal notranslate"><span class="pre">other</span></code>
+that starts with the batch shape up to the stack dimension is
+split along that dimension, one piece per member, so it must
+have the stack size there: expand it to the batch shape first.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the output <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> instance.</p></li>
-<li><p><strong>pad</strong> (<em>scalar</em><em>, </em><em>optional</em>) – if provided, missing keys from the source
-or destination tensordict will be written as <cite>torch.where(mask, self, pad)</cite>
-or <cite>torch.where(mask, pad, other)</cite>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, ie
-missing keys are not tolerated.</p></li>
-<li><p><strong>update_batch_size</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and <code class="docutils literal notranslate"><span class="pre">out</span></code> is provided, the batch size of the output will be
-updated to match the batch size of the condition. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the tensordict to write the result
+into, which is returned. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which returns a
+new tensordict.</p></li>
+<li><p><strong>pad</strong> (<em>Number</em><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – the value that stands in for an
+entry that only one of the tensordict and a tensordict
+<code class="docutils literal notranslate"><span class="pre">other</span></code> has. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which raises a
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for such an entry.</p></li>
+<li><p><strong>update_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – passed to <a class="reference internal" href="tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDictBase.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>
+when the result is written into <code class="docutils literal notranslate"><span class="pre">out</span></code>. It only matters when
+<code class="docutils literal notranslate"><span class="pre">out</span></code> is a lazy stack: if <code class="docutils literal notranslate"><span class="pre">True</span></code>, its number of members
+follows the result. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">]),</span> <span class="mf">0.0</span><span class="p">)[</span><span class="s2">"x"</span><span class="p">]</span>
+<span class="go">tensor([[1., 1., 1.],</span>
+<span class="go">        [0., 0., 0.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">other</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">]),</span> <span class="n">other</span><span class="p">,</span> <span class="n">pad</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['x', 'y']</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2029,7 +2048,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.where",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.where",
        "url": "/reference/generated/tensordict.TensorDictBase.where.html",
-       "articleBody": "TensorDictBase.where# TensorDictBase.where(condition: Tensor, other: Tensor | TensorDictBase, *, out: TensorDictBase | None = None, pad: int | bool = None, update_batch_size: bool = False) \u2192 Self# Return a TensorDict of elements selected from either self or other, depending on condition. Parameters: condition (BoolTensor) \u2013 When True (nonzero), yields self, otherwise yields other. other (TensorDictBase or Scalar) \u2013 value (if other is a scalar) or values selected at indices where condition is False. On a LazyStackedTensorDict, a tensor other that starts with the batch shape up to the stack dim is split along the stack dim, one piece per member, so it must also have the stack size at the stack dim: expand it to the batch shape first. Keyword Arguments: out (TensorDictBase, optional) \u2013 the output TensorDictBase instance. pad (scalar, optional) \u2013 if provided, missing keys from the source or destination tensordict will be written as torch.where(mask, self, pad) or torch.where(mask, pad, other). Defaults to None, ie missing keys are not tolerated. update_batch_size (bool, optional) \u2013 if True and out is provided, the batch size of the output will be updated to match the batch size of the condition. Defaults to False. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.where# TensorDictBase.where(condition: Tensor, other: Tensor | TensorDictBase, *, out: TensorDictBase | None = None, pad: int | bool = None, update_batch_size: bool = False) \u2192 Self# Returns a tensordict with the leaves where condition is True and other elsewhere. torch.where() is applied to every leaf. condition is aligned with the batch dimensions of each leaf and expanded over its feature dimensions. Parameters: condition (Tensor) \u2013 a boolean mask over the leading batch dimensions. other (TensorDictBase, Tensor or Number) \u2013 the values to take where condition is False. A tensordict is paired with the tensordict key by key. On a LazyStackedTensorDict, a tensor other that starts with the batch shape up to the stack dimension is split along that dimension, one piece per member, so it must have the stack size there: expand it to the batch shape first. Keyword Arguments: out (TensorDictBase, optional) \u2013 the tensordict to write the result into, which is returned. Defaults to None, which returns a new tensordict. pad (Number or bool, optional) \u2013 the value that stands in for an entry that only one of the tensordict and a tensordict other has. Defaults to None, which raises a KeyError for such an entry. update_batch_size (bool, optional) \u2013 passed to update() when the result is written into out. It only matters when out is a lazy stack: if True, its number of members follows the result. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.ones(2, 3), batch_size=[2]) \u003e\u003e\u003e td.where(torch.tensor([True, False]), 0.0)[\"x\"] tensor([[1., 1., 1.], [0., 0., 0.]]) \u003e\u003e\u003e other = TensorDict(y=torch.zeros(2), batch_size=[2]) \u003e\u003e\u003e sorted(td.where(torch.tensor([True, False]), other, pad=-1).keys()) [\u0027x\u0027, \u0027y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

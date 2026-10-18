@@ -2,33 +2,36 @@
 
 TensorDictBase.setdefault(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
-Inserts the `key` entry with a value of `default` if `key` is not in the tensordict.
+Returns the entry at `key`, after writing `default` there if the key is missing.
 
-Returns the value for `key` if `key` is in the tensordict, else `default`.
+As for [`dict.setdefault()`](https://docs.python.org/3/builtins/stdtypes.html#dict.setdefault), an existing entry is not changed. The
+result is read with [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get), so a non-tensor entry returns its
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData).
 
 Parameters:
 
-- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the name of the value.
-- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**compatible type**,*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - value
-to be stored in the tensordict if the key is not already present.
+- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the entry.
+- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**any object*) - the value
+written if the key is missing.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - passed to [`set()`](tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set) when `default`
 is written. Defaults to `False`.
 
-Returns:
+Raises:
 
-The value of key in the tensordict. Will be default if the key was not
-previously set.
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the key is missing and the tensordict is locked,
+ or if the leading dimensions of `default` do not match the
+ batch size.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> td = TensorDict({}, batch_size=[3, 4])
->>> val = td.setdefault("a", torch.zeros(3, 4))
->>> assert (val == 0).all()
->>> val = td.setdefault("a", torch.ones(3, 4))
->>> assert (val == 0).all() # output is still 0
+>>> td = TensorDict({}, batch_size=[3])
+>>> td.setdefault("a", torch.zeros(3))
+tensor([0., 0., 0.])
+>>> td.setdefault("a", torch.ones(3)) # "a" exists: not changed
+tensor([0., 0., 0.])
 ```
 
 Every tensordict class and every tensorclass has this method. For the

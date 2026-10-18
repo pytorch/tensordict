@@ -37,9 +37,15 @@ True
 
 Returns the interaction type whose name matches a string, in any case.
 
+`InteractionType(type_str)` does the same.
+
 Parameters:
 
 **type_str** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - the name, for example `"random"` or `"MODE"`.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if no interaction type has this name.
 
 ## Tutorials that use `InteractionType`
 

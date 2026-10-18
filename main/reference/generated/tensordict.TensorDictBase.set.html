@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1660,8 +1660,8 @@ entry it replaces.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key to set: a string, or a tuple of strings
 for a nested entry. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p></li>
-<li><p><strong>item</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>equivalent</em><em>, </em><em>TensorDictBase instance</em>) – value
-to be stored in the tensordict.</p></li>
+<li><p><strong>item</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em>, </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><em>any object</em>) – the value to
+store.</p></li>
 <li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the key exists, the value
 is copied into the existing tensor, which keeps its storage. If
 the key does not exist, the entry is added. For a write that
@@ -1670,17 +1670,21 @@ raises on a missing key, use <a class="reference internal" href="tensordict.Tens
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>non_blocking</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and this copy is between
-different devices, the copy may occur asynchronously with respect
-to the host.</p>
+<dd class="field-even"><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, copies between devices
+can run asynchronously with respect to the host. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>self</p>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is locked (see <a class="reference internal" href="tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>) and
-    <code class="docutils literal notranslate"><span class="pre">inplace</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>, or if the leading dimensions of the
-    value do not match the batch size.</p>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is locked (see <a class="reference internal" href="../../concepts/keys.html#keys-locking"><span class="std std-ref">Locking and temporary changes</span></a>)
+    and the call adds or replaces an entry, or if the leading
+    dimensions of the value do not match the batch size.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> and the value does not fit the
+    shape of the existing entry.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2071,7 +2075,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.set",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.set",
        "url": "/reference/generated/tensordict.TensorDictBase.set.html",
-       "articleBody": "TensorDictBase.set# TensorDictBase.set(key: NestedKey, item: Tensor | TensorCollection, inplace: bool = False, *, non_blocking: bool = False, **kwargs: Any) \u2192 Self# Sets an entry, and returns the tensordict. td.set(key, value) is the same as td[key] = value. By default, the value replaces the existing entry (no data is copied). A tuple key sets a nested entry, and creates the missing sub-tensordicts. The leading dimensions of the value must match batch_size. Arrays and numbers are converted to tensors. Strings and other objects are stored as NonTensorData. A bool, int or float, or a NumPy scalar of one of these kinds, written over an existing NonTensorData entry is stored as a 0-d tensor, and the write emits a FutureWarning. Starting with TensorDict 0.17, the default will change to storing it as NonTensorData, like the entry it replaces. Parameters: key (NestedKey) \u2013 the key to set: a string, or a tuple of strings for a nested entry. See Keys, nested keys, and locking. item (Tensor or equivalent, TensorDictBase instance) \u2013 value to be stored in the tensordict. inplace (bool, optional) \u2013 if True and the key exists, the value is copied into the existing tensor, which keeps its storage. If the key does not exist, the entry is added. For a write that raises on a missing key, use set_(). Defaults to False. See In-place operations. Keyword Arguments: non_blocking (bool, optional) \u2013 if True and this copy is between different devices, the copy may occur asynchronously with respect to the host. Returns: self Raises: RuntimeError \u2013 if the tensordict is locked (see lock_()) and inplace is False, or if the leading dimensions of the value do not match the batch size. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({}, batch_size=[3, 4]) \u003e\u003e\u003e td = td.set(\"x\", torch.randn(3, 4)) \u003e\u003e\u003e y = torch.randn(3, 4, 5) \u003e\u003e\u003e td = td.set(\"y\", y, inplace=True) # works, even if \u0027y\u0027 is not present yet \u003e\u003e\u003e td = td.set(\"y\", torch.zeros_like(y), inplace=True) \u003e\u003e\u003e assert (y==0).all() # y values are overwritten \u003e\u003e\u003e td = td.set((\"nested\", \"z\"), torch.zeros(3, 4, 2)) # creates td[\"nested\"] \u003e\u003e\u003e td[\"nested\"].batch_size torch.Size([3, 4]) \u003e\u003e\u003e td.set(\"y\", torch.ones(5), inplace=True) # the shape does not match Traceback (most recent call last): ... RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3, 4]) and value.shape=torch.Size([5]) ... Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use set# Getting, setting, and nesting keys Getting, setting, and nesting keys Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.set# TensorDictBase.set(key: NestedKey, item: Tensor | TensorCollection, inplace: bool = False, *, non_blocking: bool = False, **kwargs: Any) \u2192 Self# Sets an entry, and returns the tensordict. td.set(key, value) is the same as td[key] = value. By default, the value replaces the existing entry (no data is copied). A tuple key sets a nested entry, and creates the missing sub-tensordicts. The leading dimensions of the value must match batch_size. Arrays and numbers are converted to tensors. Strings and other objects are stored as NonTensorData. A bool, int or float, or a NumPy scalar of one of these kinds, written over an existing NonTensorData entry is stored as a 0-d tensor, and the write emits a FutureWarning. Starting with TensorDict 0.17, the default will change to storing it as NonTensorData, like the entry it replaces. Parameters: key (NestedKey) \u2013 the key to set: a string, or a tuple of strings for a nested entry. See Keys, nested keys, and locking. item (Tensor, TensorDictBase or any object) \u2013 the value to store. inplace (bool, optional) \u2013 if True and the key exists, the value is copied into the existing tensor, which keeps its storage. If the key does not exist, the entry is added. For a write that raises on a missing key, use set_(). Defaults to False. See In-place operations. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Returns: self. Raises: RuntimeError \u2013 if the tensordict is locked (see Locking and temporary changes) and the call adds or replaces an entry, or if the leading dimensions of the value do not match the batch size. ValueError \u2013 if inplace=True and the value does not fit the shape of the existing entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({}, batch_size=[3, 4]) \u003e\u003e\u003e td = td.set(\"x\", torch.randn(3, 4)) \u003e\u003e\u003e y = torch.randn(3, 4, 5) \u003e\u003e\u003e td = td.set(\"y\", y, inplace=True) # works, even if \u0027y\u0027 is not present yet \u003e\u003e\u003e td = td.set(\"y\", torch.zeros_like(y), inplace=True) \u003e\u003e\u003e assert (y==0).all() # y values are overwritten \u003e\u003e\u003e td = td.set((\"nested\", \"z\"), torch.zeros(3, 4, 2)) # creates td[\"nested\"] \u003e\u003e\u003e td[\"nested\"].batch_size torch.Size([3, 4]) \u003e\u003e\u003e td.set(\"y\", torch.ones(5), inplace=True) # the shape does not match Traceback (most recent call last): ... RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3, 4]) and value.shape=torch.Size([5]) ... Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use set# Getting, setting, and nesting keys Getting, setting, and nesting keys Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

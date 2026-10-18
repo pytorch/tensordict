@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1651,24 +1651,27 @@ is the entry <code class="docutils literal notranslate"><span class="pre">(&quot
 with <a class="reference internal" href="tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module" title="tensordict.TensorDictBase.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a>.</p>
 <p>The result is a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> (or a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> with <code class="docutils literal notranslate"><span class="pre">as_module=True</span></code>),
-whichever class this method is called on.</p>
+whatever class this method is called on.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method locks the result by default (<code class="docutils literal notranslate"><span class="pre">lock=True</span></code>), but its
+override <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.from_module" title="tensordict.TensorDict.from_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.from_module</span></code></a> does not.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>nn.Module</em>) – the module to get the parameters from.</p></li>
-<li><p><strong>as_module</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code>
-instance will be returned which can be used to store parameters
-within a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>lock</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the resulting tensordict will be locked.
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>use_state_dict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the state-dict from the
-module will be used and unflattened into a TensorDict with
-the tree structure of the model. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This is particularly useful when state-dict hooks have to be used.</p>
-</div>
-</p></li>
+<li><p><strong>as_module</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code>, which can be stored
+as a submodule of a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>lock</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the result is locked (see
+<a class="reference internal" href="../../concepts/keys.html#keys-locking"><span class="std std-ref">Locking and temporary changes</span></a>). Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>use_state_dict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, reads the module’s
+<code class="docutils literal notranslate"><span class="pre">state_dict()</span></code>, so that its state-dict hooks run, and
+unflattens it into the tree of the submodules. The leaves are
+then the tensors of the state dict, not the parameters.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2060,7 +2063,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_module",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_module",
        "url": "/reference/generated/tensordict.TensorDictBase.from_module.html",
-       "articleBody": "TensorDictBase.from_module# classmethod TensorDictBase.from_module(module, as_module: bool = False, lock: bool = True, use_state_dict: bool = False)# Returns a tensordict of the parameters and buffers of a module. The leaves are the parameters and buffers of the module, not copies: an in-place change to a leaf changes the module. Use TensorDict.from_module(module).data.clone() to get independent tensors. Submodules become sub-tensordicts: module.layers[0].weight is the entry (\"layers\", \"0\", \"weight\"). Write the parameters back with to_module(). The result is a TensorDict (or a TensorDictParams with as_module=True), whichever class this method is called on. Parameters: module (nn.Module) \u2013 the module to get the parameters from. as_module (bool, optional) \u2013 if True, a TensorDictParams instance will be returned which can be used to store parameters within a torch.nn.Module. Defaults to False. lock (bool, optional) \u2013 if True, the resulting tensordict will be locked. Defaults to True. use_state_dict (bool, optional) \u2013 if True, the state-dict from the module will be used and unflattened into a TensorDict with the tree structure of the model. Defaults to False. Note This is particularly useful when state-dict hooks have to be used. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.TransformerDecoder( ... decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4), ... num_layers=1 ... ) \u003e\u003e\u003e params = TensorDict.from_module(module) \u003e\u003e\u003e print(params[\"layers\", \"0\", \"linear1\"]) TensorDict( fields={ bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_module# Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.from_module# classmethod TensorDictBase.from_module(module, as_module: bool = False, lock: bool = True, use_state_dict: bool = False)# Returns a tensordict of the parameters and buffers of a module. The leaves are the parameters and buffers of the module, not copies: an in-place change to a leaf changes the module. Use TensorDict.from_module(module).data.clone() to get independent tensors. Submodules become sub-tensordicts: module.layers[0].weight is the entry (\"layers\", \"0\", \"weight\"). Write the parameters back with to_module(). The result is a TensorDict (or a TensorDictParams with as_module=True), whatever class this method is called on. Note This method locks the result by default (lock=True), but its override TensorDict.from_module does not. Parameters: module (nn.Module) \u2013 the module to get the parameters from. as_module (bool, optional) \u2013 if True, returns a TensorDictParams, which can be stored as a submodule of a torch.nn.Module. Defaults to False. lock (bool, optional) \u2013 if True, the result is locked (see Locking and temporary changes). Defaults to True. use_state_dict (bool, optional) \u2013 if True, reads the module\u2019s state_dict(), so that its state-dict hooks run, and unflattens it into the tree of the submodules. The leaves are then the tensors of the state dict, not the parameters. Defaults to False. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.TransformerDecoder( ... decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4), ... num_layers=1 ... ) \u003e\u003e\u003e params = TensorDict.from_module(module) \u003e\u003e\u003e print(params[\"layers\", \"0\", \"linear1\"]) TensorDict( fields={ bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_module# Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,18 +1643,20 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.nn.set_composite_lp_aggregate">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">set_composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thread_local</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_composite_lp_aggregate" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_DecoratorContextManager</span></code></p>
-<p>Controls whether <a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> log-probabilities and entropies will be aggregated in a single tensor.</p>
-<p>When <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">True</span></code>, the log-probs / entropies of <a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a>
-will be summed into a single tensor with the shape of the root tensordict.
+<p>Sets whether a <a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> sums its log-probabilities in one tensor.</p>
+<p>When <a class="reference internal" href="tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate" title="tensordict.nn.composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">composite_lp_aggregate()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+log-probabilities and entropies of a
+<a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> are summed
+into one tensor with the shape of the root tensordict.
 When it returns <code class="docutils literal notranslate"><span class="pre">False</span></code> (the default), they are returned as a
 TensorDict with one <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;_log_prob</span></code> (or <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;_entropy</span></code>) entry per
 sampled key. The value also decides the keys where probabilistic modules
 write their log-probabilities: see the <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#log-prob-keys"><span class="std std-ref">log-probability key table</span></a> of
 <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>, and
 <a class="reference internal" href="../../modules.html#modules-guide"><span class="std std-ref">Modules: TensorDictModule and tensordict.nn</span></a>.</p>
-<p>The value of composite_lp_aggregate can also be controlled through the <cite>COMPOSITE_LP_AGGREGATE</cite> environment variable.
-It works as a context manager and as a decorator, and <code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code> and
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">unset()</span></code> change it outside of a block.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">COMPOSITE_LP_AGGREGATE</span></code> environment variable sets the value too.
+It works as a context manager and as a decorator, and <a class="reference internal" href="#tensordict.nn.set_composite_lp_aggregate.set" title="tensordict.nn.set_composite_lp_aggregate.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a> and
+<a class="reference internal" href="#tensordict.nn.set_composite_lp_aggregate.unset" title="tensordict.nn.set_composite_lp_aggregate.unset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unset()</span></code></a> change it outside of a block.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – the value that
@@ -1662,7 +1664,7 @@ It works as a context manager and as a decorator, and <code class="xref py py-me
 block. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>thread_local</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the mode applies to the
+<dd class="field-even"><p><strong>thread_local</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the mode applies to the
 calling thread only, and blocks that other threads enter do not
 change it. Inside the block, blocks without this flag that the
 same thread enters stay in that thread too. Threads started inside
@@ -1673,7 +1675,7 @@ to the whole process. Defaults to <code class="docutils literal notranslate"><sp
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Threads. The mode is process-wide by default, and is meant to
-be set once for the whole process, for example with <code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code>
+be set once for the whole process, for example with <a class="reference internal" href="#tensordict.nn.set_composite_lp_aggregate.set" title="tensordict.nn.set_composite_lp_aggregate.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>
 before you build the modules: it decides the keys of the
 log-probabilities, which the threads that write them and the threads
 that read them must agree on. A <code class="docutils literal notranslate"><span class="pre">with</span></code> block in one thread also
@@ -1681,7 +1683,7 @@ changes the value in other threads at that time, unless it passes
 <code class="docutils literal notranslate"><span class="pre">thread_local=True</span></code>. A thread started inside a <code class="docutils literal notranslate"><span class="pre">thread_local</span></code>
 block reads the process-wide value, not the block’s.</p>
 </div>
-<p class="rubric">Example</p>
+<p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompositeDistribution</span><span class="p">,</span> <span class="n">set_composite_lp_aggregate</span>
@@ -1718,6 +1720,18 @@ block reads the process-wide value, not the block’s.</p>
 <span class="go">        [-3.0407, -4.3593,  0.5763]])</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.set_composite_lp_aggregate.set">
+<span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_composite_lp_aggregate.set" title="Link to this definition">#</a></dt>
+<dd><p>Sets the mode, as entering the block does, until <a class="reference internal" href="#tensordict.nn.set_composite_lp_aggregate.unset" title="tensordict.nn.set_composite_lp_aggregate.unset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unset()</span></code></a> is called.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.nn.set_composite_lp_aggregate.unset">
+<span class="sig-name descname"><span class="pre">unset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_composite_lp_aggregate.unset" title="Link to this definition">#</a></dt>
+<dd><p>Restores the mode that <a class="reference internal" href="#tensordict.nn.set_composite_lp_aggregate.set" title="tensordict.nn.set_composite_lp_aggregate.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a> replaced.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -1839,7 +1853,11 @@ block reads the process-wide value, not the block’s.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.set_composite_lp_aggregate"><code class="docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.set_composite_lp_aggregate"><code class="docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.set_composite_lp_aggregate.set"><code class="docutils literal notranslate"><span class="pre">set_composite_lp_aggregate.set()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.set_composite_lp_aggregate.unset"><code class="docutils literal notranslate"><span class="pre">set_composite_lp_aggregate.unset()</span></code></a></li>
+</ul>
+</li>
 </ul>
   </nav></div>
     
@@ -2076,7 +2094,7 @@ block reads the process-wide value, not the block’s.</p>
        "headline": "set_composite_lp_aggregate",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_composite_lp_aggregate",
        "url": "/reference/generated/tensordict.nn.set_composite_lp_aggregate.html",
-       "articleBody": "set_composite_lp_aggregate# class tensordict.nn.set_composite_lp_aggregate(mode: bool = True, *, thread_local: bool = False)# Bases: _DecoratorContextManager Controls whether CompositeDistribution log-probabilities and entropies will be aggregated in a single tensor. When composite_lp_aggregate() returns True, the log-probs / entropies of CompositeDistribution will be summed into a single tensor with the shape of the root tensordict. When it returns False (the default), they are returned as a TensorDict with one \u003cname\u003e_log_prob (or \u003cname\u003e_entropy) entry per sampled key. The value also decides the keys where probabilistic modules write their log-probabilities: see the log-probability key table of ProbabilisticTensorDictModule, and Modules: TensorDictModule and tensordict.nn. The value of composite_lp_aggregate can also be controlled through the COMPOSITE_LP_AGGREGATE environment variable. It works as a context manager and as a decorator, and set() and unset() change it outside of a block. Parameters: mode (bool, optional) \u2013 the value that composite_lp_aggregate() returns inside the block. Defaults to True. Keyword Arguments: thread_local (bool, optional) \u2013 if True, the mode applies to the calling thread only, and blocks that other threads enter do not change it. Inside the block, blocks without this flag that the same thread enters stay in that thread too. Threads started inside the block see the process-wide mode. If False, the mode applies to the whole process. Defaults to False. Note Threads. The mode is process-wide by default, and is meant to be set once for the whole process, for example with set() before you build the modules: it decides the keys of the log-probabilities, which the threads that write them and the threads that read them must agree on. A with block in one thread also changes the value in other threads at that time, unless it passes thread_local=True. A thread started inside a thread_local block reads the process-wide value, not the block\u2019s. Example \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate \u003e\u003e\u003e from torch import distributions as d \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e params = TensorDict({ ... \"cont\": {\"loc\": torch.randn(3, 4), \"scale\": torch.rand(3, 4)}, ... (\"nested\", \"disc\"): {\"logits\": torch.randn(3, 10)} ... }, [3]) \u003e\u003e\u003e dist = CompositeDistribution(params, ... distribution_map={\"cont\": d.Normal, (\"nested\", \"disc\"): d.Categorical}) \u003e\u003e\u003e sample = dist.sample((4,)) \u003e\u003e\u003e with set_composite_lp_aggregate(False): ... lp = dist.log_prob(sample) ... print(lp) TensorDict( fields={ cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False) \u003e\u003e\u003e with set_composite_lp_aggregate(True): ... lp = dist.log_prob(sample) ... print(lp) tensor([[-2.0886, -1.2155, -0.0414], [-2.8973, -5.5165, 2.4402], [-0.2806, -1.2799, 3.1733], [-3.0407, -4.3593, 0.5763]])",
+       "articleBody": "set_composite_lp_aggregate# class tensordict.nn.set_composite_lp_aggregate(mode: bool = True, *, thread_local: bool = False)# Bases: _DecoratorContextManager Sets whether a CompositeDistribution sums its log-probabilities in one tensor. When composite_lp_aggregate() returns True, the log-probabilities and entropies of a CompositeDistribution are summed into one tensor with the shape of the root tensordict. When it returns False (the default), they are returned as a TensorDict with one \u003cname\u003e_log_prob (or \u003cname\u003e_entropy) entry per sampled key. The value also decides the keys where probabilistic modules write their log-probabilities: see the log-probability key table of ProbabilisticTensorDictModule, and Modules: TensorDictModule and tensordict.nn. The COMPOSITE_LP_AGGREGATE environment variable sets the value too. It works as a context manager and as a decorator, and set() and unset() change it outside of a block. Parameters: mode (bool, optional) \u2013 the value that composite_lp_aggregate() returns inside the block. Defaults to True. Keyword Arguments: thread_local (bool, optional) \u2013 if True, the mode applies to the calling thread only, and blocks that other threads enter do not change it. Inside the block, blocks without this flag that the same thread enters stay in that thread too. Threads started inside the block see the process-wide mode. If False, the mode applies to the whole process. Defaults to False. Note Threads. The mode is process-wide by default, and is meant to be set once for the whole process, for example with set() before you build the modules: it decides the keys of the log-probabilities, which the threads that write them and the threads that read them must agree on. A with block in one thread also changes the value in other threads at that time, unless it passes thread_local=True. A thread started inside a thread_local block reads the process-wide value, not the block\u2019s. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import CompositeDistribution, set_composite_lp_aggregate \u003e\u003e\u003e from torch import distributions as d \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e params = TensorDict({ ... \"cont\": {\"loc\": torch.randn(3, 4), \"scale\": torch.rand(3, 4)}, ... (\"nested\", \"disc\"): {\"logits\": torch.randn(3, 10)} ... }, [3]) \u003e\u003e\u003e dist = CompositeDistribution(params, ... distribution_map={\"cont\": d.Normal, (\"nested\", \"disc\"): d.Categorical}) \u003e\u003e\u003e sample = dist.sample((4,)) \u003e\u003e\u003e with set_composite_lp_aggregate(False): ... lp = dist.log_prob(sample) ... print(lp) TensorDict( fields={ cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False), nested: TensorDict( fields={ disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False) \u003e\u003e\u003e with set_composite_lp_aggregate(True): ... lp = dist.log_prob(sample) ... print(lp) tensor([[-2.0886, -1.2155, -0.0414], [-2.8973, -5.5165, 2.4402], [-0.2806, -1.2799, 3.1733], [-3.0407, -4.3593, 0.5763]]) set()# Sets the mode, as entering the block does, until unset() is called. unset()# Restores the mode that set() replaced.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

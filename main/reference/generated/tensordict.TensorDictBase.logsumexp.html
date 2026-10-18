@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,21 +1642,37 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.logsumexp">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">logsumexp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keepdim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.logsumexp" title="Link to this definition">#</a></dt>
-<dd><p>Returns the log of summed exponentials of each row of the input tensordict in the given dimension <code class="docutils literal notranslate"><span class="pre">dim</span></code>. The computation is numerically stabilized.</p>
-<p>If keepdim is <code class="docutils literal notranslate"><span class="pre">True</span></code>, the output tensor is of the same size as input except in the dimension(s) <code class="docutils literal notranslate"><span class="pre">dim</span></code> where it is of size <code class="docutils literal notranslate"><span class="pre">1</span></code>.
-Otherwise, <code class="docutils literal notranslate"><span class="pre">dim</span></code> is squeezed (see <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.squeeze.html#torch.squeeze" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">squeeze()</span></code></a>), resulting in the output tensor having 1 (or len(dim)) fewer dimension(s).</p>
+<dd><p>Returns the log of the summed exponentials of every leaf along batch dimensions.</p>
+<p>The computation is numerically stable, as with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.logsumexp.html#torch.logsumexp" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.logsumexp()</span></code></a>.
+Unlike <a class="reference internal" href="tensordict.TensorDictBase.sum.html#tensordict.TensorDictBase.sum" title="tensordict.TensorDictBase.sum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sum()</span></code></a>, it never reduces the feature dimensions: without
+<code class="docutils literal notranslate"><span class="pre">dim</span></code>, it reduces every batch dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><em>ints</em><em>, </em><em>optional</em>) – the dimension or dimensions to reduce. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, all batch dimensions of the
-tensordict are reduced.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – whether the output tensordict has dim retained or not.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch dimensions to reduce. A
+negative <code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of the batch dimensions.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which reduces all the batch dimensions.</p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduced batch dimensions are
+kept with size 1. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the output tensordict.</p>
+<dd class="field-even"><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the tensordict to write the result into,
+which is returned. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which returns a new
+tensordict.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">dim</span></code> is not a batch dimension.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">logsumexp</span><span class="p">()[</span><span class="s2">"a"</span><span class="p">]</span>  <span class="c1"># log(exp(0) + exp(0))</span>
+<span class="go">tensor([0.6931, 0.6931, 0.6931])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2017,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.logsumexp",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.logsumexp",
        "url": "/reference/generated/tensordict.TensorDictBase.logsumexp.html",
-       "articleBody": "TensorDictBase.logsumexp# TensorDictBase.logsumexp(dim=None, keepdim=False, *, out=None)# Returns the log of summed exponentials of each row of the input tensordict in the given dimension dim. The computation is numerically stabilized. If keepdim is True, the output tensor is of the same size as input except in the dimension(s) dim where it is of size 1. Otherwise, dim is squeezed (see squeeze()), resulting in the output tensor having 1 (or len(dim)) fewer dimension(s). Parameters: dim (int or tuple of ints, optional) \u2013 the dimension or dimensions to reduce. If None, all batch dimensions of the tensordict are reduced. keepdim (bool) \u2013 whether the output tensordict has dim retained or not. Keyword Arguments: out (TensorDictBase, optional) \u2013 the output tensordict. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.logsumexp# TensorDictBase.logsumexp(dim=None, keepdim=False, *, out=None)# Returns the log of the summed exponentials of every leaf along batch dimensions. The computation is numerically stable, as with torch.logsumexp(). Unlike sum(), it never reduces the feature dimensions: without dim, it reduces every batch dimension. Parameters: dim (int or tuple of int, optional) \u2013 the batch dimensions to reduce. A negative dim counts from the end of the batch dimensions. Defaults to None, which reduces all the batch dimensions. keepdim (bool, optional) \u2013 if True, the reduced batch dimensions are kept with size 1. Defaults to False. Keyword Arguments: out (TensorDictBase, optional) \u2013 the tensordict to write the result into, which is returned. Defaults to None, which returns a new tensordict. Raises: ValueError \u2013 if dim is not a batch dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(2, 3), batch_size=[2]) \u003e\u003e\u003e td.logsumexp()[\"a\"] # log(exp(0) + exp(0)) tensor([0.6931, 0.6931, 0.6931]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

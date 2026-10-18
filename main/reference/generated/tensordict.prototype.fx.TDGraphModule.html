@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1650,7 +1650,7 @@ tensordict, runs the graph, and writes the outputs at <code class="docutils lite
 <code class="docutils literal notranslate"><span class="pre">code</span></code> attributes are those of the underlying
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#torch.fx.GraphModule" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.fx.GraphModule</span></code></a>.</p>
 <p>This class is a prototype: its API can change without a deprecation
-period.</p>
+period. See <code class="xref py py-func docutils literal notranslate"><span class="pre">symbolic_trace()</span></code> for an example.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1662,15 +1662,21 @@ period.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.prototype.fx.TDGraphModule.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensordict_out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.prototype.fx.TDGraphModule.forward" title="Link to this definition">#</a></dt>
-<dd><p>Define the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div>
+<dd><p>Runs the graph on <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> and writes the outputs at <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the input tensordict.</p></li>
+<li><p><strong>tensordict_out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the tensordict to write
+the outputs into. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which writes them into
+<code class="docutils literal notranslate"><span class="pre">tensordict</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – passed to the graph.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The tensordict that holds the outputs.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -2034,7 +2040,7 @@ registered hooks while the latter silently ignores them.</p>
        "headline": "TDGraphModule",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TDGraphModule",
        "url": "/reference/generated/tensordict.prototype.fx.TDGraphModule.html",
-       "articleBody": "TDGraphModule# class tensordict.prototype.fx.TDGraphModule(graph_module: GraphModule, out_keys: list[NestedKey])# Bases: Module The module that symbolic_trace() returns: an FX graph that reads and writes a tensordict. A call reads the in_keys of the traced module from the input tensordict, runs the graph, and writes the outputs at out_keys, into tensordict_out if given, else into the input. The graph and code attributes are those of the underlying torch.fx.GraphModule. This class is a prototype: its API can change without a deprecation period. Parameters: graph_module (GraphModule) \u2013 the traced graph. out_keys (list of NestedKey) \u2013 the keys where the outputs are written. forward(tensordict: TensorDictBase, tensordict_out: TensorDictBase | None = None, **kwargs) \u2192 TensorDictBase# Define the computation performed at every call. Should be overridden by all subclasses. Note Although the recipe for forward pass needs to be defined within this function, one should call the Module instance afterwards instead of this since the former takes care of running the registered hooks while the latter silently ignores them.",
+       "articleBody": "TDGraphModule# class tensordict.prototype.fx.TDGraphModule(graph_module: GraphModule, out_keys: list[NestedKey])# Bases: Module The module that symbolic_trace() returns: an FX graph that reads and writes a tensordict. A call reads the in_keys of the traced module from the input tensordict, runs the graph, and writes the outputs at out_keys, into tensordict_out if given, else into the input. The graph and code attributes are those of the underlying torch.fx.GraphModule. This class is a prototype: its API can change without a deprecation period. See symbolic_trace() for an example. Parameters: graph_module (GraphModule) \u2013 the traced graph. out_keys (list of NestedKey) \u2013 the keys where the outputs are written. forward(tensordict: TensorDictBase, tensordict_out: TensorDictBase | None = None, **kwargs) \u2192 TensorDictBase# Runs the graph on tensordict and writes the outputs at out_keys. Parameters: tensordict (TensorDictBase) \u2013 the input tensordict. tensordict_out (TensorDictBase, optional) \u2013 the tensordict to write the outputs into. Defaults to None, which writes them into tensordict. **kwargs \u2013 passed to the graph. Returns: The tensordict that holds the outputs.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

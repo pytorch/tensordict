@@ -9,20 +9,26 @@ documentation.
 
 Bases: [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass)
 
-Per-leaf carrier describing a tensor's attributes -- device, dtype, and shape.
+A tensorclass that holds the device, dtype and shape of one tensor.
 
-Mirrors the [PyTorch Tensor Attributes](https://pytorch.org/docs/stable/tensor_attributes.html)
-terminology. Instances are produced by [`attrs()`](tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs)
--- one per leaf of the source tensordict -- and consumed by
-[`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to drive per-leaf device/dtype casting
-when the source tensordict is heterogeneous (e.g. `device=None` with leaves
-on different devices).
+[`attrs()`](tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs) returns a tensordict with one
+`TensorAttrs` per leaf. Pass it to
+[`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to move or cast each leaf of another
+tensordict to the device and dtype of the matching leaf, for example when
+the leaves are on different devices. The names follow the [PyTorch Tensor
+Attributes](https://pytorch.org/docs/stable/tensor_attributes.html).
 
-The field names are prefixed with `tgt_` to avoid shadowing the tensordict
-attributes `device`/`dtype`/`shape`.
+The fields start with `tgt_` so that they do not hide the `device`,
+`dtype` and `shape` attributes of the tensorclass.
 
-Fields populated via `from_tensor()` are controlled by the `fields` argument
-so the API scales as new attributes are added.
+Parameters:
+
+- **tgt_device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of the tensor.
+Defaults to `None`.
+- **tgt_dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of the tensor. Defaults
+to `None`.
+- **tgt_shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the shape of the tensor. Defaults
+to `None`.
 
 Examples
 
@@ -38,7 +44,10 @@ Examples
 
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
 
-Retrieves the device type of tensor class.
+The device of the tensorclass, or `None` if its leaves may be on different devices.
+
+It is read-only: use [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to move the
+tensorclass to another device.
 
 extend(*tensordict: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
@@ -56,7 +65,7 @@ Deprecated since version 0.15: Use `dataclasses.fields(cls)` instead. It returns
 
 from_module(*as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a tensordict that holds the parameters and buffers of a module.
 
 The entries are the parameters and buffers of the module themselves,
 not copies. Submodules become nested tensordicts.
@@ -69,7 +78,7 @@ The function [`tensordict.from_module()`](tensordict.from_module.html#tensordict
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `TensorDictParams`
 instance is returned, which can be used to store parameters
 within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
@@ -86,7 +95,7 @@ Defaults to `True`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
 `TensorDictParams` if `as_module=True`.
 
 Examples
@@ -106,10 +115,27 @@ False
 
 *classmethod*from_tensor(*tensor*, ***, *fields=('device', 'dtype', 'shape')*)
 
-Build a `TensorAttrs` from a tensor, populating only the requested fields.
+Returns a `TensorAttrs` with the attributes of `tensor`.
 
-`fields` accepts the short names `"device"`, `"dtype"`, `"shape"`. Unrequested
-fields remain `None`.
+Parameters:
+
+**tensor** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor to describe.
+
+Keyword Arguments:
+
+**fields** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the attributes to read, among
+`"device"`, `"dtype"` and `"shape"`. The other fields
+are `None`. Defaults to `("device", "dtype", "shape")`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorAttrs
+>>> attrs = TensorAttrs.from_tensor(torch.zeros(2, 3), fields=("dtype",))
+>>> attrs.tgt_dtype, attrs.tgt_shape
+(torch.float32, None)
+```
 
 *classmethod*from_tensordict(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *safe: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
@@ -126,10 +152,17 @@ Parameters:
 
 - **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict that holds the tensor fields.
 - **non_tensordict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - the values of the non-tensor fields. The
-fields that neither argument holds are set to `None`.
-- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
-raise an error if `tensordict` is not a [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase).
-Without it, such a tensordict raises an error.
+fields that neither argument holds are set to `None`. Defaults
+to `None`.
+- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - deprecated in 0.15, will be removed in TensorDict 0.17.
+If `False`, skips the check that `tensordict` is a
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase). By default, the check runs, and
+another type raises a `RuntimeError`.
+
+Returns:
+
+A new instance of the class, whose fields are the entries of
+`tensordict`.
 
 Examples
 
@@ -147,8 +180,56 @@ Examples
 
 rename_keys(*mapping*, ***, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-TensorClass-specific rename_keys: the destinations must be fields, which are never removed.
+Returns a tensorclass with several keys renamed at once.
+
+Works as [`rename_keys()`](tensordict.TensorDictBase.rename_keys.html#tensordict.TensorDictBase.rename_keys), which describes
+`mapping` and `strict`, with two differences: each destination must be
+a field of the class, or the call raises an `AttributeError`, and a
+field that the renaming empties is kept.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+>>> foo = Foo(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+>>> foo.rename_keys({"x": "y", "y": "x"}).x
+tensor([1., 1., 1.])
+```
 
 select(**keys*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *as_tensordict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-TensorClass-specific select that supports `as_tensordict`.
+Returns a tensorclass that holds only the fields of `keys`, with the other fields set to `None`.
+
+Works as [`select()`](tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select), which describes
+`keys`: the leaves are not copied.
+
+Keyword Arguments:
+
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the other fields of the
+tensorclass to `None` and returns `self`. Defaults to
+`False`.
+- **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a missing key raises a
+`KeyError`. If `False`, missing keys are ignored. Defaults to
+`True`.
+- **as_tensordict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns the selected
+entries in a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) instead of a
+tensorclass. Defaults to `False`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+>>> foo = Foo(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+>>> print(foo.select("x").y)
+None
+>>> type(foo.select("x", as_tensordict=True)).__name__
+'TensorDict'
+```

@@ -2,26 +2,30 @@
 
 TensorDictBase.masked_select(*mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
-Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
+Returns a tensordict with the elements of the batch where `mask` is `True`.
+
+The batch dimensions that `mask` covers are flattened into one, of
+size `mask.sum()`, and the other batch dimensions are kept, as for
+`td[mask]`. The data is copied. The result is a
+[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) without names.
 
 Parameters:
 
-**mask** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - boolean mask to be used for the tensors.
-Shape must match the TensorDict `batch_size`.
+**mask** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a boolean mask whose shape is the batch size,
+or its leading dimensions.
 
 Keyword Arguments:
 
-**inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, this tensordict's identity
-and key set are preserved; each leaf storage is replaced by
-its masked counterpart one leaf at a time, keeping peak
-memory close to `1x`. Not supported on
-[`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict).
+**inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns `self`. A lazy stack, or a tensordict that
+holds one, raises a `NotImplementedError`: call
+[`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. See [In-place operations](../../concepts/operations.html#inplace-conventions).
 Defaults to `False`.
 
 Returns:
 
-a new tensordict with the masked values. When `inplace=True`
-this is `self`.
+The masked tensordict, or `self` with `inplace=True`.
 
 Examples
 

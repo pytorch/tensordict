@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,36 +1642,34 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.get_non_tensor">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">get_non_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">NO_DEFAULT</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.get_non_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Gets a non-tensor value, if it exists, or <cite>default</cite> if the non-tensor value is not found.</p>
-<p>This method is robust to tensor/TensorDict values, meaning that if the
-value gathered is a regular tensor it will be returned too (although
-this method comes with some overhead and should not be used out of its
-natural scope).</p>
-<p>See <a class="reference internal" href="tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor" title="tensordict.TensorDictBase.set_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_non_tensor()</span></code></a> for more information
-on how to set non-tensor values in a tensordict.</p>
+<dd><p>Returns the content of the non-tensor entry at <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p>
+<p>A <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> returns its data, and a stack of
+non-tensor data returns a list. An entry that is not non-tensor data
+is returned as it is. See <a class="reference internal" href="../../concepts/non_tensor.html#non-tensor-data"><span class="std std-ref">Non-tensor data and unbatched entries</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the location of the NonTensorData object.</p></li>
-<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value to be returned if the key cannot
-be found.</p></li>
+<li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the entry.</p></li>
+<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value returned if the key is missing.
+If not passed, a missing key raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p></li>
 </ul>
 </dd>
-</dl>
-<dl class="simple">
-<dt>Returns: the content of the <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.tensorclass.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.tensorclass.NonTensorData</span></code></a>,</dt><dd><p>or the entry corresponding to the <code class="docutils literal notranslate"><span class="pre">key</span></code> if it isn’t a
-<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.tensorclass.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.tensorclass.NonTensorData</span></code></a> (or <code class="docutils literal notranslate"><span class="pre">default</span></code> if the
-entry cannot be found).</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the key is missing and no default is passed.</p>
 </dd>
 </dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor" title="tensordict.TensorDictBase.set_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_non_tensor()</span></code></a>.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">set_non_tensor</span><span class="p">((</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"the string"</span><span class="p">),</span> <span class="s2">"a string!"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">data</span><span class="o">.</span><span class="n">get_non_tensor</span><span class="p">((</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"the string"</span><span class="p">))</span> <span class="o">==</span> <span class="s2">"a string!"</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># regular `get` works but returns a NonTensorData object</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"the string"</span><span class="p">))</span>
-<span class="go">NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">get_non_tensor</span><span class="p">((</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"the string"</span><span class="p">))</span>
+<span class="go">'a string!'</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">get_non_tensor</span><span class="p">(</span><span class="s2">"missing"</span><span class="p">,</span> <span class="s2">"default"</span><span class="p">)</span>
+<span class="go">'default'</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2034,7 +2032,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.get_non_tensor",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.get_non_tensor",
        "url": "/reference/generated/tensordict.TensorDictBase.get_non_tensor.html",
-       "articleBody": "TensorDictBase.get_non_tensor# TensorDictBase.get_non_tensor(key: NestedKey, default=NO_DEFAULT)# Gets a non-tensor value, if it exists, or default if the non-tensor value is not found. This method is robust to tensor/TensorDict values, meaning that if the value gathered is a regular tensor it will be returned too (although this method comes with some overhead and should not be used out of its natural scope). See set_non_tensor() for more information on how to set non-tensor values in a tensordict. Parameters: key (NestedKey) \u2013 the location of the NonTensorData object. default (Any, optional) \u2013 the value to be returned if the key cannot be found. Returns: the content of the tensordict.tensorclass.NonTensorData,or the entry corresponding to the key if it isn\u2019t a tensordict.tensorclass.NonTensorData (or default if the entry cannot be found). Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({}, batch_size=[]) \u003e\u003e\u003e data = data.set_non_tensor((\"nested\", \"the string\"), \"a string!\") \u003e\u003e\u003e assert data.get_non_tensor((\"nested\", \"the string\")) == \"a string!\" \u003e\u003e\u003e # regular `get` works but returns a NonTensorData object \u003e\u003e\u003e data.get((\"nested\", \"the string\")) NonTensorData(data=a string!, batch_size=torch.Size([]), device=None) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.get_non_tensor# TensorDictBase.get_non_tensor(key: NestedKey, default=NO_DEFAULT)# Returns the content of the non-tensor entry at key. A NonTensorData returns its data, and a stack of non-tensor data returns a list. An entry that is not non-tensor data is returned as it is. See Non-tensor data and unbatched entries. Parameters: key (NestedKey) \u2013 the key of the entry. default (Any, optional) \u2013 the value returned if the key is missing. If not passed, a missing key raises KeyError. Raises: KeyError \u2013 if the key is missing and no default is passed. See also set_non_tensor(). Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({}, batch_size=[]) \u003e\u003e\u003e data = data.set_non_tensor((\"nested\", \"the string\"), \"a string!\") \u003e\u003e\u003e data.get_non_tensor((\"nested\", \"the string\")) \u0027a string!\u0027 \u003e\u003e\u003e data.get_non_tensor(\"missing\", \"default\") \u0027default\u0027 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

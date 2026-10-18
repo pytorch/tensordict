@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,11 +1642,47 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.amin">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">amin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">NO_DEFAULT</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">NO_DEFAULT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keepdim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduce</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.amin" title="Link to this definition">#</a></dt>
-<dd><p>Returns the minimum values of all elements in the input tensordict.</p>
-<p>Same as <a class="reference internal" href="tensordict.TensorDictBase.min.html#tensordict.TensorDictBase.min" title="tensordict.TensorDictBase.min"><code class="xref py py-meth docutils literal notranslate"><span class="pre">min()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">return_indices=False</span></code>. A tuple <code class="docutils literal notranslate"><span class="pre">dim</span></code>
-reduces only its first dim. Starting with TensorDict 0.17, the default
-will change to reducing every dim of the tuple, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.amin.html#torch.amin" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.amin()</span></code></a>
-does.</p>
+<dd><p>Returns the minimum of every leaf, over all its elements or along a batch dimension.</p>
+<p>Like <a class="reference internal" href="tensordict.TensorDictBase.min.html#tensordict.TensorDictBase.min" title="tensordict.TensorDictBase.min"><code class="xref py py-meth docutils literal notranslate"><span class="pre">min()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">return_indices=False</span></code>: the result holds the
+values only.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch dimension to reduce. A negative <code class="docutils literal notranslate"><span class="pre">dim</span></code>
+counts from the end of the batch dimensions. A tuple reduces only
+its first dimension and is not checked against the batch dimensions.
+Starting with TensorDict 0.17, the default will change to reducing
+every dimension of the tuple, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.amin.html#torch.amin" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.amin()</span></code></a> does. Defaults
+to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which reduces every element of each leaf, and the
+result has an empty batch size.</p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduced batch dimension is
+kept with size 1. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, reduces all the leaves together
+and returns a single tensor. Without <code class="docutils literal notranslate"><span class="pre">dim</span></code>, the result is a
+scalar. With <code class="docutils literal notranslate"><span class="pre">dim</span></code>, the leaves are concatenated along <code class="docutils literal notranslate"><span class="pre">dim</span></code>
+first, so they must have the same number of dimensions. With feature
+dimensions, a negative <code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of each leaf.
+Starting with TensorDict 0.17, the default will change to counting
+it from the end of the batch dimensions, as with <code class="docutils literal notranslate"><span class="pre">reduce=False</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new tensordict, or a tensor if <code class="docutils literal notranslate"><span class="pre">reduce=True</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">amin</span><span class="p">()[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor(1.)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">amin</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([1., 2.])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2007,7 +2043,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.amin",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.amin",
        "url": "/reference/generated/tensordict.TensorDictBase.amin.html",
-       "articleBody": "TensorDictBase.amin# TensorDictBase.amin(dim: int | NO_DEFAULT = NO_DEFAULT, keepdim: bool = False, *, reduce: bool | None = None) \u2192 Self | Tensor# Returns the minimum values of all elements in the input tensordict. Same as min() with return_indices=False. A tuple dim reduces only its first dim. Starting with TensorDict 0.17, the default will change to reducing every dim of the tuple, as torch.amin() does. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.amin# TensorDictBase.amin(dim: int | NO_DEFAULT = NO_DEFAULT, keepdim: bool = False, *, reduce: bool | None = None) \u2192 Self | Tensor# Returns the minimum of every leaf, over all its elements or along a batch dimension. Like min() with return_indices=False: the result holds the values only. Parameters: dim (int, optional) \u2013 the batch dimension to reduce. A negative dim counts from the end of the batch dimensions. A tuple reduces only its first dimension and is not checked against the batch dimensions. Starting with TensorDict 0.17, the default will change to reducing every dimension of the tuple, as torch.amin() does. Defaults to None, which reduces every element of each leaf, and the result has an empty batch size. keepdim (bool, optional) \u2013 if True, the reduced batch dimension is kept with size 1. Defaults to False. Keyword Arguments: reduce (bool, optional) \u2013 if True, reduces all the leaves together and returns a single tensor. Without dim, the result is a scalar. With dim, the leaves are concatenated along dim first, so they must have the same number of dimensions. With feature dimensions, a negative dim counts from the end of each leaf. Starting with TensorDict 0.17, the default will change to counting it from the end of the batch dimensions, as with reduce=False. Defaults to False. Returns: A new tensordict, or a tensor if reduce=True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.tensor([[1.0, 5.0], [3.0, 2.0]]), batch_size=[2]) \u003e\u003e\u003e td.amin()[\"a\"] tensor(1.) \u003e\u003e\u003e td.amin(dim=0)[\"a\"] tensor([1., 2.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

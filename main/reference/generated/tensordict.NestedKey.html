@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,14 +1643,12 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.NestedKey">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">NestedKey</span></span><a class="headerlink" href="#tensordict.NestedKey" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>An abstract class for nested keys.</p>
-<p>Nested keys are the generic key type accepted by TensorDict.</p>
-<p>A nested key is either a string or a non-empty tuple of NestedKeys
-instances. <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;,</span> <span class="pre">&quot;b&quot;]</span></code> and <code class="docutils literal notranslate"><span class="pre">td[(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)]</span></code> read the entry <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code>
-of the nested tensordict <code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code>. Nested tuples are flattened:
-<code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">(&quot;b&quot;,))</span></code> is the same key as <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code>. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
-<p>The NestedKey class supports instance checks. Use it in type hints and
-in <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> checks.</p>
+<p>The type of the keys of a tensordict: a string, or a tuple of strings for a nested entry.</p>
+<p>A nested key is either a string or a non-empty tuple of nested keys.
+<code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;,</span> <span class="pre">&quot;b&quot;]</span></code> and <code class="docutils literal notranslate"><span class="pre">td[(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)]</span></code> read the entry <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> of the
+nested tensordict <code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code>. Nested tuples are flattened: <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">(&quot;b&quot;,))</span></code>
+is the same key as <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code>. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
+<p>Use <a class="reference internal" href="#tensordict.NestedKey" title="tensordict.NestedKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code></a> in type hints and in <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> checks.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">),</span> <span class="nb">isinstance</span><span class="p">((</span><span class="s2">"a"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"b"</span><span class="p">,)),</span> <span class="n">NestedKey</span><span class="p">)</span>
@@ -2027,7 +2025,7 @@ in <code class="docutils literal notranslate"><span class="pre">isinstance</span
        "headline": "NestedKey",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - NestedKey",
        "url": "/reference/generated/tensordict.NestedKey.html",
-       "articleBody": "NestedKey# class tensordict.NestedKey# Bases: object An abstract class for nested keys. Nested keys are the generic key type accepted by TensorDict. A nested key is either a string or a non-empty tuple of NestedKeys instances. td[\"a\", \"b\"] and td[(\"a\", \"b\")] read the entry \"b\" of the nested tensordict \"a\". Nested tuples are flattened: (\"a\", (\"b\",)) is the same key as (\"a\", \"b\"). See Keys, nested keys, and locking. The NestedKey class supports instance checks. Use it in type hints and in isinstance checks. Examples \u003e\u003e\u003e from tensordict import NestedKey, TensorDict \u003e\u003e\u003e isinstance(\"a\", NestedKey), isinstance((\"a\", (\"b\",)), NestedKey) (True, True) \u003e\u003e\u003e isinstance((\"a\", 1), NestedKey), isinstance((), NestedKey) (False, False) \u003e\u003e\u003e td = TensorDict({\"a\": {\"b\": 0}}) \u003e\u003e\u003e td[\"a\", \"b\"] is td[(\"a\", (\"b\",))] True Tutorials that use NestedKey# Building tensordicts from streams Building tensordicts from streams",
+       "articleBody": "NestedKey# class tensordict.NestedKey# Bases: object The type of the keys of a tensordict: a string, or a tuple of strings for a nested entry. A nested key is either a string or a non-empty tuple of nested keys. td[\"a\", \"b\"] and td[(\"a\", \"b\")] read the entry \"b\" of the nested tensordict \"a\". Nested tuples are flattened: (\"a\", (\"b\",)) is the same key as (\"a\", \"b\"). See Keys, nested keys, and locking. Use NestedKey in type hints and in isinstance checks. Examples \u003e\u003e\u003e from tensordict import NestedKey, TensorDict \u003e\u003e\u003e isinstance(\"a\", NestedKey), isinstance((\"a\", (\"b\",)), NestedKey) (True, True) \u003e\u003e\u003e isinstance((\"a\", 1), NestedKey), isinstance((), NestedKey) (False, False) \u003e\u003e\u003e td = TensorDict({\"a\": {\"b\": 0}}) \u003e\u003e\u003e td[\"a\", \"b\"] is td[(\"a\", (\"b\",))] True Tutorials that use NestedKey# Building tensordicts from streams Building tensordicts from streams",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

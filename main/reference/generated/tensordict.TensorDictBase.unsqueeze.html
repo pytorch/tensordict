@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,8 +1642,9 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.unsqueeze">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">unsqueeze</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.unsqueeze" title="Link to this definition">#</a></dt>
-<dd><p>Inserts a batch dimension of size 1 in every tensor, and returns them in a new tensordict.</p>
-<p>The tensors of the result are views of the original tensors.</p>
+<dd><p>Returns a tensordict with a new batch dimension of size 1 at position <code class="docutils literal notranslate"><span class="pre">dim</span></code>.</p>
+<p>The tensors of the result are views of the original tensors. The new
+dimension has no name.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the position of the new dimension, in
@@ -2045,7 +2046,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.unsqueeze",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.unsqueeze",
        "url": "/reference/generated/tensordict.TensorDictBase.unsqueeze.html",
-       "articleBody": "TensorDictBase.unsqueeze# TensorDictBase.unsqueeze(*args, **kwargs)# Inserts a batch dimension of size 1 in every tensor, and returns them in a new tensordict. The tensors of the result are views of the original tensors. Parameters: dim (int) \u2013 the position of the new dimension, in [-batch_dims - 1, batch_dims] as for torch.unsqueeze(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(24).reshape(3, 4, 2), ... }, batch_size=[3, 4]) \u003e\u003e\u003e td = td.unsqueeze(-2) \u003e\u003e\u003e td.shape torch.Size([3, 1, 4]) \u003e\u003e\u003e td.get(\"x\").shape torch.Size([3, 1, 4, 2]) This operation can be used as a context manager too. Inside the with block, you work on the unsqueezed tensordict. When the block exits, the inverse operation (squeeze()) runs, and the entries of the block are written back to the original tensordict. They replace the original tensors instead of being copied into them. The original tensordict must not be locked. If the block raises an exception, nothing is written back. \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(24).reshape(3, 4, 2), ... }, batch_size=[3, 4]) \u003e\u003e\u003e with td.unsqueeze(-2) as tds: ... _ = tds.set(\"y\", torch.zeros(3, 1, 4)) \u003e\u003e\u003e assert td.get(\"y\").shape == (3, 4) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unsqueeze# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.unsqueeze# TensorDictBase.unsqueeze(*args, **kwargs)# Returns a tensordict with a new batch dimension of size 1 at position dim. The tensors of the result are views of the original tensors. The new dimension has no name. Parameters: dim (int) \u2013 the position of the new dimension, in [-batch_dims - 1, batch_dims] as for torch.unsqueeze(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(24).reshape(3, 4, 2), ... }, batch_size=[3, 4]) \u003e\u003e\u003e td = td.unsqueeze(-2) \u003e\u003e\u003e td.shape torch.Size([3, 1, 4]) \u003e\u003e\u003e td.get(\"x\").shape torch.Size([3, 1, 4, 2]) This operation can be used as a context manager too. Inside the with block, you work on the unsqueezed tensordict. When the block exits, the inverse operation (squeeze()) runs, and the entries of the block are written back to the original tensordict. They replace the original tensors instead of being copied into them. The original tensordict must not be locked. If the block raises an exception, nothing is written back. \u003e\u003e\u003e td = TensorDict({ ... \u0027x\u0027: torch.arange(24).reshape(3, 4, 2), ... }, batch_size=[3, 4]) \u003e\u003e\u003e with td.unsqueeze(-2) as tds: ... _ = tds.set(\"y\", torch.zeros(3, 1, 4)) \u003e\u003e\u003e assert td.get(\"y\").shape == (3, 4) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unsqueeze# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

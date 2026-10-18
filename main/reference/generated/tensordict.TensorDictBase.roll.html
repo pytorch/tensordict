@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,30 +1642,32 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.roll">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">roll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shifts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.roll" title="Link to this definition">#</a></dt>
-<dd><p>Roll the tensordict along the given dimensions.</p>
-<p>Elements that are shifted beyond the last position are re-introduced at
-the first position.</p>
+<dd><p>Returns a tensordict with the elements rolled along batch dimensions, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.roll.html#torch.roll" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.roll()</span></code></a> does.</p>
+<p>Elements shifted past the last position come back at the first one.
+The batch size and the names do not change, and the feature dimensions
+are not rolled. The data is copied.</p>
+<p>It can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> can: when
+the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, the entries of the block are written back to
+the tensordict with the inverse operation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>shifts</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><em>ints</em>) – The number of places by which the elements
-of the tensordict are shifted. If shifts is a tuple, dims must be a
-tuple of the same size, and each dimension will be rolled by the
-corresponding value.</p></li>
-<li><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><em>ints</em><em>, </em><em>optional</em>) – Axis along which to roll.
-By default, the tensordict is flattened before rolling.</p></li>
+<li><p><strong>shifts</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the number of places to shift the
+elements by. With a tuple, <code class="docutils literal notranslate"><span class="pre">dims</span></code> is a tuple of the same
+size, and each dimension is rolled by its own shift.</p></li>
+<li><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch dimensions to roll.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which rolls the flattened batch and
+restores its shape.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
-and key set are preserved; each leaf storage is replaced by
-its rolled counterpart one leaf at a time, keeping peak memory
-close to <code class="docutils literal notranslate"><span class="pre">1x</span></code>. The batch_size is unchanged by <code class="docutils literal notranslate"><span class="pre">roll</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns <code class="docutils literal notranslate"><span class="pre">self</span></code>. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>. Defaults
+to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a new tensordict with elements rolled. When <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> this
-is <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<dd class="field-odd"><p>The rolled tensordict, or <code class="docutils literal notranslate"><span class="pre">self</span></code> with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2040,7 +2042,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.roll",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.roll",
        "url": "/reference/generated/tensordict.TensorDictBase.roll.html",
-       "articleBody": "TensorDictBase.roll# TensorDictBase.roll(shifts: int | tuple[int, ...], dims: int | tuple[int, ...] = None, *, inplace: bool = False)# Roll the tensordict along the given dimensions. Elements that are shifted beyond the last position are re-introduced at the first position. Parameters: shifts (int or tuple of ints) \u2013 The number of places by which the elements of the tensordict are shifted. If shifts is a tuple, dims must be a tuple of the same size, and each dimension will be rolled by the corresponding value. dims (int or tuple of ints, optional) \u2013 Axis along which to roll. By default, the tensordict is flattened before rolling. Keyword Arguments: inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each leaf storage is replaced by its rolled counterpart one leaf at a time, keeping peak memory close to 1x. The batch_size is unchanged by roll. Defaults to False. Returns: a new tensordict with elements rolled. When inplace=True this is self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.roll(1, 0)[\"a\"]) tensor([[3, 4, 5], [0, 1, 2]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.roll# TensorDictBase.roll(shifts: int | tuple[int, ...], dims: int | tuple[int, ...] = None, *, inplace: bool = False)# Returns a tensordict with the elements rolled along batch dimensions, as torch.roll() does. Elements shifted past the last position come back at the first one. The batch size and the names do not change, and the feature dimensions are not rolled. The data is copied. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: shifts (int or tuple of int) \u2013 the number of places to shift the elements by. With a tuple, dims is a tuple of the same size, and each dimension is rolled by its own shift. dims (int or tuple of int, optional) \u2013 the batch dimensions to roll. Defaults to None, which rolls the flattened batch and restores its shape. Keyword Arguments: inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. See In-place operations. Defaults to False. Returns: The rolled tensordict, or self with inplace=True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.roll(1, 0)[\"a\"]) tensor([[3, 4, 5], [0, 1, 2]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

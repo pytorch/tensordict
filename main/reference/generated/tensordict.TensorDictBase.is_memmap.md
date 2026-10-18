@@ -2,16 +2,26 @@
 
 TensorDictBase.is_memmap() → [bool](https://docs.python.org/3/builtins/functions.html#bool)
 
-Checks if tensordict is memory-mapped.
+Whether the tensordict is memory-mapped.
 
-If a TensorDict instance is memory-mapped, it is locked (entries cannot
-be renamed, removed or added). If a `TensorDict` is created with
-tensors that are all memory-mapped, this does __not__ mean that `is_memmap`
-will return `True` (as a new tensor may or may not be memory-mapped).
-Only if one calls tensordict.memmap_() will the tensordict be
-considered as memory-mapped.
+`True` for the tensordict of [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_), and for the results
+of [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) and [`memmap_like()`](tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like) written to a directory or
+to anonymous memory (not to an archive).
 
-This is always `True` for tensordicts on a CUDA device.
+A memory-mapped tensordict is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)), and
+unlocking it makes `is_memmap` return `False`. A tensordict built
+from memory-mapped tensors, or returned by [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap), is
+not memory-mapped in this sense: a new entry would not be.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3))
+>>> td.is_memmap(), td.memmap().is_memmap()
+(False, True)
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

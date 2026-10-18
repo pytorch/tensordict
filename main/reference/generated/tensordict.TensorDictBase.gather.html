@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,27 +1642,29 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.gather">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">gather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.gather" title="Link to this definition">#</a></dt>
-<dd><p>Gathers values along an axis specified by <cite>dim</cite>.</p>
+<dd><p>Gathers values along a batch dimension, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.gather.html#torch.gather" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.gather()</span></code></a> does.</p>
+<p><code class="docutils literal notranslate"><span class="pre">index</span></code> has as many dimensions as the batch, and gives the batch size
+of the result; each leaf keeps its feature dimensions. As for
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.gather.html#torch.gather" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.gather()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">index</span></code> can be smaller than the batch along
+the other dimensions. The data is copied, and the names are kept.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the dimension along which collect the elements</p></li>
-<li><p><strong>index</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – a long tensor which number of dimension matches
-the one of the tensordict with only one dimension differing between
-the two (the gathering dimension). Its elements refer to the
-index to be gathered along the required dimension.</p></li>
-<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a destination tensordict. It must
-have the same shape as the index.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the batch dimension to gather along.</p></li>
+<li><p><strong>index</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – a long tensor of indices along <code class="docutils literal notranslate"><span class="pre">dim</span></code>, with
+as many dimensions as the batch.</p></li>
+<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a tensordict to write the result
+into, with the batch size <code class="docutils literal notranslate"><span class="pre">index.shape</span></code>. Exclusive with
+<code class="docutils literal notranslate"><span class="pre">inplace</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, this tensordict’s identity
-and key set are preserved; each leaf storage is replaced by
-its gathered counterpart one leaf at a time, keeping peak
-memory close to <code class="docutils literal notranslate"><span class="pre">1x</span></code>. Requires <code class="docutils literal notranslate"><span class="pre">index.ndim</span> <span class="pre">==</span>
-<span class="pre">self.batch_dims</span></code> (the result must have the same number of
-batch dims as the input). Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">out</span></code>.
-Not supported on <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>.
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns <code class="docutils literal notranslate"><span class="pre">self</span></code>. It needs <code class="docutils literal notranslate"><span class="pre">index.ndim</span> <span class="pre">==</span> <span class="pre">batch_dims</span></code>.
+Exclusive with <code class="docutils literal notranslate"><span class="pre">out</span></code>. A lazy stack, or a tensordict that
+holds one, raises a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>: call
+<a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> first. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
@@ -1670,32 +1672,24 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>     <span class="s2">"b"</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"c"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])},</span>
-<span class="gp">... </span>    <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_gather</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td_gather</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([3, 2, 5]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([3, 2]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([[ 0,  3],</span>
+<span class="go">        [ 5,  6],</span>
+<span class="go">        [11, 11]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">out</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(torch.Size([3, 2]), torch.Size([3, 2, 1]))</span>
 </pre></div>
 </div>
-<p>Gather keeps the dimension names.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_gather</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_gather</span><span class="o">.</span><span class="n">names</span>
-<span class="go">['a', 'b']</span>
+<p>The names of the batch dimensions are kept:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['x', 'y']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2065,7 +2059,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.gather",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.gather",
        "url": "/reference/generated/tensordict.TensorDictBase.gather.html",
-       "articleBody": "TensorDictBase.gather# TensorDictBase.gather(dim: int, index: Tensor, out: T | None = None, *, inplace: bool = False) \u2192 Self# Gathers values along an axis specified by dim. Parameters: dim (int) \u2013 the dimension along which collect the elements index (Tensor) \u2013 a long tensor which number of dimension matches the one of the tensordict with only one dimension differing between the two (the gathering dimension). Its elements refer to the index to be gathered along the required dimension. out (TensorDictBase, optional) \u2013 a destination tensordict. It must have the same shape as the index. Keyword Arguments: inplace (bool, optional) \u2013 If True, this tensordict\u2019s identity and key set are preserved; each leaf storage is replaced by its gathered counterpart one leaf at a time, keeping peak memory close to 1x. Requires index.ndim == self.batch_dims (the result must have the same number of batch dims as the input). Mutually exclusive with out. Not supported on LazyStackedTensorDict. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... {\"a\": torch.randn(3, 4, 5), ... \"b\": TensorDict({\"c\": torch.zeros(3, 4, 5)}, [3, 4, 5])}, ... [3, 4]) \u003e\u003e\u003e index = torch.randint(4, (3, 2)) \u003e\u003e\u003e td_gather = td.gather(dim=1, index=index) \u003e\u003e\u003e print(td_gather) TensorDict( fields={ a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([3, 2, 5]), device=None, is_shared=False)}, batch_size=torch.Size([3, 2]), device=None, is_shared=False) Gather keeps the dimension names. Examples \u003e\u003e\u003e td.names = [\"a\", \"b\"] \u003e\u003e\u003e td_gather = td.gather(dim=1, index=index) \u003e\u003e\u003e td_gather.names [\u0027a\u0027, \u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use gather# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.gather# TensorDictBase.gather(dim: int, index: Tensor, out: T | None = None, *, inplace: bool = False) \u2192 Self# Gathers values along a batch dimension, as torch.gather() does. index has as many dimensions as the batch, and gives the batch size of the result; each leaf keeps its feature dimensions. As for torch.gather(), index can be smaller than the batch along the other dimensions. The data is copied, and the names are kept. Parameters: dim (int) \u2013 the batch dimension to gather along. index (Tensor) \u2013 a long tensor of indices along dim, with as many dimensions as the batch. out (TensorDictBase, optional) \u2013 a tensordict to write the result into, with the batch size index.shape. Exclusive with inplace. Defaults to None. Keyword Arguments: inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. It needs index.ndim == batch_dims. Exclusive with out. A lazy stack, or a tensordict that holds one, raises a NotImplementedError: call to_tensordict() first. See In-place operations. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=torch.arange(12).view(3, 4), ... b=TensorDict(c=torch.arange(12).view(3, 4, 1), batch_size=[3, 4, 1]), ... batch_size=[3, 4], ... ) \u003e\u003e\u003e index = torch.tensor([[0, 3], [1, 2], [3, 3]]) \u003e\u003e\u003e out = td.gather(dim=1, index=index) \u003e\u003e\u003e out[\"a\"] tensor([[ 0, 3], [ 5, 6], [11, 11]]) \u003e\u003e\u003e out.batch_size, out[\"b\", \"c\"].shape (torch.Size([3, 2]), torch.Size([3, 2, 1])) The names of the batch dimensions are kept: \u003e\u003e\u003e td.names = [\"x\", \"y\"] \u003e\u003e\u003e td.gather(dim=1, index=index).names [\u0027x\u0027, \u0027y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use gather# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

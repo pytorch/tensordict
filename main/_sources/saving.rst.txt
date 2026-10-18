@@ -127,7 +127,8 @@ The methods have several names:
 - :meth:`~tensordict.TensorDictBase.load` and
   :meth:`~tensordict.TensorDictBase.load_memmap` are one method.
 
-``memmap``, ``memmap_``, and ``save`` lock the tensordict that they return.
+``memmap``, ``memmap_``, and ``save`` lock the tensordict that they return,
+except when ``memmap`` or ``save`` writes a ``.tdz`` archive.
 You can write into its tensors in place, but you cannot add, remove, or
 replace an entry (see :ref:`keys-locking`).
 
@@ -544,9 +545,10 @@ tensordict also protects the paths that it writes:
   directory, also for keys that contain ``/`` or ``..``. ``robust_key=False``
   turns this off for old layouts. Do not use it with keys or metadata that
   you do not trust.
-- A save overwrites a leaf file that exists. To get an error instead, pass
-  ``existsok=False``. ``save`` still rewrites the metadata files of a
-  directory that it reuses.
+- A save overwrites a leaf file that exists. To get an error instead, call
+  ``memmap`` with ``existsok=False``: ``save`` has no ``existsok``
+  argument. ``memmap`` still rewrites the metadata files of a directory
+  that it reuses.
 
 Two other features unpickle what they receive: the Redis backend of
 :class:`~tensordict.store.TensorDictStore` (see :ref:`storage-redis`) and the

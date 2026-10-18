@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,9 +1643,14 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.entry_class">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">entry_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><span class="pre">type</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.entry_class" title="Link to this definition">#</a></dt>
 <dd><p>Returns the class of an entry, possibly without reading the entry.</p>
-<p>It returns <code class="docutils literal notranslate"><span class="pre">type(tensordict.get(key))</span></code>. Prefer it to that expression
+<p>It is the same as <code class="docutils literal notranslate"><span class="pre">type(td.get(key))</span></code>. Prefer it to that expression
 when <a class="reference internal" href="tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> is expensive, for example on a lazy stack or a
 tensordict stored on disk.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the entry.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2016,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.entry_class",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.entry_class",
        "url": "/reference/generated/tensordict.TensorDictBase.entry_class.html",
-       "articleBody": "TensorDictBase.entry_class# abstract TensorDictBase.entry_class(key: NestedKey) \u2192 type# Returns the class of an entry, possibly without reading the entry. It returns type(tensordict.get(key)). Prefer it to that expression when get() is expensive, for example on a lazy stack or a tensordict stored on disk. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3))) \u003e\u003e\u003e td.entry_class(\"a\") \u003cclass \u0027torch.Tensor\u0027\u003e \u003e\u003e\u003e td.entry_class(\"b\") \u003cclass \u0027tensordict._td.TensorDict\u0027\u003e Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.entry_class# abstract TensorDictBase.entry_class(key: NestedKey) \u2192 type# Returns the class of an entry, possibly without reading the entry. It is the same as type(td.get(key)). Prefer it to that expression when get() is expensive, for example on a lazy stack or a tensordict stored on disk. Parameters: key (NestedKey) \u2013 the key of the entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3))) \u003e\u003e\u003e td.entry_class(\"a\") \u003cclass \u0027torch.Tensor\u0027\u003e \u003e\u003e\u003e td.entry_class(\"b\") \u003cclass \u0027tensordict._td.TensorDict\u0027\u003e Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

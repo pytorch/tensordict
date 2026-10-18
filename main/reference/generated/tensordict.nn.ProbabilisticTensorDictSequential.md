@@ -4,73 +4,72 @@
 
 Bases: [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential)
 
-A [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) that contains one or more [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) instances, and can return their distribution.
+A [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) with probabilistic modules, which can return their distribution.
 
-Usually the last module is probabilistic and the modules before it
-compute its parameters. `get_dist()` returns the distribution, and
-`log_prob()` returns the log-probability of a sample. A call to the
-module runs every module and writes the sampled values (see
-[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) for the keys of the
-log-probabilities).
+Usually the last module is a
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) and the modules
+before it compute its parameters. A call runs every module and writes the
+sampled values (see [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule)
+for the keys of the log-probabilities). `get_dist()` returns the
+distribution, and `log_prob()` returns the log-probability of a
+sample. See [Probabilistic modules](../../modules.html#modules-probabilistic) for a guide.
 
-`return_composite` decides what `get_dist()` returns when there is
-more than one probabilistic module:
-
-- `False`: the distribution of the last module. The other probabilistic
-modules only write their values. The last module must be
-probabilistic, otherwise the constructor raises `TypeError`.
-- `True`: one [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution)
-that holds the distributions of all probabilistic modules.
-
-The default chooses `True` if there is more than one probabilistic
-module or if the last module is not probabilistic, and `False`
-otherwise.
-
-Resulting log-probabilities will be conditional probabilities if samples are interdependent:
-whenever
-
-> \[Z = F(X, Y)\]
-
-then the log-probability of Z will be
-
-> \[log(p(z | x, y))\]
+When a module samples from a distribution whose parameters depend on the
+sample of an earlier module, its log-probability is conditional: for a
+value `z` drawn from a distribution whose parameters are computed from
+earlier samples `x` and `y`, it is `log p(z | x, y)`.
 
 Parameters:
 
-***modules** (*sequence**or**OrderedDict**of*[*TensorDictModuleBase*](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)*or*[*ProbabilisticTensorDictModule*](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule)) - An ordered sequence of
-[`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) instances, usually terminating in a [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule),
-to be run sequentially.
-The modules can be instances of TensorDictModuleBase or any other function that matches this signature.
-Note that if a non-TensorDictModuleBase callable is used, its input and output keys will not be tracked,
-and thus will not affect the in_keys and out_keys attributes of the TensorDictSequential.
+***modules** ([*TensorDictModuleBase*](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase)*or**Callable*) - the modules to run, in
+order, usually ending with a
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule). You can
+also pass one list, or one `OrderedDict` or `dict` that maps
+names to modules. A callable that is not a
+[`TensorDictModuleBase`](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) takes and returns a
+tensordict, and its keys do not count in the `in_keys` and
+`out_keys` of the sequence.
 
 Keyword Arguments:
 
-- **partial_tolerant** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - stored as an attribute, but
+- **partial_tolerant** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - stored as an attribute, but
 `forward()` does not use it: every module runs on the whole
 input, as with `partial_tolerant=False`. To skip the modules whose
 input keys are missing, or to run them on the members of a lazy
 stack that have the keys, put this module in a
 [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) with
 `partial_tolerant=True`. Defaults to `False`.
-- **return_composite** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If True and multiple
-[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) or
-`ProbabilisticTensorDictSequential` instances are found,
-a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) instance will be used.
-Otherwise, only the last module will be used to build the distribution.
-Defaults to `True` whenever there are more than one probabilistic modules or the last module is not probabilistic.
-Errors if return_composite is False and the last module is not probabilistic.
-- **selected_out_keys** (*iterable**of**NestedKeys**,**optional*) - the list of out-keys to select. If not provided, all
-`out_keys` will be written.
-- **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if True, the input tensordict is modified in-place. If False, a new empty
-[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) instance is created. If "empty", input.empty() is used instead (ie, the
-output preserves type, device and batch-size). Defaults to None (relies on sub-modules).
+- **return_composite** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - what `get_dist()` returns.
+If `True`, one
+[`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) that
+holds the distributions of all the probabilistic modules. If
+`False`, the distribution of the last module: the other
+probabilistic modules only write their values, and the last module
+must be probabilistic. Defaults to `None`, which gives `True`
+if there is more than one probabilistic module or if the last
+module is not probabilistic, and `False` otherwise.
+- **selected_out_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the `out_keys` to
+write. Defaults to `None`, which writes all the `out_keys`.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - 
+
+where the sequence writes its
+`out_keys` after the last module ran.
+
+- `True`: into the input tensordict, which is returned.
+- `False`: into a new, empty [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict).
+- `"empty"`: into `input.empty()`, which keeps the type, device
+and batch size of the input.
+- `None` (default): the sequence returns what the last module
+returns, so the `inplace` value of each module decides.
+
+With `False` or `"empty"`, the modules run on a shallow copy
+of the input, so the input does not change.
 
 Raises:
 
-- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - If the input sequence of modules is empty.
-- [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - If `return_composite=False` and the final module is not an instance of
- [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) or
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `modules` is empty.
+- [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `return_composite=False` and the last module is not a
+ [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) or a
  `ProbabilisticTensorDictSequential`.
 
 Examples
@@ -198,33 +197,34 @@ TensorDict(
 
 build_dist_from_params(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution)
 
-Constructs a distribution from the input parameters without evaluating other modules in the sequence.
+Builds the distribution of the last probabilistic module from parameters, without running the other modules.
 
-This method searches for the last [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) in the sequence and uses it to build the distribution.
+The method calls [`ProbabilisticTensorDictModule.get_dist()`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.get_dist) of the
+last [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) in the
+sequence, nested sequences included. See the example of
+`get_dist_params()`.
 
 Parameters:
 
-**tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The input tensordict containing the distribution parameters.
+**tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - a tensordict with the distribution
+parameters at the `in_keys` of that module.
 
 Returns:
 
-The constructed distribution object.
-
-Return type:
-
-D.Distribution
+A `torch.distributions.Distribution`.
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - If no [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) is found in the sequence.
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the sequence has no
+ [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule).
 
 *property*default_interaction_type
 
-Returns the default_interaction_type of the module using an iterative heuristic.
+The `default_interaction_type` of the last module that has one.
 
-This property iterates over all modules in reverse order, attempting to retrieve the
-default_interaction_type attribute from any child module. The first non-None value
-encountered is returned. If no such value is found, a default interaction_type() is returned.
+If no module has one, the value of
+[`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type), which is `None` outside of a
+[`set_interaction_type`](tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type) block.
 
 *property*det_part
 
@@ -235,95 +235,102 @@ Deprecated since version 0.15: This property will be removed in TensorDict 0.17.
 
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
 
-A deprecated approximation of the module device.
+The device of the first parameter of the module, or `cpu` if it has no parameter.
 
 Deprecated since version 0.15: This property will be removed in TensorDict 0.17 because modules may
 contain parameters and buffers on multiple devices.
 
 *property*dist_params_keys*: [List](https://docs.python.org/3/library/typing.html#typing.List)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)]*
 
-Returns all the keys pointing at the distribution params.
+The keys of the distribution parameters of all the probabilistic modules, those of the last module first.
 
 *property*dist_sample_keys*: [List](https://docs.python.org/3/library/typing.html#typing.List)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)]*
 
-Returns all the keys pointing at the distribution samples.
+The keys of the sampled values of all the probabilistic modules, those of the last module first.
 
 forward(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *_requires_sample: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Reads `in_keys` from `tensordict`, calls the wrapped module, and writes `out_keys`.
+Runs the modules in order, and returns the tensordict with their outputs.
 
-If you call the module with tensors instead of a tensordict, the
-tensors are put in a new tensordict first (see
-[`dispatch()`](tensordict.nn.dispatch.html#tensordict.nn.dispatch)).
+If the modules before the last one already write the sampled keys of
+the last module, the last module does not sample again.
 
 Parameters:
 
-**tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input tensordict.
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input.
+- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - if given, the modules
+run on a shallow copy of `tensordict`, and the `out_keys`
+are written into `tensordict_out`, which is returned (unless
+`inplace` is set). Defaults to `None`.
 
 Keyword Arguments:
 
-- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - if given, the outputs
-are written into it and it is returned, whatever the value of
-`inplace`. Defaults to `None`.
-- ****kwargs** - passed to the wrapped module.
+****kwargs** - with `return_composite=True`, passed to the modules
+that are not
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule). With
+`return_composite=False`, any keyword argument raises a
+`RuntimeError`.
 
 Returns:
 
-the tensordict that holds the outputs (see `inplace`).
+The tensordict that holds the outputs (see `inplace`).
 
 get_dist(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution)
 
-Returns the distribution resulting from passing the input tensordict through the sequence.
+Returns the distribution that the sequence samples from, given the input `tensordict`.
 
-If return_composite is `False`, this method will only consider the last probabilistic module in the sequence.
-It runs the modules before it with `get_dist_params()`, so the
-intermediate entries are written into `tensordict`.
+If `return_composite` is `False`, this is the distribution of the
+last module. The method runs the modules before it with
+`get_dist_params()`, so the intermediate entries are written into
+`tensordict`.
 
-Otherwise, it will return a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) instance containing the distributions of all probabilistic modules.
-It runs the modules on a shallow copy of `tensordict`, so the input
-does not get new entries.
+If `return_composite` is `True`, this is a
+[`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) that holds
+the distributions of all the probabilistic modules, at their sample
+keys. The method runs the modules on a shallow copy of
+`tensordict`, so the input does not get new entries. Each
+probabilistic module draws a value, which the modules after it read,
+so their distributions are conditional on it. Only a probabilistic
+module in the last position does not draw.
+See the examples of `ProbabilisticTensorDictSequential`.
 
 Parameters:
 
-- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The input tensordict.
-- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - Used only when
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input, with the entries that the
+first module reads.
+- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - used only when
 `return_composite` is `False`: the tensordict where the
 intermediate entries are written, instead of `tensordict`.
 Defaults to `None`.
 
 Keyword Arguments:
 
-****kwargs** - Additional keyword arguments passed to the underlying modules.
+****kwargs** - ignored when `return_composite` is `True`. When it
+is `False`, any keyword argument raises a `RuntimeError`.
 
 Returns:
 
-The resulting distribution object.
-
-Return type:
-
-D.Distribution
+A `torch.distributions.Distribution`.
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - If no probabilistic module is found in the sequence.
-
-Note
-
-When return_composite is `True`, the distributions are conditioned on the previous samples in the sequence.
-This means that if a module depends on the output of a previous probabilistic module, its distribution will be conditional.
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the sequence has no probabilistic module.
 
 get_dist_params(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution), [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]
 
 Runs every module except the last one, and returns the tensordict with the distribution parameters.
 
-This method runs the deterministic part of the `ProbabilisticTensorDictSequential`
-module to obtain the distribution parameters. The interaction type is set to the current global
-interaction type if available, otherwise it defaults to the interaction type of the last module.
+The modules run with the interaction type of
+[`interaction_type()`](tensordict.nn.interaction_type.html#tensordict.nn.interaction_type) if it is set, and otherwise
+with the `default_interaction_type` of the last module that has
+one, so that the probabilistic modules among them sample as in a
+call to the sequence.
 
 Parameters:
 
-- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The input tensordict.
-- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - The tensordict where
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input, with the entries that the
+first module reads.
+- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - the tensordict where
 the parameters are written. If `None`, they are written into
 `tensordict`, which is returned. Pass
 `tensordict.copy()` to keep the input unchanged.
@@ -331,19 +338,36 @@ Defaults to `None`.
 
 Keyword Arguments:
 
-****kwargs** - Additional keyword arguments passed to the deterministic part of the module.
+****kwargs** - not supported: any keyword argument raises a
+`RuntimeError`.
 
 Returns:
 
-the output tensordict containing the distribution parameters.
+The tensordict that holds the distribution parameters.
 
-Return type:
+Examples
 
-[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
-
-Note
-
-The interaction type is temporarily set to the specified value during the execution of this method.
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import (
+... ProbabilisticTensorDictModule,
+... ProbabilisticTensorDictSequential,
+... TensorDictModule,
+... )
+>>> seq = ProbabilisticTensorDictSequential(
+... TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["loc"]),
+... ProbabilisticTensorDictModule(
+... in_keys=["loc"], out_keys=["y"], distribution_class=torch.distributions.Normal,
+... distribution_kwargs={"scale": 1.0},
+... ),
+... )
+>>> params = seq.get_dist_params(TensorDict(x=torch.zeros(2)))
+>>> sorted(params.keys())
+['loc', 'x']
+>>> seq.build_dist_from_params(params)
+Normal(loc: torch.Size([2]), scale: torch.Size([2]))
+```
 
 *property*in_keys
 
@@ -359,50 +383,50 @@ for the `FunctionalModule` classes of the legacy
 
 *static*is_tdmodule_compatible(*module*)
 
-Checks if a module is compatible with TensorDictModule API.
+Returns `True` if `module` has both an `in_keys` and an `out_keys` attribute.
+
+[`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) wraps the callables that
+fail this check in a [`WrapModule`](tensordict.nn.WrapModule.html#tensordict.nn.WrapModule).
 
 Parameters:
 
 **module** ([*object*](https://docs.python.org/3/builtins/functions.html#object)) - the object to check.
 
-Returns:
-
-`True` if `module` has both an `in_keys` and an `out_keys`
-attribute.
-
 log_prob(*tensordict*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *dist: [Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
-Returns the log-probability of the input tensordict.
+Returns the log-probability of the sampled values in `tensordict`.
 
-If self.return_composite is `True` and the distribution is a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution),
-this method will return the log-probability of the entire composite distribution.
-While [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) is `False`, each entry is at
-the key where a forward call writes it, as listed in `log_prob_keys`.
+If `return_composite` is `True`, the distribution is a
+[`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) and the
+method returns its [`log_prob()`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution.log_prob):
+while [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) is `False`, a
+tensordict with one entry per sampled key, at the key where a call to
+the sequence writes it (see `log_prob_keys`); while it is
+`True`, the sum, as a tensor.
 
-Otherwise, it will only consider the last probabilistic module in the sequence.
-In that case the intermediate entries are written into `tensordict`,
-as in `get_dist()`.
+If `return_composite` is `False`, the method returns the
+log-probability of the value of the last module, as
+[`ProbabilisticTensorDictModule.log_prob()`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.log_prob) does. The intermediate
+entries are then written into `tensordict`, as in `get_dist()`.
 
 Parameters:
 
-- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The input tensordict, with the
-sampled values.
-- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - If given, the
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input, with the sampled values.
+- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - if given, the
 distribution is computed on a copy of `tensordict`, so the
 input does not get new entries. Defaults to `None`.
 
 Keyword Arguments:
 
-**dist** (*torch.distributions.Distribution**,**optional*) - The distribution object. If `None`, it will be computed using get_dist.
-Defaults to `None`.
+**dist** (*torch.distributions.Distribution**,**optional*) - the
+distribution. Defaults to `None`, which builds it with
+`get_dist()`.
 
 Returns:
 
-The log-probability of the input tensordict.
-
-Return type:
-
-[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase) or [*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
+A tensor, or a tensordict for a composite distribution while
+[`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) is `False`.
+See the examples of `ProbabilisticTensorDictSequential`.
 
 *property*log_prob_key
 
@@ -416,12 +440,23 @@ Raises:
  changed since the module was built, or if it is `False` and
  the module has several sampled keys (use `log_prob_keys`).
 
+*property*log_prob_keys
+
+The log-probability keys of all the probabilistic modules, those of the last module first.
+
+See the [log-probability key table](tensordict.nn.ProbabilisticTensorDictModule.html#log-prob-keys).
+
+*property*num_samples
+
+The leading dimensions that the probabilistic modules add to the output.
+
+The `num_samples` of each probabilistic module, those of the last
+module first, as they appear in the shape of the output. An empty
+tuple if no module sets `num_samples`.
+
 *property*out_keys
 
-The keys that the module writes to the output tensordict.
-
-After `select_out_keys()`, only the selected keys. The full list
-is in `out_keys_source`.
+The keys that the modules write, each listed once, or those chosen with `select_out_keys()`.
 
 *property*out_keys_source
 
@@ -429,96 +464,86 @@ All the keys that the module writes, before `select_out_keys()`.
 
 reset_out_keys()
 
-Resets the `out_keys` attribute to its original value.
-
-Returns: the same module, with its original `out_keys` values.
-
-Examples
-
-```
->>> from tensordict import TensorDict
->>> from tensordict.nn import TensorDictModule, TensorDictSequential
->>> import torch
->>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
->>> _ = mod.select_out_keys("d")
->>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
->>> mod(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> _ = mod.reset_out_keys()
->>> mod(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
-```
+Undoes `select_out_keys()`: the sequence writes all its `out_keys` again, and returns `self`.
 
 reset_parameters_recursive(*parameters: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Recursively reset the parameters of the module and its children.
+Resets the parameters of every submodule that has a `reset_parameters` method.
+
+Without `parameters`, the parameters of the module are reset in
+place. With `parameters`, the module is left as it is: the values in
+`parameters` are reset in place, as if they were loaded into the
+module (see [`to_module()`](tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module)). Use this
+for parameters kept outside the module, for example in a functional
+call. Values that share their storage with the module parameters,
+such as those of [`from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module), reset
+the module too.
 
 Parameters:
 
-**parameters** ([*TensorDict*](tensordict.TensorDict.html#tensordict.TensorDict)*of**parameters**,**optional*) - If set to None, the module will reset using self.parameters().
-Otherwise, we will reset the parameters in the tensordict in-place. This is
-useful for functional modules where the parameters are not stored in the module itself.
+**parameters** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - the parameters to reset,
+with the structure of
+[`from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module) and an empty batch
+size. Defaults to `None`, which resets the parameters of the
+module.
 
 Returns:
 
-A tensordict of the new parameters, only if parameters was not None.
+`None` without `parameters`. Otherwise a new tensordict of
+tensors that share their storage with `parameters` and require
+gradients.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `parameters` has batch dimensions.
+
+Without `parameters`, the call warns if no submodule has a
+`reset_parameters` method.
 
 Examples
 
 ```
->>> from tensordict.nn import TensorDictModule
->>> from torch import nn
->>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
->>> old_param = net[0].weight.clone()
->>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
->>> module.reset_parameters_recursive()
->>> (old_param == net[0].weight).any()
-tensor(False)
-```
-
-This method also supports functional parameter sampling:
-
-```
+>>> import torch
 >>> from tensordict import TensorDict
 >>> from tensordict.nn import TensorDictModule
 >>> from torch import nn
->>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
->>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
->>> params = TensorDict.from_module(module)
->>> old_params = params.clone(recurse=True)
+>>> net = nn.Sequential(nn.Linear(2, 3), nn.ReLU())
+>>> old_weight = net[0].weight.clone()
+>>> module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+>>> module.reset_parameters_recursive()
+>>> torch.equal(old_weight, net[0].weight)
+False
+```
+
+The parameters can also live outside the module:
+
+```
+>>> params = TensorDict.from_module(module).clone()
+>>> old_params = params.clone()
 >>> _ = module.reset_parameters_recursive(params)
 >>> (old_params == params).any()
 False
+>>> torch.equal(net[0].weight, old_params["module", "0", "weight"])
+True
 ```
 
 select_out_keys(**selected_out_keys*) → [TensorDictSequential](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential)
 
-Selects the keys within the `out_keys` that will be found in the output tensordict.
+Keeps only some of the `out_keys` in the output of the sequence, and returns the sequence.
 
-This change occurs in-place and can be reverted using `reset_out_keys()`.
+The sequence changes in place, and `reset_out_keys()` undoes the
+change. The modules still compute all their outputs; the call then
+writes only the selected ones, and the entries of the input, into the
+output.
 
 Parameters:
 
-***selected_out_keys** (*a sequence**of**strings**or**tuples**of**strings*) - the
-out_keys that should be found in the output tensordict. Each of them
-must be part of the module's `out_keys`.
+***selected_out_keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the keys to keep. Each one must be
+in `out_keys`.
 
-Returns: the same module, modified in-place with updated `out_keys`.
+Returns:
+
+`self`.
 
 Raises:
 
@@ -538,7 +563,8 @@ Examples
 >>> seq.out_keys
 ['z']
 >>> td = seq(TensorDict(x=torch.zeros(())))
->>> assert "y" not in td
+>>> "y" in td
+False
 >>> td["z"]
 tensor(2.)
 >>> _ = seq.reset_out_keys()
@@ -548,31 +574,37 @@ tensor(2.)
 
 select_subsequence(*in_keys: [Iterable](https://docs.python.org/3/library/typing.html#typing.Iterable)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *out_keys: [Iterable](https://docs.python.org/3/library/typing.html#typing.Iterable)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictSequential](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential)
 
-Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
+Returns a new sequence with only the modules that can run from `in_keys` and that `out_keys` need.
+
+Two filters are applied, in this order:
+
+- `in_keys`: a module is kept if each of its inputs is in
+`in_keys` or is written by a module kept before it. The other
+modules, and those that read their outputs, are dropped.
+- `out_keys`: of the modules left, a module is kept if it writes one
+of `out_keys`, or an input of a module kept after it.
+
+A nested [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) is filtered the same way. The
+modules are not copied: the new sequence holds the same module
+objects. Modules of a named sequence keep their names, and the new
+sequence keeps `partial_tolerant` and `inplace`.
 
 Parameters:
 
-- **in_keys** - input keys of the subsequence we want to select.
-All the keys absent from `in_keys` will be considered as
-non-relevant, and modules that *just* take these keys as inputs
-will be discarded.
-The resulting sequential module will follow the pattern "all
-the modules which output will be affected by a different value
-for any in <in_keys>".
-If none is provided, the module's `in_keys` are assumed.
-- **out_keys** - output keys of the subsequence we want to select.
-Only the modules that are necessary to get the `out_keys`
-will be found in the resulting sequence.
-The resulting sequential module will follow the pattern "all
-the modules that condition the value or <out_keys> entries."
-If none is provided, the module's `out_keys` are assumed.
+- **in_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the keys that the modules
+can start from. Defaults to `None`, which uses the
+`in_keys` of the sequence.
+- **out_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the keys to compute.
+Defaults to `None`, which uses the `out_keys` of the
+sequence.
 
 Returns:
 
-A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
-Modules in a named sequence keep their names, including nested sequences.
-The new sequence keeps `partial_tolerant` and `inplace`.
-Nested sequences keep their own options the same way.
+A new sequence of the same type.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if no module is left.
 
 Examples
 
@@ -585,69 +617,18 @@ Examples
 ... Mod(idn, in_keys=["c"], out_keys=["d"]),
 ... Mod(idn, in_keys=["a"], out_keys=["e"]),
 ... )
->>> # select all modules whose output depend on "a"
->>> module.select_subsequence(in_keys=["a"])
-TensorDictSequential(
- module=ModuleList(
- (0): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['a'],
- out_keys=['b'])
- (1): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['b'],
- out_keys=['c'])
- (2): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['c'],
- out_keys=['d'])
- (3): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['a'],
- out_keys=['e'])
- ),
- in_keys=['a'],
- out_keys=['b', 'c', 'd', 'e'])
->>> # select all modules whose output depend on "c"
->>> module.select_subsequence(in_keys=["c"])
-TensorDictSequential(
- module=ModuleList(
- (0): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['c'],
- out_keys=['d'])
- ),
- in_keys=['c'],
- out_keys=['d'])
->>> # select all modules that affect the value of "c"
->>> module.select_subsequence(out_keys=["c"])
-TensorDictSequential(
- module=ModuleList(
- (0): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['a'],
- out_keys=['b'])
- (1): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['b'],
- out_keys=['c'])
- ),
- in_keys=['a'],
- out_keys=['b', 'c'])
->>> # select all modules that affect the value of "e"
->>> module.select_subsequence(out_keys=["e"])
-TensorDictSequential(
- module=ModuleList(
- (0): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['a'],
- out_keys=['e'])
- ),
- in_keys=['a'],
- out_keys=['e'])
+>>> # the modules that can run from "c"
+>>> module.select_subsequence(in_keys=["c"]).out_keys
+['d']
+>>> # the modules that "c" depends on
+>>> sub = module.select_subsequence(out_keys=["c"])
+>>> sub.in_keys, sub.out_keys
+(['a'], ['b', 'c'])
+>>> sub[0] is module[0]
+True
 ```
 
-This method propagates to nested sequential:
+Nested sequences are filtered too:
 
 ```
 >>> module = Seq(
@@ -660,26 +641,9 @@ This method propagates to nested sequential:
 ... Mod(idn, in_keys=["d"], out_keys=["e"]),
 ... ),
 ... )
->>> # select submodules whose output will be affected by a change in "b" or "d" AND which output is "e"
->>> module.select_subsequence(in_keys=["b", "d"], out_keys=["e"])
-TensorDictSequential(
- module=ModuleList(
- (0): TensorDictSequential(
- module=ModuleList(
- (0): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['b'],
- out_keys=['d'])
- (1): TensorDictModule(
- module=<function <lambda> at ...>,
- in_keys=['d'],
- out_keys=['e'])
- ),
- in_keys=['b'],
- out_keys=['d', 'e'])
- ),
- in_keys=['b'],
- out_keys=['d', 'e'])
+>>> sub = module.select_subsequence(in_keys=["b", "d"], out_keys=["e"])
+>>> len(sub), sub[0].out_keys
+(1, ['d', 'e'])
 ```
 
 ## Tutorials that use `ProbabilisticTensorDictSequential`

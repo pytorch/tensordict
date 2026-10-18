@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,15 +1642,31 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.unflatten">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">unflatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unflattened_size</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inplace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.unflatten" title="Link to this definition">#</a></dt>
-<dd><p>Unflattens a tensordict dim expanding it to a desired shape.</p>
+<dd><p>Returns a tensordict whose batch dimension <code class="docutils literal notranslate"><span class="pre">dim</span></code> is split into several.</p>
+<p>It works as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.unflatten.html#torch.unflatten" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.unflatten()</span></code></a> does on the batch. The leaves keep
+their feature dimensions, and are views of the original leaves when the
+memory layout allows it. The last new dimension keeps the name of
+<code class="docutils literal notranslate"><span class="pre">dim</span></code>, and the others have no name.</p>
+<p>It can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> can: when
+the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, the entries of the block are written back to
+the tensordict with the inverse operation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – specifies the dimension of the input tensor to be
-unflattened.</p></li>
-<li><p><strong>unflattened_size</strong> (<em>shape</em>) – is the new shape of the unflattened
-dimension of the tensordict.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the batch dimension to unflatten.</p></li>
+<li><p><strong>unflattened_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a>) – the sizes of the new
+dimensions. Their product is <code class="docutils literal notranslate"><span class="pre">batch_size[dim]</span></code>, and one of
+them can be <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns <code class="docutils literal notranslate"><span class="pre">self</span></code>. A leaf keeps its storage when the
+unflatten can return a view of it. A lazy stack, or a
+tensordict that holds one, raises a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>:
+call <a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> first. See
+<a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2025,7 +2041,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.unflatten",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.unflatten",
        "url": "/reference/generated/tensordict.TensorDictBase.unflatten.html",
-       "articleBody": "TensorDictBase.unflatten# TensorDictBase.unflatten(dim, unflattened_size, *, inplace: bool = False)# Unflattens a tensordict dim expanding it to a desired shape. Parameters: dim (int) \u2013 specifies the dimension of the input tensor to be unflattened. unflattened_size (shape) \u2013 is the new shape of the unflattened dimension of the tensordict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.arange(60).view(3, 4, 5), ... \"b\": torch.arange(12).view(3, 4)}, ... batch_size=[3, 4]) \u003e\u003e\u003e td_flat = td.flatten(0, 1) \u003e\u003e\u003e td_unflat = td_flat.unflatten(0, [3, 4]) \u003e\u003e\u003e assert (td == td_unflat).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.unflatten# TensorDictBase.unflatten(dim, unflattened_size, *, inplace: bool = False)# Returns a tensordict whose batch dimension dim is split into several. It works as torch.unflatten() does on the batch. The leaves keep their feature dimensions, and are views of the original leaves when the memory layout allows it. The last new dimension keeps the name of dim, and the others have no name. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: dim (int) \u2013 the batch dimension to unflatten. unflattened_size (tuple of int or Size) \u2013 the sizes of the new dimensions. Their product is batch_size[dim], and one of them can be -1. Keyword Arguments: inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. A leaf keeps its storage when the unflatten can return a view of it. A lazy stack, or a tensordict that holds one, raises a NotImplementedError: call to_tensordict() first. See In-place operations. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.arange(60).view(3, 4, 5), ... \"b\": torch.arange(12).view(3, 4)}, ... batch_size=[3, 4]) \u003e\u003e\u003e td_flat = td.flatten(0, 1) \u003e\u003e\u003e td_unflat = td_flat.unflatten(0, [3, 4]) \u003e\u003e\u003e assert (td == td_unflat).all() Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

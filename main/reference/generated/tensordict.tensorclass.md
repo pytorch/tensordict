@@ -12,30 +12,35 @@ flags, and type checkers understand it without a plugin. This decorator
 is kept for existing code and for code that moves from
 `@dataclass`. See [TensorClass](../../tensorclass.html#tensorclass-guide).
 
+Parameters:
+
+**cls** ([*type*](https://docs.python.org/3/builtins/functions.html#type)*,**optional*) - the class to decorate, passed by
+`@tensorclass` without parentheses.
+
 Keyword Arguments:
 
-- **autocast** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, when a field is set, the value
+- **autocast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, when a field is set, the value
 is converted to the annotated type. Exclusive with `nocast` and
 `tensor_only`. Defaults to `False`.
-- **frozen** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, assigning a field raises
+- **frozen** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, assigning a field raises
 `dataclasses.FrozenInstanceError`, as with
 `@dataclass(frozen=True)`. To block writes on one instance only,
 call `lock_()` on it or pass `lock=True` to the constructor:
 writes then raise a `RuntimeError`. Defaults to `False`.
-- **nocast** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, Tensor-compatible types such as
+- **nocast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, Tensor-compatible types such as
 `int`, `np.ndarray` and the like are not cast to a tensor
 type. Exclusive with `autocast` and `tensor_only`. Defaults
 to `False`.
-- **shadow** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, fields can have the name of a
+- **shadow** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, fields can have the name of a
 tensorclass member (`batch_size`, `sum`, ...), and hide that
 member. If `False`, such a name raises an `AttributeError`
 when the class is defined. Defaults to `False`.
-- **tensor_only** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, every field annotation must
+- **tensor_only** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, every field annotation must
 be a tensor type or a tensor collection. Values that can be cast
 to a tensor are cast. Reading a field then skips the lookup in the
 non-tensor storage. Exclusive with `autocast` and `nocast`.
 Defaults to `False`.
-- **skip_post_init_on_rebuild** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`,
+- **skip_post_init_on_rebuild** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`,
 `__post_init__` runs in the generated `__init__`,
 `from_tensordict`, `from_dict`, the other constructors such
 as `from_any` or `fromkeys`, and when the data is loaded or
@@ -45,7 +50,7 @@ new instance from the data of an existing one, as in indexing,
 `False`: `__post_init__` also runs on these rebuilds, except
 on the shells that `empty()` builds. On a lazy stack it runs on
 each stacked instance.
-- **cast_filter** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - the default `cast_filter` of
+- **cast_filter** (*Callable**,**optional*) - the default `cast_filter` of
 [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) and of the dtype shorthands
 (`float()`, `bfloat16()`, ...) on the instances of the class: a
 predicate `fn(key, value) -> bool` that selects the tensor leaves
@@ -58,7 +63,7 @@ is cast. Defaults to `None`: every leaf is cast.
 
 Returns:
 
-the tensorclass, or a decorator if the flags are given without a
+The tensorclass, or a decorator if the flags are given without a
 class (`@tensorclass(autocast=True)`).
 
 Examples

@@ -5,7 +5,9 @@
 Builds a tensordict by stacking a list of dicts or tensor collections.
 
 Each dict is converted with [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict) and the results are
-stacked along a new leading dimension.
+stacked along a new leading dimension. A tensordict or tensorclass in
+the list is stacked as it is: the keyword arguments do not apply to
+it.
 
 Parameters:
 
@@ -13,23 +15,32 @@ Parameters:
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch size of
-each element is computed automatically. See [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict).
-- **batch_size** (*iterable**of*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the batch size of the
-result, with the length of the list first. Each element gets
-`batch_size[1:]`.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**compatible type**,**optional*) - a device for
-the result.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the maximum number of batch dimensions
-of the result, the list dimension included. Exclusive with
-`batch_size`.
-- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the dimension names of the result,
-one per batch dimension, with the name of the list dimension
-first.
-- **lazy** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the result is a lazy stack;
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+of each element to the largest leading shape that all its
+entries share. Defaults to `None`, which behaves like
+`False` unless `batch_dims` is given.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result, with the length of the list first. Each element
+gets `batch_size[1:]`. Defaults to `None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
+Defaults to `None`.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the maximum number of batch dimensions
+of the result, the list dimension included. Turns on
+`auto_batch_size` when that is `None`. Exclusive with
+`batch_size`. Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions
+of the result, one per dimension, with the name of the list
+dimension first. Defaults to `None`.
+- **lazy** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the result is a lazy stack;
 if `False`, a dense stack. Defaults to `None`, which builds
 a dense stack when the elements have the same shape and a lazy
-stack otherwise.
+stack otherwise. See [Stacking and variable-size data](../../concepts/stacking.html#stacking).
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `batch_size[0]` is not the length of the list.
 
 Examples
 

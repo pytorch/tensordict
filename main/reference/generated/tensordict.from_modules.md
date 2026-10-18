@@ -13,28 +13,28 @@ example.
 
 Parameters:
 
-***modules** (*nn.Module*) - the modules to get the parameters from.
+***modules** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the modules to get the parameters from.
 
 Keyword Arguments:
 
-- **as_module** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a
+- **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a
 `TensorDictParams` instance is returned.
 Defaults to `False`.
-- **lock** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the resulting tensordict is
+- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the resulting tensordict is
 locked. Defaults to `True`.
-- **use_state_dict** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the state-dict of each
+- **use_state_dict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the state-dict of each
 module is used. Defaults to `False`.
-- **lazy_stack** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the parameters are stacked
+- **lazy_stack** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the parameters are stacked
 in a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) that keeps the
 original parameters. If `False`, they are stacked into new
 parameters. Exclusive with `as_module`. Defaults to `False`.
-- **expand_identical** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a parameter that is
+- **expand_identical** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a parameter that is
 the same object in every module is expanded instead of stacked.
 Ignored when `lazy_stack=True`. Defaults to `False`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with batch size `[len(modules)]`,
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with batch size `[len(modules)]`,
 a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) if `lazy_stack=True`,
 or a `TensorDictParams` if `as_module=True`.
 

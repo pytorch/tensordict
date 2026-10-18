@@ -5,9 +5,8 @@ TensorDictBase.numel() → [int](https://docs.python.org/3/builtins/functions.ht
 Returns the number of elements in the batch, which is the product of `batch_size`.
 
 The feature dimensions of the leaves do not count. The minimum is 1: a
-tensordict with batch size `[]` or `[0]` returns 1. This way,
-stacking two tensordicts of batch size `[]` gives a batch of 2
-elements.
+tensordict with batch size `[]` or `[0]` returns 1, unlike
+[`torch.Tensor.numel()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numel.html#torch.Tensor.numel), which returns 0 for a size of 0.
 
 Examples
 

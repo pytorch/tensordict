@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,24 +1642,31 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.refine_names">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">refine_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.refine_names" title="Link to this definition">#</a></dt>
-<dd><p>Refines the dimension names of self according to names.</p>
-<p>Refining is a special case of renaming that “lifts” unnamed dimensions.
-A None dim can be refined to have any name; a named dim can only be
-refined to have the same name.</p>
-<p>Because named tensors can coexist with unnamed tensors, refining names
-gives a nice way to write named-tensor-aware code that works with both
-named and unnamed tensors.</p>
-<p>names may contain up to one Ellipsis (…). The Ellipsis is expanded
-greedily; it is expanded in-place to fill names to the same length as
-self.dim() using names from the corresponding indices of self.names.</p>
-<p>Returns: the same tensordict with dimensions named according to the input.</p>
+<dd><p>Names the unnamed batch dimensions, and checks the named ones, in place.</p>
+<p>Each entry of <code class="docutils literal notranslate"><span class="pre">names</span></code> goes with one batch dimension. An unnamed
+dimension takes the new name, or stays unnamed for <code class="docutils literal notranslate"><span class="pre">None</span></code>. A named
+dimension must get its own name. <code class="docutils literal notranslate"><span class="pre">names</span></code> can hold one <code class="docutils literal notranslate"><span class="pre">...</span></code>, which
+keeps the names of the dimensions that it covers. This follows
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.refine_names()</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>*names</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>None</em>) – one name per batch dimension, or fewer with
+one <code class="docutils literal notranslate"><span class="pre">...</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a named dimension gets another name, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tdr</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">tdr</span><span class="o">.</span><span class="n">names</span> <span class="o">==</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tdr</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">tdr</span><span class="o">.</span><span class="n">names</span> <span class="o">==</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">)</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['a', None, 'c']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">)</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['a', 'b', 'c']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2022,7 +2029,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.refine_names",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.refine_names",
        "url": "/reference/generated/tensordict.TensorDictBase.refine_names.html",
-       "articleBody": "TensorDictBase.refine_names# TensorDictBase.refine_names(*names) \u2192 Self# Refines the dimension names of self according to names. Refining is a special case of renaming that \u201clifts\u201d unnamed dimensions. A None dim can be refined to have any name; a named dim can only be refined to have the same name. Because named tensors can coexist with unnamed tensors, refining names gives a nice way to write named-tensor-aware code that works with both named and unnamed tensors. names may contain up to one Ellipsis (\u2026). The Ellipsis is expanded greedily; it is expanded in-place to fill names to the same length as self.dim() using names from the corresponding indices of self.names. Returns: the same tensordict with dimensions named according to the input. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({}, batch_size=[3, 4, 5, 6]) \u003e\u003e\u003e tdr = td.refine_names(None, None, None, \"d\") \u003e\u003e\u003e assert tdr.names == [None, None, None, \"d\"] \u003e\u003e\u003e tdr = td.refine_names(\"a\", None, None, \"d\") \u003e\u003e\u003e assert tdr.names == [\"a\", None, None, \"d\"] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.refine_names# TensorDictBase.refine_names(*names) \u2192 Self# Names the unnamed batch dimensions, and checks the named ones, in place. Each entry of names goes with one batch dimension. An unnamed dimension takes the new name, or stays unnamed for None. A named dimension must get its own name. names can hold one ..., which keeps the names of the dimensions that it covers. This follows torch.Tensor.refine_names(). Parameters: *names (str or None) \u2013 one name per batch dimension, or fewer with one .... Returns: self. Raises: RuntimeError \u2013 if a named dimension gets another name, or None. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[3, 4, 5], names=[\"a\", None, None]) \u003e\u003e\u003e td.refine_names(\"a\", None, \"c\").names [\u0027a\u0027, None, \u0027c\u0027] \u003e\u003e\u003e td.refine_names(..., \"b\", \"c\").names [\u0027a\u0027, \u0027b\u0027, \u0027c\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

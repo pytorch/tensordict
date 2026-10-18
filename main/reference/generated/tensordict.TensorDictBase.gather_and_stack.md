@@ -2,65 +2,40 @@
 
 TensorDictBase.gather_and_stack(*dst: [int](https://docs.python.org/3/builtins/functions.html#int)*, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self | [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Gathers tensordicts from various workers and stacks them onto self in the destination worker.
+Stacks the tensordicts of the other ranks into the tensordict of rank `dst`, in place.
+
+Every rank of the group must call it. On rank `dst`, the tensordict must
+have one row per other rank: its first batch dimension is
+`world_size - 1`, and its own data is not in the result. The
+tensordicts are sent with [`torch.distributed.gather_object()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather_object), which
+pickles them: use it only with ranks you trust. See
+[Collectives](../../distributed.html#distributed-collectives).
 
 Parameters:
 
-- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank of the destination worker where `gather_and_stack()` will be called.
-- **group** (*torch.distributed.ProcessGroup**,**optional*) - if set, the specified process group
-will be used for communication. Otherwise, the default process group
-will be used.
-Defaults to `None`.
+- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank that receives the stack.
+- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
+Defaults to `None`, the default process group.
 
-Example
+Returns:
+
+`self` on rank `dst`, `None` on the other ranks.
+
+Examples
+
+This example runs in two processes: add it to the
+[runner script of the distributed guide](../../distributed.html#distributed) and
+pass it to `run`.
 
 ```
->>> from torch import multiprocessing as mp
->>> from tensordict import TensorDict
->>> import torch
->>>
->>> def client():
-... torch.distributed.init_process_group(
-... "gloo",
-... rank=1,
-... world_size=2,
-... init_method=f"tcp://localhost:10003",
-... )
-... # Create a single tensordict to be sent to server
-... td = TensorDict(
-... {("a", "b"): torch.randn(2),
-... "c": torch.randn(2)}, [2]
-... )
-... td.gather_and_stack(0)
-...
->>> def server():
-... torch.distributed.init_process_group(
-... "gloo",
-... rank=0,
-... world_size=2,
-... init_method=f"tcp://localhost:10003",
-... )
-... # Creates the destination tensordict on server.
-... # The first dim must be equal to world_size-1
-... td = TensorDict(
-... {("a", "b"): torch.zeros(2),
-... "c": torch.zeros(2)}, [2]
-... ).expand(1, 2).contiguous()
-... td.gather_and_stack(0)
-... assert td["a", "b"] != 0
-... print("yuppie")
-...
->>> if __name__ == "__main__":
-... mp.set_start_method("spawn")
-...
-... main_worker = mp.Process(target=server)
-... secondary_worker = mp.Process(target=client)
-...
-... main_worker.start()
-... secondary_worker.start()
-...
-... main_worker.join()
-... secondary_worker.join()
+def gather_and_stack(rank, world_size):
+ if rank == 0:
+ out = TensorDict(a=torch.zeros(world_size - 1, 3), batch_size=[world_size - 1])
+ out.gather_and_stack(dst=0)
+ print(out["a"][:, 0]) # with 2 ranks: tensor([1.])
+ else:
+ td = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
+ td.gather_and_stack(dst=0)
 ```
 
 Every tensordict class and every tensorclass has this method. For the

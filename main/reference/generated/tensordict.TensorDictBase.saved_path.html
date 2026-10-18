@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,8 +1642,13 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.saved_path">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">saved_path</span></span><a class="headerlink" href="#tensordict.TensorDictBase.saved_path" title="Link to this definition">#</a></dt>
-<dd><p>Returns the path where a memmap saved TensorDict is being stored.</p>
-<p>This argument valishes as soon as is_memmap() returns <code class="docutils literal notranslate"><span class="pre">False</span></code> (e.g., when the tensordict is unlocked).</p>
+<dd><p>The directory where a memory-mapped tensordict stores its files, as a <a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#AttributeError" title="(in Python v3.15)"><strong>AttributeError</strong></a> – if <a class="reference internal" href="tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap" title="tensordict.TensorDictBase.is_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_memmap()</span></code></a> returns <code class="docutils literal notranslate"><span class="pre">False</span></code>, for
+    example after <a class="reference internal" href="tensordict.TensorDictBase.unlock_.html#tensordict.TensorDictBase.unlock_" title="tensordict.TensorDictBase.unlock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_()</span></code></a>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2004,7 +2009,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.saved_path",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.saved_path",
        "url": "/reference/generated/tensordict.TensorDictBase.saved_path.html",
-       "articleBody": "TensorDictBase.saved_path# property TensorDictBase.saved_path# Returns the path where a memmap saved TensorDict is being stored. This argument valishes as soon as is_memmap() returns False (e.g., when the tensordict is unlocked). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.saved_path# property TensorDictBase.saved_path# The directory where a memory-mapped tensordict stores its files, as a Path. Raises: AttributeError \u2013 if is_memmap() returns False, for example after unlock_(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

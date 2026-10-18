@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,79 +1642,39 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.cummax">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">cummax</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduce</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.cummax" title="Link to this definition">#</a></dt>
-<dd><p>Returns the cumulative maximum values of all elements in the input tensordict.</p>
+<dd><p>Returns the cumulative maximum of every leaf along a batch dimension.</p>
+<p>As with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cummax.html#torch.cummax" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cummax()</span></code></a>, the result is a named tuple of two
+tensordicts, <code class="docutils literal notranslate"><span class="pre">values</span></code> and <code class="docutils literal notranslate"><span class="pre">indices</span></code>, with the structure and the batch
+size of the tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – integer representing the dimension along which to perform the cummax operation.
-A tuple uses only its first dim; passing one is deprecated
-and will be removed in TensorDict 0.17.</p>
+<dd class="field-odd"><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the batch dimension along which to compute it. A negative
+<code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of the batch dimensions. A tuple uses
+only its first dimension; passing one is deprecated and will be
+removed in TensorDict 0.17.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>reduce</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduction will occur across all TensorDict values
-and a single reduced tensor will be returned.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>. With feature dims, a negative <code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of
-each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-the end of the batch dims, as with <code class="docutils literal notranslate"><span class="pre">reduce=False</span></code>.</p></li>
-<li><p><strong>return_indices</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cummax.html#torch.cummax" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cummax()</span></code></a> returns a named tuple with values and indices
-when the <code class="docutils literal notranslate"><span class="pre">dim</span></code> argument is passed. The <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> equivalent of this is to return a named tuple
-with <code class="docutils literal notranslate"><span class="pre">values</span></code> and <code class="docutils literal notranslate"><span class="pre">indices</span></code> tensordicts of identical structure. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, only the values
-are returned. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, concatenates the leaves along
+<code class="docutils literal notranslate"><span class="pre">dim</span></code>, which requires them to have the same number of dimensions,
+and returns what <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cummax.html#torch.cummax" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cummax()</span></code></a> returns for the result. With
+feature dimensions, a negative <code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of each
+leaf. Starting with TensorDict 0.17, the default will change to
+counting it from the end of the batch dimensions, as with
+<code class="docutils literal notranslate"><span class="pre">reduce=False</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>return_indices</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, returns only the values
+tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">d</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="p">),</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">cummax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="go">torch.return_types.cummax(</span>
-<span class="go">values=TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([3, 4]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([3, 4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False),</span>
-<span class="go">indices=TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([3, 4]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([3, 4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">d</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="p">),</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">cummax</span><span class="p">(</span><span class="n">reduce</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="go">torch.return_types.cummax(...)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">cummax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([1., 3., 3.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">cummax</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([0, 1, 1])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2077,7 +2037,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.cummax",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.cummax",
        "url": "/reference/generated/tensordict.TensorDictBase.cummax.html",
-       "articleBody": "TensorDictBase.cummax# TensorDictBase.cummax(dim: int, *, reduce: bool | None = None, return_indices: bool = True) \u2192 Self | Tensor# Returns the cumulative maximum values of all elements in the input tensordict. Parameters: dim (int) \u2013 integer representing the dimension along which to perform the cummax operation. A tuple uses only its first dim; passing one is deprecated and will be removed in TensorDict 0.17. Keyword Arguments: reduce (bool, optional) \u2013 if True, the reduction will occur across all TensorDict values and a single reduced tensor will be returned. Defaults to False. With feature dims, a negative dim counts from the end of each leaf. Starting with TensorDict 0.17, the default will change to counting it from the end of the batch dims, as with reduce=False. return_indices (bool, optional) \u2013 cummax() returns a named tuple with values and indices when the dim argument is passed. The TensorDict equivalent of this is to return a named tuple with values and indices tensordicts of identical structure. If False, only the values are returned. Defaults to True. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e td = TensorDict( ... a=torch.randn(3, 4, 5), ... b=TensorDict( ... c=torch.randn(3, 4, 5, 6), ... d=torch.randn(3, 4, 5), ... batch_size=(3, 4, 5), ... ), ... batch_size=(3, 4) ... ) \u003e\u003e\u003e td.cummax(dim=0) torch.return_types.cummax( values=TensorDict( fields={ a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False), d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([3, 4]), device=None, is_shared=False)}, batch_size=torch.Size([3, 4]), device=None, is_shared=False), indices=TensorDict( fields={ a: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([3, 4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False), d: Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([3, 4]), device=None, is_shared=False)}, batch_size=torch.Size([3, 4]), device=None, is_shared=False)) \u003e\u003e\u003e td = TensorDict( ... a=torch.randn(3, 4, 5), ... b=TensorDict( ... c=torch.randn(3, 4, 5), ... d=torch.randn(3, 4, 5), ... batch_size=(3, 4, 5), ... ), ... batch_size=(3, 4) ... ) \u003e\u003e\u003e td.cummax(reduce=True, dim=0) torch.return_types.cummax(...) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.cummax# TensorDictBase.cummax(dim: int, *, reduce: bool | None = None, return_indices: bool = True) \u2192 Self | Tensor# Returns the cumulative maximum of every leaf along a batch dimension. As with torch.cummax(), the result is a named tuple of two tensordicts, values and indices, with the structure and the batch size of the tensordict. Parameters: dim (int) \u2013 the batch dimension along which to compute it. A negative dim counts from the end of the batch dimensions. A tuple uses only its first dimension; passing one is deprecated and will be removed in TensorDict 0.17. Keyword Arguments: reduce (bool, optional) \u2013 if True, concatenates the leaves along dim, which requires them to have the same number of dimensions, and returns what torch.cummax() returns for the result. With feature dimensions, a negative dim counts from the end of each leaf. Starting with TensorDict 0.17, the default will change to counting it from the end of the batch dimensions, as with reduce=False. Defaults to False. return_indices (bool, optional) \u2013 if False, returns only the values tensordict. Defaults to True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.tensor([1.0, 3.0, 2.0]), batch_size=[3]) \u003e\u003e\u003e td.cummax(dim=0).values[\"a\"] tensor([1., 3., 3.]) \u003e\u003e\u003e td.cummax(dim=0).indices[\"a\"] tensor([0, 1, 1]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

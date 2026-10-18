@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,24 +1642,24 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.clone">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">clone</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.clone" title="Link to this definition">#</a></dt>
-<dd><p>Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.</p>
-<p>To create a TensorDict instance from any other TensorDictBase subtype, call the <a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> method
-instead.</p>
+<dd><p>Returns a copy of the tensordict, of the same type.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">recurse=True</span></code>, every tensor leaf is copied. The result is not
+locked, even if the tensordict is: a clone is usually made to be
+modified. To get a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> from any other type,
+call <a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> instead.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>recurse</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, each tensor contained in the
-TensorDict will be copied too. Otherwise only the TensorDict
-tree structure is copied: the sub-tensordicts are new objects,
-but the leaves are the same tensors as in <code class="docutils literal notranslate"><span class="pre">self</span></code>. Defaults to
-<code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>recurse</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the leaves are copied too.
+If <code class="docutils literal notranslate"><span class="pre">False</span></code>, only the tree of nested tensordicts is copied:
+the nested tensordicts are new objects, and the leaves are the
+same tensors as in the tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – options of the class, for example <code class="docutils literal notranslate"><span class="pre">newfile</span></code>, the
+destination file of a <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>
+cloned with <code class="docutils literal notranslate"><span class="pre">recurse=True</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Unlike many other ops (pointwise arithmetic, shape operations, …) <code class="docutils literal notranslate"><span class="pre">clone</span></code> does not inherit the
-original lock attribute. This design choice is made such that a clone can be created to be modified,
-which is the most frequent usage.</p>
-</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2041,7 +2041,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.clone",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.clone",
        "url": "/reference/generated/tensordict.TensorDictBase.clone.html",
-       "articleBody": "TensorDictBase.clone# TensorDictBase.clone(recurse: bool = True, **kwargs) \u2192 Self# Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type. To create a TensorDict instance from any other TensorDictBase subtype, call the to_tensordict() method instead. Parameters: recurse (bool, optional) \u2013 if True, each tensor contained in the TensorDict will be copied too. Otherwise only the TensorDict tree structure is copied: the sub-tensordicts are new objects, but the leaves are the same tensors as in self. Defaults to True. Note Unlike many other ops (pointwise arithmetic, shape operations, \u2026) clone does not inherit the original lock attribute. This design choice is made such that a clone can be created to be modified, which is the most frequent usage. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3), \"b\": {\"c\": torch.ones(3)}}, [3]) \u003e\u003e\u003e td_clone = td.clone() \u003e\u003e\u003e td_clone[\"a\"] is td[\"a\"] False \u003e\u003e\u003e td_shallow = td.clone(recurse=False) \u003e\u003e\u003e td_shallow[\"a\"] is td[\"a\"], td_shallow[\"b\"] is td[\"b\"] (True, False) \u003e\u003e\u003e td.lock_().clone().is_locked False Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use clone# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.clone# TensorDictBase.clone(recurse: bool = True, **kwargs) \u2192 Self# Returns a copy of the tensordict, of the same type. With recurse=True, every tensor leaf is copied. The result is not locked, even if the tensordict is: a clone is usually made to be modified. To get a TensorDict from any other type, call to_tensordict() instead. Parameters: recurse (bool, optional) \u2013 if True, the leaves are copied too. If False, only the tree of nested tensordicts is copied: the nested tensordicts are new objects, and the leaves are the same tensors as in the tensordict. Defaults to True. **kwargs \u2013 options of the class, for example newfile, the destination file of a PersistentTensorDict cloned with recurse=True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3), \"b\": {\"c\": torch.ones(3)}}, [3]) \u003e\u003e\u003e td_clone = td.clone() \u003e\u003e\u003e td_clone[\"a\"] is td[\"a\"] False \u003e\u003e\u003e td_shallow = td.clone(recurse=False) \u003e\u003e\u003e td_shallow[\"a\"] is td[\"a\"], td_shallow[\"b\"] is td[\"b\"] (True, False) \u003e\u003e\u003e td.lock_().clone().is_locked False Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use clone# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

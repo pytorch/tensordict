@@ -2,17 +2,28 @@
 
 TensorDictBase.is_shared() → [bool](https://docs.python.org/3/builtins/functions.html#bool)
 
-Checks if tensordict is in shared memory.
+Whether the tensordict is in shared memory.
 
-If a TensorDict instance is in shared memory, it is locked (entries cannot
-be renamed, removed or added). If a `TensorDict` is created with
-tensors that are all in shared memory, this does __not__ mean that `is_shared`
-will return `True` (as a new tensor may or may not be in shared memory).
-Only if one calls tensordict.share_memory_() or places the tensordict
-on a device where the content is shared by default (eg, `"cuda"`)
-will the tensordict be considered in shared memory.
+It is `True` after [`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_), and always for a
+tensordict on a CUDA device. A tensordict built from tensors that are
+in shared memory is not marked as shared: only
+[`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_) marks it. A tensordict in shared memory is
+locked: entries cannot be added, renamed or removed. See
+[Locking and temporary changes](../../concepts/keys.html#keys-locking).
 
-This is always `True` for tensordicts on a CUDA device.
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+>>> td.is_shared()
+False
+>>> td.share_memory_().is_shared()
+True
+>>> td.is_locked
+True
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

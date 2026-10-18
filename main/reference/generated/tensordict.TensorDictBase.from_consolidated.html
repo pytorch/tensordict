@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,11 +1642,29 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.from_consolidated">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">from_consolidated</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.from_consolidated" title="Link to this definition">#</a></dt>
-<dd><p>Reconstructs a tensordict from a file written by <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>.</p>
-<p>The batch sizes and names are as they were when the file was written.
-To write later changes into the file, call
-<code class="docutils literal notranslate"><span class="pre">consolidate(filename=filename)</span></code> again on the consolidated tensordict.
-See <a class="reference internal" href="tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_consolidated()</span></code></a>.</p>
+<dd><p>Reconstructs a tensordict from a file written by <code class="docutils literal notranslate"><span class="pre">consolidate(filename=...)</span></code>.</p>
+<p>The result is consolidated: its leaves are views into one
+copy-on-write memory map of the file, so in-place writes into them do
+not reach the file. It is not locked. The batch sizes and names are as
+they were when the file was written. Same as
+<a class="reference internal" href="tensordict.from_consolidated.html#tensordict.from_consolidated" title="tensordict.from_consolidated"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_consolidated()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the file to read.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">/td.bin"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_consolidated</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">/td.bin"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">loaded</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">],</span> <span class="n">loaded</span><span class="o">.</span><span class="n">is_consolidated</span><span class="p">())</span>
+<span class="go">tensor([1., 1., 1.]) True</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2014,7 +2032,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_consolidated",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_consolidated",
        "url": "/reference/generated/tensordict.TensorDictBase.from_consolidated.html",
-       "articleBody": "TensorDictBase.from_consolidated# classmethod TensorDictBase.from_consolidated(filename)# Reconstructs a tensordict from a file written by consolidate(). The batch sizes and names are as they were when the file was written. To write later changes into the file, call consolidate(filename=filename) again on the consolidated tensordict. See from_consolidated(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_consolidated# Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed",
+       "articleBody": "TensorDictBase.from_consolidated# classmethod TensorDictBase.from_consolidated(filename)# Reconstructs a tensordict from a file written by consolidate(filename=...). The result is consolidated: its leaves are views into one copy-on-write memory map of the file, so in-place writes into them do not reach the file. It is not locked. The batch sizes and names are as they were when the file was written. Same as from_consolidated(). Parameters: filename (str or Path) \u2013 the file to read. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b={\"c\": torch.ones(3)}, batch_size=[3]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = td.consolidate(filename=f\"{path}/td.bin\") ... loaded = TensorDict.from_consolidated(f\"{path}/td.bin\") ... print(loaded[\"b\", \"c\"], loaded.is_consolidated()) tensor([1., 1., 1.]) True Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_consolidated# Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

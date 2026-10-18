@@ -2,38 +2,51 @@
 
 TensorDictBase.copy_at_(*tensordict: T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *fast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → Self
 
-Copies values from `tensordict` into `self` at the specified index.
+Copies the tensors of `tensordict` into the existing entries at `idx`, and returns `self`.
 
-`copy_at_` is an explicit copy-oriented variant of
-[`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_). Unlike `update_at_`,
-it may use optimized tensor-only copy paths and is intended for hot
-paths where the source and destination structures are known to match.
+`copy_at_` is a faster [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_) for the hot paths where
+every key of `tensordict` is a tensor entry of the tensordict. With
+`fast=True`, the non-tensor entries of `tensordict` are skipped,
+not copied. Use `fast=False` or [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_) to write them.
 
 Parameters:
 
-- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - input data to be copied in `self`.
-- **idx** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**iterable**,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)) - index of the tensordict
-where the copy should occur.
-- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and this copy is between
-different devices, the copy may occur asynchronously with respect
-to the host.
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the entries to copy. Their leading
+dimensions are those of `td[idx]`.
+- **idx** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,*[*slice*](https://docs.python.org/3/builtins/functions.html#slice)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)) - the index to write at,
+along the batch dimensions.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+can run asynchronously with respect to the host. Defaults to
+`False`.
 
 Keyword Arguments:
 
-**fast** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - 
+**fast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - 
 
-controls whether `copy_at_` may
-fall back to [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_).
-If `True`, only the optimized tensor-only path is used and a
-`RuntimeError` is raised when the fast path is not available.
-If `False`, this method delegates directly to `update_at_`.
-Defaults to `True`.
+if `True`, uses only the tensor-only copy,
+and raises a `RuntimeError` if the source, the destination or
+the index does not allow it (for example a dictionary source, a
+tensordict that is not a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), a
+tensor index, a value that needs broadcasting, or a key missing
+from the tensordict). If `False`, calls
+[`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_). Defaults to `True`.
 
 Changed in version 0.15: `fast=None`, deprecated in 0.14, is no longer accepted.
 
 Returns:
 
-self
+`self`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(x=torch.zeros(3, 2), batch_size=[3])
+>>> _ = td.copy_at_(TensorDict(x=torch.ones(2), batch_size=[]), 1)
+>>> td["x"][:, 0]
+tensor([0., 1., 0.])
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

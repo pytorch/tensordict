@@ -2,7 +2,7 @@
 
 tensordict.from_consolidated(*filename*)
 
-Reconstructs a tensordict from a consolidated file.
+Reconstructs a tensordict from a file written by `consolidate(filename=...)`.
 
 A consolidated file is the single file that
 [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) writes when you pass it a
@@ -18,7 +18,7 @@ Parameters:
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict). Its entries are views into one
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict). Its entries are views into one
 storage that is read from the file.
 
 Examples

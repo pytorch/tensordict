@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,51 +1642,36 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.data_ptr">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.data_ptr" title="Link to this definition">#</a></dt>
-<dd><p>Returns the data_ptr of the tensordict leaves.</p>
-<p>This can be useful to check if two tensordicts share the same <code class="docutils literal notranslate"><span class="pre">data_ptr()</span></code>.</p>
+<dd><p>Returns the data pointers of the leaves, as a tensordict of integers.</p>
+<p>The result has the keys of the tensordict, an empty batch size and the
+CPU device. Each leaf is replaced by its
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.data_ptr.html#torch.Tensor.data_ptr" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a>, as a 0-d <code class="docutils literal notranslate"><span class="pre">int64</span></code> tensor. Compare two
+results to check whether two tensordicts share memory. In a lazy stack,
+each member is a nested entry named by its index (<code class="docutils literal notranslate"><span class="pre">&quot;0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code>,
+…), which gives the data pointers of the leaves it really holds.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>storage</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, <cite>tensor.untyped_storage().data_ptr()</cite> will be called
-instead. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<dd class="field-odd"><p><strong>storage</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns the data pointer of
+the storage of each leaf
+(<code class="docutils literal notranslate"><span class="pre">tensor.untyped_storage().data_ptr()</span></code>) instead, which a view
+shares with its base. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># the leaves of td0 are views on the leaves of td</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td0</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span> <span class="o">==</span> <span class="n">td</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">())</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>  <span class="c1"># views with an offset</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td1</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span> <span class="o">==</span> <span class="n">td</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">())</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">td1</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="n">td</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">td</span><span class="p">,</span> <span class="n">td</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[('0', 'a'), ('0', 'b'), ('1', 'a'), ('1', 'b')]</span>
 </pre></div>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p><a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> instances will be displayed as nested tensordicts to
-reflect the true <code class="docutils literal notranslate"><span class="pre">data_ptr()</span></code> of their leaves:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td0</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td1</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">([</span><span class="n">td0</span><span class="p">,</span> <span class="n">td1</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        0: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=cpu,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        1: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=cpu,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=cpu,</span>
-<span class="go">    is_shared=False)</span>
-</pre></div>
-</div>
 </div>
 </dd></dl>
 
@@ -2048,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.data_ptr",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.data_ptr",
        "url": "/reference/generated/tensordict.TensorDictBase.data_ptr.html",
-       "articleBody": "TensorDictBase.data_ptr# TensorDictBase.data_ptr(*, storage: bool = False)# Returns the data_ptr of the tensordict leaves. This can be useful to check if two tensordicts share the same data_ptr(). Keyword Arguments: storage (bool, optional) \u2013 if True, tensor.untyped_storage().data_ptr() will be called instead. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2]) \u003e\u003e\u003e td0 = td.unsqueeze(0) # the leaves of td0 are views on the leaves of td \u003e\u003e\u003e assert (td0.data_ptr() == td.data_ptr()).all() Note LazyStackedTensorDict instances will be displayed as nested tensordicts to reflect the true data_ptr() of their leaves: \u003e\u003e\u003e td0 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2]) \u003e\u003e\u003e td1 = TensorDict(a=torch.randn(2), b=torch.randn(2), batch_size=[2]) \u003e\u003e\u003e td = TensorDict.lazy_stack([td0, td1]) \u003e\u003e\u003e td.data_ptr() TensorDict( fields={ 0: TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False), 1: TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.data_ptr# TensorDictBase.data_ptr(*, storage: bool = False)# Returns the data pointers of the leaves, as a tensordict of integers. The result has the keys of the tensordict, an empty batch size and the CPU device. Each leaf is replaced by its data_ptr(), as a 0-d int64 tensor. Compare two results to check whether two tensordicts share memory. In a lazy stack, each member is a nested entry named by its index (\"0\", \"1\", \u2026), which gives the data pointers of the leaves it really holds. Keyword Arguments: storage (bool, optional) \u2013 if True, returns the data pointer of the storage of each leaf (tensor.untyped_storage().data_ptr()) instead, which a view shares with its base. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(2), b=torch.zeros(2), batch_size=[2]) \u003e\u003e\u003e td0 = td.unsqueeze(0) # the leaves of td0 are views on the leaves of td \u003e\u003e\u003e assert (td0.data_ptr() == td.data_ptr()).all() \u003e\u003e\u003e td1 = td[1:] # views with an offset \u003e\u003e\u003e (td1.data_ptr() == td.data_ptr()).all() False \u003e\u003e\u003e (td1.data_ptr(storage=True) == td.data_ptr(storage=True)).all() True \u003e\u003e\u003e stack = TensorDict.lazy_stack([td, td]) \u003e\u003e\u003e list(stack.data_ptr().keys(include_nested=True, leaves_only=True)) [(\u00270\u0027, \u0027a\u0027), (\u00270\u0027, \u0027b\u0027), (\u00271\u0027, \u0027a\u0027), (\u00271\u0027, \u0027b\u0027)] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

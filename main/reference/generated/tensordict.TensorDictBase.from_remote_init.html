@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,38 +1642,32 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.from_remote_init">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">from_remote_init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'ProcessGroup'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_broadcast</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.from_remote_init" title="Link to this definition">#</a></dt>
-<dd><p>Creates a new tensordict instance initialized from remotely sent metadata.</p>
-<p>This class method receives consolidated metadata and a single storage buffer
-sent by <a class="reference internal" href="tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote" title="tensordict.TensorDictBase.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a>, then reconstructs the full tensordict.</p>
-<p>Two transport modes are available (must match the sender’s choice):</p>
-<ul class="simple">
-<li><p><strong>Point-to-point</strong> (default): uses <code class="docutils literal notranslate"><span class="pre">recv_object_list</span></code> +
-<code class="docutils literal notranslate"><span class="pre">dist.recv</span></code>.  Only sender and receiver participate.</p></li>
-<li><p><strong>Broadcast</strong> (<code class="docutils literal notranslate"><span class="pre">use_broadcast=True</span></code>): delegates to
-<a class="reference internal" href="tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>.  All ranks must participate.</p></li>
-</ul>
+<dd><p>Receives a tensordict that <a class="reference internal" href="tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote" title="tensordict.TensorDictBase.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a> sends, and returns it.</p>
+<p>The result is consolidated (see <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>): receive the next
+batches into it with <code class="docutils literal notranslate"><span class="pre">recv(consolidated=True)</span></code>, which allocates no new
+memory. A tensorclass arrives as the same tensorclass, if this process can
+import its class. The metadata is unpickled: use it only with ranks you
+trust. See <a class="reference internal" href="tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote" title="tensordict.TensorDictBase.init_remote"><code class="xref py py-meth docutils literal notranslate"><span class="pre">init_remote()</span></code></a> for an example, and <a class="reference internal" href="../../distributed.html#distributed"><span class="std std-ref">Distributed tensordicts</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – The rank of the source process that sent the metadata.</p></li>
-<li><p><strong>group</strong> (<em>&quot;ProcessGroup&quot;</em><em>, </em><em>optional</em>) – The process group to use for communication. Defaults to None.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><em>optional</em>) – The device to use for tensor operations. Defaults to None.</p></li>
-<li><p><strong>use_broadcast</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, use <a class="reference internal" href="tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a> instead
-of point-to-point recv.  Must match the sender’s setting.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the rank of the sender.</p></li>
+<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the result.
+Point-to-point, it is also the device that the metadata goes
+through, as in <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.recv_object_list" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.recv_object_list()</span></code></a>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which is the CPU point-to-point, and the
+device of the sender’s storage with <code class="docutils literal notranslate"><span class="pre">use_broadcast=True</span></code>.</p></li>
+<li><p><strong>use_broadcast</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, receives with
+<a class="reference internal" href="tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast" title="tensordict.TensorDictBase.broadcast"><code class="xref py py-meth docutils literal notranslate"><span class="pre">broadcast()</span></code></a>. It must match the sender’s value. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new tensordict instance initialized with the received metadata and content.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a></p>
+<dd class="field-even"><p>A new consolidated tensordict, of the class that was sent.</p>
 </dd>
 </dl>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p>The sending process should have called <cite>~.init_remote</cite> to send the metadata and content.</p>
-</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2034,7 +2028,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_remote_init",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_remote_init",
        "url": "/reference/generated/tensordict.TensorDictBase.from_remote_init.html",
-       "articleBody": "TensorDictBase.from_remote_init# classmethod TensorDictBase.from_remote_init(src: int, group: \u0027ProcessGroup\u0027 | None = None, device: device | None = None, use_broadcast: bool = False) \u2192 Self# Creates a new tensordict instance initialized from remotely sent metadata. This class method receives consolidated metadata and a single storage buffer sent by init_remote(), then reconstructs the full tensordict. Two transport modes are available (must match the sender\u2019s choice): Point-to-point (default): uses recv_object_list + dist.recv. Only sender and receiver participate. Broadcast (use_broadcast=True): delegates to broadcast(). All ranks must participate. Parameters: src (int) \u2013 The rank of the source process that sent the metadata. group (\"ProcessGroup\", optional) \u2013 The process group to use for communication. Defaults to None. device (device, optional) \u2013 The device to use for tensor operations. Defaults to None. use_broadcast (bool) \u2013 If True, use broadcast() instead of point-to-point recv. Must match the sender\u2019s setting. Defaults to False. Returns: A new tensordict instance initialized with the received metadata and content. Return type: TensorDict See also The sending process should have called ~.init_remote to send the metadata and content. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.from_remote_init# classmethod TensorDictBase.from_remote_init(src: int, group: \u0027ProcessGroup\u0027 | None = None, device: device | None = None, use_broadcast: bool = False) \u2192 Self# Receives a tensordict that init_remote() sends, and returns it. The result is consolidated (see consolidate()): receive the next batches into it with recv(consolidated=True), which allocates no new memory. A tensorclass arrives as the same tensorclass, if this process can import its class. The metadata is unpickled: use it only with ranks you trust. See init_remote() for an example, and Distributed tensordicts. Parameters: src (int) \u2013 the rank of the sender. group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. device (device, str or int, optional) \u2013 the device of the result. Point-to-point, it is also the device that the metadata goes through, as in torch.distributed.recv_object_list(). Defaults to None, which is the CPU point-to-point, and the device of the sender\u2019s storage with use_broadcast=True. use_broadcast (bool, optional) \u2013 if True, receives with broadcast(). It must match the sender\u2019s value. Defaults to False. Returns: A new consolidated tensordict, of the class that was sent. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

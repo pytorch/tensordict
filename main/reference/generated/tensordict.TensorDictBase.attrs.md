@@ -2,23 +2,22 @@
 
 TensorDictBase.attrs(***, *fields: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] = ('device', 'dtype', 'shape')*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Return a deviceless tensordict whose leaves are [`TensorAttrs`](tensordict.TensorAttrs.html#tensordict.TensorAttrs).
+Returns a tensordict that describes each tensor leaf with a [`TensorAttrs`](tensordict.TensorAttrs.html#tensordict.TensorAttrs).
 
-Each tensor leaf of `self` is replaced by a [`TensorAttrs`](tensordict.TensorAttrs.html#tensordict.TensorAttrs)
-describing the requested tensor attributes. The result is intended to be passed to
-[`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to drive per-leaf device/dtype casting when the source tensordict
-is heterogeneous.
+Each tensor leaf is replaced by a [`TensorAttrs`](tensordict.TensorAttrs.html#tensordict.TensorAttrs) that
+records its device, dtype and shape. The result has an empty batch size
+and no device. Pass it to [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to cast another tensordict leaf
+by leaf, to the device and dtype of the matching leaf, when the leaves
+do not all share one device or dtype.
 
 Keyword Arguments:
 
-- **fields** (*sequence**of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - which attributes to record on each
-[`TensorAttrs`](tensordict.TensorAttrs.html#tensordict.TensorAttrs). Accepts any subset of
-`("device", "dtype", "shape")`. Attributes not listed remain `None`.
-Defaults to `("device", "dtype", "shape")`.
-- **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)*,**optional*) - number of threads to use when
-iterating leaves. Defaults to `None` (single-threaded). Construction
-of [`TensorAttrs`](tensordict.TensorAttrs.html#tensordict.TensorAttrs) is Python-bound, so threading typically yields
-little; exposed for symmetry with [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to).
+- **fields** (*sequence**of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the attributes to record, any
+subset of `("device", "dtype", "shape")`. The others are
+`None`. Defaults to `("device", "dtype", "shape")`.
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that build the
+result. Defaults to `None`, which uses the calling thread
+only.
 
 Examples
 
@@ -32,7 +31,7 @@ Examples
 ... )
 >>> attrs = td.attrs(fields=("device", "dtype"))
 >>> target = TensorDict(a=torch.zeros(3, device="cpu"), b=torch.zeros(3), batch_size=[3])
->>> out = target.to(attrs) # casts `b` to int32 per-leaf
+>>> out = target.to(attrs) # casts "b" to int32
 >>> out["b"].dtype
 torch.int32
 ```

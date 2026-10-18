@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1647,7 +1647,8 @@ document.write(`
 <p>Inside the block, <a class="reference internal" href="tensordict.nn.interaction_type.html#tensordict.nn.interaction_type" title="tensordict.nn.interaction_type"><code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code></a>
 returns <code class="docutils literal notranslate"><span class="pre">type</span></code>, and every <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> uses it
 instead of its <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>. When the block ends, the
-previous value comes back.</p>
+previous value comes back. By default the interaction type applies to
+the whole process (see <code class="docutils literal notranslate"><span class="pre">thread_local</span></code>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>type</strong> (<a class="reference internal" href="tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.InteractionType"><em>InteractionType</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the interaction type, for
@@ -1656,7 +1657,7 @@ example <code class="docutils literal notranslate"><span class="pre">Interaction
 Defaults to <code class="docutils literal notranslate"><span class="pre">InteractionType.DETERMINISTIC</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>thread_local</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the interaction type
+<dd class="field-even"><p><strong>thread_local</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the interaction type
 applies to the calling thread only, and blocks that other threads
 enter do not change it. Inside the block, blocks without this flag
 that the same thread enters stay in that thread too. Threads
@@ -1665,14 +1666,6 @@ If <code class="docutils literal notranslate"><span class="pre">False</span></co
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Threads. By default the interaction type is process-wide: a
-<code class="docutils literal notranslate"><span class="pre">with</span></code> block in one thread also changes what the modules running in
-other threads at that time use. Pass <code class="docutils literal notranslate"><span class="pre">thread_local=True</span></code> to keep a
-block to its own thread. A thread started inside such a block reads
-the process-wide value, not the block’s.</p>
-</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span>
@@ -2067,7 +2060,7 @@ the process-wide value, not the block’s.</p>
        "headline": "set_interaction_type",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_interaction_type",
        "url": "/reference/generated/tensordict.nn.set_interaction_type.html",
-       "articleBody": "set_interaction_type# class tensordict.nn.set_interaction_type(type: InteractionType | str | None = InteractionType.DETERMINISTIC, *, thread_local: bool = False)# Bases: _DecoratorContextManager Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function. Inside the block, interaction_type() returns type, and every ProbabilisticTensorDictModule uses it instead of its default_interaction_type. When the block ends, the previous value comes back. Parameters: type (InteractionType or str, optional) \u2013 the interaction type, for example InteractionType.RANDOM or \"random\" (in any case). None makes each module use its default_interaction_type. Defaults to InteractionType.DETERMINISTIC. Keyword Arguments: thread_local (bool, optional) \u2013 if True, the interaction type applies to the calling thread only, and blocks that other threads enter do not change it. Inside the block, blocks without this flag that the same thread enters stay in that thread too. Threads started inside the block see the process-wide interaction type. If False, the interaction type applies to the whole process. Defaults to False. Note Threads. By default the interaction type is process-wide: a with block in one thread also changes what the modules running in other threads at that time use. Pass thread_local=True to keep a block to its own thread. A thread started inside such a block reads the process-wide value, not the block\u2019s. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import distributions as d \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import ( ... InteractionType, ... ProbabilisticTensorDictModule, ... set_interaction_type, ... ) \u003e\u003e\u003e module = ProbabilisticTensorDictModule( ... in_keys=[\"loc\", \"scale\"], out_keys=[\"action\"], distribution_class=d.Normal ... ) \u003e\u003e\u003e td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3)) \u003e\u003e\u003e module(td)[\"action\"] # default_interaction_type is DETERMINISTIC: the mean tensor([0., 0., 0.]) \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e with set_interaction_type(\"random\"): ... module(td)[\"action\"] tensor([ 1.5410, -0.2934, -2.1788]) It also works as a decorator: \u003e\u003e\u003e @set_interaction_type(InteractionType.MODE) ... def act(td): ... return module(td) \u003e\u003e\u003e act(td)[\"action\"] tensor([0., 0., 0.]) Tutorials that use set_interaction_type# Building models with TensorDictModule Building models with TensorDictModule",
+       "articleBody": "set_interaction_type# class tensordict.nn.set_interaction_type(type: InteractionType | str | None = InteractionType.DETERMINISTIC, *, thread_local: bool = False)# Bases: _DecoratorContextManager Sets the interaction type of all probabilistic modules inside a block of code, or inside a decorated function. Inside the block, interaction_type() returns type, and every ProbabilisticTensorDictModule uses it instead of its default_interaction_type. When the block ends, the previous value comes back. By default the interaction type applies to the whole process (see thread_local). Parameters: type (InteractionType or str, optional) \u2013 the interaction type, for example InteractionType.RANDOM or \"random\" (in any case). None makes each module use its default_interaction_type. Defaults to InteractionType.DETERMINISTIC. Keyword Arguments: thread_local (bool, optional) \u2013 if True, the interaction type applies to the calling thread only, and blocks that other threads enter do not change it. Inside the block, blocks without this flag that the same thread enters stay in that thread too. Threads started inside the block see the process-wide interaction type. If False, the interaction type applies to the whole process. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import distributions as d \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import ( ... InteractionType, ... ProbabilisticTensorDictModule, ... set_interaction_type, ... ) \u003e\u003e\u003e module = ProbabilisticTensorDictModule( ... in_keys=[\"loc\", \"scale\"], out_keys=[\"action\"], distribution_class=d.Normal ... ) \u003e\u003e\u003e td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3)) \u003e\u003e\u003e module(td)[\"action\"] # default_interaction_type is DETERMINISTIC: the mean tensor([0., 0., 0.]) \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e with set_interaction_type(\"random\"): ... module(td)[\"action\"] tensor([ 1.5410, -0.2934, -2.1788]) It also works as a decorator: \u003e\u003e\u003e @set_interaction_type(InteractionType.MODE) ... def act(td): ... return module(td) \u003e\u003e\u003e act(td)[\"action\"] tensor([0., 0., 0.]) Tutorials that use set_interaction_type# Building models with TensorDictModule Building models with TensorDictModule",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

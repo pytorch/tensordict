@@ -208,6 +208,7 @@
 - [TensorDictBase.is_floating_point](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_floating_point.md)
 - [TensorDictBase.is_locked](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_locked.md)
 - [TensorDictBase.is_memmap](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_memmap.md)
+- [TensorDictBase.is_meta](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_meta.md)
 - [TensorDictBase.is_non_tensor](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_non_tensor.md)
 - [TensorDictBase.is_shared](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_shared.md)
 - [TensorDictBase.isend](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.isend.md)

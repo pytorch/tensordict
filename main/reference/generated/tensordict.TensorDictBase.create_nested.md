@@ -2,46 +2,31 @@
 
 TensorDictBase.create_nested(*key*)
 
-Creates a nested tensordict of the same shape, device and dim names as the current tensordict.
+Adds an empty nested tensordict at `key`, and returns `self`.
 
-If the value already exists, it will be overwritten by this operation.
-This operation is blocked in locked tensordicts.
+The new tensordict has the batch size, device and names of the
+tensordict. An existing entry at `key` is replaced. For a tuple key,
+every level is created new, so an existing entry on the path, such as
+`td["a"]` for `("a", "b")`, is replaced too.
+
+Parameters:
+
+**key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the new tensordict.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensordict is locked.
 
 Examples
 
 ```
 >>> from tensordict import TensorDict
 >>> data = TensorDict({}, [3, 4, 5])
->>> _ = data.create_nested("root")
 >>> _ = data.create_nested(("some", "nested", "value"))
->>> print(data)
-TensorDict(
- fields={
- root: TensorDict(
- fields={
- },
- batch_size=torch.Size([3, 4, 5]),
- device=None,
- is_shared=False),
- some: TensorDict(
- fields={
- nested: TensorDict(
- fields={
- value: TensorDict(
- fields={
- },
- batch_size=torch.Size([3, 4, 5]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([3, 4, 5]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([3, 4, 5]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([3, 4, 5]),
- device=None,
- is_shared=False)
+>>> data["some", "nested", "value"].batch_size
+torch.Size([3, 4, 5])
+>>> list(data.keys(include_nested=True))
+[('some', 'nested', 'value'), ('some', 'nested'), 'some']
 ```
 
 Every tensordict class and every tensorclass has this method. For the

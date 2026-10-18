@@ -9,22 +9,24 @@ documentation.
 
 Bases: `_StateFromSource`, [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-A TensorDictBase subclass with typed field declarations and backend composition.
+A [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass whose fields are declared as class annotations.
 
 Warning
 
 `TypedTensorDict` is experimental: its API can change in a minor
 release without a deprecation cycle.
 
-TypedTensorDict combines TensorDict's tensor operations with TypedDict-style
-field declarations. Subclasses declare fields as class annotations and get:
+A subclass declares its fields as annotations, as a `TypedDict` does,
+and gets:
 
-- Typed attribute access (`state.eta`)
-- Typed construction (`PredictorState(eta=..., X=..., beta=..., batch_size=...)`)
-- Inheritance (`class ObservedState(PredictorState): ...`)
-- Default-valued fields for optional pipeline branches
-- Full TensorDict interop (`.to()`, `.clone()`, slicing, `**state` spreading)
-- Backend composition via `from_tensordict` (H5, Redis, lazy stacks, and others)
+- attribute access to the fields (`state.eta`) and `state["eta"]`;
+- a constructor that takes the fields by keyword and checks them;
+- inheritance: a subclass adds fields to the fields of its parent;
+- default values for the fields that a pipeline may not fill;
+- every [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) operation (`to`,
+`clone`, indexing, `**state` unpacking);
+- typed access to an existing tensordict of any backend (H5, Redis, lazy
+stacks) with `from_tensordict()`, which does not copy the data.
 
 Use it instead of a [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) when you need a
 [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass: `state["key"]` access,
@@ -34,10 +36,38 @@ values that must come back as plain Python objects.
 [Which container should I use?](../../choosing_a_container.html#choosing-a-container) compares the containers, and
 [TypedTensorDict](../../typed_tensordict.html#typed-tensordict-guide) is the user guide.
 
-Internally, a `TypedTensorDict` delegates all storage to an internal
-`_source` attribute (a `TensorDictBase` instance). Direct construction
-creates a `TensorDict` as `_source`. `from_tensordict` stores the
-given backend directly, so the typed access to that backend makes no copy.
+Keyword Arguments:
+
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the instance: the leading dimensions that all its entries share.
+Defaults to `None`, which gives an empty batch size.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+instance. Leaves on another device are moved to it. Defaults to
+`None`, which leaves each leaf where it is.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions, one
+per dimension. Defaults to `None`.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices can
+run asynchronously with respect to the host. Defaults to `None`:
+the moves are asynchronous, and the constructor synchronizes after
+them if required.
+- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the instance is locked. See
+[Locking and temporary changes](../../concepts/keys.html#keys-locking). Defaults to `False`.
+- ****fields** - the value of each field. A missing field without a default,
+or a name that is not a field, raises a `TypeError`.
+
+Two options change the behavior of a class. Set them with
+`class State(TypedTensorDict["frozen"])` or
+`class State(TypedTensorDict, frozen=True)`. Subclasses inherit them.
+
+- `shadow`: allows a field to have the name of a
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) attribute (`batch_size`,
+`sum`, ...), which it then hides. Without it, such a field raises an
+`AttributeError` when the class is defined.
+- `frozen`: the constructor locks the instance.
+
+The `autocast`, `nocast` and `tensor_only` options of
+[`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) are accepted, have no effect, and warn.
+They are deprecated and will be removed in TensorDict 0.17.
 
 Examples
 
@@ -45,22 +75,25 @@ Examples
 >>> import torch
 >>> from tensordict import TensorDict, TypedTensorDict
 >>> from torch import Tensor
->>>
 >>> class PredictorState(TypedTensorDict):
 ... eta: Tensor
 ... X: Tensor
-...
->>> state = PredictorState(eta=torch.randn(5, 3), X=torch.randn(5, 4), batch_size=[5])
+>>> state = PredictorState(eta=torch.zeros(5, 3), X=torch.zeros(5, 4), batch_size=[5])
 >>> state.eta.shape
 torch.Size([5, 3])
 >>> state["X"].shape
 torch.Size([5, 4])
->>>
->>> # Wrap an existing TensorDict backend
->>> td = TensorDict({"eta": torch.randn(5, 3), "X": torch.randn(5, 4)}, batch_size=[5])
+>>> state[0].batch_size
+torch.Size([])
+```
+
+`from_tensordict()` wraps an existing tensordict:
+
+```
+>>> td = TensorDict(eta=torch.zeros(5, 3), X=torch.zeros(5, 4), batch_size=[5])
 >>> state = PredictorState.from_tensordict(td)
->>> state.eta.shape
-torch.Size([5, 3])
+>>> state.eta is td["eta"]
+True
 ```
 
 *classmethod*from_dict(*input_dict*, ***, *auto_batch_size=None*, *batch_size=None*, *device=None*, *batch_dims=None*, *names=None*, *check: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
@@ -78,21 +111,45 @@ become [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) instance
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether to infer the batch size.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of batch dimensions to infer.
-- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions.
-- **check** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - If `True` (default), warn with a
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Defaults to `None`, which behaves like `False`, unless
+`batch_dims` is passed: then it behaves like `True`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Defaults to `None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. Defaults to
+`None`, which leaves each leaf where it is.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Exclusive with `batch_size`.
+Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions,
+one per dimension. Defaults to `None`.
+- **check** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, warns with a
 [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning) when `input_dict` misses a required
 field. Starting with TensorDict 0.17, the default will change
-to raising the `TypeError` that the constructor raises. Set
-it to `False` to build an instance without these fields;
-reading one then raises `AttributeError`.
+to raising the `TypeError` that the constructor raises. Pass
+`False` to build an instance without these fields; reading
+one then raises `AttributeError`. Defaults to `True`.
 
 Returns:
 
 A new instance of the class.
+
+Examples
+
+```
+>>> import torch
+>>> from torch import Tensor
+>>> from tensordict import TypedTensorDict
+>>> class State(TypedTensorDict):
+... x: Tensor
+... y: Tensor
+>>> state = State.from_dict({"x": torch.zeros(3, 4), "y": torch.zeros(3)}, auto_batch_size=True)
+>>> state.batch_size
+torch.Size([3])
+```
 
 from_dict_instance(*input_dict*, ***, *auto_batch_size=None*, *batch_size=None*, *device=None*, *batch_dims=None*, *names=None*)
 
@@ -104,33 +161,75 @@ calls it with the entries that a nested write changes, as in
 `outer[0:2] = {"inner": {"eta": value}}` where `outer["inner"]`
 is a `TypedTensorDict`.
 
-The arguments are those of
-[`from_dict_instance()`](tensordict.TensorDictBase.from_dict_instance.html#tensordict.TensorDictBase.from_dict_instance).
-
-*classmethod*from_tensordict(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *check: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → TypedTensorDict
-
-Wrap an existing TensorDictBase backend as a TypedTensorDict.
-
-The `td` is stored directly (no copy); mutations through the
-TypedTensorDict are reflected in the original backend and vice versa.
-
 Parameters:
 
-**td** - Any `TensorDictBase` instance (`TensorDict`,
-`PersistentTensorDict`, `LazyStackedTensorDict`, etc.).
+**input_dict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the values of the entries.
 
 Keyword Arguments:
 
-**check** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - If `True` (default), validate that all required
-fields are present in `td`. Set to `False` to wrap an
-empty or partially-filled backend (e.g. a pre-allocated
-`TensorDictStore`); missing fields will raise at access time
-rather than wrap time.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Defaults to `None`, which behaves like `False`, unless
+`batch_dims` is passed: then it behaves like `True`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result. Defaults to `None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Defaults to `None`, which leaves each leaf where it
+is.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Exclusive with `batch_size`.
+Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions,
+one per dimension. Defaults to `None`.
 
-Raises:
+These arguments go to
+[`from_dict_instance()`](tensordict.TensorDictBase.from_dict_instance.html#tensordict.TensorDictBase.from_dict_instance) of the wrapped
+tensordict.
 
-[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - If `check=True` and required fields are missing.
+*classmethod*from_tensordict(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *check: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → TypedTensorDict
+
+Wraps an existing tensordict in an instance of the class, without copying it.
+
+The instance stores `td` itself: a write through either one is seen
+by the other.
+
+Parameters:
+
+**td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict to wrap, of any backend
+([`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict),
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), a lazy stack, ...).
+
+Keyword Arguments:
+
+**check** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, checks that `td` holds every
+required field. Pass `False` to wrap an empty or partly
+filled tensordict, such as a preallocated
+[`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore): reading a missing
+field then raises an `AttributeError`. Defaults to `True`.
 
 Returns:
 
-A new `TypedTensorDict` instance backed by `td`.
+A new instance of the class backed by `td`.
+
+Raises:
+
+[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `check=True` and `td` misses required fields.
+
+Examples
+
+```
+>>> import torch
+>>> from torch import Tensor
+>>> from tensordict import TensorDict, TypedTensorDict
+>>> class State(TypedTensorDict):
+... x: Tensor
+>>> td = TensorDict(x=torch.zeros(3), batch_size=[3])
+>>> state = State.from_tensordict(td)
+>>> state.x += 1
+>>> td["x"]
+tensor([1., 1., 1.])
+>>> State.from_tensordict(TensorDict())
+Traceback (most recent call last):
+ ...
+TypeError: State.from_tensordict() missing required field(s): x
+```

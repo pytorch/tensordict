@@ -11,9 +11,7 @@ It supports a [`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordic
 [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) that [`torch.fx.symbolic_trace()`](https://docs.pytorch.org/docs/stable/fx.html#torch.fx.symbolic_trace) can trace,
 and a [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) of such modules. A
 module that wraps a plain function or a lambda raises a `RuntimeError`
-("Unsupported type ... passed for root!"). Other module types, such as
-[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), raise a
-`TypeError`.
+("Unsupported type ... passed for root!").
 
 Parameters:
 
@@ -21,8 +19,14 @@ Parameters:
 
 Returns:
 
-a `TDGraphModule` with the same inputs and outputs as
+A `TDGraphModule` with the same inputs and outputs as
 `td_module`.
+
+Raises:
+
+[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `td_module` is not a
+ [`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) or a
+ [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential).
 
 Examples
 

@@ -2,51 +2,52 @@
 
 TensorDictBase.recv(*src: [int](https://docs.python.org/3/builtins/functions.html#int) | 'TensorDictPipe' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group_src: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *init_tag: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *pseudo_rand: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [int](https://docs.python.org/3/builtins/functions.html#int)
 
-Receives the content of a tensordict and updates content with it.
+Receives the leaves that [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) sends, and writes them into the tensordict in place.
 
-Check the example in the send method for context.
+The tensordict must have the keys, shapes and dtypes of the tensordict
+that the sender sends. See [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) for an example, and
+[Distributed tensordicts](../../distributed.html#distributed).
 
 Parameters:
 
-**src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*TensorDictPipe*](tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe)*,**optional*) - the global rank of the
-source worker, or a
-[`TensorDictPipe`](tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe) for UCXX-based
-transport. When a pipe is passed, the data is received
-in-place into this tensordict's consolidated storage (if
-available and its layout matches the received data);
-otherwise the pipe returns a tensordict of its own, so use
-the returned value. Mutually exclusive with `group_src`;
-exactly one of the two must be provided.
+**src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*TensorDictPipe*](tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe)*,**optional*) - the global rank of the sender,
+or a [`TensorDictPipe`](tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe) to receive from
+with UCXX, which ignores the other arguments. Exclusive with
+`group_src`: pass exactly one of them. Defaults to `None`.
 
 Keyword Arguments:
 
-- **group** (*torch.distributed.ProcessGroup**,**optional*) - if set, the specified process group
-will be used for communication. Otherwise, the default process group
-will be used.
-Defaults to `None`.
-- **group_src** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the rank of the source worker *relative
-to* `group`. Requires `group` to be passed and is mutually
-exclusive with `src`. When set, the p2p calls are issued
-directly on the group's backend, so `group` may be a
-standalone `ProcessGroup` built
-against a store (never registered through
-[`init_process_group()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) or
-[`new_group()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group)).
-Defaults to `None`.
-- **init_tag** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)) - the `init_tag` used by the source worker.
-- **pseudo_rand** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if True, the sequence of tags will be pseudo-
-random, allowing to send multiple data from different nodes
-without overlap. Notice that the generation of these pseudo-random
-numbers is expensive (1e-5 sec/number), meaning that it could
-slow down the runtime of your algorithm.
-This value must match the one passed to [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send).
-Defaults to `False`.
-- **consolidated** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if True, receives a single consolidated storage
-tensor directly into `self._consolidated["storage"]`. The
-tensordict must already be consolidated (e.g. from a prior
-[`from_remote_init()`](tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init) call). All leaf tensor views update
-in-place automatically.
-Defaults to `False`.
+- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
+Defaults to `None`, the default process group.
+- **group_src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the rank of the sender in `group`, which
+must be given. Exclusive with `src`. The messages then go through
+the backend of `group` directly, so `group` can be a standalone
+`ProcessGroup` built on a store, never
+registered by [`init_process_group()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) or
+[`new_group()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group). Defaults to `None`.
+- **init_tag** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the `init_tag` that the sender passed.
+Defaults to `0`.
+- **pseudo_rand** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the `pseudo_rand` that the sender
+passed. Defaults to `False`.
+- **consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, receives one message into
+the consolidated storage of the tensordict, which updates all its
+leaves, as sent by `send(consolidated=True)`. The tensordict must
+be consolidated already, for example by
+`consolidate(metadata=True)` or [`from_remote_init()`](tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init);
+otherwise an `AttributeError` is raised. `init_tag` and
+`pseudo_rand` are ignored. Defaults to `False`.
+
+Returns:
+
+With a pipe, the received tensordict, which is `self` only if the
+tensordict is consolidated with the layout of the data, so use the
+return value. With `consolidated=True`, `None`. Otherwise, the
+tag of the last leaf received.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if both or none of `src` and `group_src` are given, or
+ if `group_src` is given without `group`.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

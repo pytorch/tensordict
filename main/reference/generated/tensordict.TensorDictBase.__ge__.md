@@ -2,12 +2,18 @@
 
 TensorDictBase.__ge__(*other: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self | [bool](https://docs.python.org/3/builtins/functions.html#bool)
 
-Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
+Compares the tensordict with `other` leaf by leaf with `>=`.
+
+Works as [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__).
+
+Parameters:
+
+**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the value to
+compare with.
 
 Returns:
 
-a new TensorDict instance with all tensors are boolean
-tensors of the same shape as the original tensors.
+A new tensordict of boolean leaves, or `False`.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

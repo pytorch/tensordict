@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,26 +1642,30 @@ document.write(`
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.set_printoptions">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_printoptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_printoptions" title="Link to this definition">#</a></dt>
-<dd><p>Controls which attributes appear in TensorDict’s <code class="docutils literal notranslate"><span class="pre">__repr__</span></code> output.</p>
+<dd><p>Sets the options that control what the repr of a tensordict shows.</p>
 <p>Use it as a context manager or a decorator to change the options for a
-block of code, or call <code class="docutils literal notranslate"><span class="pre">set_printoptions(...).set()</span></code> to change them
-for the rest of the program. <a class="reference internal" href="../../printing.html#printing"><span class="std std-ref">Printing and display</span></a> describes every option
-with examples.</p>
+block of code; the previous options come back at the end of the block.
+Call <code class="docutils literal notranslate"><span class="pre">set_printoptions(...).set()</span></code> to change them for the rest of the
+program. The options that are not passed keep their current value.
+<a class="reference internal" href="../../printing.html#printing"><span class="std std-ref">Printing and display</span></a> describes every option with examples, and
+<a class="reference internal" href="tensordict.get_printoptions.html#tensordict.get_printoptions" title="tensordict.get_printoptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_printoptions()</span></code></a> returns the current values.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the device, dtype and
-<code class="docutils literal notranslate"><span class="pre">is_shared</span></code> attributes are hidden, unless a keyword argument
-sets them. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, hides the device, dtype and
+<code class="docutils literal notranslate"><span class="pre">is_shared</span></code> attributes, unless a keyword argument sets them.
+Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 <li><p><strong>**kwargs</strong> – the options to set: <code class="docutils literal notranslate"><span class="pre">show_batch_size</span></code>, <code class="docutils literal notranslate"><span class="pre">show_device</span></code>,
 <code class="docutils literal notranslate"><span class="pre">show_is_shared</span></code>, <code class="docutils literal notranslate"><span class="pre">show_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">show_field_device</span></code>,
 <code class="docutils literal notranslate"><span class="pre">show_dtype</span></code>, <code class="docutils literal notranslate"><span class="pre">show_field_is_shared</span></code>, <code class="docutils literal notranslate"><span class="pre">show_grad</span></code>,
 <code class="docutils literal notranslate"><span class="pre">show_is_contiguous</span></code>, <code class="docutils literal notranslate"><span class="pre">show_is_view</span></code>, <code class="docutils literal notranslate"><span class="pre">show_storage_size</span></code>,
-<code class="docutils literal notranslate"><span class="pre">plain</span></code>, <code class="docutils literal notranslate"><span class="pre">sort_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">compact</span></code>. An unknown option
-raises a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>. <code class="docutils literal notranslate"><span class="pre">compact=True</span></code> prints each entry on
-one line as its dtype and its shape after the batch dims
-(<code class="docutils literal notranslate"><span class="pre">f32[3]</span></code>); see <a class="reference internal" href="../../printing.html#printing"><span class="std std-ref">Printing and display</span></a>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">plain</span></code>, <code class="docutils literal notranslate"><span class="pre">sort_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">compact</span></code>. <code class="docutils literal notranslate"><span class="pre">compact=True</span></code> prints
+each entry on one line as its dtype and its feature dimensions
+(<code class="docutils literal notranslate"><span class="pre">f32[3]</span></code>).</p></li>
 </ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – if an option is unknown.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2034,7 +2038,7 @@ one line as its dtype and its shape after the batch dims
        "headline": "set_printoptions",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_printoptions",
        "url": "/reference/generated/tensordict.set_printoptions.html",
-       "articleBody": "set_printoptions# class tensordict.set_printoptions(*, verbose: bool = True, **kwargs)# Controls which attributes appear in TensorDict\u2019s __repr__ output. Use it as a context manager or a decorator to change the options for a block of code, or call set_printoptions(...).set() to change them for the rest of the program. Printing and display describes every option with examples. Parameters: verbose (bool, optional) \u2013 if False, the device, dtype and is_shared attributes are hidden, unless a keyword argument sets them. Defaults to True. **kwargs \u2013 the options to set: show_batch_size, show_device, show_is_shared, show_shape, show_field_device, show_dtype, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size, plain, sort_keys and compact. An unknown option raises a TypeError. compact=True prints each entry on one line as its dtype and its shape after the batch dims (f32[3]); see Printing and display. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, set_printoptions \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e with set_printoptions(verbose=False): ... print(td) TensorDict( fields={ a: Tensor(shape=torch.Size([3]))}, batch_size=torch.Size([3]))",
+       "articleBody": "set_printoptions# class tensordict.set_printoptions(*, verbose: bool = True, **kwargs)# Sets the options that control what the repr of a tensordict shows. Use it as a context manager or a decorator to change the options for a block of code; the previous options come back at the end of the block. Call set_printoptions(...).set() to change them for the rest of the program. The options that are not passed keep their current value. Printing and display describes every option with examples, and get_printoptions() returns the current values. Keyword Arguments: verbose (bool, optional) \u2013 if False, hides the device, dtype and is_shared attributes, unless a keyword argument sets them. Defaults to True. **kwargs \u2013 the options to set: show_batch_size, show_device, show_is_shared, show_shape, show_field_device, show_dtype, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size, plain, sort_keys and compact. compact=True prints each entry on one line as its dtype and its feature dimensions (f32[3]). Raises: TypeError \u2013 if an option is unknown. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, set_printoptions \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e with set_printoptions(verbose=False): ... print(td) TensorDict( fields={ a: Tensor(shape=torch.Size([3]))}, batch_size=torch.Size([3]))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -4,11 +4,10 @@
 
 Bases: [`object`](https://docs.python.org/3/builtins/functions.html#object)
 
-A base class for TensorDictBase and TensorClass.
+The abstract base class of tensordicts and tensorclasses.
 
-This is an abstract base class that provides the foundation for tensor collections
-like TensorDict and TensorClass. It serves as a common interface for all tensor
-collection types in the tensordict library.
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) and [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass)
+inherit from it. It cannot be instantiated.
 
 Use it in type hints and `isinstance` checks for "a tensordict or a
 tensorclass". Classes decorated with `@tensorclass` do not inherit from

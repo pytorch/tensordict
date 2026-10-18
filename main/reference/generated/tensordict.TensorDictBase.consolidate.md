@@ -5,76 +5,79 @@ TensorDictBase.consolidate(*filename: [Path](https://docs.python.org/3/library/p
 Copies all the leaves into one contiguous storage, and returns a tensordict of views of it.
 
 A consolidated tensordict pickles and moves between devices faster,
-because its leaves are one block of memory. The result is locked (see
-[`lock_()`](tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)): you can write into its leaves in place, but you
-cannot add or remove entries.
+because its leaves are one block of memory: [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to),
+[`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle), [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) and [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast) move that block
+in one copy. The result is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)): you can
+write into its leaves in place, but you cannot add or remove entries.
+
+If the tensordict is already consolidated, `self` is returned and
+the other arguments are ignored. A `filename` other than its own
+file writes nothing: `td.contiguous().consolidate(filename=other)`
+writes a new file.
 
 Parameters:
 
-**filename** (*Path**,**optional*) - an optional file path for a memory-mapped tensor
-to use as a storage for the tensordict.
+**filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - a file to use as the storage. The
+leaves are views into a memory map of the file, and the
+metadata is written after them, so that
+[`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) can read the file back. Defaults to
+`None`, which keeps the storage in memory.
 
 Keyword Arguments:
 
-- **num_threads** (*integer**,**optional*) - the number of threads to use for populating
-the storage. The leaves are copied by contiguous chunks of
-roughly equal byte size, one chunk per thread. When writing to
-a memory-mapped file with all leaves already on the target
-device, `num_threads` is ignored and a single fused copy is
-used instead, as concurrent writes to a fresh file mapping are
-slower than a sequential one on most filesystems.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - an optional device where the storage must be
-instantiated.
-- **non_blocking** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - `non_blocking` argument passed to [`copy_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_).
-- **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the resulting tensordict is the same
-as `self` with updated values. Defaults to `False`.
-- **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and `num_threads>1`,
-the method will return a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture)
-while the copies keep running in the background. The consolidated
-tensordict can be queried using `future.result()`. Incompatible
-with `use_buffer=True` and `non_blocking=True`. Defaults to
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that copy the
+leaves into the storage, by chunks of about equal size. When
+`filename` is given, `return_early=False` and all the
+leaves are on the CPU, one copy is faster and `num_threads`
+is ignored. Defaults to `0`, which copies in the calling
+thread.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+storage. Exclusive with `filename`, unless it is `"cpu"`.
+Defaults to `None`, which uses the device of the tensordict,
+or the CPU if it has none.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+can run asynchronously with respect to the host. Defaults to
 `False`.
-- **use_buffer** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and a filename is passed, an intermediate
-local buffer will be created in shared memory, and the data will be copied at
-the storage location as a last step. This may be faster than writing directly
-to a distant physical memory (e.g., NFS).
-Defaults to `False`.
-- **share_memory** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the storage will be placed in shared memory.
-Defaults to `False`.
-- **pin_memory** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether the consolidated data should be placed in pinned
-memory. Defaults to `False`.
-- **metadata** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the metadata will be stored alongside the
-common storage. If a filename is provided, this is without effect.
-Storing the metadata can be useful when one wants to control how serialization
-is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
-differently if the metadata is or isn't available.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the leaves of the tensordict
+are replaced by the views, and `self` is returned. Defaults
+to `False`.
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `num_threads > 1`,
+returns a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) at once,
+while the threads copy the leaves: `future.result()` waits
+for them and returns the tensordict. Not supported with
+`use_buffer=True` or `non_blocking=True`. Defaults to
+`False`.
+- **use_buffer** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `filename` is given,
+the leaves are copied into a buffer in shared memory, which is
+written to the file at the end. This can be faster on a remote
+file system (for example NFS). In-place writes into the leaves
+then do not reach the file. Defaults to `False`.
+- **share_memory** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the storage is placed
+in shared memory. Defaults to `False`.
+- **pin_memory** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the storage is placed in
+pinned memory. Defaults to `False`.
+- **metadata** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the structure of the
+tensordict is stored with the storage, which changes how the
+result is pickled; [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) and [`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote) use
+it. It is always stored when `filename` is given. Defaults to
+`False`.
+
+Returns:
+
+A consolidated tensordict, `self` if `inplace=True`, or a
+[`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) of it if
+`return_early=True` and `num_threads > 1`.
 
 Note
 
-If the tensordict is already consolidated, all arguments but `filename` are
-ignored and `self` is returned. Call [`contiguous()`](tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) to re-consolidate.
-
-Note
-
-The file written with `filename` is a snapshot of the batch sizes and names
-at the time of the call: [`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) reads them back from it.
-The leaves are views into the file, so in-place writes into them reach it
-(unless `use_buffer=True`), but setting `batch_size` or `names` later
-does not. Call `consolidate(filename=filename)` again on the result to write
-the current ones into the file. Another file name writes nothing:
-`td.contiguous().consolidate(filename=other)` writes a new file. Nothing
-is written either if the file has been deleted or replaced, or has changed
-size, since this tensordict was written to it.
-
-Note
-
-A pickle (or [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save), [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send), [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast)) of a
-consolidated tensordict is rebuilt from metadata recorded here. Setting
-`batch_size` or `names` on the consolidated tensordict updates that
-metadata; setting them directly on a nested tensordict, as in
-`td["nested"].batch_size = ...`, may not. Call `consolidate()` again
-afterwards: on a consolidated tensordict, it writes the current batch sizes
-and names into that metadata.
+The file written with `filename` holds the batch sizes and names
+at the time of the call. Setting `batch_size` or `names` on the
+result later does not change the file: call
+`consolidate(filename=filename)` again on the result to write
+them. Likewise, a pickle of the result is rebuilt from metadata
+recorded here: setting the batch size of a nested tensordict, as in
+`td["nested"].batch_size = ...`, may not update it until
+`consolidate()` is called again.
 
 Examples
 

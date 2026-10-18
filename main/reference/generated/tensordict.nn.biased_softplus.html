@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,15 +1643,15 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.nn.biased_softplus">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">biased_softplus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.01</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.biased_softplus" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a></p>
-<p>A biased softplus module.</p>
-<p>The bias indicates the value that is to be returned when a zero-tensor is
-passed through the transform. The module computes
-<code class="docutils literal notranslate"><span class="pre">softplus(x</span> <span class="pre">+</span> <span class="pre">inv_softplus(bias</span> <span class="pre">-</span> <span class="pre">min_val))</span> <span class="pre">+</span> <span class="pre">min_val</span></code>.</p>
+<p>A softplus shifted so that it returns <code class="docutils literal notranslate"><span class="pre">bias</span></code> for a zero input and stays above <code class="docutils literal notranslate"><span class="pre">min_val</span></code>.</p>
+<p>The module computes <code class="docutils literal notranslate"><span class="pre">softplus(x</span> <span class="pre">+</span> <span class="pre">inv_softplus(bias</span> <span class="pre">-</span> <span class="pre">min_val))</span> <span class="pre">+</span> <span class="pre">min_val</span></code>.
+<a class="reference internal" href="tensordict.nn.mappings.html#tensordict.nn.mappings" title="tensordict.nn.mappings"><code class="xref py py-func docutils literal notranslate"><span class="pre">mappings()</span></code></a> returns it for the keys <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}&quot;</span></code>
+and <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}_{min_val}&quot;</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>bias</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – the output for a zero input.</p></li>
-<li><p><strong>min_val</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – minimum value of the output. Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p></li>
+<li><p><strong>min_val</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – the lower bound of the output. Defaults to <code class="docutils literal notranslate"><span class="pre">0.01</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2038,7 +2038,7 @@ registered hooks while the latter silently ignores them.</p>
        "headline": "biased_softplus",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - biased_softplus",
        "url": "/reference/generated/tensordict.nn.biased_softplus.html",
-       "articleBody": "biased_softplus# class tensordict.nn.biased_softplus(bias: float, min_val: float = 0.01)# Bases: Module A biased softplus module. The bias indicates the value that is to be returned when a zero-tensor is passed through the transform. The module computes softplus(x + inv_softplus(bias - min_val)) + min_val. Parameters: bias (float) \u2013 the output for a zero input. min_val (float, optional) \u2013 minimum value of the output. Defaults to 0.01. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import biased_softplus \u003e\u003e\u003e f = biased_softplus(1.0) \u003e\u003e\u003e f(torch.zeros(2)) tensor([1., 1.]) forward(x: Tensor) \u2192 Tensor# Define the computation performed at every call. Should be overridden by all subclasses. Note Although the recipe for forward pass needs to be defined within this function, one should call the Module instance afterwards instead of this since the former takes care of running the registered hooks while the latter silently ignores them.",
+       "articleBody": "biased_softplus# class tensordict.nn.biased_softplus(bias: float, min_val: float = 0.01)# Bases: Module A softplus shifted so that it returns bias for a zero input and stays above min_val. The module computes softplus(x + inv_softplus(bias - min_val)) + min_val. mappings() returns it for the keys \"biased_softplus_{bias}\" and \"biased_softplus_{bias}_{min_val}\". Parameters: bias (float) \u2013 the output for a zero input. min_val (float, optional) \u2013 the lower bound of the output. Defaults to 0.01. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import biased_softplus \u003e\u003e\u003e f = biased_softplus(1.0) \u003e\u003e\u003e f(torch.zeros(2)) tensor([1., 1.]) forward(x: Tensor) \u2192 Tensor# Define the computation performed at every call. Should be overridden by all subclasses. Note Although the recipe for forward pass needs to be defined within this function, one should call the Module instance afterwards instead of this since the former takes care of running the registered hooks while the latter silently ignores them.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

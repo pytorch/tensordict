@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6027+g04238197f.d20261018)">
+<meta name="llm:version" content="main (0.15.0.dev6028+g50ef77ea0.d20261018)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6027+g04238197f.d20261018)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6028+g50ef77ea0.d20261018)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1642,34 +1642,53 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.make_memmap">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">make_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><span class="pre">Size</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">robust_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.memmap.MemoryMappedTensor"><span class="pre">MemoryMappedTensor</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.make_memmap" title="Link to this definition">#</a></dt>
-<dd><p>Creates an empty memory-mapped tensor given a shape and possibly a dtype.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
-will need to be updated using the method <a class="reference internal" href="tensordict.TensorDictBase.memmap_refresh_.html#tensordict.TensorDictBase.memmap_refresh_" title="tensordict.TensorDictBase.memmap_refresh_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_refresh_()</span></code></a>.</p>
-</div>
-<p>Writing an existing entry will result in an error.</p>
+<dd><p>Adds an uninitialized memory-mapped tensor of shape <code class="docutils literal notranslate"><span class="pre">shape</span></code> at <code class="docutils literal notranslate"><span class="pre">key</span></code>, and returns it.</p>
+<p>The tensordict must be memory-mapped (see <a class="reference internal" href="tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>), and the
+file of the new tensor goes in its directory.</p>
+<p>The entry is written even though a memory-mapped tensordict is
+locked. Other tensordicts that share its files, for example in other
+processes, see it only after
+<a class="reference internal" href="tensordict.TensorDictBase.memmap_refresh_.html#tensordict.TensorDictBase.memmap_refresh_" title="tensordict.TensorDictBase.memmap_refresh_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_refresh_()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the new entry to write. If the key is already present in the tensordict, an
-exception is raised.</p></li>
-<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><em>equivalent</em><em>, </em><em>torch.Tensor for nested tensors</em>) – the shape of the tensor to write.</p></li>
+<li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the new entry. A tuple key creates
+the missing nested tensordicts.</p></li>
+<li><p><strong>shape</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a>) – the shape of the new tensor,
+or a tensor of shapes for a nested tensor.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em>, </em><em>optional</em>) – the dtype of the new tensor.</p></li>
-<li><p><strong>robust_key</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), uses robust key encoding that safely
-handles keys with path separators and special characters. If <code class="docutils literal notranslate"><span class="pre">False</span></code>,
-uses legacy behavior (keys used as-is). If <code class="docutils literal notranslate"><span class="pre">None</span></code>, uses the default
-robust behavior.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em>, </em><em>optional</em>) – the dtype of the new tensor.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which uses
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.get_default_dtype.html#torch.get_default_dtype" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.get_default_dtype()</span></code></a>.</p></li>
+<li><p><strong>robust_key</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, keys are percent-encoded
+in file names, so that every file stays inside the directory of
+the tensordict. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, keys are used as file names
+unchanged. <code class="docutils literal notranslate"><span class="pre">None</span></code> is the same as <code class="docutils literal notranslate"><span class="pre">True</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A new memory mapped tensor.</p>
+<dd class="field-odd"><p>The new <a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a>.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is not memory-mapped, or if the key
+    exists.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">x</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">make_memmap</span><span class="p">((</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">x</span><span class="p">)</span>
+<span class="go">torch.Size([3, 4]) True</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2030,7 +2049,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.make_memmap",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.make_memmap",
        "url": "/reference/generated/tensordict.TensorDictBase.make_memmap.html",
-       "articleBody": "TensorDictBase.make_memmap# TensorDictBase.make_memmap(key: NestedKey, shape: Size | Tensor, *, dtype: dtype | None = None, robust_key: bool | None = True) \u2192 MemoryMappedTensor# Creates an empty memory-mapped tensor given a shape and possibly a dtype. Warning This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes will need to be updated using the method memmap_refresh_(). Writing an existing entry will result in an error. Parameters: key (NestedKey) \u2013 the key of the new entry to write. If the key is already present in the tensordict, an exception is raised. shape (Size or equivalent, torch.Tensor for nested tensors) \u2013 the shape of the tensor to write. Keyword Arguments: dtype (dtype, optional) \u2013 the dtype of the new tensor. robust_key (bool, optional) \u2013 if True (default), uses robust key encoding that safely handles keys with path separators and special characters. If False, uses legacy behavior (keys used as-is). If None, uses the default robust behavior. Returns: A new memory mapped tensor. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.make_memmap# TensorDictBase.make_memmap(key: NestedKey, shape: Size | Tensor, *, dtype: dtype | None = None, robust_key: bool | None = True) \u2192 MemoryMappedTensor# Adds an uninitialized memory-mapped tensor of shape shape at key, and returns it. The tensordict must be memory-mapped (see memmap()), and the file of the new tensor goes in its directory. The entry is written even though a memory-mapped tensordict is locked. Other tensordicts that share its files, for example in other processes, see it only after memmap_refresh_(). Parameters: key (NestedKey) \u2013 the key of the new entry. A tuple key creates the missing nested tensordicts. shape (Size or Tensor) \u2013 the shape of the new tensor, or a tensor of shapes for a nested tensor. Keyword Arguments: dtype (dtype, optional) \u2013 the dtype of the new tensor. Defaults to None, which uses torch.get_default_dtype(). robust_key (bool, optional) \u2013 if True, keys are percent-encoded in file names, so that every file stays inside the directory of the tensordict. If False, keys are used as file names unchanged. None is the same as True. Defaults to True. Returns: The new MemoryMappedTensor. Raises: RuntimeError \u2013 if the tensordict is not memory-mapped, or if the key exists. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... td = TensorDict(a=torch.zeros(3), batch_size=[3]).memmap(path) ... x = td.make_memmap((\"nested\", \"b\"), (3, 4)) ... print(td[\"nested\", \"b\"].shape, td[\"nested\", \"b\"] is x) torch.Size([3, 4]) True Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
