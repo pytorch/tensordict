@@ -730,7 +730,6 @@ def pad_sequence(
     max_seq_length = float("-inf")
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
-    keys_copy = list(keys)
     mask_pad_dims = {}
     for i, td in enumerate(list_of_tensordicts):
         if is_tensorclass(td):
@@ -764,9 +763,9 @@ def pad_sequence(
                 mask_key = unravel_key((masks_key, key))
                 mask_pad_dims[mask_key] = min(pos_pad_dim, td.ndim)
                 list_of_dicts[i][mask_key] = torch.ones(mask_shape, dtype=torch.bool)
-                keys_copy.append(mask_key)
 
-    keys = keys_copy
+    # Each mask key once, in the order of its first sample
+    keys = list(keys) + list(mask_pad_dims)
 
     old_batch_size = list(list_of_tensordicts[0].batch_size)
     # The batch dim set to max_seq_length, if any: non-tensor entries are

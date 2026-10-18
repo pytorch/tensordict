@@ -7718,6 +7718,22 @@ class TestGeneric:
             samples,
         )
 
+    def test_pad_sequence_masks_padded_once(self):
+        # https://github.com/pytorch/tensordict/issues/2939
+        samples = [
+            TensorDict({"a": torch.ones(n), ("b", "c"): torch.ones(n, 2)}, [n])
+            for n in range(1, 6)
+        ]
+        with mock.patch(
+            "torch.nn.utils.rnn.pad_sequence", wraps=torch.nn.utils.rnn.pad_sequence
+        ) as padder:
+            padded = pad_sequence(samples, return_mask=True)
+        # one call per entry and one per mask, whatever the number of samples
+        assert padder.call_count == 4
+        assert padded["masks", "b", "c"].tolist() == [
+            [True] * n + [False] * (5 - n) for n in range(1, 6)
+        ]
+
     def test_pad_sequence_padding_side(self):
         # https://github.com/pytorch/tensordict/issues/2808
         d1 = TensorDict(
