@@ -8867,9 +8867,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Returns:
             The results joined along ``dim``, a tensordict or a tensor
-            depending on what ``fn`` returns. When ``out`` is given, ``out``
-            if it is in regular memory, and ``None`` if it is shared or
-            memory-mapped. ``None`` if ``fn`` returns ``None`` for every chunk.
+            depending on what ``fn`` returns. When ``out`` is given, ``out``.
+            Otherwise, ``None`` if ``fn`` returns ``None`` for every chunk.
 
         Examples:
             Run this example as a script, not in a REPL: the worker processes
@@ -9167,8 +9166,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 )
                 return _CloudpickleWrapper(newfn), _zip_strict(self_split, out_split)
 
+            # The workers fill out and return None, so the loop below leaves
+            # out alone and returns it.
             fn, self_split = wrap_fn_with_out(fn, out)
-            out = None
 
         imap_fn = pool.imap if not shuffle else pool.imap_unordered
         imap = imap_fn(fn, self_split, call_chunksize)
