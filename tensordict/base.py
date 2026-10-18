@@ -7844,7 +7844,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 non-tensor data too.
             out (TensorDictBase, optional): a tensordict to write the results
                 into, instead of a new one. When ``batch_size`` or ``device`` is
-                given, ``out`` must have it. See the warning below about
+                given, ``out`` must have it. A lazy stack can use a different
+                stack dimension from ``out``. See the warning below about
                 ``out=self``. Defaults to ``None``.
             **constructor_kwargs: accepted and ignored.
 

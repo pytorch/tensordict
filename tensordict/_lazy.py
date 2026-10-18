@@ -3543,12 +3543,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True. Got args "
                 f"batch_size={batch_size}, device={device}, names={names}, constructor_kwargs={constructor_kwargs}"
             )
+        out_tensordict = out
         if out is not None:
             if not isinstance(out, LazyStackedTensorDict):
                 raise ValueError(
                     "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
                 )
-            out = out.tensordicts
+            # Members only line up when both stacks use the same dimension.
+            out = (
+                out.tensordicts
+                if out.stack_dim == self.stack_dim
+                else out.unbind(self.stack_dim)
+            )
         elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
             batch_size = torch.Size(batch_size)
@@ -3634,7 +3640,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if all(r is None for r in results) and filter_empty in (None, True):
             return
         if not inplace:
-            if not results or any(r is not None for r in results):
+            if out_tensordict is not None:
+                if out_tensordict.stack_dim != self.stack_dim:
+                    out_tensordict.update(type(self)(*out, stack_dim=self.stack_dim))
+                out = out_tensordict
+            elif not results or any(r is not None for r in results):
                 if filter_empty in (None, True):
                     # A member with no result becomes an empty member, as with
                     # filter_empty=False

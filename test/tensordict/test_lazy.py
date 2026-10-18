@@ -788,6 +788,40 @@ class TestLazyStackedTensorDict:
             is None
         )
 
+    @pytest.mark.parametrize("batch_size", [(2, 2), (2, 3)])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("out_stack_dim", [0, 1])
+    @pytest.mark.parametrize("named", [False, True])
+    def test_apply_out_stack_dim(self, batch_size, stack_dim, out_stack_dim, named):
+        data = torch.arange(math.prod(batch_size)).reshape(batch_size)
+        dense = TensorDict(
+            a=data, nested={"b": data.unsqueeze(-1)}, batch_size=batch_size
+        )
+        stack = lazy_stack(dense.unbind(stack_dim), stack_dim)
+        out = lazy_stack(torch.zeros_like(dense).unbind(out_stack_dim), out_stack_dim)
+        if named:
+            result = stack.named_apply(lambda key, value: value + 1, out=out)
+        else:
+            result = stack.apply(lambda value: value + 1, out=out)
+        torch.testing.assert_close(out.to_tensordict(), dense + 1)
+        assert result is out
+
+    @pytest.mark.parametrize("out_stack_dim", [0, 1])
+    @pytest.mark.parametrize("filter_empty", [False, True, None])
+    def test_apply_out_filtered_member(self, out_stack_dim, filter_empty):
+        dense = TensorDict(a=torch.arange(4).reshape(2, 2), batch_size=[2, 2])
+        stack = lazy_stack(dense.unbind(0), 0)
+        out = lazy_stack(torch.full_like(dense, 7).unbind(out_stack_dim), out_stack_dim)
+        result = stack.apply(
+            lambda value: value + 1 if value[0] else None,
+            out=out,
+            filter_empty=filter_empty,
+        )
+        assert result is out
+        torch.testing.assert_close(out["a"], torch.tensor([[7, 7], [3, 4]]))
+        assert stack.apply(lambda value: None, out=out, filter_empty=True) is None
+        torch.testing.assert_close(out["a"], torch.tensor([[7, 7], [3, 4]]))
+
     def test_apply_returns_self_and_kwargs(self):
         tds = [
             TensorDict(
