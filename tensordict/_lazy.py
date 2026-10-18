@@ -1074,13 +1074,17 @@ class LazyStackedTensorDict(TensorDictBase):
     # every member.
     @property
     def _is_shared(self):
-        return bool(self.tensordicts) and all(td._is_shared for td in self.tensordicts)
+        return len(self.tensordicts) > 0 and all(
+            td._is_shared for td in self.tensordicts
+        )
 
     # Override: the flag holds when the stack has members and it holds for
     # every member.
     @property
     def _is_memmap(self):
-        return bool(self.tensordicts) and all(td._is_memmap for td in self.tensordicts)
+        return len(self.tensordicts) > 0 and all(
+            td._is_memmap for td in self.tensordicts
+        )
 
     @property
     @_cache_while_locked  # noqa: B019
@@ -1410,7 +1414,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # and raises for heterogeneous shapes. A key of the stack is a key of
         # every member, so the first member is enough to know that the stack
         # has no non-tensor entry.
-        return bool(self.tensordicts) and self.tensordicts[0]._has_non_tensor
+        return len(self.tensordicts) > 0 and self.tensordicts[0]._has_non_tensor
 
     # Override: the names are stored on the members and the stack dim.
     def _erase_names(self):
@@ -6247,7 +6251,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
         new_dims = self.add_missing_dims(
             len(source_tensor.shape), self.custom_op_kwargs["dims"]
         )
-        kwargs = deepcopy(self.custom_op_kwargs)
+        kwargs = dict(self.custom_op_kwargs)
         kwargs.update({"dims": new_dims})
         return kwargs
 

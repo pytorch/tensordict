@@ -542,6 +542,8 @@ def _slice_length(index: slice, size: int) -> int:
         stop = stop + size
     if step is None:
         step = 1
-    start = torch.sym_min(torch.sym_max(start, 0), size)
-    stop = torch.sym_min(torch.sym_max(stop, 0), size)
-    return (torch.sym_max(stop - start, 0) + step - 1) // step
+    # Builtin min and max: Dynamo calls torch.sym_min and torch.sym_max for
+    # SymInts, and the Dynamo of torch 2.11 fails on torch.sym_max of two ints.
+    start = min(max(start, 0), size)
+    stop = min(max(stop, 0), size)
+    return (max(stop - start, 0) + step - 1) // step
