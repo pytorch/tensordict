@@ -97,7 +97,7 @@ classifiers = [
     "Development Status :: 4 - Beta"
 ]
 dependencies = [
-    "torch>=2.13.0a0",
+    "torch>=2.11.0a0",
     "numpy",
     "cloudpickle",
     # only for tensordict's deprecated implement_for aliases

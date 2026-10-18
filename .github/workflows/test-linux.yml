@@ -301,7 +301,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CU_VERSION: cpu
-          TORCH_VERSION: "2.13"
+          TORCH_VERSION: "2.11"
           # tensordict does not require NumPy 2: this job tests NumPy 1
           NUMPY_SPEC: "<2"
           # pytest-xdist workers for run_test.sh; the runner has 48 CPUs.
