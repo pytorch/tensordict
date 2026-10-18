@@ -939,6 +939,56 @@ def test_inplace_read_only_warns(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("file_state", ["closed", "read_only"])
+@pytest.mark.parametrize(
+    "write",
+    [
+        lambda td: td.__setitem__("new", torch.ones(2)),
+        lambda td: td.__setitem__("x", torch.ones(2)),
+        lambda td: td.set(("n", "new"), torch.ones(2)),
+        lambda td: td.update({"new": torch.ones(2)}),
+        lambda td: td.update({"x": torch.ones(2)}),
+        lambda td: td.set("x", torch.ones(2), inplace=True),
+    ],
+    ids=[
+        "setitem_new",
+        "setitem",
+        "set_nested_new",
+        "update_new",
+        "update",
+        "set_inplace",
+    ],
+)
+def test_write_that_cannot_be_made_raises(tmp_path, file_state, write):
+    # #2964: these writes went silently missing from the file
+    path = tmp_path / "file.h5"
+    td = TensorDict(x=torch.zeros(2), n=TensorDict(y=torch.zeros(2)), batch_size=[2])
+    h5td = td.to_h5(path)
+    h5td.close()
+    if file_state == "read_only":
+        h5td = PersistentTensorDict.from_h5(path)
+    # h5py's error; replacing an entry of a read-only file raises a KeyError
+    with pytest.raises((ValueError, OSError, KeyError)):
+        write(h5td)
+    h5td.close()
+    h5td = PersistentTensorDict.from_h5(path)
+    torch.testing.assert_close(h5td.to_tensordict(), td)
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_write_rejected_dataset_kwargs_raises(tmp_path):
+    # #2964: h5py rejects the chunks of a 2-element array, and the entry was
+    # not written, without an error
+    h5td = PersistentTensorDict(
+        filename=tmp_path / "file.h5", batch_size=[], mode="w", chunks=(4,)
+    )
+    with pytest.raises(ValueError, match="Chunk shape"):
+        h5td["x"] = torch.zeros(2)
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_methods_keep_key_order(tmp_path):
     # lerp_ pairs the leaves of its operand with those of the file by key, also
     # when a nested key comes first
