@@ -751,6 +751,27 @@ class TestPointwiseOps:
         assert {key: td.get(key).data_ptr() for key in td.keys()} == data_ptrs
         assert (td == expected).all()
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("op", ["maximum", "minimum", "clamp_min", "clamp_max"])
+    def test_inplace_broadcast_tensor_max_min(self, op, lazy):
+        # The in-place ops broadcast a tensor to the batch dims, as the
+        # out-of-place ones do (#2962)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(2, 3),
+            nested=TensorDict(b=torch.randn(2, 3, 4), batch_size=[2, 3]),
+            batch_size=[2, 3],
+        )
+        other = torch.randn(3)
+        expected = getattr(td, op)(other)
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        tds = td.tensordicts if lazy else [td]
+        data_ptrs = [x.data_ptr() for t in tds for x in t.values(True, True)]
+        assert getattr(td, op + "_")(other) is td
+        assert [x.data_ptr() for t in tds for x in t.values(True, True)] == data_ptrs
+        assert_allclose_td(td, expected)
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensor(self, shape):
         torch.manual_seed(0)
@@ -1014,6 +1035,10 @@ class TestPointwiseOps:
             ("pow_", (other,)),
             ("addcmul_", (other, other)),
             ("addcdiv_", (other, other)),
+            ("maximum_", (other,)),
+            ("minimum_", (other,)),
+            ("clamp_min_", (other,)),
+            ("clamp_max_", (other,)),
         ]:
             assert getattr(td, name)(*args) is td
             expected = getattr(expected, name[:-1])(*args)
