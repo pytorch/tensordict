@@ -1082,17 +1082,19 @@ class LazyStackedTensorDict(TensorDictBase):
     # every member.
     @property
     def _is_shared(self):
-        return len(self.tensordicts) > 0 and all(
-            td._is_shared for td in self.tensordicts
-        )
+        # A truth test, not bool(): the Dynamo of torch 2.11 cannot call bool()
+        # on a list of tensordicts.
+        if not self.tensordicts:
+            return False
+        return all(td._is_shared for td in self.tensordicts)
 
     # Override: the flag holds when the stack has members and it holds for
     # every member.
     @property
     def _is_memmap(self):
-        return len(self.tensordicts) > 0 and all(
-            td._is_memmap for td in self.tensordicts
-        )
+        if not self.tensordicts:
+            return False
+        return all(td._is_memmap for td in self.tensordicts)
 
     @property
     @_cache_while_locked  # noqa: B019
@@ -1422,7 +1424,9 @@ class LazyStackedTensorDict(TensorDictBase):
         # and raises for heterogeneous shapes. A key of the stack is a key of
         # every member, so the first member is enough to know that the stack
         # has no non-tensor entry.
-        return len(self.tensordicts) > 0 and self.tensordicts[0]._has_non_tensor
+        if not self.tensordicts:
+            return False
+        return self.tensordicts[0]._has_non_tensor
 
     # Override: the names are stored on the members and the stack dim.
     def _erase_names(self):
