@@ -13,6 +13,7 @@ import pathlib
 import pickle
 import re
 import threading
+import typing
 import unittest
 import warnings
 import weakref
@@ -39,6 +40,7 @@ from tensordict import (
     set_list_to_stack,
     tensorclass,
     TensorDict,
+    TensorDictBase,
     unravel_key,
     unravel_key_list,
 )
@@ -2125,6 +2127,11 @@ class TestTDSequence:
         assert isinstance(det_part, TensorDictSequential)
         params = seq.get_dist_params(TensorDict(x=torch.zeros(3)))
         assert (params["loc"] == 1).all()
+
+    def test_prob_seq_get_dist_params_return_hint(self):
+        # get_dist_params returns the tensordict, not a (distribution, td) tuple
+        hints = typing.get_type_hints(ProbabilisticTensorDictSequential.get_dist_params)
+        assert hints["return"] is TensorDictBase
 
     def test_prob_seq_no_prob_modules(self):
         """Test ProbabilisticTensorDictSequential with no probabilistic modules.
