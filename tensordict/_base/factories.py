@@ -45,17 +45,24 @@ def from_any(
     Keyword Args:
         auto_batch_size (bool, optional): if ``True``, sets the batch size to
             the largest leading shape that all the entries share. Exclusive
-            with ``batch_size``. Defaults to ``False``.
+            with ``batch_size``, except for a dict, where ``batch_size``
+            wins. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
             ``None``.
         batch_size (torch.Size or list of int, optional): the batch size of
             the result: the leading dimensions that all its entries share.
-            Exclusive with ``auto_batch_size``. Defaults to ``None``.
+            Exclusive with ``auto_batch_size``, except for a dict, where
+            ``batch_size`` wins and no batch size is computed. Defaults to
+            ``None``.
 
     Returns:
         A tensordict (a :class:`~tensordict.PersistentTensorDict` for an HDF5
@@ -101,8 +108,12 @@ def from_tuple(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
@@ -155,8 +166,12 @@ def from_namedtuple(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
@@ -209,8 +224,12 @@ def from_struct_array(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
@@ -345,8 +364,12 @@ def from_h5(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         batch_size (torch.Size or list of int, optional): the batch size of
             the result: the leading dimensions that all its entries share.
             Exclusive with ``auto_batch_size``. Defaults to ``None``, which
@@ -398,8 +421,12 @@ def from_zarr(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         batch_size (torch.Size or list of int, optional): the batch size of
             the result: the leading dimensions that all its entries share.
             Exclusive with ``auto_batch_size``. Defaults to ``None``, which
@@ -455,8 +482,12 @@ def from_pandas(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
@@ -518,8 +549,12 @@ def from_csv(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
@@ -576,8 +611,12 @@ def from_parquet(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to
@@ -638,8 +677,12 @@ def from_json(
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Ignored without ``auto_batch_size``.
-            Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): the device of the
             result. Leaves on another device are moved to it. ``None`` leaves
             each leaf where it is, and the result has no device. Defaults to

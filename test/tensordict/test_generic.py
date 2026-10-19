@@ -3335,6 +3335,76 @@ class TestGeneric:
         with pytest.raises(ValueError):
             TensorDict.from_list(data, batch_size=[2, 3], names=["x"])
 
+    def test_from_list_tensor_collections_warn(self):
+        # https://github.com/pytorch/tensordict/issues/2979
+        td = TensorDict(a=torch.zeros(3))
+        td3 = TensorDict(a=torch.zeros(3), batch_size=[3])
+        with pytest.warns(FutureWarning, match="batch_size=.2, 3. for the tensor"):
+            assert TensorDict.from_list([td, td], batch_size=[2, 3]).batch_size == (2,)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            out = TensorDict.from_list([td3, td3], batch_size=[2])
+        assert out.batch_size == (2, 3)
+        with pytest.warns(FutureWarning, match="device=meta"):
+            assert TensorDict.from_list([td, td], device="meta").device is None
+        # silent when the result has the batch size and device asked for
+        data = [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            out = TensorDict.from_list([td3, td3], batch_size=[2, 3])
+            assert out.batch_size == (2, 3)
+            assert TensorDict.from_list([td, td], batch_size=2).batch_size == (2,)
+            out = TensorDict.from_list([td3.to("cpu"), td3.to("cpu")], device="cpu")
+            assert out.device == torch.device("cpu")
+            out = TensorDict.from_list(data, batch_size=[2, 3], device="meta")
+            assert out.batch_size == (2, 3) and out.device == torch.device("meta")
+            assert TensorDict.from_list([td, td], batch_dims=2).batch_size == (2,)
+
+    def test_from_batch_dims_without_auto_batch_size_warns(self):
+        # https://github.com/pytorch/tensordict/issues/2979
+        @dataclass
+        class Data:
+            a: torch.Tensor
+
+        NT = namedtuple("NT", ["a"])
+        x = torch.zeros(3, 4)
+        calls = [
+            lambda **kw: TensorDict.from_any({"a": x}, **kw),
+            lambda **kw: TensorDict.from_any({"a": {"b": x}}, **kw),
+            lambda **kw: TensorDict.from_any(Data(x), **kw),
+            lambda **kw: TensorDict.from_any(NT(x), **kw),
+            lambda **kw: TensorDict.from_tuple((x,), **kw),
+            lambda **kw: TensorDict.from_namedtuple(NT(x), **kw),
+            lambda **kw: TensorDict.from_dataclass(Data(x), **kw),
+            lambda **kw: TensorDict.from_dataclass(Data(x), as_tensorclass=True, **kw),
+            lambda **kw: TensorDict.from_pytree({"a": x}, **kw),
+            lambda **kw: TensorDict.from_struct_array(
+                np.zeros((3, 4), dtype=[("a", "f4")]), **kw
+            ),
+        ]
+        for call in calls:
+            expected = call(auto_batch_size=True, batch_dims=1)
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                td = call(batch_dims=1)
+            # the result is the one without batch_dims, until 0.17
+            assert td.batch_size == call().batch_size != expected.batch_size
+        with pytest.warns(FutureWarning, match="from_tuple ignores batch_dims=1"):
+            td = TensorDict.from_tuple((x,), batch_dims=1, batch_size=[3])
+        assert td.batch_size == (3,)
+        # silent where turning auto_batch_size on gives the same result
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert TensorDict.from_tuple((1, 2), batch_dims=1).batch_size == ()
+            assert TensorDict.from_any(x, batch_dims=1) is x
+            assert TensorDict.from_any(["a", "b"], batch_dims=1).batch_size == (2,)
+            td = TensorDict.from_struct_array(
+                np.zeros(3, dtype=[("a", "f4")]), batch_dims=1
+            )
+            assert td.batch_size == (3,)
+            td = TensorDict.from_pytree({"a": x}, batch_size=[3], batch_dims=1)
+            assert td.batch_size == (3,)
+            td = TensorDict.from_dict({"a": x}, auto_batch_size=False, batch_dims=1)
+            assert td.batch_size == ()
+
     def test_from_dict_instance(self):
         @tensorclass(autocast=True)
         class MyClass:
@@ -3659,8 +3729,9 @@ class TestGeneric:
         assert type(pytree_recon) is NT
         assert (pytree_recon.a == nt.a).all()
         assert (pytree_recon.b == nt.b).all()
-        # without auto_batch_size, batch_dims is ignored, as for lists and dicts
-        assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
+        # without auto_batch_size, batch_dims is ignored until TensorDict 0.17
+        with pytest.warns(FutureWarning, match="from_pytree ignores batch_dims"):
+            assert TensorDict.from_pytree(nt, batch_dims=1).batch_size == ()
         # an int batch_size with batch_dims gives the same batch size as for lists
         td = TensorDict.from_pytree(nt, batch_size=3, batch_dims=1)
         assert td.batch_size == (3,)

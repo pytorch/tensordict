@@ -89,6 +89,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _warn_batch_dims_ignored,
     _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
@@ -840,8 +841,12 @@ def from_dataclass(
             the batch size to the largest leading shape that all the entries
             share. Exclusive with ``batch_size``. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Defaults to ``None``, which allows
-            as many as the entries share.
+            number of batch dimensions. Ignored without ``auto_batch_size``,
+            with a ``FutureWarning`` when it would change the result.
+            Starting with TensorDict 0.17, the default will change to
+            turning on ``auto_batch_size`` when ``batch_dims`` is given, as
+            ``from_dict`` does. Defaults to ``None``, which allows as many as
+            the entries share.
         batch_size (torch.Size or list of int, optional): for an instance, the
             batch size of the result: the leading dimensions that all its
             entries share. Defaults to ``None``, which gives an empty batch
@@ -1006,6 +1011,8 @@ def from_dataclass(
                 TensorDictBase._CONFLICTING_BATCH_SIZES.format("from_dataclass")
             )
         result = result.auto_batch_size_(batch_dims=batch_dims)
+    elif batch_dims is not None:
+        _warn_batch_dims_ignored("from_dataclass", result, batch_dims, batch_size)
     if dest_cls is None:
         _warn_exclusive_flags()
     return result

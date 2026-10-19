@@ -182,7 +182,12 @@ def from_pytree(
             the largest leading shape that all the leaves share. Defaults to
             ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
-            number of batch dimensions. Defaults to ``None``.
+            number of batch dimensions. Ignored without
+            ``auto_batch_size``, with a ``FutureWarning`` when it would
+            change the result. Starting with TensorDict 0.17, the default
+            will change to turning on ``auto_batch_size`` when
+            ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+            ``None``.
 
     Returns:
         A :class:`~tensordict.TensorDict`.
