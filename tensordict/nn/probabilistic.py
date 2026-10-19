@@ -1784,8 +1784,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 Defaults to ``None``.
 
         Keyword Args:
-            **kwargs: not supported: any keyword argument raises a
-                ``RuntimeError``.
+            **kwargs: passed to the modules that are not
+                :class:`~tensordict.nn.ProbabilisticTensorDictModule`, as in
+                :meth:`forward` with ``return_composite=True``.
 
         Returns:
             The tensordict that holds the distribution parameters.
@@ -1821,7 +1822,21 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             else:
                 raise ValueError("Could not find a default interaction in the modules.")
         with set_interaction_type(type):
-            return tds(tensordict, tensordict_out, **kwargs)
+            if not kwargs:
+                return tds(tensordict, tensordict_out)
+            # TensorDictSequential.forward raises for keyword arguments, so run
+            # the modules here as it does, and pass the keyword arguments on.
+            tensordict_exec = (
+                tensordict if tensordict_out is None else tensordict.copy()
+            )
+            for m in tds._module_iter():
+                module_kwargs = (
+                    {} if isinstance(m, ProbabilisticTensorDictModule) else kwargs
+                )
+                tensordict_exec = tds._run_module(m, tensordict_exec, **module_kwargs)
+            if tensordict_out is None:
+                return tensordict_exec
+            return tensordict_out.update(tensordict_exec, keys_to_update=tds.out_keys)
 
     @property
     def log_prob_keys(self):
@@ -1948,7 +1963,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         Keyword Args:
             **kwargs: ignored when ``return_composite`` is ``True``. When it
-                is ``False``, any keyword argument raises a ``RuntimeError``.
+                is ``False``, passed to :meth:`get_dist_params`.
 
         Returns:
             A :class:`torch.distributions.Distribution`.
@@ -2061,6 +2076,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             dist (torch.distributions.Distribution, optional): the
                 distribution. Defaults to ``None``, which builds it with
                 :meth:`get_dist`.
+            **kwargs: if ``dist`` is ``None``, ``return_composite`` is
+                ``False`` and the last module does not override
+                :meth:`ProbabilisticTensorDictModule.log_prob`, passed to
+                :meth:`get_dist`. Otherwise, passed to the ``log_prob`` method
+                of the distribution, or of the last module.
 
         Returns:
             A tensor, or a tensordict for a composite distribution while
@@ -2071,9 +2091,21 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_inp = tensordict.copy()
         else:
             tensordict_inp = tensordict
-        if dist is None:
-            dist = self.get_dist(tensordict_inp)
         return_composite = self.return_composite
+        if dist is None:
+            reroute = bool(kwargs) and not return_composite
+            if reroute:
+                # The base log_prob of the last module takes no keyword
+                # arguments; a subclass that overrides it keeps getting them.
+                leaf = self._last_module
+                while type(leaf).log_prob is ProbabilisticTensorDictSequential.log_prob:
+                    leaf = leaf._last_module
+                reroute = type(leaf).log_prob is ProbabilisticTensorDictModule.log_prob
+            if reroute:
+                dist = self.get_dist(tensordict_inp, **kwargs)
+                kwargs = {}
+            else:
+                dist = self.get_dist(tensordict_inp)
         if return_composite and isinstance(dist, CompositeDistribution):
             # Check the values within the dist - if not set, choose defaults
             lp = dist.log_prob(
@@ -2162,11 +2194,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 ``inplace`` is set). Defaults to ``None``.
 
         Keyword Args:
-            **kwargs: with ``return_composite=True``, passed to the modules
-                that are not
-                :class:`~tensordict.nn.ProbabilisticTensorDictModule`. With
-                ``return_composite=False``, any keyword argument raises a
-                ``RuntimeError``.
+            **kwargs: passed to the modules that are not
+                :class:`~tensordict.nn.ProbabilisticTensorDictModule`, with
+                either value of ``return_composite``.
 
         Returns:
             The tensordict that holds the outputs (see ``inplace``).

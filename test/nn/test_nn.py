@@ -2815,6 +2815,105 @@ class TestTDSequence:
             out = seq(TensorDict(x=x, batch_size=[2]), shift=10.0)
         torch.testing.assert_close(out["i"], x + 10.0)
 
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_probtdseq_receives_kwargs_without_composite(self, nested):
+        # https://github.com/pytorch/tensordict/issues/2976
+        class Shift(nn.Module):
+            def forward(self, x, shift=0.0):
+                return x + shift
+
+        modules = [
+            TensorDictModule(Shift(), in_keys=["x"], out_keys=["loc"]),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        ]
+        if nested:
+            modules = [
+                ProbabilisticTensorDictSequential(*modules, return_composite=False),
+                TensorDictModule(Shift(), in_keys=["a"], out_keys=["loc_b"]),
+                ProbabilisticTensorDictModule(
+                    in_keys={"loc": "loc_b"},
+                    out_keys=["b"],
+                    distribution_class=Normal,
+                    distribution_kwargs={"scale": 1.0},
+                ),
+            ]
+        seq = ProbabilisticTensorDictSequential(*modules, return_composite=False)
+        x = torch.zeros(2)
+
+        def td():
+            return TensorDict(x=x, batch_size=[2])
+
+        with set_interaction_type("mode"):
+            params = seq.get_dist_params(td(), shift=10.0)
+            torch.testing.assert_close(params["loc"], x + 10.0)
+            out = TensorDict()
+            params = seq.get_dist_params(td(), out, shift=10.0)
+            assert params is out
+            assert "x" not in out
+            torch.testing.assert_close(out["loc"], x + 10.0)
+            dist = seq.get_dist(td(), shift=10.0)
+            out = seq(td(), shift=10.0)
+            lp = seq.log_prob(
+                td().update(out.select("a", "b", strict=False)), shift=10.0
+            )
+        if nested:
+            torch.testing.assert_close(params["loc_b"], x + 20.0)
+            torch.testing.assert_close(dist.loc, x + 20.0)
+            torch.testing.assert_close(out["b"], x + 20.0)
+            torch.testing.assert_close(lp, dist.log_prob(x + 20.0))
+        else:
+            torch.testing.assert_close(dist.loc, x + 10.0)
+            torch.testing.assert_close(out["a"], x + 10.0)
+            torch.testing.assert_close(lp, dist.log_prob(x + 10.0))
+        with pytest.raises(TypeError, match="shift"):
+            seq.log_prob(out, dist=dist, shift=10.0)
+
+    @pytest.mark.parametrize("custom", [True, False])
+    @pytest.mark.parametrize("nested_last", [True, False])
+    def test_probtdseq_log_prob_kwargs_last_module(self, custom, nested_last):
+        # https://github.com/pytorch/tensordict/issues/2976: a last module whose
+        # log_prob takes keyword arguments keeps getting them.
+        class Shift(nn.Module):
+            def forward(self, x, shift=0.0):
+                return x + shift
+
+        class ScaledLogProb(ProbabilisticTensorDictModule):
+            def log_prob(self, tensordict, *, dist=None, shift=1.0):
+                return super().log_prob(tensordict, dist=dist) * shift
+
+        cls = ScaledLogProb if custom else ProbabilisticTensorDictModule
+        last = cls(
+            in_keys=["loc"],
+            out_keys=["a"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        if nested_last:
+            last = ProbabilisticTensorDictSequential(
+                TensorDictModule(Shift(), in_keys=["x"], out_keys=["y"]),
+                last,
+                return_composite=False,
+            )
+        seq = ProbabilisticTensorDictSequential(
+            TensorDictModule(Shift(), in_keys=["x"], out_keys=["loc"]),
+            last,
+            return_composite=False,
+        )
+        x = torch.zeros(2)
+        td = TensorDict(x=x, a=x, batch_size=[2])
+        lp = seq.log_prob(td, shift=2.0)
+        if custom:
+            # As on main: the keyword goes to the last module's log_prob only.
+            expected = Normal(x, 1.0).log_prob(x) * 2.0
+        else:
+            expected = Normal(x + 2.0, 1.0).log_prob(x)
+        torch.testing.assert_close(lp, expected)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)
