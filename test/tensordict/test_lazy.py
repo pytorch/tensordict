@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import gc
 import importlib.util
 import io
@@ -775,18 +776,16 @@ class TestLazyStackedTensorDict:
             assert out.tensordicts[1].is_empty()
             assert out.tensordicts[1].batch_size == torch.Size([3])
 
-        check(
-            stack.apply(
-                lambda x: x.grad, filter_empty=filter_empty, num_threads=num_threads
-            )
-        )
+        # apply() takes no num_threads: _fast_apply runs the threaded path
+        if num_threads:
+            apply = functools.partial(stack._fast_apply, num_threads=num_threads)
+        else:
+            apply = stack.apply
+        check(apply(lambda x: x.grad, filter_empty=filter_empty))
         check(stack.grad)
         check(TensorDict(s=stack).grad["s"])
         # All members without a result still give None
-        assert (
-            stack.apply(lambda x: None, filter_empty=True, num_threads=num_threads)
-            is None
-        )
+        assert apply(lambda x: None, filter_empty=True) is None
 
     def test_apply_returns_self_and_kwargs(self):
         tds = [

@@ -1214,11 +1214,12 @@ def _l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
         raise ValueError(
             f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
         )
+    # torch also passes size_average, reduce (and beta), which apply ignored:
+    # keep ignoring them, without apply's warning about unknown keywords
     return input.apply(
         partial(torch.nn.functional.l1_loss, reduction=reduction),
         target,
         *args,
-        **kwargs,
         batch_size=batch_size,
     )
 
@@ -1236,11 +1237,12 @@ def _mse_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
         raise ValueError(
             f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
         )
+    # torch also passes size_average, reduce (and beta), which apply ignored:
+    # keep ignoring them, without apply's warning about unknown keywords
     return input.apply(
         partial(torch.nn.functional.mse_loss, reduction=reduction),
         target,
         *args,
-        **kwargs,
         batch_size=batch_size,
     )
 
@@ -1258,11 +1260,12 @@ def _smooth_l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
         raise ValueError(
             f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
         )
+    # torch also passes size_average, reduce (and beta), which apply ignored:
+    # keep ignoring them, without apply's warning about unknown keywords
     return input.apply(
         partial(torch.nn.functional.smooth_l1_loss, reduction=reduction),
         target,
         *args,
-        **kwargs,
         batch_size=batch_size,
     )
 
