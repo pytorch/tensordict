@@ -2538,6 +2538,37 @@ class TestTDSequence:
             for key in expected:
                 torch.testing.assert_close(lp[key], td[key])
 
+    @pytest.mark.parametrize("aggregate", [True, False])
+    def test_probtdseq_log_prob_key(self, aggregate):
+        # The sequence gives its one log-probability key, and raises a clear
+        # error when it has several.
+        with set_composite_lp_aggregate(aggregate):
+            prob_a = ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+            )
+            prob_b = ProbabilisticTensorDictModule(
+                in_keys={"loc": "a"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+                log_prob_key="lp_b",
+            )
+            seq = ProbabilisticTensorDictSequential(prob_a)
+            assert seq.log_prob_key == prob_a.log_prob_key
+            nested = ProbabilisticTensorDictSequential(
+                TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["loc"]),
+                seq,
+            )
+            assert nested.log_prob_key == prob_a.log_prob_key
+            seq2 = ProbabilisticTensorDictSequential(prob_a, prob_b)
+            with pytest.raises(RuntimeError, match="log_prob_keys"):
+                seq2.log_prob_key
+
     def test_probtdseq_log_prob_aggregate_changed_after_init(self):
         # Modules built while composite_lp_aggregate() was True keep the
         # default names when the sequence is scored with it False.
