@@ -9052,8 +9052,12 @@ class TestGeneric:
             # a tensorclass is indexed by batch index only
             reads.append(lambda: td[key])
         if container != "tensorclass" or key[0] != "x":
-            # a tensorclass returns None for a field that is a tensor
             reads.append(lambda: td.get(key))
+        else:
+            # a tensorclass returns None for a field that is a tensor, and
+            # raises from 0.17 (#2979)
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                assert td.get(key) is None
         match = f"'{'x' if 'x' in key else 'y'}' is a Tensor, not a tensordict"
         for read in reads:
             with pytest.raises(ValueError, match=match):
