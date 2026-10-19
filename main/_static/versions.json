@@ -5,10 +5,15 @@
     "url": "https://docs.pytorch.org/tensordict/main/"
   },
   {
-    "name": "0.14 (stable)",
-    "version": "0.14",
+    "name": "0.15 (stable)",
+    "version": "0.15",
     "url": "https://docs.pytorch.org/tensordict/stable/",
     "preferred": true
+  },
+  {
+    "name": "0.14",
+    "version": "0.14",
+    "url": "https://docs.pytorch.org/tensordict/0.14/"
   },
   {
     "name": "0.13",
