@@ -291,6 +291,33 @@ class TestNativeFunctorch:
         with pytest.raises(RuntimeError, match="inplace arithmetic"):
             vmap(lambda x: getattr(td, name)(x))(torch.zeros(2, 4, 3))
 
+    @pytest.mark.parametrize(
+        "name", ["maximum_", "minimum_", "clamp_min_", "clamp_max_"]
+    )
+    def test_vmap_td_inplace_tensor_from_the_right(self, name):
+        # Under vmap, each leaf meets the tensor as torch broadcasts it, from
+        # the right, one leaf at a time
+        td = TensorDict(a=torch.randn(2, 4, 3), batch_size=[2, 4])
+        other = torch.randn(2, 4, 3)
+        torch_op = {"maximum_": torch.maximum, "minimum_": torch.minimum}.get(
+            name, getattr(torch, name[:-1])
+        )
+        expected = td.apply(lambda x: torch_op(x, other))
+        vmap(lambda t, x: getattr(t, name)(x))(td, other)
+        assert_close(td, expected)
+
+    @pytest.mark.parametrize("op", ["lerp", "addcmul", "addcdiv"])
+    def test_vmap_td_and_tensor_operands(self, op):
+        # A tensordict operand next to a batch-shaped tensor, under vmap
+        td = TensorDict(a=torch.randn(2, 4, 3), batch_size=[2, 4])
+        other = td.apply(lambda x: torch.rand_like(x) + 1)
+        weight = torch.rand(2, 4) + 1
+        result = vmap(lambda t, o, w: getattr(t, op)(o, w))(td, other, weight)
+        expected = torch.stack(
+            [getattr(td[i], op)(other[i], weight[i]) for i in range(2)]
+        )
+        assert_close(result, expected)
+
     def test_vmap_grad_td(self):
         td = TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4, 2)}, batch_size=[4])
 
