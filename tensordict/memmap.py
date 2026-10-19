@@ -239,7 +239,9 @@ class MemoryMappedTensor(torch.Tensor):
             ``filename``. Defaults to ``None``, which keeps the shape of
             ``source``.
         index (index, optional): an index applied to the result, as in
-            ``tensor[index]``. Defaults to ``None``.
+            ``tensor[index]``. With a str or storage ``source``, ``shape`` is
+            the shape of the data before ``index`` is applied. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): ``None`` or ``"cpu"``;
             another device raises a ``ValueError``. Defaults to ``None``.
         filename (str or Path, optional): the file to copy ``source`` to.
