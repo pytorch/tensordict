@@ -54,7 +54,7 @@ code.
        %linear : [num_users=2] = call_module[target=linear](args = (%getitem,), kwargs = {})
        %sigmoid : [num_users=1] = call_function[target=torch.sigmoid](args = (%linear,), kwargs = {})
        return (linear, sigmoid)
-   >>> print(graph_module.code)
+   >>> print(graph_module.code.strip())
    def forward(self, tensordict):
        getitem = tensordict['input'];  tensordict = None
        linear = self.linear(getitem);  getitem = None
@@ -114,7 +114,7 @@ example traces a sequence of two modules:
    ... )
    >>> module = TensorDictSequential(net, masker)
    >>> graph_module = symbolic_trace(module)
-   >>> print(graph_module.code)
+   >>> print(graph_module.code.strip())
    def forward(self, tensordict):
        getitem = tensordict[('input', 'x')]
        _0_fc1 = getattr(self, "0").module.fc1(getitem);  getitem = None
@@ -134,9 +134,9 @@ package and the Graphviz ``dot`` program:
    >>> import os
    >>> import tempfile
    >>> from torch.fx.passes.graph_drawer import FxGraphDrawer
-   >>> g = FxGraphDrawer(graph_module, "sequential")
+   >>> g = FxGraphDrawer(graph_module, "sequential")  # doctest: +SKIP
    >>> path = os.path.join(tempfile.mkdtemp(), "graph.svg")
-   >>> with open(path, "wb") as f:
+   >>> with open(path, "wb") as f:  # doctest: +SKIP
    ...     _ = f.write(g.get_dot_graph().create_svg())
 
 The result is this drawing:

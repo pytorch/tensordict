@@ -510,6 +510,10 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 
 
 class _StrEnum(str, Enum):  # noqa
+    # As in enum.StrEnum, str() and format() give the value, not the name.
+    __str__ = str.__str__
+    __format__ = str.__format__
+
     def __new__(cls, *values):
         if len(values) > 3:
             raise TypeError("too many arguments for str(): %r" % (values,))

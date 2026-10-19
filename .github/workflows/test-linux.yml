@@ -244,6 +244,9 @@ jobs:
           # so one job runs it: the one that gets the newest stable torch
           # (torch 2.15 has no Python 3.10 wheels).
           TENSORDICT_COMPILE_CONFORMANCE: ${{ matrix.python_version == '3.14' && '1' || '' }}
+          # Run the examples of the docstrings and of the docs (run_test.sh)
+          # in the jobs with the newest and the oldest pinned torch.
+          TD_RUN_DOCTESTS: ${{ matrix.python_version == '3.14' && '1' || '' }}
           # The ONNX export tests skip without onnx. One job installs it: a
           # released Python with stable torch, which onnxruntime supports.
           TD_INSTALL_ONNX: ${{ matrix.python_version == '3.14' && '1' || '' }}
@@ -307,6 +310,8 @@ jobs:
           TORCH_VERSION: "2.11"
           # tensordict does not require NumPy 2: this job tests NumPy 1
           NUMPY_SPEC: "<2"
+          # Run the examples of the docstrings and of the docs (run_test.sh).
+          TD_RUN_DOCTESTS: "1"
           # pytest-xdist workers for run_test.sh; the runner has 48 CPUs.
           TD_TEST_WORKERS: 16
           ARCH: x86_64

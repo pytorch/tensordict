@@ -314,6 +314,18 @@ class TestInteractionType:
             assert tensordict.nn.utils.StrEnum is tensordict.nn.utils._StrEnum
         assert record[0].filename == __file__
 
+    def test_str_enum_str(self):
+        # str() and format() give the value, as with enum.StrEnum, on every
+        # Python version.
+        class Backported(tensordict.nn.utils._StrEnum):
+            MODE = "mode"
+
+        for member in (InteractionType.MODE, Backported.MODE):
+            assert str(member) == "mode"
+            assert "%s" % member == "mode"
+            assert f"{member}" == "mode"
+            assert format(member, ">5") == " mode"
+
     dist_partials = {
         "Bernoulli": functools.partial(
             distributions.Bernoulli, probs=torch.tensor([0.5, 0.5])
