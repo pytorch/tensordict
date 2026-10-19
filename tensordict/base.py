@@ -1770,6 +1770,21 @@ def _warn_split_keys_kept_in_last() -> None:
     )
 
 
+def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
+    """Warns that ``update(update_batch_size=True)`` keeps a batch size that is a prefix of the source's, until 0.17 (#2957)."""
+    warnings.warn(
+        "update(update_batch_size=True) got a source with batch size "
+        f"{source_batch_size} for a destination with batch size "
+        f"{dest_batch_size}, a prefix of it, and keeps the destination's batch "
+        "size. Starting with TensorDict 0.17, the default will change to "
+        "giving the destination the source's batch size, as for any other "
+        "mismatch, which raises if the destination has keys that the source "
+        "lacks, or with inplace=True or keys_to_update.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -5555,7 +5570,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 A lazy stack is then refilled with copies of the tensordicts of
                 the input. It needs ``keys_to_update=None`` and
                 ``inplace=False``, and the keys of the tensordict must all be in
-                the input. Defaults to ``False``.
+                the input. A batch size that is a prefix of the input's (``[]``
+                for an input of batch size ``[2]``) is kept, with a
+                :class:`FutureWarning`: starting with TensorDict 0.17, the
+                default will change to replacing it as well. A batch size whose
+                leading dims are those of the input (``[2, 3]`` for ``[2]``) is
+                kept. Defaults to ``False``.
             ignore_lock (bool, optional): deprecated: ``True`` warns, and the
                 argument will be removed in TensorDict 0.17. On a locked
                 :class:`~tensordict.TensorDict`, it does not lift the lock: a
@@ -5733,6 +5753,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.batch_size = input_dict_or_td.batch_size
             self.update(input_dict_or_td, update_batch_size=True)
             return self
+        if (
+            update_batch_size
+            and _is_tensor_collection(type(input_dict_or_td))
+            and self.batch_dims < input_dict_or_td.batch_dims
+        ):
+            # self's batch size is a prefix of the source's (#2957)
+            _warn_update_batch_size_prefix(self.batch_size, input_dict_or_td.batch_size)
 
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
