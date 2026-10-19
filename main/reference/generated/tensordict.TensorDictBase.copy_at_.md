@@ -6,8 +6,12 @@ Copies the tensors of `tensordict` into the existing entries at `idx`, and retur
 
 `copy_at_` is a faster [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_) for the hot paths where
 every key of `tensordict` is a tensor entry of the tensordict. With
-`fast=True`, the non-tensor entries of `tensordict` are skipped,
-not copied. Use `fast=False` or [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_) to write them.
+`fast=True`, a `tensordict` with only non-tensor entries raises a
+`RuntimeError`. If it also holds tensors, its non-tensor entries are
+skipped, not copied, with a `FutureWarning`: starting with
+TensorDict 0.17, the default will change to raising the same
+`RuntimeError`. Use `fast=False` or [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_) to write
+them.
 
 Parameters:
 

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6097+g64511acc2.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6104+g96871074c.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6097+g64511acc2.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6104+g96871074c.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1645,8 +1645,12 @@ document.write(`
 <dd><p>Copies the tensors of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> into the existing entries at <code class="docutils literal notranslate"><span class="pre">idx</span></code>, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">copy_at_</span></code> is a faster <a class="reference internal" href="tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_" title="tensordict.TensorDictBase.update_at_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_at_()</span></code></a> for the hot paths where
 every key of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> is a tensor entry of the tensordict. With
-<code class="docutils literal notranslate"><span class="pre">fast=True</span></code>, the non-tensor entries of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> are skipped,
-not copied. Use <code class="docutils literal notranslate"><span class="pre">fast=False</span></code> or <a class="reference internal" href="tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_" title="tensordict.TensorDictBase.update_at_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_at_()</span></code></a> to write them.</p>
+<code class="docutils literal notranslate"><span class="pre">fast=True</span></code>, a <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> with only non-tensor entries raises a
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. If it also holds tensors, its non-tensor entries are
+skipped, not copied, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>: starting with
+TensorDict 0.17, the default will change to raising the same
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. Use <code class="docutils literal notranslate"><span class="pre">fast=False</span></code> or <a class="reference internal" href="tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_" title="tensordict.TensorDictBase.update_at_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_at_()</span></code></a> to write
+them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2045,7 +2049,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.copy_at",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.copy_at",
        "url": "/reference/generated/tensordict.TensorDictBase.copy_at_.html",
-       "articleBody": "TensorDictBase.copy_at# TensorDictBase.copy_at_(tensordict: T, idx: None | int | slice | str | Tensor | List[Any] | Tuple[Any, ...], non_blocking: bool = False, *, fast: bool = True) \u2192 Self# Copies the tensors of tensordict into the existing entries at idx, and returns self. copy_at_ is a faster update_at_() for the hot paths where every key of tensordict is a tensor entry of the tensordict. With fast=True, the non-tensor entries of tensordict are skipped, not copied. Use fast=False or update_at_() to write them. Parameters: tensordict (TensorDictBase) \u2013 the entries to copy. Their leading dimensions are those of td[idx]. idx (int, slice, Tensor or tuple) \u2013 the index to write at, along the batch dimensions. non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Keyword Arguments: fast (bool, optional) \u2013 if True, uses only the tensor-only copy, and raises a RuntimeError if the source, the destination or the index does not allow it (for example a dictionary source, a tensordict that is not a TensorDict, a tensor index, a value that needs broadcasting, or a key missing from the tensordict). If False, calls update_at_(). Defaults to True. Changed in version 0.15: fast=None, deprecated in 0.14, is no longer accepted. Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3, 2), batch_size=[3]) \u003e\u003e\u003e _ = td.copy_at_(TensorDict(x=torch.ones(2), batch_size=[]), 1) \u003e\u003e\u003e td[\"x\"][:, 0] tensor([0., 1., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.copy_at# TensorDictBase.copy_at_(tensordict: T, idx: None | int | slice | str | Tensor | List[Any] | Tuple[Any, ...], non_blocking: bool = False, *, fast: bool = True) \u2192 Self# Copies the tensors of tensordict into the existing entries at idx, and returns self. copy_at_ is a faster update_at_() for the hot paths where every key of tensordict is a tensor entry of the tensordict. With fast=True, a tensordict with only non-tensor entries raises a RuntimeError. If it also holds tensors, its non-tensor entries are skipped, not copied, with a FutureWarning: starting with TensorDict 0.17, the default will change to raising the same RuntimeError. Use fast=False or update_at_() to write them. Parameters: tensordict (TensorDictBase) \u2013 the entries to copy. Their leading dimensions are those of td[idx]. idx (int, slice, Tensor or tuple) \u2013 the index to write at, along the batch dimensions. non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Keyword Arguments: fast (bool, optional) \u2013 if True, uses only the tensor-only copy, and raises a RuntimeError if the source, the destination or the index does not allow it (for example a dictionary source, a tensordict that is not a TensorDict, a tensor index, a value that needs broadcasting, or a key missing from the tensordict). If False, calls update_at_(). Defaults to True. Changed in version 0.15: fast=None, deprecated in 0.14, is no longer accepted. Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3, 2), batch_size=[3]) \u003e\u003e\u003e _ = td.copy_at_(TensorDict(x=torch.ones(2), batch_size=[]), 1) \u003e\u003e\u003e td[\"x\"][:, 0] tensor([0., 1., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
