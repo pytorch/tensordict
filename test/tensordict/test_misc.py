@@ -1014,6 +1014,7 @@ class TestPointwiseOps:
             ("lerp", (w, 0.5), (), {"end": w, "weight": 0.5}),
             ("lerp", (w2, w), (w2,), {"weight": w}),
             ("addcmul", (w, w2), (), {"other1": w, "other2": w2, "value": 2}),
+            ("addcmul", (w, torch.tensor(2.0)), (w,), {"other2": torch.tensor(2.0)}),
             ("add_", (w,), (), {"other": w}),
             ("addcdiv_", (w, w2), (), {"other2": w2, "other1": w}),
         ]
@@ -1022,6 +1023,19 @@ class TestPointwiseOps:
             expected = getattr(dense.clone(), op)(*operands, **extra)
             result = getattr(make(), op)(*pos, **kwargs)
             assert_allclose_td(result.to_tensordict(), expected)
+
+    def test_tensordict_keyword_operand(self):
+        # A tensordict operand passed by keyword is paired with self by key, as
+        # before #3042: its batch size is not aligned with self's
+        td = TensorDict(a=torch.ones(3, 4, 2), batch_size=[3, 4])
+        other = TensorDict(a=torch.full((3, 4, 2), 2.0), batch_size=[3])
+        assert (td.add(other=other)["a"] == 3).all()
+        lazy = LazyStackedTensorDict(
+            *TensorDict(a=torch.full((3, 4), 5.0), batch_size=[3, 4]).unbind(0),
+            stack_dim=0,
+        )
+        bound = TensorDict(a=torch.ones(3, 4), c=torch.ones(3, 4), batch_size=[3, 4])
+        assert (lazy.clamp(min=bound, max=bound + 1)["a"] == 2).all()
 
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     @pytest.mark.parametrize("alpha", [None, 2])

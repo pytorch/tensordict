@@ -746,8 +746,17 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
 
         @wraps(func)
         def new_func(self, *others, **kwargs):
-            if kwargs and len(others) < n_other and any(n in kwargs for n in names):
-                # an operand passed by keyword is broadcast as a positional one
+            if (
+                kwargs
+                and len(others) < n_other
+                and any(
+                    isinstance(o, torch.Tensor) and o.ndim
+                    for o in (*others, *(kwargs.get(n) for n in names))
+                )
+            ):
+                # with a tensor operand to broadcast, an operand passed by
+                # keyword is treated as a positional one. Without one, a
+                # tensordict operand is paired by key as before.
                 others, kwargs = _operands_from_kwargs(others, kwargs, names, defaults)
             others, args = others[:n_other], others[n_other:]
             need_broadcast = False
