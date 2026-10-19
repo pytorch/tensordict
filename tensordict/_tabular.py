@@ -61,14 +61,18 @@ def _flatten_keys(td, separator: str) -> dict[str, Any]:
             isinstance(value, TensorCollection) or is_tensorclass(value)
         ) and not is_non_tensor(value):
             sub = _flatten_keys(value, separator)
-            if not isinstance(value, TensorCollection) and any(
-                _is_multi_column(sub_val)
-                or (is_tensorclass(sub_val) and not is_non_tensor(sub_val))
-                for sub_val in sub.values()
+            if not isinstance(value, TensorCollection) and (
+                not sub
+                or any(
+                    _is_multi_column(sub_val)
+                    or (is_tensorclass(sub_val) and not is_non_tensor(sub_val))
+                    for sub_val in sub.values()
+                )
             ):
-                # Keep a @tensorclass with a leaf that does not fit one column,
-                # here or in a @tensorclass it holds, as one column of objects
-                # as before, so that a call that worked keeps working.
+                # Keep a @tensorclass with no leaves, or with a leaf that does
+                # not fit one column, here or in a @tensorclass it holds, as one
+                # column of objects as before, so that a call that worked keeps
+                # its result.
                 result[key] = value
                 continue
             for sub_key, sub_val in sub.items():

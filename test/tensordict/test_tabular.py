@@ -526,6 +526,18 @@ class TestTensorClassTabular:
         assert list(df2.columns) == ["a", "inner"]
         assert df2["inner"][0] == str(df["inner"][0])
 
+    def test_nested_tensorclass_without_leaves(self):
+        # A nested tensorclass whose fields are all None has nothing to flatten
+        # and stays one object column.
+        tc = TabularNestedTensorClass(
+            a=torch.tensor([1.0, 2.0, 3.0]),
+            inner=TabularTensorClass(x=None, y=None, batch_size=[3]),
+            batch_size=[3],
+        )
+        df = tc.to_pandas(separator=".")
+        assert list(df.columns) == ["a", "inner"]
+        assert isinstance(df["inner"][0], TabularTensorClass)
+
     def test_csv_roundtrip(self, tmp_path):
         csv_path = tmp_path / "tensorclass.csv"
         tc = TabularTensorClass(
