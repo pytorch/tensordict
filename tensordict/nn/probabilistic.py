@@ -2031,10 +2031,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             dist (torch.distributions.Distribution, optional): the
                 distribution. Defaults to ``None``, which builds it with
                 :meth:`get_dist`.
-            **kwargs: if ``dist`` is ``None`` and ``return_composite`` is
-                ``False``, passed to :meth:`get_dist`. Otherwise, passed to
-                the ``log_prob`` method of the distribution, or of the last
-                module.
+            **kwargs: if ``dist`` is ``None``, ``return_composite`` is
+                ``False`` and the last module does not override
+                :meth:`ProbabilisticTensorDictModule.log_prob`, passed to
+                :meth:`get_dist`. Otherwise, passed to the ``log_prob`` method
+                of the distribution, or of the last module.
 
         Returns:
             A tensor, or a tensordict for a composite distribution while
@@ -2047,11 +2048,19 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             tensordict_inp = tensordict
         return_composite = self.return_composite
         if dist is None:
-            if return_composite:
-                dist = self.get_dist(tensordict_inp)
-            else:
+            reroute = bool(kwargs) and not return_composite
+            if reroute:
+                # The base log_prob of the last module takes no keyword
+                # arguments; a subclass that overrides it keeps getting them.
+                leaf = self._last_module
+                while type(leaf).log_prob is ProbabilisticTensorDictSequential.log_prob:
+                    leaf = leaf._last_module
+                reroute = type(leaf).log_prob is ProbabilisticTensorDictModule.log_prob
+            if reroute:
                 dist = self.get_dist(tensordict_inp, **kwargs)
                 kwargs = {}
+            else:
+                dist = self.get_dist(tensordict_inp)
         if return_composite and isinstance(dist, CompositeDistribution):
             # Check the values within the dist - if not set, choose defaults
             lp = dist.log_prob(
