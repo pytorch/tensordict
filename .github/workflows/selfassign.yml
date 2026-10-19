@@ -11,10 +11,10 @@ on:
     types: created
 
 concurrency:
-  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
-  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
-  cancel-in-progress: true
+  # One group per issue, so that a comment on one issue cannot cancel the run for another. Runs queue rather
+  # than cancel, so that a later comment on the same issue does not drop an earlier "#take".
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   one:
