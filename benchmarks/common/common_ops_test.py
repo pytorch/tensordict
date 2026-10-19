@@ -1117,11 +1117,13 @@ def test_to_dtype_nested(benchmark):
     benchmark(td.to, torch.float64)
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to(benchmark, td):
     benchmark(td.to, "cuda:0")
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to_nonblocking(benchmark, td):
     benchmark(td.to, "cuda:0", non_blocking=True)

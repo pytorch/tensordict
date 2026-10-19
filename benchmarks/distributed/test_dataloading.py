@@ -33,13 +33,16 @@ _has_torchvision = importlib.util.find_spec("torchvision") is not None
 _has_rpc = hasattr(torch.distributed, "rpc")
 _has_cuda = torch.cuda.is_available()
 
-pytestmark = pytest.mark.skipif(
-    not (_has_tenacity and _has_torchvision and _has_rpc and _has_cuda),
-    reason=(
-        "Requires tenacity, torchvision, torch.distributed.rpc and CUDA. "
-        "Also needs ImageNet on disk."
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(
+        not (_has_tenacity and _has_torchvision and _has_rpc and _has_cuda),
+        reason=(
+            "Requires tenacity, torchvision, torch.distributed.rpc and CUDA. "
+            "Also needs ImageNet on disk."
+        ),
     ),
-)
+]
 
 RETRY_LIMIT = 2
 NUM_WORKERS = 8

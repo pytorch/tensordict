@@ -127,7 +127,9 @@ jobs:
           uv run --active python -c "import sys; actual_version = f'{sys.version_info.major}.{sys.version_info.minor}'; expected_version = '${{ matrix.python-version }}'; print(f'Expected: {expected_version}, Actual: {actual_version}'); exit(1) if actual_version != expected_version else None; exit(1) if sys.version_info >= (3, 13) else print(f'Python version check passed: {actual_version}')"
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          uv run --active pytest -vvv --benchmark-json output.json
+          # The GPU job runs only the benchmarks marked gpu, which run on CUDA
+          # (see benchmarks/conftest.py): the CPU job runs the others.
+          uv run --active pytest -vvv --benchmark-json output.json ${{ matrix.device == 'GPU' && '-m gpu' || '' }}
 
       # Upload benchmark results for main branch, manual dispatch, or PRs with 'benchmarks/upload' label
       - name: Upload benchmark results
@@ -165,8 +167,15 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
+      # The full history of gh-pages is about 850 MiB: fetch its last commit
+      # only. github-action-benchmark then runs its own `git fetch` and
+      # `git pull` of gh-pages, which fetch only the commits that are newer,
+      # and pulls again before it retries a rejected push. Leave
+      # skip-fetch-gh-pages at false: it would also skip that pull, and the
+      # retries would fail when another workflow pushed to gh-pages first.
+      - name: Fetch the last commit of gh-pages
+        run: git fetch --depth=1 origin gh-pages:gh-pages
 
       - name: Download CPU benchmark results
         uses: actions/download-artifact@v4
@@ -209,12 +218,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-          # Keep only the latest 100 CPU results in dev/bench/data.js, which
-          # also holds the GPU results. GitHub rejects files over 100 MB. A
-          # result takes about 150 KB, so the file stays near 30 MB. It
-          # reaches the limit only if the number of benchmarks triples. The
-          # dropped results stay in the history of gh-pages.
-          max-items-in-chart: 100
+          # The CPU and GPU results have a file each, with its own charts at
+          # https://pytorch.github.io/tensordict/dev/bench/cpu/ and .../gpu/.
+          # dev/bench/data.js holds the results up to October 2026, when they
+          # shared one file.
+          benchmark-data-dir-path: dev/bench/cpu
+          # Keep only the latest 250 results, about 8 days of pushes to main.
+          # GitHub rejects files over 100 MB. A CPU result takes about 160 KB,
+          # so the file stays near 40 MB. The dropped results stay in the
+          # history of gh-pages.
+          max-items-in-chart: 250
 
       - name: Store GPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
@@ -230,5 +243,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-          # Same cap as the CPU results: see the step above.
-          max-items-in-chart: 100
+          benchmark-data-dir-path: dev/bench/gpu
+          # Same cap as the CPU results: see the step above. The GPU job runs
+          # fewer benchmarks, so its file is smaller.
+          max-items-in-chart: 250

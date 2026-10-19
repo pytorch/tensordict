@@ -19,10 +19,13 @@ from tensordict import TensorDict
 _DIST_AVAILABLE = dist.is_available()
 _CUDA_AVAILABLE = torch.cuda.is_available()
 
-pytestmark = pytest.mark.skipif(
-    not (_DIST_AVAILABLE and dist.is_initialized()),
-    reason="Requires an initialised torch.distributed process group (launch with torchrun)",
-)
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(
+        not (_DIST_AVAILABLE and dist.is_initialized()),
+        reason="Requires an initialised torch.distributed process group (launch with torchrun)",
+    ),
+]
 
 
 # ---------------------------------------------------------------------------

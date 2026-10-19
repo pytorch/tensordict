@@ -54,9 +54,19 @@ def measure_duration(request: pytest.FixtureRequest):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
+    config.addinivalue_line(
+        "markers",
+        "gpu: benchmark that runs on CUDA when it is available. The GPU job of "
+        "benchmarks.yml runs only these, as the CPU job runs the others.",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
+    # A benchmark with cuda in its name or parameters, such as device="cuda",
+    # runs on CUDA: mark it for the GPU job.
+    for item in items:
+        if "cuda" in item.name:
+            item.add_marker(pytest.mark.gpu)
     if config.getoption("--runslow"):
         # --runslow given in cli: do not skip slow tests
         return

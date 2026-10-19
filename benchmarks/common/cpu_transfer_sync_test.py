@@ -57,6 +57,7 @@ def _to_cpu_event_sync(td):
     return td_cpu
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device found")
 class TestCpuTransferSync:
     """Compare blocking, global sync, and event sync .to('cpu')."""
