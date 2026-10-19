@@ -13449,6 +13449,11 @@ class TestGeneric:
             out = td.apply(lambda name, x: x, named=True, nested_keys=True)
             td.named_apply(lambda name, x: x, prefix=())
             td.apply_(lambda x: x, default=0)
+            # keywords that apply passes itself raise, without a warning
+            with pytest.raises(TypeError, match="multiple values"):
+                td.apply(lambda x: x, checked=True)
+            with pytest.raises(TypeError, match="multiple values"):
+                td.named_apply(lambda name, x: x, named=True)
         assert_allclose_td(out, td)
 
     def test_apply_out_batch_size_list_multithread(self):

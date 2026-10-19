@@ -1755,9 +1755,13 @@ def _warn_lazy_is_empty() -> None:
     )
 
 
-# Keywords of _apply_nest that apply() and named_apply() pass through
-# **constructor_kwargs and that _apply_nest honours.
-_APPLY_NEST_KWARGS = frozenset({"named", "nested_keys", "prefix", "call_on_unbatched"})
+# Keywords that apply() and named_apply() take through **constructor_kwargs
+# and do not warn about: _apply_nest honours the first four, and checked (like
+# named in named_apply) collides with the value they pass themselves, so the
+# call raises a TypeError.
+_APPLY_NEST_KWARGS = frozenset(
+    {"named", "nested_keys", "prefix", "call_on_unbatched", "checked"}
+)
 
 
 def _warn_ignored_kwargs(method: str, kwargs: Iterable[str]) -> None:
@@ -4835,10 +4839,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
-        # inplace is loose here, but for set_ it is constraining. We translate it
-        # to None to tell _set_str and others to drop it if the key isn't found
         if kwargs:
             _warn_ignored_kwargs("set", kwargs)
+        # inplace is loose here, but for set_ it is constraining. We translate it
+        # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
         return self._set_tuple(
             key_tuple, item, inplace=inplace, validated=False, non_blocking=non_blocking
