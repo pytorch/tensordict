@@ -9129,6 +9129,15 @@ class TestGeneric:
             assert out["zz"] is None
             assert (out["a"] == 0).all()
             assert "a" not in td
+        # the same for a lazy stack and a TensorDictParams
+        td = lazy_stack([TensorDict(a=torch.zeros(2), batch_size=[2])] * 3)
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            out = td.separates("zz", default=[1, 2])
+        assert out.get("zz").tolist() == [[None, None]] * 3
+        td = TensorDictParams(TensorDict(a=torch.zeros(3), batch_size=[3]))
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            out = td.separates("zz", default=torch.ones(2))
+        assert out["zz"] is None
 
     @set_list_to_stack(True)
     def test_set_list_nontensor(self):

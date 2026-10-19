@@ -1777,9 +1777,8 @@ def _warn_separates_default(key: NestedKey) -> None:
     warnings.warn(
         f"separates() puts a None entry under the missing key {key!r}, "
         "because its default does not fit the batch size. Starting with "
-        "TensorDict 0.17, the default will change to raising the RuntimeError "
-        "of split_keys: pass a default that fits the batch size, or "
-        "default=None.",
+        "TensorDict 0.17, the default will change to raising the error of "
+        "split_keys: pass a default that fits the batch size, or default=None.",
         FutureWarning,
         stacklevel=_user_stacklevel(),
     )
@@ -10731,8 +10730,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ``None`` entry. A ``default`` that does not fit the batch size
                 (for example ``0`` with a batch size of ``[3]``) also gives a
                 ``None`` entry, with a ``FutureWarning``: starting with
-                TensorDict 0.17, the default will change to raising the
-                ``RuntimeError`` of :meth:`~.split_keys`.
+                TensorDict 0.17, the default will change to raising the error
+                of :meth:`~.split_keys`.
             strict (bool, optional): if ``True``, a missing key raises a
                 ``KeyError``. If ``False``, the result holds ``default`` under
                 it, or a ``None`` entry if no ``default`` is given. Defaults to
@@ -10774,13 +10773,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         # We want to keep the metadata such as batch-size etc so we call with recurse=True
         out = self.empty(recurse=True)
+        # _UNSET tells a missing key apart: pop may convert the default
+        pop_default = default if default is None or default is NO_DEFAULT else _UNSET
         for key in key_set:
-            val = last_out.pop(key, default)
-            if val is default and default is not None:
+            val = last_out.pop(key, pop_default)
+            if val is _UNSET:
                 try:
-                    out.set(key, val)
+                    out.set(key, default)
                     continue
-                except RuntimeError:
+                except Exception:
                     # a default that does not fit the batch size (#2948)
                     _warn_separates_default(key)
                     val = None
