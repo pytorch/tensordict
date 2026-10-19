@@ -35,7 +35,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f0c65bf4a10>
+<torch._C.Generator object at 0x7f13f25eca10>
 ```
 
 ## Indexing
