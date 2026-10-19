@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:30.804** total execution time for 14 files **from tutorials**:
+**01:27.310** total execution time for 14 files **from tutorials**:
 
 .. container::
 
@@ -33,36 +33,36 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_serialization_speed.py` (``serialization_speed.py``)
-     - 00:44.900
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_data_fashion.py` (``data_fashion.py``)
-     - 00:17.077
+     - 00:42.410
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``tensordict_module.py``)
-     - 00:16.765
+     - 00:16.726
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_data_fashion.py` (``data_fashion.py``)
+     - 00:16.346
      - 0.0
    * - :ref:`sphx_glr_tutorials_streamed_tensordict.py` (``streamed_tensordict.py``)
-     - 00:06.020
+     - 00:06.019
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``tensorclass_fashion.py``)
-     - 00:04.242
+     - 00:04.101
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``tensorclass_imagenet.py``)
-     - 00:01.481
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_zarr_storage.py` (``zarr_storage.py``)
-     - 00:00.149
+     - 00:01.417
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``export.py``)
-     - 00:00.129
+     - 00:00.130
      - 0.0
-   * - :ref:`sphx_glr_tutorials_tensordict_shapes.py` (``tensordict_shapes.py``)
-     - 00:00.010
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_functional.py` (``functional.py``)
-     - 00:00.009
+   * - :ref:`sphx_glr_tutorials_zarr_storage.py` (``zarr_storage.py``)
+     - 00:00.121
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``tensordict_keys.py``)
+     - 00:00.009
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_tensordict_shapes.py` (``tensordict_shapes.py``)
+     - 00:00.009
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_functional.py` (``functional.py``)
      - 00:00.009
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_memory.py` (``tensordict_memory.py``)
