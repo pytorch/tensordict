@@ -36,6 +36,7 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     load_memmap,
+    MemoryMappedTensor,
     pack_memmap,
     PersistentTensorDict,
     refresh_archive_checksums,
@@ -414,17 +415,21 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_as_tensor(self, td_name, device):
         td = getattr(self, td_name)(device)
-        if "memmap" in td_name and device == torch.device("cpu"):
+        # MemoryMappedTensor leaves are kept with a FutureWarning, since they
+        # become plain tensors in 0.17 (#2979); other tensordicts stay silent.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
             tdt = td.as_tensor()
+        record = [w for w in record if issubclass(w.category, FutureWarning)]
+        if "memmap" in td_name:
+            assert len(record) == 1
+            assert "Starting with TensorDict 0.17" in str(record[0].message)
+            assert record[0].filename == __file__
+            assert type(tdt["a"]) is MemoryMappedTensor
+            assert tdt["a"].data_ptr() == td["a"].data_ptr()
             assert (tdt == td).all()
-        elif "memmap" in td_name:
-            with pytest.raises(
-                RuntimeError, match="can only be called with MemoryMappedTensors stored"
-            ):
-                td.as_tensor()
         else:
-            # checks that it runs
-            td.as_tensor()
+            assert record == []
 
     def test_assert(self, td_name, device):
         torch.manual_seed(1)

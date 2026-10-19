@@ -1755,6 +1755,20 @@ def _warn_lazy_is_empty() -> None:
     )
 
 
+def _warn_as_tensor_memmap() -> None:
+    """Warns that ``as_tensor()`` keeps :class:`~tensordict.MemoryMappedTensor` leaves, until 0.17 (#2979)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        "as_tensor() keeps the MemoryMappedTensor leaves of the tensordict as "
+        "they are. Starting with TensorDict 0.17, the default will change to "
+        "returning them as plain torch.Tensor over the same storage, with "
+        "as_subclass(torch.Tensor).",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_split_keys_kept_in_last() -> None:
     """Warns that ``split_keys(strict=False)`` keeps a named entry that only some members of a lazy stack hold in the last part, until 0.17 (#2827)."""
     if is_compiling():
@@ -9931,15 +9945,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         are. No tensordict leaf type defines ``as_tensor()``, so the result
         holds the same leaves as the tensordict. A locked tensordict gives a
         locked result.
+
+        A tensordict with :class:`~tensordict.MemoryMappedTensor` leaves also
+        emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the
+        default will change to returning those leaves as plain
+        :class:`torch.Tensor` over the same storage, with
+        ``as_subclass(torch.Tensor)``, without a copy.
         """
+        return self._as_tensor(warn=True)
+
+    def _as_tensor(self, *, warn: bool) -> Self:
+        has_memmap = False
 
         def as_tensor(tensor):
+            nonlocal has_memmap
+            if type(tensor) is torch.Tensor:
+                # torch.Tensor has no as_tensor() method.
+                return tensor
+            if isinstance(tensor, MemoryMappedTensor):
+                has_memmap = True
             try:
                 return tensor.as_tensor()
             except AttributeError:
                 return tensor
 
-        return self._fast_apply(as_tensor, propagate_lock=True)
+        result = self._fast_apply(as_tensor, propagate_lock=True)
+        if warn and has_memmap:
+            _warn_as_tensor_memmap()
+        return result
 
     _CONFLICTING_BATCH_SIZES = "Conflicting batch sizes in {}: batch_size and auto_batch_size cannot be both specified."
 
