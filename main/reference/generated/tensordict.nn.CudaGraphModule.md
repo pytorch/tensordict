@@ -117,11 +117,14 @@ on a side stream, the next call records the graph, and later calls replay it. A 
 enough calls to finish compiling before the capture, for example
 `CudaGraphModule(torch.compile(module), warmup=3)`. Defaults to `2`.
 - **in_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the input keys, if the module takes a tensordict. If `module`
-has an `in_keys` attribute, that attribute is used and this argument is ignored. An empty list
-marks a function that takes a tensordict, without keyword calls. Defaults to `None`, which
-means that the function takes tensors.
+has an `in_keys` attribute, that attribute is used and this argument is ignored, with a
+`UserWarning` if the argument is a non-empty str, list, tuple or set of keys that differs from
+the attribute. An empty list marks a function that takes a tensordict, without keyword calls.
+Defaults to `None`, which means that the function takes tensors.
 - **out_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the output keys, if the module returns a tensordict. If
-`module` has an `out_keys` attribute, that attribute is used and this argument is ignored.
+`module` has an `out_keys` attribute, that attribute is used and this argument is ignored,
+with a `UserWarning` if the argument is a non-empty str, list, tuple or set of keys that differs
+from the attribute.
 Defaults to `None`, which becomes `[]` when `in_keys` is given.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of the CUDA streams that run the warmup and the capture.
 Defaults to `None`, the current CUDA device.
