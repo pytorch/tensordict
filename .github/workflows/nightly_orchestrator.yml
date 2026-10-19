@@ -80,15 +80,6 @@ jobs:
       id-token: write
       contents: read
 
-  lint:
-    needs: config
-    if: needs.config.outputs.run_tests == 'true'
-    uses: ./.github/workflows/lint.yml
-    secrets: inherit
-    permissions:
-      id-token: write
-      contents: read
-
   docs:
     needs: config
     if: needs.config.outputs.run_tests == 'true'
@@ -124,7 +115,6 @@ jobs:
       - test-linux
       - test-macos
       - test-rl-gpu
-      - lint
       - docs
       - benchmarks
     if: always()

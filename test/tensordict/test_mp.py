@@ -733,7 +733,7 @@ class TestMap:
         result = h5_input.map(
             self._add_one, num_workers=2, out=out, mp_start_method=mp_ctx
         )
-        assert result is None
+        assert result is out
         assert (out["a"] == torch.arange(24).view(8, 3) + 1).all()
 
     def test_map_without_pool_h5_num_chunks(self, h5_input):
@@ -774,25 +774,29 @@ class TestMap:
         return input.select("a")
 
     @pytest.mark.parametrize("chunksize", [0, 5])
-    @pytest.mark.parametrize("mmap", [True, False])
+    @pytest.mark.parametrize("memory", ["memmap", "shared", "regular"])
     @pytest.mark.parametrize("start_method", [None, mp_ctx])
-    def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
+    def test_map_with_out(self, memory, chunksize, tmpdir, start_method):
         gc.collect()
         tmpdir = Path(tmpdir)
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
-        if mmap:
-            input.memmap_(tmpdir / "input")
         out = TensorDict({"a": torch.zeros(10, dtype=torch.int)}, [10])
-        if mmap:
+        if memory == "memmap":
+            input.memmap_(tmpdir / "input")
             out.memmap_(tmpdir / "output")
-        input.map(
+        elif memory == "shared":
+            input.share_memory_()
+            out.share_memory_()
+        result = input.map(
             self.selectfn,
             num_workers=2,
             chunksize=chunksize,
             out=out,
             mp_start_method=start_method,
         )
-        assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
+        # map returns out whether the workers or the main process filled it
+        assert result is out, (chunksize, memory)
+        assert (out["a"] == torch.arange(10)).all(), (chunksize, memory)
 
     @classmethod
     def nontensor_check(cls, td):

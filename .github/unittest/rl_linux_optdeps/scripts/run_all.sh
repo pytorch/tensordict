@@ -16,7 +16,6 @@ apt-get update
 apt-get install -y --no-install-recommends tzdata
 dpkg-reconfigure -f noninteractive tzdata || true
 
-apt-get upgrade -y
 apt-get install -y vim git wget cmake curl python3-dev gcc g++ freeglut3 freeglut3-dev
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
@@ -35,7 +34,7 @@ env_dir="${root_dir}/venv"
 cd "${root_dir}"
 
 # Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf --retry 3 https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 
 # Create venv with uv
@@ -164,6 +163,16 @@ python -m torch.utils.collect_env
 # - test_worker_affinity_error_shuts_down_workers: AsyncEnvPool reports
 #   "worker process exited unexpectedly" when another worker exits before
 #   worker 0 reports its CPU affinity error (pytorch/rl#4563).
+# - test_multiprocess_shutdown_is_bounded_and_idempotent: a worker can still be
+#   alive just after shutdown(timeout=0.5) returns. It failed on four unrelated
+#   commits and passed on rerun (runs 38340954621, 38827005518, and attempt 1
+#   of 38843598244 and 38973273656).
+# - test_replay_buffer_prefetch_without_replacement_roundtrip: the restored
+#   buffer yields a different number of batches than the source ("assert 3 ==
+#   7"), depending on what the prefetch thread had queued when state_dict ran.
+#   It failed on a docs-only commit (runs 38583899324 and 38820956479).
+# test_setup.py checks how TorchRL itself builds and installs, which TorchRL
+# tests in its own CI; TensorDict plays no part in it.
 # test_dreamer_v3_reinforce_return_normalization builds its expected loss from
 # the log-probability that ProbabilisticTensorDictModule stored for the sampled
 # action, while DreamerV3ActorLoss scores the action again with
@@ -174,11 +183,14 @@ python -m torch.utils.collect_env
 MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
+  --ignore test/test_setup.py \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
   --deselect "test/test_helpers.py::test_transformed_env_constructor_with_state_dict[from_pixels1]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cpu-autocast]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cuda-autocast]" \
   --deselect test/envs/test_special.py::TestAsyncEnvPool::test_worker_affinity_error_shuts_down_workers \
+  --deselect test/test_collectors.py::TestCollectorGeneric::test_multiprocess_shutdown_is_bounded_and_idempotent \
+  --deselect test/rb/test_rb_core.py::test_replay_buffer_prefetch_without_replacement_roundtrip \
   --deselect test/objectives/test_dreamer_v3.py::TestDreamerV3::test_dreamer_v3_reinforce_return_normalization \
   --timeout=120

@@ -38,7 +38,12 @@ from tensordict.nn.utils import (
 )
 from tensordict.tensorclass import is_non_tensor
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _ContextManager, _zip_strict, unravel_key
+from tensordict.utils import (
+    _ContextManager,
+    _user_stacklevel,
+    _zip_strict,
+    unravel_key,
+)
 from torch import distributions as D, Tensor
 from torch.compiler import is_compiling
 from torch.utils._contextlib import _DecoratorContextManager
@@ -422,8 +427,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             to ``None``: for a
             :class:`~tensordict.nn.distributions.CompositeDistribution`, the
             values of the ``name_map`` of ``distribution_kwargs`` if it has
-            one, and the keys of its ``distribution_map`` otherwise. For
-            another distribution, ``None`` gives the key ``"_"``.
+            one, and the keys of its ``distribution_map`` otherwise. A
+            component that ``name_map`` leaves out is written under its own
+            name but is not in ``out_keys``, and the module warns. Starting
+            with TensorDict 0.17, the default will change to ``out_keys`` that
+            include these components. For another distribution, ``None``
+            gives the key ``"_"``: the module writes the sample there, and
+            warns the first time it does.
+            Starting with TensorDict 0.17, the default will change to not
+            writing the sample at ``"_"``, which marks an output that is not
+            written, as in :class:`~tensordict.nn.TensorDictModule`. Pass
+            ``out_keys`` to keep the current keys.
 
     Keyword Args:
         default_interaction_type (InteractionType or str, optional): the
@@ -636,10 +650,24 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 name_map = distribution_kwargs.get("name_map")
                 if name_map is not None:
                     out_keys = list(name_map.values())
+                    mapped = {unravel_key(name) for name in name_map}
+                    if any(
+                        unravel_key(name) not in mapped for name in distribution_map
+                    ):
+                        warnings.warn(
+                            "ProbabilisticTensorDictModule got a name_map that leaves "
+                            "out components of distribution_map and no out_keys: these "
+                            "components are written but are not in out_keys. Starting "
+                            "with TensorDict 0.17, the default will change to out_keys "
+                            "that include them. Pass out_keys to keep the current keys.",
+                            FutureWarning,
+                            stacklevel=_user_stacklevel(),
+                        )
                 else:
                     out_keys = list(distribution_map.keys())
             else:
                 out_keys = ["_"]
+                self._warn_default_out_key = True
         if isinstance(in_keys, dict):
             dist_keys, in_keys = zip(*in_keys.items())
             if set(map(type, dist_keys)) != {str}:
@@ -926,6 +954,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     build_dist_from_params = get_dist
 
+    # Set when out_keys defaults to ["_"]; the sample is not written there from 0.17
+    _warn_default_out_key = False
+
     _CHANGE_IN_C_LP_A = "The value returned by composite_lp_aggregate changed between init of {} and its execution ({} -> {}). Make sure the mode matches."
 
     def log_prob(
@@ -1099,6 +1130,20 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 if isinstance(out_tensors, Tensor):
                     out_tensors = (out_tensors,)
+                if (
+                    self._warn_default_out_key
+                    and not torch.compiler.is_dynamo_compiling()
+                ):
+                    self._warn_default_out_key = False
+                    warnings.warn(
+                        "ProbabilisticTensorDictModule got no out_keys and writes "
+                        'its sample at "_". Starting with TensorDict 0.17, the '
+                        'default will change to not writing the sample at "_". '
+                        "Pass out_keys to write the sample at a key of your "
+                        "choice and silence this warning.",
+                        FutureWarning,
+                        stacklevel=_user_stacklevel(),
+                    )
                 tensordict_out.update(
                     dict(_zip_strict(self.dist_sample_keys, out_tensors))
                 )

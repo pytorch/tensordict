@@ -976,6 +976,17 @@ class TestLazyStackedTensorDict:
                 assert not value.requires_grad
         assert not stack["a"].requires_grad
 
+    @pytest.mark.parametrize("stack_dim", range(4))
+    def test_transpose_matches_dense(self, stack_dim):
+        dense = TensorDict(a=torch.randn(2, 3, 4, 5, 6), batch_size=[2, 3, 4, 5])
+        stack = lazy_stack(list(dense.unbind(stack_dim)), stack_dim)
+        for dim0 in range(4):
+            for dim1 in range(dim0 + 1, 4):
+                torch.testing.assert_close(
+                    stack.transpose(dim0, dim1).to_tensordict(),
+                    dense.transpose(dim0, dim1),
+                )
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("mask_dims", [2, 1, 0])
     def test_masked_fill_mask_shapes(self, stack_dim, mask_dims):
@@ -5005,8 +5016,7 @@ class TestLazyStackedTensorDict:
             TensorDict(a=torch.ones(2, 3, 1), batch_size=[2]),
         )
         assert td.get_item_shape("a") == torch.Size([-1])
-        # get returns None for a missing key with TD_GET_DEFAULTS_TO_NONE
-        with pytest.raises((KeyError, AttributeError)):
+        with pytest.raises(KeyError, match="missing"):
             td.get_item_shape("missing")
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])

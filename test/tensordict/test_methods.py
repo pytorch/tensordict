@@ -36,6 +36,7 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     load_memmap,
+    MemoryMappedTensor,
     pack_memmap,
     PersistentTensorDict,
     refresh_archive_checksums,
@@ -414,12 +415,21 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_as_tensor(self, td_name, device):
         td = getattr(self, td_name)(device)
-        if "memmap" in td_name and device == torch.device("cpu"):
+        # MemoryMappedTensor leaves are kept with a FutureWarning, since they
+        # become plain tensors in 0.17 (#2979); other tensordicts stay silent.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
             tdt = td.as_tensor()
+        record = [w for w in record if issubclass(w.category, FutureWarning)]
+        if "memmap" in td_name:
+            assert len(record) == 1
+            assert "Starting with TensorDict 0.17" in str(record[0].message)
+            assert record[0].filename == __file__
+            assert type(tdt["a"]) is MemoryMappedTensor
+            assert tdt["a"].data_ptr() == td["a"].data_ptr()
             assert (tdt == td).all()
         else:
-            # checks that it runs
-            td.as_tensor()
+            assert record == []
 
     def test_assert(self, td_name, device):
         torch.manual_seed(1)
@@ -5427,6 +5437,37 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(TypeError, match="fast=None"):
             td.copy_at_(newdata, slice(1, None, 2), fast=None)
         assert td.get("val").tolist() == [0] * 10
+
+    def test_copy_at_fast_non_tensor_warns(self, td_name, device):
+        # #2951: fast=True skips the non-tensor entries of a source that also
+        # holds tensors, and warns that this raises from TensorDict 0.17.
+        td = TensorDict(
+            x=torch.zeros(3), a=TensorDict(y=torch.zeros(3)), batch_size=[3]
+        )
+        td.set_non_tensor("z", "a")
+        source = TensorDict(x=torch.ones(()), a=TensorDict(y=torch.ones(())))
+        nested = source.clone()
+        source.set_non_tensor("z", "b")
+        nested.set_non_tensor(("a", "z"), "b")
+        for src in (source, nested):
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                td.copy_at_(src, 0)
+            assert td["x"].tolist() == [1, 0, 0]
+            assert td["a", "y"].tolist() == [1, 0, 0]
+            assert td.get_non_tensor("z") == "a"
+            assert ("a", "z") not in td.keys(True)
+            td.zero_()
+
+        # the calls whose result stays the same in 0.17 do not warn
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td.copy_at_(source.filter_non_tensor_data(), 1)
+            with pytest.raises(RuntimeError, match="fast=True"):
+                td.copy_at_(source.select("z"), 1)
+            td.copy_at_(source, 2, fast=False)
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        assert td["x"].tolist() == [0, 1, 1]
+        assert td.get("z").tolist() == ["a", "a", "b"]
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
