@@ -4235,13 +4235,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return _future_list
         elif async_op and return_premature:
             return _future_list
-        elif async_op:
-            for future in _future_list:
-                future.wait()
-            return
-        for pending in _future_list:
-            if pending is not None:
-                pending()
+        self._finish_reduce(_future_list, async_op)
 
     # Override: deletes the entry of each member that has it.
     def _del(self, key: tuple[str, ...]) -> None:

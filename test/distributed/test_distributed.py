@@ -602,10 +602,15 @@ class TestReduce:
             works = td.reduce(
                 0, async_op=mode != "sync", return_premature=mode == "premature"
             )
-            for work in works or ():
-                work.wait()
         except Exception as err:
             error = type(err).__name__
+        else:
+            # Wait for every work, even after one raises.
+            for work in works or ():
+                try:
+                    work.wait()
+                except Exception as err:
+                    error = error or type(err).__name__
         result = (
             error,
             td["s", "b"].unique().tolist(),
@@ -631,10 +636,11 @@ class TestReduce:
 
     @pytest.mark.parametrize("mode", ["sync", "async", "premature"])
     def test_reduce_lazy_stack_write_back_error(self, set_context, mode):
-        error, _, _, z = self._run_write_back(mode, expanded=True)
-        # Rank 0 raises after every collective is issued, so the dense leaf
-        # is reduced and the other rank does not hang.
+        error, b, _, z = self._run_write_back(mode, expanded=True)
+        # Rank 0 raises once every reduction and write-back has run, so the
+        # other leaves are reduced and the other rank does not hang.
         assert error is not None
+        assert b == [3.0]
         assert z == [3.0]
 
     @classmethod
