@@ -417,11 +417,6 @@ class TestTensorDicts(TestTensorDictsBase):
         if "memmap" in td_name and device == torch.device("cpu"):
             tdt = td.as_tensor()
             assert (tdt == td).all()
-        elif "memmap" in td_name:
-            with pytest.raises(
-                RuntimeError, match="can only be called with MemoryMappedTensors stored"
-            ):
-                td.as_tensor()
         else:
             # checks that it runs
             td.as_tensor()

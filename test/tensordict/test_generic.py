@@ -11131,6 +11131,35 @@ class TestGeneric:
         out = getattr(td, method)(cast_filter=None)
         assert out["cells"].dtype == out["mask"].dtype == dtype
 
+    @pytest.mark.parametrize("cls", [TensorDict, LazyStackedTensorDict])
+    def test_dtype_shorthand_signature(self, cls):
+        # The generated dtype shorthands show their cast_filter keyword
+        names = [
+            "bfloat16",
+            "complex128",
+            "complex32",
+            "complex64",
+            "float16",
+            "float32",
+            "float64",
+            "int16",
+            "int32",
+            "int64",
+            "int8",
+            "qint32",
+            "qint8",
+            "quint4x2",
+            "quint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "uint8",
+        ]
+        for name in names:
+            parameter = inspect.signature(getattr(cls, name)).parameters["cast_filter"]
+            assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+            assert parameter.default is None
+
     def test_to_cast_filter_integer_target(self):
         # An integer target does not raise: the filter does what it says
         td = self._cast_filter_td()

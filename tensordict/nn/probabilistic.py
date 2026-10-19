@@ -1720,7 +1720,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tensordict: TensorDictBase,
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
-    ) -> tuple[D.Distribution, TensorDictBase]:
+    ) -> TensorDictBase:
         """Runs every module except the last one, and returns the tensordict with the distribution parameters.
 
         The modules run with the interaction type of
