@@ -20,32 +20,28 @@ concurrency:
 
 jobs:
   python-source-and-configs:
-    uses: pytorch/test-infra/.github/workflows/linux_job_v3.yml@main
+    # A GitHub-hosted runner: the hooks need no GPU or test-infra image, and the
+    # pod setup of test-infra's linux_job took ~3 of the job's 4 minutes.
+    runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
-    with:
-      repository: pytorch/tensordict
-      script: |
-        set -euo pipefail
-
-        echo '::group::Setup environment'
-        CONDA_PATH=$(which conda)
-        eval "$(${CONDA_PATH} shell.bash hook)"
-        conda create --name ci --quiet --yes python=3.10 pip
-        conda activate ci
-        echo '::endgroup::'
-
-        echo '::group::Install lint tools'
-        pip install --progress-bar=off pre-commit
-        echo '::endgroup::'
-
-        echo '::group::Lint Python source and configs'
-        set +e
-        pre-commit run --all-files
-
-        if [ $? -ne 0 ]; then
-          git --no-pager diff
-          exit 1
-        fi
-        echo '::endgroup::'
+    steps:
+      - uses: actions/checkout@v4
+      # torchfix segfaults or hangs under CPython 3.14, so pin the interpreter
+      # that pre-commit and its hook environments use.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache the pre-commit hook environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Install lint tools
+        run: pip install --progress-bar=off pre-commit
+      - name: Lint Python source and configs
+        run: |
+          if ! pre-commit run --all-files; then
+            git --no-pager diff
+            exit 1
+          fi
