@@ -1656,6 +1656,21 @@ class TestTD:
         assert (x.grad == 2).all()
         assert not td["b"].requires_grad
 
+    def test_update_batch_size_prefix_future_warning(self, mode):
+        # eager mode warns on this call (#2957); compiled code skips the warning
+        def update(x):
+            td = TensorDict(x=x.clone())
+            td.update(TensorDict(x=x * 0, batch_size=[2]), update_batch_size=True)
+            return td
+
+        x = torch.ones(2, 3)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            expected = update(x)
+        update_c = torch.compile(update, fullgraph=True, mode=mode)
+        result = update_c(x)
+        assert result.batch_size == expected.batch_size == ()
+        assert_close(result, expected)
+
     @pytest.mark.parametrize("lazy", [False, True])
     def test_detach_no_grad(self, lazy, mode):
         # detach_() traces when no leaf requires grad: Dynamo cannot trace

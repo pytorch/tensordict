@@ -3011,8 +3011,8 @@ class _PointwiseOps:
             update_batch_size (bool, optional): passed to :meth:`~.update`
                 when the result is written into ``out``. If ``True``, a lazy
                 stack ``out`` gets as many members as the result. When
-                ``other`` is not a tensordict, or the tensordict is a lazy
-                stack, an ``out`` whose batch size is a prefix of the result's
+                ``other`` is not a tensordict, or ``self`` is a lazy stack, an
+                ``out`` whose batch size is a prefix of the result's
                 (``[]`` for ``[2]``) keeps it, with a :class:`FutureWarning`:
                 starting with TensorDict 0.17, the default will change to
                 giving ``out`` the batch size of the result, as

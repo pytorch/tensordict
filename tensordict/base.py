@@ -1772,6 +1772,8 @@ def _warn_split_keys_kept_in_last() -> None:
 
 def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
     """Warns that ``update(update_batch_size=True)`` keeps a batch size that is a prefix of the source's, until 0.17 (#2957)."""
+    if is_compiling():
+        return
     warnings.warn(
         "update(update_batch_size=True) got a source with batch size "
         f"{source_batch_size} for a destination with batch size "
@@ -5710,8 +5712,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         with :meth:`_set_tuple`, merging the sub-tensordicts. Returns ``self``.
         """
         batch_size_changed = False
+        is_collection = _is_tensor_collection(type(input_dict_or_td))
         if (
-            _is_tensor_collection(type(input_dict_or_td))
+            is_collection
             # here, we do a loose check on the batch sizes: it could be that the source has batch_size (1,) and self (1, 2)
             # and that all the values have an appropriate shape for the new batch size.
             # What we want to catch is any batch size item that is obviously mismatching, like (1, 2, 3) and (1, 4, 3).
@@ -5755,7 +5758,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return self
         if (
             update_batch_size
-            and _is_tensor_collection(type(input_dict_or_td))
+            and is_collection
             and self.batch_dims < input_dict_or_td.batch_dims
         ):
             # self's batch size is a prefix of the source's (#2957)
