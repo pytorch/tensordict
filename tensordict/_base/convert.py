@@ -2106,7 +2106,11 @@ class _Conversion:
           field names (``"values"``, ``"indices"``, ...), as
           :meth:`~.from_namedtuple` gives;
         - a dataclass instance: :meth:`~.from_dataclass` (the result is a
-          tensordict, not a tensorclass);
+          tensordict, not a tensorclass). A dataclass type whose fields all
+          have defaults gives a tensordict of the defaults too, with a
+          :class:`FutureWarning`. Starting with TensorDict 0.17, the default
+          will change to returning the type unchanged, as for any other
+          class;
         - a NumPy structured array: :meth:`~.from_struct_array`;
         - a pandas DataFrame: :meth:`~.from_pandas`;
         - an open :class:`h5py.File`: a
@@ -2386,6 +2390,10 @@ class _Conversion:
         Args:
             dataclass: the dataclass instance to convert. With
                 ``as_tensorclass=True``, it can also be a dataclass type.
+                Without it, a dataclass type whose fields all have defaults
+                gives a tensordict of the defaults, with a
+                :class:`FutureWarning`. Starting with TensorDict 0.17, the
+                default will change to raising a :class:`TypeError` for it.
 
         Keyword Args:
             dest_cls (type, optional): with ``as_tensorclass=True``, the
@@ -2470,6 +2478,17 @@ class _Conversion:
                 f"from_dataclass() got the dataclass type {dataclass.__name__}, "
                 "whose fields cannot all be read from the class. Pass an "
                 "instance, or as_tensorclass=True to convert the type."
+            )
+        if isinstance(dataclass, type):
+            warnings.warn(
+                f"The dataclass type {dataclass.__name__} was converted to a "
+                "tensordict of its field defaults. Starting with TensorDict "
+                "0.17, the default will change to raising a TypeError in "
+                "from_dataclass, and to keeping the type as it is in from_any "
+                "and from_dict, as for any other class. Pass an instance to "
+                "convert the defaults.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
             )
         source = {}
         for field in fields(dataclass):

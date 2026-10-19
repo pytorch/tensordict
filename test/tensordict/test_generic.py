@@ -3233,9 +3233,39 @@ class TestGeneric:
             with pytest.raises(TypeError, match="Pass an instance"):
                 TensorDict.from_dict({"c": cls})
             assert is_tensorclass(TensorDict.from_dataclass(cls, as_tensorclass=True))
-        # A type whose fields all have defaults gives a tensordict of them.
-        assert TensorDict.from_dataclass(Defaults)["n"] == 3
-        assert TensorDict.from_dict({"c": Defaults})["c", "n"] == 3
+
+    def test_from_dataclass_type_defaults_warns(self):
+        # https://github.com/pytorch/tensordict/issues/2960
+        @dataclass
+        class Defaults:
+            n: int = 3
+
+        @dataclass
+        class Holder:
+            cfg: type = Defaults
+
+        # A type whose fields all have defaults gives a tensordict of them,
+        # with a warning: from 0.17 from_dataclass raises and the others keep
+        # the type.
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_dataclass(Defaults)["n"] == 3
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_any(Defaults)["n"] == 3
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_dict({"c": Defaults})["c", "n"] == 3
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_dataclass(Holder())["cfg", "n"] == 3
+        # Instances, as_tensorclass=True and the constructor stay silent.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            assert TensorDict.from_dataclass(Defaults())["n"] == 3
+            assert TensorDict.from_any(Defaults())["n"] == 3
+            assert TensorDict.from_dict({"c": Defaults()})["c", "n"] == 3
+            assert is_tensorclass(
+                TensorDict.from_dataclass(Defaults, as_tensorclass=True)
+            )
+            assert TensorDict(c=Defaults)["c"] is Defaults
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
 
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])
     def test_from_any_dataclass_batch_dims(self, batch_dims):
