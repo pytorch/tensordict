@@ -2,7 +2,8 @@
 
 [![Nightly](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml/badge.svg)](https://github.com/pytorch/tensordict/actions/workflows/nightly_orchestrator.yml)
 [![Nightly Dashboard](https://img.shields.io/badge/Nightly-Dashboard-blue)](https://pytorch.github.io/tensordict/nightly-status/)
-[![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch.github.io/tensordict/dev/bench/)
+[![CPU Benchmarks](https://img.shields.io/badge/Benchmarks-CPU-blue)](https://pytorch.github.io/tensordict/dev/bench/cpu/)
+[![GPU Benchmarks](https://img.shields.io/badge/Benchmarks-GPU-blue)](https://pytorch.github.io/tensordict/dev/bench/gpu/)
 
 We want to make contributing to this project as easy and transparent as
 possible.

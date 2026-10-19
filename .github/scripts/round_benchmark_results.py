@@ -8,7 +8,7 @@
 
 benchmark-action/github-action-benchmark writes ``stats.ops``,
 ``stats.stddev`` and ``stats.mean`` of each benchmark to
-``dev/bench/data.js`` with up to 17 significant digits. GitHub push
+``dev/bench/*/data.js`` with up to 17 significant digits. GitHub push
 protection reads a 15-digit number that starts with 1000, such as the
 fractional part of ``32.100025873592784``, as a secret of type "BII - UID",
 and rejects the push to gh-pages. This script rounds the three values so that

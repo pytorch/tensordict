@@ -210,12 +210,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-          # Keep only the latest 100 CPU results in dev/bench/data.js, which
-          # also holds the GPU results. GitHub rejects files over 100 MB. A
-          # result takes about 150 KB, so the file stays near 30 MB. It
-          # reaches the limit only if the number of benchmarks triples. The
-          # dropped results stay in the history of gh-pages.
-          max-items-in-chart: 100
+          # The CPU and GPU results have a file each, with its own charts at
+          # https://pytorch.github.io/tensordict/dev/bench/cpu/ and .../gpu/.
+          # dev/bench/data.js holds the results up to October 2026, when they
+          # shared one file.
+          benchmark-data-dir-path: dev/bench/cpu
+          # Keep only the latest 250 results, about 8 days of pushes to main.
+          # GitHub rejects files over 100 MB. A CPU result takes about 160 KB,
+          # so the file stays near 40 MB. The dropped results stay in the
+          # history of gh-pages.
+          max-items-in-chart: 250
 
       - name: Store GPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
@@ -231,5 +235,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
-          # Same cap as the CPU results: see the step above.
-          max-items-in-chart: 100
+          benchmark-data-dir-path: dev/bench/gpu
+          # Same cap as the CPU results: see the step above. The GPU job runs
+          # fewer benchmarks, so its file is smaller.
+          max-items-in-chart: 250
