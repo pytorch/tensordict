@@ -1827,6 +1827,20 @@ def _warn_split_keys_kept_in_last() -> None:
     )
 
 
+def _warn_separates_default(key: NestedKey) -> None:
+    """Warns that ``separates`` puts ``None`` under a missing key whose ``default`` does not fit the batch size, until 0.17 (#2948)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        f"separates() puts a None entry under the missing key {key!r}, "
+        "because its default does not fit the batch size. Starting with "
+        "TensorDict 0.17, the default will change to raising the error of "
+        "split_keys: pass a default that fits the batch size, or default=None.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
     """Warns that ``update(update_batch_size=True)`` keeps a batch size that is a prefix of the source's, until 0.17 (#2957)."""
     if is_compiling():
@@ -10899,12 +10913,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             *keys (NestedKey): the keys to remove.
 
         Keyword Args:
-            default (Any, optional): if given, a missing key does not raise.
-                The value of ``default`` is not used: the result holds a
-                ``None`` entry under the missing key.
+            default (Any, optional): if given, a missing key does not raise,
+                and the result holds ``default`` under it, as
+                :meth:`~.split_keys` does. A ``default`` of ``None`` gives a
+                ``None`` entry. A ``default`` that does not fit the batch size
+                (for example ``0`` with a batch size of ``[3]``) also gives a
+                ``None`` entry, with a ``FutureWarning``: starting with
+                TensorDict 0.17, the default will change to raising the error
+                of :meth:`~.split_keys`.
             strict (bool, optional): if ``True``, a missing key raises a
-                ``KeyError``. If ``False``, the result holds a ``None`` entry
-                under it. Defaults to ``True``.
+                ``KeyError``. If ``False``, the result holds ``default`` under
+                it, or a ``None`` entry if no ``default`` is given. Defaults to
+                ``True``.
             filter_empty (bool, optional): if ``True``, the nested tensordicts
                 of the tensordict that the removal leaves empty are removed
                 too. Defaults to ``True``.
@@ -10936,14 +10956,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         strict = strict and default is NO_DEFAULT
         if strict:
             default = NO_DEFAULT
-        else:
+        elif default is NO_DEFAULT:
             default = None
         key_set = keys
 
         # We want to keep the metadata such as batch-size etc so we call with recurse=True
         out = self.empty(recurse=True)
+        # _UNSET tells a missing key apart: pop may convert the default
+        pop_default = default if default is None or default is NO_DEFAULT else _UNSET
         for key in key_set:
-            val = last_out.pop(key, default)
+            val = last_out.pop(key, pop_default)
+            if val is _UNSET:
+                try:
+                    out.set(key, default)
+                    continue
+                except Exception:
+                    # a default that does not fit the batch size (#2948)
+                    _warn_separates_default(key)
+                    val = None
             out.set(key, val)
         out.filter_empty_()
         if filter_empty:
