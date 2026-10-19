@@ -3367,6 +3367,29 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_replace is not td
         assert (td_replace == 0).all()
 
+    def test_replace_does_not_modify_arg(self, td_name, device):
+        # https://github.com/pytorch/tensordict/issues/2949
+        td = getattr(self, td_name)(device)
+        new_a = torch.zeros_like(td.get("a"))
+        new_b = torch.ones_like(td.get("a"))
+        arg = {"a": new_a}
+        td_replace = td.replace(arg, new_key=new_b)
+        assert list(arg) == ["a"]
+        assert (td_replace.get("a") == 0).all()
+        assert (td_replace.get("new_key") == 1).all()
+
+        arg = TensorDict(
+            a=new_a,
+            nested=TensorDict(x=new_a, batch_size=td.batch_size),
+            batch_size=td.batch_size,
+            device=td.device,
+        ).lock_()
+        td_replace = td.replace(arg, new_key=new_b, nested={"y": new_b})
+        assert set(arg.keys(True)) == {"a", "nested", ("nested", "x")}
+        assert (td_replace.get("new_key") == 1).all()
+        assert (td_replace.get(("nested", "x")) == 0).all()
+        assert (td_replace.get(("nested", "y")) == 1).all()
+
     def test_repr(self, td_name, device):
         td = getattr(self, td_name)(device)
         _ = str(td)
