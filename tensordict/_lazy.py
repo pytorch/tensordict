@@ -4180,9 +4180,9 @@ class LazyStackedTensorDict(TensorDictBase):
     # Override: issues the collectives of a dense tensordict with the same
     # keys and shapes, one per key on the stacked leaf. That leaf is a copy, so
     # rank dst, the only rank where the result is defined, writes it back into
-    # the members once every collective is issued: in a callback with async_op,
-    # and at the root in sync mode, so that a failing write-back cannot stop
-    # the collectives of rank dst.
+    # the members: with async_op, in a callback once that reduction completes;
+    # in sync mode, at the root after the last collective, so that a failing
+    # write-back cannot stop the collectives of rank dst.
     def _reduce(
         self,
         dst,
