@@ -1379,6 +1379,7 @@ class TensorCollection:
         out: str | tuple[str, str],
         columns: dict[str, str] | None = None,
         writer: MDSWriter | None = None,
+        finish_writer: bool | None = None,
     ) -> None: ...
     def to_dict(
         self,

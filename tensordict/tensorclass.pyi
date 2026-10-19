@@ -1449,6 +1449,7 @@ class TensorClass(_TensorClassInitArgs):
         out: str | tuple[str, str],
         columns: dict[str, str] | None = None,
         writer: MDSWriter | None = None,
+        finish_writer: bool | None = None,
     ) -> None: ...
     @classmethod
     def from_list(

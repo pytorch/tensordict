@@ -11659,6 +11659,67 @@ class TestGeneric:
         assert isinstance(row["b"], np.ndarray)
         assert (row["b"] == td["b"].numpy()).all()
 
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    @pytest.mark.parametrize("finish_writer", [None, True, False])
+    def test_to_mds_writer_finish(self, tmpdir, finish_writer):
+        # after a tensordict with batch dims, a writer passed by the caller is
+        # finished unless finish_writer=False; the default warns that it stays
+        # open from 0.17 (#2967)
+        from streaming import MDSWriter
+
+        td = TensorDict(a=torch.arange(4), batch_size=[4])
+
+        tmpdir = str(tmpdir)
+        writer = MDSWriter(out=tmpdir, columns={"a": "int"})
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td[:2].to_mds(out=tmpdir, writer=writer, finish_writer=finish_writer)
+        record = [w for w in record if "finish_writer" in str(w.message)]
+        assert len(record) == (finish_writer is None)
+        if record:
+            assert record[0].category is FutureWarning
+            assert record[0].filename == __file__
+        index = os.path.join(tmpdir, "index.json")
+        assert os.path.exists(index) == (finish_writer is not False)
+        if finish_writer is False:
+            td[2:].to_mds(out=tmpdir, writer=writer, finish_writer=False)
+            writer.finish()
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        n = 4 if finish_writer is False else 2
+        assert len(dataset) == n
+        test_td = TensorDict.from_list([dataset[i] for i in range(n)])
+        assert (test_td["a"] == td["a"][:n]).all()
+
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    @pytest.mark.parametrize("finish_writer", [None, True, False])
+    @pytest.mark.parametrize("batched", [True, False])
+    def test_to_mds_writer_finish_silent(self, tmpdir, finish_writer, batched):
+        # calls whose result stays the same in 0.17 do not warn: a writer that
+        # to_mds creates is always finished, and a caller's writer is left
+        # open for a tensordict without batch dims unless finish_writer=True
+        from streaming import MDSWriter
+
+        td = TensorDict(a=torch.arange(2), batch_size=[2] if batched else [])
+
+        tmpdir = str(tmpdir)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            if batched:
+                td.to_mds(out=tmpdir, finish_writer=finish_writer)
+            else:
+                writer = MDSWriter(out=tmpdir, columns={"a": "ndarray"})
+                td.to_mds(out=tmpdir, writer=writer, finish_writer=finish_writer)
+                assert os.path.exists(os.path.join(tmpdir, "index.json")) == (
+                    finish_writer is True
+                )
+                if finish_writer is not True:
+                    writer.finish()
+        assert not [w for w in record if "finish_writer" in str(w.message)]
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        assert len(dataset) == (2 if batched else 1)
+
     def test_to_module_state_dict(self):
         net0 = nn.Transformer(
             d_model=16,
