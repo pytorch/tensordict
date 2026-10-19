@@ -66,34 +66,30 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:20, 328kB/s]
- 0%| | 131k/26.4M [00:00<00:56, 464kB/s]
- 1%| | 197k/26.4M [00:00<00:49, 534kB/s]
- 1%| | 328k/26.4M [00:00<00:32, 803kB/s]
- 2%|▏ | 623k/26.4M [00:00<00:17, 1.51MB/s]
- 4%|▍ | 1.15M/26.4M [00:00<00:09, 2.71MB/s]
- 9%|▊ | 2.26M/26.4M [00:00<00:04, 5.36MB/s]
- 17%|█▋ | 4.42M/26.4M [00:00<00:02, 10.4MB/s]
- 30%|███ | 7.96M/26.4M [00:01<00:01, 18.0MB/s]
- 44%|████▎ | 11.5M/26.4M [00:01<00:00, 23.2MB/s]
- 57%|█████▋ | 15.0M/26.4M [00:01<00:00, 26.8MB/s]
- 70%|███████ | 18.6M/26.4M [00:01<00:00, 29.3MB/s]
- 84%|████████▎ | 22.1M/26.4M [00:01<00:00, 31.1MB/s]
- 97%|█████████▋| 25.6M/26.4M [00:01<00:00, 32.3MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 17.4MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:18, 334kB/s]
+ 1%| | 197k/26.4M [00:00<00:49, 530kB/s]
+ 3%|▎ | 754k/26.4M [00:00<00:16, 1.58MB/s]
+ 8%|▊ | 2.03M/26.4M [00:00<00:05, 4.37MB/s]
+ 18%|█▊ | 4.88M/26.4M [00:00<00:02, 10.7MB/s]
+ 31%|███ | 8.13M/26.4M [00:00<00:01, 16.6MB/s]
+ 44%|████▎ | 11.5M/26.4M [00:00<00:00, 21.5MB/s]
+ 56%|█████▌ | 14.7M/26.4M [00:01<00:00, 24.5MB/s]
+ 70%|███████ | 18.5M/26.4M [00:01<00:00, 28.4MB/s]
+ 86%|████████▌ | 22.6M/26.4M [00:01<00:00, 31.9MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 19.8MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 311kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 309kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:12, 342kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:07, 543kB/s]
- 15%|█▍ | 655k/4.42M [00:00<00:02, 1.39MB/s]
- 48%|████▊ | 2.13M/4.42M [00:00<00:00, 4.78MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 5.72MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:12, 349kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:07, 553kB/s]
+ 11%|█ | 492k/4.42M [00:00<00:03, 1.02MB/s]
+ 42%|████▏ | 1.87M/4.42M [00:00<00:00, 3.50MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 5.20MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 38.5MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 37.5MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -213,8 +209,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 2.03 s
-TensorDict DataLoader: 0.08 s
+torchvision DataLoader: 2.11 s
+TensorDict DataLoader: 0.09 s
 ```
 
 ## Model
@@ -376,7 +372,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 2.2384 s
+TensorDict training done! time: 2.2502 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -386,7 +382,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.6008 s
+Training done! time: 4.6910 s
 ```
 
 ## Conclusion
@@ -415,7 +411,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.886 seconds)
+**Total running time of the script:** (0 minutes 16.046 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 

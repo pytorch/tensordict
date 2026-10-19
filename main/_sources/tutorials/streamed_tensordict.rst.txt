@@ -175,8 +175,8 @@ holds tensors of different lengths in one tensor. With
 
     TensorDict(
         fields={
-            stream0: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False),
-            stream1: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False)},
+            stream0: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False),
+            stream1: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False)},
         batch_size=torch.Size([2]),
         device=None,
         is_shared=False)
@@ -395,8 +395,8 @@ collects ``batch_size`` buckets of data, for ``timeout=1`` second each:
 
     TensorDict from stream TensorDict(
         fields={
-            bucket0: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False),
-            bucket1: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False)},
+            bucket0: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False),
+            bucket1: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False)},
         batch_size=torch.Size([5]),
         device=None,
         is_shared=False)
@@ -461,7 +461,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.018 seconds)
+   **Total running time of the script:** (0 minutes 6.017 seconds)
 
 
 .. _sphx_glr_download_tutorials_streamed_tensordict.py:
