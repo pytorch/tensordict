@@ -811,6 +811,38 @@ def test_inplace_methods_write_nested_file(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("idx", [1, slice(1, 3), (slice(1, 3), 0)])
+def test_sub_td_inplace_methods_tensor_write_nested_file(tmp_path, idx):
+    # #3049: through a sub-tensordict, the in-place math with a tensor operand
+    # writes to the h5 file that the tensordict holds, as with a number
+    expected = TensorDict(
+        h=TensorDict(
+            x=torch.arange(12.0).view(4, 3),
+            g=TensorDict(z=torch.arange(24.0).view(4, 3, 2), batch_size=[4, 3]),
+            batch_size=[4, 3],
+        ),
+        y=torch.arange(12.0).view(4, 3),
+        batch_size=[4, 3],
+    )
+    td = expected.clone()
+    path = tmp_path / "file.h5"
+    td["h"] = PersistentTensorDict.from_dict(td["h"], filename=path)
+    for data in (td, expected):
+        sub_td = data._get_sub_tensordict(idx)
+        w = torch.arange(1.0, 1.0 + sub_td.batch_size.numel()).view(sub_td.batch_size)
+        sub_td.add_(w)
+        sub_td.mul_(w[..., :1])
+        sub_td.clamp_min_(w * 3)
+        sub_td.lerp_(sub_td.to_tensordict() * 0, w / 10)
+        sub_td.addcmul_(w, w)
+    torch.testing.assert_close(td.to_tensordict(), expected)
+    td["h"].close()
+    h5td = PersistentTensorDict.from_h5(path)
+    torch.testing.assert_close(h5td.to_tensordict(), expected["h"])
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_update_keys_to_update_writes_nested_file(tmp_path):
     # #2780: update_ with keys_to_update writes the h5 files that a tensordict
     # holds, as without keys_to_update, also for a key that names a
