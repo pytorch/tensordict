@@ -1834,6 +1834,137 @@ class TestGeneric:
 
         assert convert_ellipsis_to_idx(ellipsis_index, batch_size) == expected_index
 
+    @pytest.mark.parametrize(
+        "entry",
+        ["td", "tensor", "non_tensor", "tensorclass", "locked", "memmap"],
+    )
+    def test_create_nested_path(self, entry, tmpdir):
+        # A tensordict on the path keeps its entries. Any other entry, or a
+        # locked tensordict, is replaced by an empty tensordict.
+        sub = TensorDict(x=torch.zeros(3), batch_size=[3])
+        if entry == "tensor":
+            value = torch.zeros(3)
+        elif entry == "non_tensor":
+            value = NonTensorData("s", batch_size=[3])
+        elif entry == "tensorclass":
+            value = self._KeysUpdateTC(
+                x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]
+            )
+        elif entry == "locked":
+            value = sub.lock_()
+        elif entry == "memmap":
+            value = sub.memmap_(tmpdir)
+        else:
+            value = sub
+        td = TensorDict(a=value, batch_size=[3])
+        assert td.create_nested(("a", "b", "c")) is td
+        a = td.get("a")
+        assert type(a) is TensorDict
+        assert not a.is_locked
+        expected = {"b", ("b", "c")} | ({"x"} if entry == "td" else set())
+        assert set(a.keys(True)) == expected
+
+    def test_create_nested_tensorclass(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+            td: TensorDict = None
+
+        tc = TC(
+            x=torch.zeros(3),
+            td=TensorDict(y=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        assert tc.create_nested(("td", "b")) is tc
+        assert set(tc.td.keys()) == {"y", "b"}
+        assert (tc.td["y"] == 1).all()
+
+    def test_create_nested_lazy_stack(self):
+        # A key that every member holds keeps its entries.
+        td = lazy_stack([TensorDict(a={"x": torch.zeros(())}) for _ in range(2)])
+        td.create_nested(("a", "b"))
+        assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        # A key that only some members hold keeps its entries in those members.
+        td = lazy_stack([TensorDict(a={"x": torch.zeros(())}), TensorDict()])
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1].keys(True)) == {"a", ("a", "b")}
+        # A tensor in one member and a tensordict in the other.
+        td = lazy_stack(
+            [TensorDict(a={"x": torch.zeros(())}), TensorDict(a=torch.zeros(()))]
+        )
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1].keys(True)) == {"a", ("a", "b")}
+        # A locked tensordict in one member is replaced in that member only.
+        locked = TensorDict(x=torch.zeros(())).lock_()
+        td = lazy_stack([TensorDict(a=locked), TensorDict(a={"x": torch.zeros(())})])
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "b")}
+        assert set(td[1].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        # A stack along another dim keeps its batch size.
+        td = lazy_stack(
+            [TensorDict(a={"x": torch.zeros(3)}, batch_size=[3]) for _ in range(2)], 1
+        )
+        td.create_nested(("a", "b", "c"))
+        assert td["a", "b", "c"].batch_size == (3, 2)
+        assert set(td.keys(True)) == {
+            "a",
+            ("a", "x"),
+            ("a", "b"),
+            ("a", "b", "c"),
+        }
+
+    @pytest.mark.parametrize("member", ["tensor", "locked"])
+    @pytest.mark.parametrize("view", ["sub", "sub_slice", "typed"])
+    def test_create_nested_view_of_lazy_stack(self, member, view):
+        # A view over a lazy stack replaces each level of the path.
+        class Typed(TypedTensorDict):
+            a: TensorDictBase
+
+        other = torch.zeros(2)
+        if member == "locked":
+            other = TensorDict(x=torch.zeros(2), batch_size=[2]).lock_()
+        td = lazy_stack(
+            [
+                TensorDict(
+                    a=TensorDict(x=torch.zeros(2), batch_size=[2]), batch_size=[2]
+                ),
+                TensorDict(a=other, batch_size=[2]),
+            ]
+        )
+        if view == "sub":
+            td = td._get_sub_tensordict(0)
+        elif view == "sub_slice":
+            td = td._get_sub_tensordict((slice(None), 0))
+        else:
+            td = Typed.from_tensordict(td)
+        assert td.create_nested(("a", "b")) is td
+        assert set(td.keys(True)) == {"a", ("a", "b")}
+
+    def test_create_nested_partly_locked_lazy_parent(self):
+        # A lazy stack on the path is replaced, even when some members are
+        # unlocked.
+        def parent():
+            return lazy_stack(
+                [TensorDict(x=torch.zeros(())).lock_(), TensorDict(y=torch.zeros(()))]
+            )
+
+        td = TensorDict(a=parent(), batch_size=[2])
+        td.create_nested(("a", "b"))
+        assert type(td.get("a")) is TensorDict
+        assert set(td.keys(True)) == {"a", ("a", "b")}
+        td = lazy_stack([TensorDict(a=parent()) for _ in range(2)])
+        td.create_nested(("a", "b"))
+        for member in td.tensordicts:
+            assert type(member.get("a")) is TensorDict
+            assert set(member.keys(True)) == {"a", ("a", "b")}
+
+    def test_create_nested_non_tensor_stack(self):
+        td = NonTensorStack(NonTensorData("a"), NonTensorData("b"))
+        with pytest.raises(KeyError, match="only 'data' keys"):
+            td.create_nested(("a", "b"))
+
     @pytest.mark.skipif(
         not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu"
     )

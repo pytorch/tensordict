@@ -6588,9 +6588,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Adds an empty nested tensordict at ``key``, and returns ``self``.
 
         The new tensordict has the batch size, device and names of the
-        tensordict. An existing entry at ``key`` is replaced. For a tuple key,
-        every level is created new, so an existing entry on the path, such as
-        ``td["a"]`` for ``("a", "b")``, is replaced too.
+        tensordict it is added to. An existing entry at ``key`` is replaced.
+        For a tuple key, a plain :class:`~tensordict.TensorDict` keeps a
+        plain, unlocked ``TensorDict`` already on the path with its entries:
+        ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. A lazy stack of
+        plain ``TensorDict`` instances does this in each member, and a
+        tensorclass or a :class:`~tensordict.nn.TensorDictParams` follows the
+        rule of the tensordict it wraps. Any other entry on the path, such as a
+        tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
+        tensordict, is replaced by a new empty tensordict, and so is every
+        level of the path when the tensordict is of any other type, such as a
+        view, a typed tensordict or a file.
 
         Args:
             key (NestedKey): the key of the new tensordict.
@@ -6606,6 +6614,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             torch.Size([3, 4, 5])
             >>> list(data.keys(include_nested=True))
             [('some', 'nested', 'value'), ('some', 'nested'), 'some']
+            >>> _ = data.create_nested(("some", "other"))
+            >>> list(data.keys(include_nested=True))
+            [('some', 'nested', 'value'), ('some', 'nested'), ('some', 'other'), 'some']
         """
         key = _unravel_key_to_tuple(key)
         self._create_nested_tuple(key)
@@ -6617,9 +6628,28 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return out
 
     def _create_nested_tuple(self, key):
-        td = self._create_nested_str(key[0])
+        """Adds an empty nested tensordict at the tuple ``key``.
+
+        ``create_nested`` calls it with the key unravelled to a non-empty tuple.
+        The hook puts a new empty tensordict at the last level, and returns
+        nothing. A plain ``TensorDict`` goes down into a plain, unlocked
+        ``TensorDict`` already on the path, so it keeps its entries, and
+        replaces any other entry with a new empty tensordict. Every other
+        class replaces each level of the path. ``LazyStackedTensorDict``
+        overrides it: a stack of plain ``TensorDict`` instances hands the key
+        to each member.
+        """
+        from tensordict._td import TensorDict
+
         if len(key) > 1:
+            # Only a plain TensorDict keeps a plain, unlocked TensorDict on
+            # the path. Anything else is replaced, level by level.
+            td = self._get_str(key[0], None) if type(self) is TensorDict else None
+            if type(td) is not TensorDict or td.is_locked:
+                td = self._create_nested_str(key[0])
             td._create_nested_tuple(key[1:])
+        else:
+            self._create_nested_str(key[0])
 
     def copy_(self, tensordict: T, non_blocking: bool = False) -> Self:
         """Copies the entries of ``tensordict`` into the existing entries, and returns ``self``.

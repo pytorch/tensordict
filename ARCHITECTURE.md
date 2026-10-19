@@ -234,6 +234,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_contains_str(key)` | `_convert_inplace`, which `_set_str` calls | say whether `key` is a key, without reading data | `TensorDict`, file, store |
 | `_get_tuple(key, default)` | `get` | return the entry, or `default`; raise `ValueError` for a path through a tensor (files and the store return `default`) | every class but element |
 | `_get_at_tuple(key, idx, default)` | `get_at` | read the entry at `idx` | file, store, lazy store, element, params |
+| `_create_nested_tuple(key)` | `create_nested` | add an empty tensordict at the tuple `key`; a plain `TensorDict` keeps the plain, unlocked `TensorDict`s already on the path, and every other class replaces each level | lazy (a stack of plain `TensorDict`s hands the key to each member) |
 | `_del(key)` | `del_` | delete the entry at the tuple `key`; raise `KeyError` for a missing key and `ValueError` for a path through a tensor (for `()`, the file and the stores keep their own behaviour until 0.17) | every class but params and typed (sub forwards it) |
 | `_members_as_lists()` | `items`, `values` with `_NESTED_TENSORS_AS_LISTS` | return the members to walk one by one, or `None` | lazy |
 | `_contains_key(key)` | `key in td`, for a str key and an unravelled, non-empty tuple key | say whether `key` is in `keys(True, is_leaf=_is_leaf_nontensor)`, without reading the leaves | `TensorDict` (not its subclasses) |
