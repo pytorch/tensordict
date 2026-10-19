@@ -59,8 +59,13 @@ Parameters:
 
 - **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input tensordict. Its entries that
 are not fields of the input class are ignored.
-- ***args** - ignored.
-- ****kwargs** - ignored.
+- ***args** - ignored, with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning).
+- ****kwargs** - ignored, `tensordict_out` included, with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the
+default will change to writing the outputs into
+`tensordict_out` and returning it, as
+[`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) does, and to raising
+a `TypeError` for the other arguments.
 
 Returns:
 

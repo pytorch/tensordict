@@ -68,7 +68,9 @@ into, instead of a new one. When `batch_size` or `device` is
 given, `out` must have it. For a lazy stack, `out` must be a
 lazy stack too, stacked along any dimension. See the warning
 below about `out=self`. Defaults to `None`.
-- ****constructor_kwargs** - accepted and ignored.
+- ****constructor_kwargs** - ignored, with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning).
+Starting with TensorDict 0.17, the default will change to
+raising a `TypeError` for them.
 
 Returns:
 

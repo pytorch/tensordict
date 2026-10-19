@@ -9,7 +9,13 @@ structure. Each leaf is reduced in place with
 [`torch.distributed.reduce()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.reduce). After the call, rank `dst` holds the
 result. On the other ranks, the values of the tensordict are not defined
 (with `gloo`, they can hold partial results): clone the tensordict
-before the call if you need them. See [Collectives](../../distributed.html#distributed-collectives).
+before the call if you need them. A lazy stack reduces each stacked
+leaf, like a dense tensordict of the same keys and shapes, and rank
+`dst` writes the result back into its members: after the last
+reduction, or with `async_op=True`, after each reduction completes.
+That write raises if a member leaf cannot be written in place, such as
+an expanded tensor, and the call waits for every reduction before it
+raises. See [Collectives](../../distributed.html#distributed-collectives).
 
 Parameters:
 
@@ -22,7 +28,10 @@ leaves run at the same time, and the call waits for them unless
 - **return_premature** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - with `async_op=True`, if
 `True`, returns the list of `Work` objects of the reductions
 without waiting for them: call `wait()` on each one before you use
-the tensordict. Defaults to `False`.
+the tensordict, even if an earlier one raises. On rank `dst`,
+the leaves of a lazy stack give a
+[`torch.futures.Future`](https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future) instead, which also writes the
+result back. Defaults to `False`.
 - **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
 Defaults to `None`, the default process group.
 

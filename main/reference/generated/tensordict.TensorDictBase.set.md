@@ -32,9 +32,12 @@ raises on a missing key, use [`set_()`](tensordict.TensorDictBase.set_.html#tens
 
 Keyword Arguments:
 
-**non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
 can run asynchronously with respect to the host. Defaults to
 `False`.
+- ****kwargs** - ignored, with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with
+TensorDict 0.17, the default will change to raising a
+`TypeError` for them, as [`set_()`](tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_) does.
 
 Returns:
 
