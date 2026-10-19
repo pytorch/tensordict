@@ -3728,9 +3728,10 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     def _tree_of_copies(self, written: list) -> TensorDict:
         """A ``TensorDict`` of the entries of ``self``, with each nested sub-tensordict that reads copies replaced by a copy of its leaves.
 
-        Called by ``_inplace_on_nested_copies``. Appends each such
-        sub-tensordict and its copy to ``written``, for it to write the copy
-        back.
+        Called by ``_inplace_on_nested_copies``, and by
+        ``LazyStackedTensorDict._stack_of_copies`` for a member that is a
+        sub-tensordict. Appends each such sub-tensordict and its copy to
+        ``written``, for the caller to write the copy back.
         """
         source = {}
         for key in self.keys():
