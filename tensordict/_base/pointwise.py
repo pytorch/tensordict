@@ -1388,7 +1388,7 @@ class _PointwiseOps:
             _foreach("cosh_", vals)
         return self
 
-    @_maybe_broadcast_other("bitwise_and")
+    @_maybe_broadcast_other("bitwise_and", keywords=("other",))
     def bitwise_and(
         self,
         other: TensorCollection | torch.Tensor,
@@ -1445,7 +1445,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
-    @_maybe_broadcast_other("logical_and")
+    @_maybe_broadcast_other("logical_and", keywords=("other",))
     def logical_and(
         self,
         other: TensorCollection | torch.Tensor,
@@ -2146,7 +2146,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
-    @_maybe_broadcast_other("__mod__")
+    @_maybe_broadcast_other("__mod__", keywords=("other",))
     def mod(self, other: TensorCollection | torch.Tensor) -> Self:
         """Returns a new tensordict with the remainder of every leaf divided by ``other``.
 
@@ -2758,7 +2758,7 @@ class _PointwiseOps:
         return result
 
     @_clamp_into_out
-    @_maybe_broadcast_other("clamp", 2)
+    @_maybe_broadcast_other("clamp", 2, keywords=("min", "max"))
     def clamp(
         self,
         min: TensorDictBase | torch.Tensor | float | None = None,

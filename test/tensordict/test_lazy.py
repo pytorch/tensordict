@@ -1131,6 +1131,45 @@ class TestLazyStackedTensorDict:
             check(td, make(False) * other)
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_pointwise_keyword_tensor(self, stack_dim):
+        # A tensor passed by keyword broadcasts with each leaf from the right,
+        # as on the dense tensordict: each member leaf gets its part of it,
+        # which depends on the rank of the leaf (#3042)
+        torch.manual_seed(0)
+        members = [
+            TensorDict(x=torch.randn(4, 3), y=torch.randn(4), batch_size=[4])
+            for _ in range(3)
+        ]
+        lazy = lazy_stack(members, stack_dim)  # batch [3, 4] or [4, 3]
+        dense = lazy.to_tensordict()
+
+        def check(result, expected):
+            assert set(result.keys(True, True)) == set(expected.keys(True, True))
+            for key, value in expected.items(True, True):
+                torch.testing.assert_close(result[key], value)
+
+        # per-feature bounds for x, and bounds of the batch shape for y
+        for lo in (torch.full((3,), -0.5), -torch.rand(lazy.batch_size)):
+            if lo.shape != (3,):
+                lazy_y = lazy.exclude("x")
+                dense_y = dense.exclude("x")
+            else:
+                lazy_y = lazy.exclude("y")
+                dense_y = dense.exclude("y")
+            check(
+                lazy_y.clamp(min=lo, max=lo + 0.5),
+                dense_y.clamp(min=lo, max=lo + 0.5),
+            )
+            minus_one = torch.tensor(-1.0)
+            check(lazy_y.clamp(minus_one, max=lo), dense_y.clamp(minus_one, max=lo))
+        # the leaves of a member differ in rank: x gets the whole bound and y
+        # its slice along the stack dim
+        if stack_dim == 1:
+            lo = torch.rand(3) - 0.5
+            check(lazy.clamp(min=lo, max=lo + 0.5), dense.clamp(min=lo, max=lo + 0.5))
+            check(lazy.mod(other=lo + 2), dense.mod(other=lo + 2))
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("kind", ["tensorclass", "typed"])
     def test_arithmetic_ops_broadcast_tensor_nested_wrapped(self, stack_dim, kind):
         # A tensorclass or a TypedTensorDict that wraps a lazy stack, nested in
