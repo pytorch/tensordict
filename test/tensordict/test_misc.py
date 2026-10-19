@@ -789,22 +789,25 @@ class TestPointwiseOps:
     )
     @pytest.mark.parametrize("tensor_first", [False, True])
     def test_nested_lazy_and_tensor_operands(self, op, tensor_first):
-        # With a lazy stack nested in the tensordict, the leaves of each member
-        # lack the stack dim and a batch-shaped tensor would be misaligned, so
-        # the ops still raise
-        def make_td():
-            return TensorDict(
-                n=LazyStackedTensorDict(
-                    TensorDict(a=torch.arange(2.0)), TensorDict(a=torch.arange(2.0))
-                ),
-                batch_size=[2],
-            )
+        # With a lazy stack nested in the tensordict, each member gets its
+        # slice of a batch-shaped tensor, as for a dense tensordict (#3005)
+        def make_td(lazy):
+            n = TensorDict(a=torch.arange(6.0).view(2, 3) + 1, batch_size=[2, 3])
+            if lazy:
+                n = LazyStackedTensorDict(*n.unbind(0))
+            return TensorDict(n=n, batch_size=[2, 3])
 
-        args = [make_td() + 10, torch.tensor([0.0, 1.0])]
-        if tensor_first:
-            args = args[::-1]
-        with pytest.raises(TypeError):
-            getattr(make_td(), op)(*args)
+        def make_args(lazy):
+            args = [make_td(lazy) + 10, torch.arange(6.0).view(2, 3) / 6]
+            return args[::-1] if tensor_first else args
+
+        td = make_td(True)
+        result = getattr(td, op)(*make_args(True))
+        expected = getattr(make_td(False), op)(*make_args(False))
+        assert isinstance(result["n"], LazyStackedTensorDict)
+        torch.testing.assert_close(result["n", "a"], expected["n", "a"])
+        if op.endswith("_"):
+            assert result is td
 
     @pytest.mark.parametrize("op", ["maximum", "minimum"])
     @pytest.mark.parametrize("other_type", ["tensordict", "float", "tensor"])

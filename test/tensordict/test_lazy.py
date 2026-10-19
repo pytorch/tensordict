@@ -1093,6 +1093,45 @@ class TestLazyStackedTensorDict:
             assert (lazy == dense + other).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("depth", [1, 2])
+    def test_arithmetic_ops_broadcast_tensor_nested(self, stack_dim, depth):
+        # A lazy stack nested in a tensordict also gives each member its slice
+        # of a batch-shaped tensor. Here the leaves of a member have the shape
+        # of the batch, so a misaligned tensor would give wrong values (#3005)
+        def make(lazy):
+            n = TensorDict(a=torch.arange(8.0).view(2, 2, 2), batch_size=[2, 2])
+            if lazy:
+                n = lazy_stack(list(n.unbind(stack_dim)), stack_dim)
+            td = TensorDict(n=n, b=torch.arange(4.0).view(2, 2), batch_size=[2, 2])
+            if depth == 2:
+                td = TensorDict(o=td, batch_size=[2, 2])
+            return td
+
+        def check(result, expected):
+            assert set(result.keys(True, True)) == set(expected.keys(True, True))
+            for key, value in expected.items(True, True):
+                torch.testing.assert_close(result[key], value)
+
+        lazy_key = ("n",) if depth == 1 else ("o", "n")
+        for other in (torch.arange(4.0).view(2, 2) * 10, torch.tensor([1.0, 2.0])):
+            for op in ("add", "sub", "mul", "maximum", "clamp_min"):
+                result = getattr(make(True), op)(other)
+                assert isinstance(result.get(lazy_key), LazyStackedTensorDict)
+                check(result, getattr(make(False), op)(other))
+            check(make(True) + other, make(False) + other)
+            check(
+                make(True).lerp(make(True) + 1, other),
+                make(False).lerp(make(False) + 1, other),
+            )
+            check(
+                make(True).addcmul(other, make(True) + 1),
+                make(False).addcmul(other, make(False) + 1),
+            )
+            td = make(True)
+            assert td.mul_(other) is td
+            check(td, make(False) * other)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize(
         "op,args",
         [
