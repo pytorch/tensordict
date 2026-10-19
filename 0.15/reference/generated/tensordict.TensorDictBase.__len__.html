@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.__len__">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__len__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.__len__" title="Link to this definition">#</a></dt>
-<dd><p>Returns the length of first dimension, if there is, otherwise 0.</p>
+<dd><p>Returns the size of the first batch dimension, or 0 if the tensordict has no batch dimensions.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__len__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__len__",
        "url": "/reference/generated/tensordict.TensorDictBase.__len__.html",
-       "articleBody": "TensorDictBase.__len__# TensorDictBase.__len__() \u2192 int# Returns the length of first dimension, if there is, otherwise 0. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__len__# TensorDictBase.__len__() \u2192 int# Returns the size of the first batch dimension, or 0 if the tensordict has no batch dimensions. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

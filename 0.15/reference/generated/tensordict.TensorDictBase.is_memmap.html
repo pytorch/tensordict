@@ -1642,14 +1642,22 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.is_memmap">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">is_memmap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.is_memmap" title="Link to this definition">#</a></dt>
-<dd><p>Checks if tensordict is memory-mapped.</p>
-<p>If a TensorDict instance is memory-mapped, it is locked (entries cannot
-be renamed, removed or added). If a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> is created with
-tensors that are all memory-mapped, this does __not__ mean that <code class="docutils literal notranslate"><span class="pre">is_memmap</span></code>
-will return <code class="docutils literal notranslate"><span class="pre">True</span></code> (as a new tensor may or may not be memory-mapped).
-Only if one calls <cite>tensordict.memmap_()</cite> will the tensordict be
-considered as memory-mapped.</p>
-<p>This is always <code class="docutils literal notranslate"><span class="pre">True</span></code> for tensordicts on a CUDA device.</p>
+<dd><p>Whether the tensordict is memory-mapped.</p>
+<p><code class="docutils literal notranslate"><span class="pre">True</span></code> for the tensordict of <a class="reference internal" href="tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a>, and for the results
+of <a class="reference internal" href="tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> and <a class="reference internal" href="tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a> written to a directory or
+to anonymous memory (not to an archive).</p>
+<p>A memory-mapped tensordict is locked (see <a class="reference internal" href="../../concepts/keys.html#keys-locking"><span class="std std-ref">Locking and temporary changes</span></a>), and
+unlocking it makes <code class="docutils literal notranslate"><span class="pre">is_memmap</span></code> return <code class="docutils literal notranslate"><span class="pre">False</span></code>. A tensordict built
+from memory-mapped tensors, or returned by <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>, is
+not memory-mapped in this sense: a new entry would not be.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">(),</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">()</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">()</span>
+<span class="go">(False, True)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2010,7 +2018,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.is_memmap",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.is_memmap",
        "url": "/reference/generated/tensordict.TensorDictBase.is_memmap.html",
-       "articleBody": "TensorDictBase.is_memmap# TensorDictBase.is_memmap() \u2192 bool# Checks if tensordict is memory-mapped. If a TensorDict instance is memory-mapped, it is locked (entries cannot be renamed, removed or added). If a TensorDict is created with tensors that are all memory-mapped, this does __not__ mean that is_memmap will return True (as a new tensor may or may not be memory-mapped). Only if one calls tensordict.memmap_() will the tensordict be considered as memory-mapped. This is always True for tensordicts on a CUDA device. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.is_memmap# TensorDictBase.is_memmap() \u2192 bool# Whether the tensordict is memory-mapped. True for the tensordict of memmap_(), and for the results of memmap() and memmap_like() written to a directory or to anonymous memory (not to an archive). A memory-mapped tensordict is locked (see Locking and temporary changes), and unlocking it makes is_memmap return False. A tensordict built from memory-mapped tensors, or returned by load_memmap(), is not memory-mapped in this sense: a new entry would not be. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3)) \u003e\u003e\u003e td.is_memmap(), td.memmap().is_memmap() (False, True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

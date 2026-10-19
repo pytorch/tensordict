@@ -1,31 +1,31 @@
 # TensorDictBase.rsub
 
-TensorDictBase.rsub(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.rsub(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [float](https://docs.python.org/3/builtins/functions.html#float)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Subtracts `self`, scaled by `alpha`, from `other`, leaf by leaf.
+Returns a new tensordict with every leaf, scaled by `alpha`, subtracted from `other`.
+
+`other - td` calls this method.
 
 \[\text{out}_i = \text{other}_i - \text{alpha} \times \text{self}_i\]
 
-Supports broadcasting,
-type promotion, and integer, float, and complex inputs.
-
 Parameters:
 
-**other** ([*TensorDict*](tensordict.TensorDict.html#tensordict.TensorDict)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the value from which
-`self` is subtracted. The dimensions of a tensor match the
-leading dimensions of each leaf, and the tensor is expanded
-over the other dimensions.
+**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the value from which
+the leaves are subtracted. A tensordict is paired with the
+tensordict key by key. A tensor is aligned with the batch
+dimensions of each leaf and expanded over its feature
+dimensions. Batch sizes that differ are broadcast together.
 
 Keyword Arguments:
 
-- **alpha** (*Number*) - the multiplier for `self`.
-- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the value to use for an
-entry that only one of the two tensordicts has. If `None`
-(default), the two tensordicts must have the same keys, and a
-missing key raises `KeyError`. If `"intersection"`, only
-the keys that both tensordicts have are computed, and the
-other keys are dropped. Any other value replaces the missing
-entries on both sides of the operation.
+- **alpha** (*Number**,**optional*) - the multiplier for the leaves. Defaults to
+`None`, which subtracts them as they are.
+- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - what to do with the keys
+that only one of the two tensordicts has. `None` requires the
+same keys and raises a `KeyError` otherwise.
+`"intersection"` computes the keys that both have and drops
+the others. A tensor stands in for the missing entry on either
+side, and the result has the keys of both. Defaults to `None`.
 
 Examples
 

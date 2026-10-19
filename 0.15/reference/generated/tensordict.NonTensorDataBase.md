@@ -23,13 +23,33 @@ keep a [`MetaData`](tensordict.MetaData.html#tensordict.MetaData).
 
 See [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data).
 
+Parameters:
+
+**data** (*Any*) - the value. A [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) is
+unwrapped: its value is used.
+
+Keyword Arguments:
+
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the entry, usually that of the tensordict that holds it. Defaults
+to `torch.Size([])`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the entry.
+The value itself is not moved. Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions, one
+per dimension. Defaults to `None`.
+
 copy()
 
-Return a shallow copy, equivalent to `_clone(recurse=False)`.
+Returns a shallow copy: a new entry that holds the same value, as `clone(recurse=False)` does.
+
+A `list`, `tuple` or `dict` value is copied, but not its items.
 
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
 
-Retrieves the device type of tensor class.
+The device of the tensorclass, or `None` if its leaves may be on different devices.
+
+It is read-only: use [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to move the
+tensorclass to another device.
 
 extend(*tensordict: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
@@ -47,7 +67,7 @@ Deprecated since version 0.15: Use `dataclasses.fields(cls)` instead. It returns
 
 from_module(*as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a tensordict that holds the parameters and buffers of a module.
 
 The entries are the parameters and buffers of the module themselves,
 not copies. Submodules become nested tensordicts.
@@ -60,7 +80,7 @@ The function [`tensordict.from_module()`](tensordict.from_module.html#tensordict
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `TensorDictParams`
 instance is returned, which can be used to store parameters
 within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
@@ -77,7 +97,7 @@ Defaults to `True`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or a
 `TensorDictParams` if `as_module=True`.
 
 Examples
@@ -110,10 +130,17 @@ Parameters:
 
 - **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict that holds the tensor fields.
 - **non_tensordict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - the values of the non-tensor fields. The
-fields that neither argument holds are set to `None`.
-- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
-raise an error if `tensordict` is not a [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase).
-Without it, such a tensordict raises an error.
+fields that neither argument holds are set to `None`. Defaults
+to `None`.
+- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - deprecated in 0.15, will be removed in TensorDict 0.17.
+If `False`, skips the check that `tensordict` is a
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase). By default, the check runs, and
+another type raises a `RuntimeError`.
+
+Returns:
+
+A new instance of the class, whose fields are the entries of
+`tensordict`.
 
 Examples
 
@@ -131,24 +158,106 @@ Examples
 
 maybe_to_stack()
 
-Converts the NonTensorDataBase object to a NonTensorStack object if it has a non-empty batch-size.
+Returns a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with the value in every batch element.
+
+The elements share the value: it is not copied. If the batch size is
+empty, returns `self`.
+
+Examples
+
+```
+>>> from tensordict import NonTensorData
+>>> stack = NonTensorData("a", batch_size=[2]).maybe_to_stack()
+>>> type(stack).__name__, stack.tolist()
+('NonTensorStack', ['a', 'a'])
+```
+
+rename_keys(*mapping*, ***, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
+
+Returns a tensorclass with several keys renamed at once.
+
+Works as [`rename_keys()`](tensordict.TensorDictBase.rename_keys.html#tensordict.TensorDictBase.rename_keys), which describes
+`mapping` and `strict`, with two differences: each destination must be
+a field of the class, or the call raises an `AttributeError`, and a
+field that the renaming empties is kept.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+>>> foo = Foo(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+>>> foo.rename_keys({"x": "y", "y": "x"}).x
+tensor([1., 1., 1.])
+```
 
 select(**keys*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *as_tensordict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-TensorClass-specific select that supports `as_tensordict`.
+Returns a tensorclass that holds only the fields of `keys`, with the other fields set to `None`.
 
-tolist(***, *convert_tensors: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['numpy'] = False*, *tolist_first: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_linked_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
-
-Converts the data in a list if the batch-size is non-empty.
-
-If the batch-size is empty, returns the data.
+Works as [`select()`](tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select), which describes
+`keys`: the leaves are not copied.
 
 Keyword Arguments:
 
-- **convert_tensors** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**"numpy"*) - if `True`, tensors will be converted to lists when creating the dictionary.
-If "numpy", tensors will be converted to numpy arrays.
-Otherwise, they will remain as tensors. Default: `False`.
-- **tolist_first** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensordict will be converted to a list first when
-it has batch dimensions. Default: `False`.
-- **as_linked_list** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the list will be converted to a [`tensordict.utils.LinkedList`](tensordict.utils.LinkedList.html#tensordict.utils.LinkedList)
-which will automatically update the tensordict when the list is modified. Default: `False`.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the other fields of the
+tensorclass to `None` and returns `self`. Defaults to
+`False`.
+- **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a missing key raises a
+`KeyError`. If `False`, missing keys are ignored. Defaults to
+`True`.
+- **as_tensordict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns the selected
+entries in a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) instead of a
+tensorclass. Defaults to `False`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+>>> foo = Foo(x=torch.zeros(3), y=torch.ones(3), batch_size=[3])
+>>> print(foo.select("x").y)
+None
+>>> type(foo.select("x", as_tensordict=True)).__name__
+'TensorDict'
+```
+
+tolist(***, *convert_tensors: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['numpy'] = False*, *tolist_first: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_linked_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+
+Returns the value in a nested list with one item per batch element.
+
+If the batch size is empty, returns the value itself.
+
+Keyword Arguments:
+
+- **convert_tensors** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*or**"numpy"**,**optional*) - accepted for
+compatibility with [`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist).
+It has no effect: the items are the stored value. Defaults to
+`False`.
+- **tolist_first** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - accepted for compatibility with
+[`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist). It has no effect.
+Defaults to `False`.
+- **as_linked_list** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns a
+`tensordict.utils.LinkedList` bound to the entry instead of a
+list. A [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) holds one value, so setting an
+item of the list to a non-tensor value, such as a string,
+raises a `ValueError` and leaves the list unchanged. Call
+`maybe_to_stack()` first to get a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), whose list writes back.
+Defaults to `False`.
+
+Examples
+
+```
+>>> from tensordict import NonTensorData
+>>> NonTensorData("a", batch_size=[2, 1]).tolist()
+[['a'], ['a']]
+>>> NonTensorData("a").tolist()
+'a'
+```

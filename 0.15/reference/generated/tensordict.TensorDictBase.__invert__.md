@@ -2,12 +2,10 @@
 
 TensorDictBase.__invert__() → Self
 
-Returns a new TensorDict instance with all tensors inverted (i.e., bitwise NOT operation).
+Returns `~td`, a new tensordict with `~` applied to every leaf.
 
-Returns:
-
-A new TensorDict instance with the same key set as the original,
-but with all tensors having their bits inverted.
+The operation is a logical NOT for boolean leaves and a bitwise NOT for
+integer leaves.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

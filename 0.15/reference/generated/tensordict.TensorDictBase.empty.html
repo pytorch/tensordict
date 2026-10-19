@@ -1642,33 +1642,45 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.empty">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">NO_DEFAULT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.empty" title="Link to this definition">#</a></dt>
-<dd><p>Returns a new, empty tensordict with the same device and batch size.</p>
-<p>The result is not locked, even if <code class="docutils literal notranslate"><span class="pre">self</span></code> is.</p>
+<dd><p>Returns a new tensordict of the same type, with no tensor leaves.</p>
+<p>The result has the batch size, device and dimension names of the
+tensordict, unless the keyword arguments change them. It is not locked,
+even if the tensordict is.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>recurse</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the entire structure of the
-<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> will be reproduced without content: the result
-has the sub-tensordicts of <code class="docutils literal notranslate"><span class="pre">self</span></code>, without their leaves.
-Otherwise, only the root will be duplicated.
+<dd class="field-odd"><p><strong>recurse</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the result has the nested
+tensordicts and the non-tensor data of the tensordict, without
+its tensor leaves. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the result has no entries.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em>, </em><em>optional</em>) – a new batch-size for the tensordict.
-With <code class="docutils literal notranslate"><span class="pre">recurse=True</span></code>, a sub-tensordict whose batch size is the
-start of the new one gets the new one, a sub-tensordict whose
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size of
+the result. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which keeps the batch size of
+the tensordict.
+With <code class="docutils literal notranslate"><span class="pre">recurse=True</span></code>, a nested tensordict whose batch size is the
+start of the new one gets the new one, a nested tensordict whose
 batch size starts with the new one keeps it, and any other
-sub-tensordict raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. A
+nested tensordict raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. A
 <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> whose members took
 the batch size before 0.15 (one stacked along dim 0, for
 instance) keeps that result, the empty stack of its members,
-with a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>, when a sub-tensordict does not
+with a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>, when a nested tensordict does not
 fit the new batch size or <code class="docutils literal notranslate"><span class="pre">names</span></code> has another length.
 Starting with TensorDict 0.17, the default will change to
 raising a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> or a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, as
 <code class="docutils literal notranslate"><span class="pre">TensorDict.empty</span></code> and the names setter do.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><em>optional</em>) – a new device.</p></li>
-<li><p><strong>names</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – dimension names.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the
+result. <code class="docutils literal notranslate"><span class="pre">None</span></code> gives a result with no device. By default, the
+result has the device of the tensordict.</p></li>
+<li><p><strong>names</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the names of the batch dimensions
+of the result, one per dimension. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which
+keeps the names of the tensordict for the dimensions that
+remain. Where <code class="docutils literal notranslate"><span class="pre">empty()</span></code> keeps names that the names
+setter would reject or drop (a list of another length, or a
+name used twice), it emits a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. Starting
+with TensorDict 0.17, the default will change to applying them
+as the names setter does, with or without <code class="docutils literal notranslate"><span class="pre">recurse</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1681,6 +1693,8 @@ raising a <code class="docutils literal notranslate"><span class="pre">RuntimeEr
 <span class="go">([], torch.Size([3]))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <span class="go">['b']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2043,7 +2057,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.empty",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.empty",
        "url": "/reference/generated/tensordict.TensorDictBase.empty.html",
-       "articleBody": "TensorDictBase.empty# TensorDictBase.empty(recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None) \u2192 Self# Returns a new, empty tensordict with the same device and batch size. The result is not locked, even if self is. Parameters: recurse (bool, optional) \u2013 if True, the entire structure of the TensorDict will be reproduced without content: the result has the sub-tensordicts of self, without their leaves. Otherwise, only the root will be duplicated. Defaults to False. Keyword Arguments: batch_size (Size, optional) \u2013 a new batch-size for the tensordict. With recurse=True, a sub-tensordict whose batch size is the start of the new one gets the new one, a sub-tensordict whose batch size starts with the new one keeps it, and any other sub-tensordict raises a RuntimeError. A LazyStackedTensorDict whose members took the batch size before 0.15 (one stacked along dim 0, for instance) keeps that result, the empty stack of its members, with a FutureWarning, when a sub-tensordict does not fit the new batch size or names has another length. Starting with TensorDict 0.17, the default will change to raising a RuntimeError or a ValueError, as TensorDict.empty and the names setter do. device (device, optional) \u2013 a new device. names (list of str, optional) \u2013 dimension names. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3), \"b\": {\"c\": torch.ones(3)}}, [3]) \u003e\u003e\u003e empty = td.empty() \u003e\u003e\u003e list(empty.keys()), empty.batch_size ([], torch.Size([3])) \u003e\u003e\u003e list(td.empty(recurse=True).keys(include_nested=True)) [\u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.empty# TensorDictBase.empty(recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None) \u2192 Self# Returns a new tensordict of the same type, with no tensor leaves. The result has the batch size, device and dimension names of the tensordict, unless the keyword arguments change them. It is not locked, even if the tensordict is. Parameters: recurse (bool, optional) \u2013 if True, the result has the nested tensordicts and the non-tensor data of the tensordict, without its tensor leaves. If False, the result has no entries. Defaults to False. Keyword Arguments: batch_size (Size or list of int, optional) \u2013 the batch size of the result. Defaults to None, which keeps the batch size of the tensordict. With recurse=True, a nested tensordict whose batch size is the start of the new one gets the new one, a nested tensordict whose batch size starts with the new one keeps it, and any other nested tensordict raises a RuntimeError. A LazyStackedTensorDict whose members took the batch size before 0.15 (one stacked along dim 0, for instance) keeps that result, the empty stack of its members, with a FutureWarning, when a nested tensordict does not fit the new batch size or names has another length. Starting with TensorDict 0.17, the default will change to raising a RuntimeError or a ValueError, as TensorDict.empty and the names setter do. device (device, str or int, optional) \u2013 the device of the result. None gives a result with no device. By default, the result has the device of the tensordict. names (list of str, optional) \u2013 the names of the batch dimensions of the result, one per dimension. Defaults to None, which keeps the names of the tensordict for the dimensions that remain. Where empty() keeps names that the names setter would reject or drop (a list of another length, or a name used twice), it emits a FutureWarning. Starting with TensorDict 0.17, the default will change to applying them as the names setter does, with or without recurse. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3), \"b\": {\"c\": torch.ones(3)}}, [3]) \u003e\u003e\u003e empty = td.empty() \u003e\u003e\u003e list(empty.keys()), empty.batch_size ([], torch.Size([3])) \u003e\u003e\u003e list(td.empty(recurse=True).keys(include_nested=True)) [\u0027b\u0027] \u003e\u003e\u003e td.empty(batch_size=[]).batch_size torch.Size([]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1642,7 +1642,8 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.requires_grad">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">requires_grad</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></em><a class="headerlink" href="#tensordict.TensorDictBase.requires_grad" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<dd><p><code class="docutils literal notranslate"><span class="pre">True</span></code> if any leaf of the tensordict, nested ones included, requires gradients.</p>
+</dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
 other methods, see <a class="reference internal" href="../td.html#api-tensordict-methods"><span class="std std-ref">Methods by task</span></a>.</p>
@@ -2002,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.requires_grad",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.requires_grad",
        "url": "/reference/generated/tensordict.TensorDictBase.requires_grad.html",
-       "articleBody": "TensorDictBase.requires_grad# property TensorDictBase.requires_grad: bool# Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.requires_grad# property TensorDictBase.requires_grad: bool# True if any leaf of the tensordict, nested ones included, requires gradients. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

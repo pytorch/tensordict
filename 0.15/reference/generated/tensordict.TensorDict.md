@@ -58,67 +58,91 @@ the largest leading shape that all entries share.
 - The shape of every entry must start with the batch size. If it does
 not, setting the entry raises a `RuntimeError`.
 - If `device` is set, every entry is moved to that device. If it is
-not set, the entries can be on different devices.
-- A key is a string, or a tuple of strings for a nested entry.
+not set, the entries can be on different devices. See [Devices, dtypes, and memory](../../concepts/devices.html#devices).
+- A key is a string, or a tuple of strings for a nested entry. Other keys
+raise a `KeyError`.
+
+The values of `source` are stored as given, not copied, except when
+they are moved to `device`. A nested `dict` becomes a nested
+tensordict with the same batch size. Numbers and arrays become tensors,
+and other values such as strings are stored as non-tensor data (see
+[Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data)).
 
 Parameters:
 
-- **source** (*TensorDict**or**Mapping**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**Union**[**Tensor**,*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*]**]*) - a
-data source, such as a `dict` or any other
-[`Mapping`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping), read like a `dict`. If empty,
-the tensordict can be populated subsequently.
-A `TensorDict` can also be built via a sequence of keyword arguments,
-as it is the case for `dict(...)`.
-- **batch_size** (*iterable**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - a batch size for the
-tensordict. The batch size can be modified subsequently as long
-as it is compatible with its content.
-If no batch size is provided, an empty batch size is assumed (it
-is not inferred automatically from the data). To automatically set
-the batch size, refer to [`auto_batch_size_()`](tensordict.TensorDictBase.auto_batch_size_.html#tensordict.TensorDictBase.auto_batch_size_).
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**compatible type**,**optional*) - a device for the
-TensorDict. If provided, all tensors will be stored on that device.
-If not, tensors on different devices are allowed.
-- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the dimensions of the
-tensordict. If provided, its length must match the one of the
-`batch_size`. Defaults to `None` (no dimension name, or `None`
-for every dimension).
-- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and a device is passed, the
-entries are moved to the device without synchronization. This is
-safe only from CPU to CUDA. In other cases, you must synchronize
-yourself. If `False`, every move is synchronous. If `None`
-(default), the moves are asynchronous, and the constructor
-synchronizes after them if required.
-- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the resulting tensordict will be
-locked.
+- **source** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**Mapping**or*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - the entries, read
+like a `dict`: string or nested keys to tensors, tensordicts,
+nested dicts or other values. Exclusive with `**kwargs`.
+Defaults to `None`, which gives an empty tensordict that can be
+filled later.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size
+of the tensordict: the leading dimensions that all its entries
+share. It can be changed later if the entries allow it. Defaults
+to `None`, which gives the batch size `[]`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+tensordict. Entries on another device are moved to it. Defaults to
+`None`, which leaves each entry where it is, and the tensordict
+has no device.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions, one
+per dimension. Defaults to `None`, which leaves the dimensions
+unnamed.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - with `device`, if `True`, the
+entries are copied to the device asynchronously with respect to
+the host, with no synchronization: this is safe only from CPU to
+CUDA. If `False`, every copy is synchronous. Defaults to
+`None`, which copies asynchronously and synchronizes after the
+copies when needed.
+- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict is locked: its
+entries cannot be added, removed or replaced. See
+[Locking and temporary changes](../../concepts/keys.html#keys-locking). Defaults to `False`.
+- ****kwargs** - the entries, as keyword arguments, instead of `source`.
+
+Raises:
+
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if both `source` and `**kwargs` are given, or if the
+ length of `names` differs from that of `batch_size`.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the shape of an entry does not start with
+ `batch_size`.
 
 Examples
+
+Name the batch dimensions. Shape operations keep the names:
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> source = {'random': torch.randn(3, 4),
-... 'zeros': torch.zeros(3, 4, 5)}
->>> batch_size = [3]
->>> td = TensorDict(source, batch_size=batch_size)
->>> print(td.shape) # equivalent to td.batch_size
-torch.Size([3])
->>> td_unsqueeze = td.unsqueeze(-1)
->>> print(td_unsqueeze.get("zeros").shape)
-torch.Size([3, 1, 4, 5])
->>> print(td_unsqueeze[0].shape)
-torch.Size([1])
->>> print(td_unsqueeze.view(-1).shape)
-torch.Size([3])
->>> print((td.clone()==td).all())
-True
->>> td_add = td.apply(lambda x, y: x + y, td)
->>> (td_add["random"] == 2 * td["random"]).all()
-tensor(True)
+>>> td = TensorDict(
+... obs=torch.zeros(3, 4), action=torch.zeros(3, 2), batch_size=[3], names=["time"]
+... )
+>>> td.names
+['time']
+>>> td.unsqueeze(0).names
+[None, 'time']
+```
+
+Set the batch size from the data:
+
+```
+>>> td = TensorDict(obs=torch.zeros(3, 4))
+>>> td.batch_size
+torch.Size([])
+>>> td.auto_batch_size_().batch_size
+torch.Size([3, 4])
+```
+
+Adding an entry to a locked tensordict raises an error:
+
+```
+>>> td = TensorDict(obs=torch.zeros(3), batch_size=[3], lock=True)
+>>> td["action"] = torch.zeros(3)
+Traceback (most recent call last):
+ ...
+RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 ```
 
 *classmethod*from_module(*module: [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)*, *as_module: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *lock: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *use_state_dict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*)
 
-Puts the parameters and buffers of a module in a tensordict.
+Returns a tensordict that holds the parameters and buffers of a module.
 
 The entries are the parameters and buffers of the module themselves,
 not copies. Submodules become nested tensordicts.
@@ -131,7 +155,7 @@ The function [`tensordict.from_module()`](tensordict.from_module.html#tensordict
 
 Parameters:
 
-- **module** (*nn.Module*) - the module to get the parameters from.
+- **module** ([*Module*](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)) - the module to get the parameters from.
 - **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `TensorDictParams`
 instance is returned, which can be used to store parameters
 within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
@@ -148,7 +172,7 @@ Defaults to `True`.
 
 Returns:
 
-a `TensorDict`, or a
+A `TensorDict`, or a
 `TensorDictParams` if `as_module=True`.
 
 Examples

@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+is_integer
+==========
+
+.. autofunction:: is_integer
+
+.. minigallery:: tensordict.is_integer
+    :add-heading: Tutorials that use ``is_integer``

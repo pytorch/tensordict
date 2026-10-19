@@ -1645,9 +1645,14 @@ document.write(`
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a></p>
 <p>A list of the values of a non-tensor entry that writes item assignments back to the tensordict.</p>
 <p><code class="docutils literal notranslate"><span class="pre">td[key]</span></code> returns a <a class="reference internal" href="#tensordict.utils.LinkedList" title="tensordict.utils.LinkedList"><code class="xref py py-class docutils literal notranslate"><span class="pre">LinkedList</span></code></a> when the entry is a
-<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>. Setting an item
-(<code class="docutils literal notranslate"><span class="pre">values[0]</span> <span class="pre">=</span> <span class="pre">&quot;z&quot;</span></code>) writes the value to the tensordict. <code class="docutils literal notranslate"><span class="pre">append</span></code> and
-<code class="docutils literal notranslate"><span class="pre">extend</span></code> change the list only, and unlink it from the tensordict.</p>
+<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>, and so does
+<a class="reference internal" href="tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist" title="tensordict.TensorDictBase.tolist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tolist()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">as_linked_list=True</span></code>.
+Setting an item (<code class="docutils literal notranslate"><span class="pre">values[0]</span> <span class="pre">=</span> <span class="pre">&quot;z&quot;</span></code>) writes the value to the tensordict.
+The methods that change the length of the list (<code class="docutils literal notranslate"><span class="pre">append</span></code>, <code class="docutils literal notranslate"><span class="pre">extend</span></code>,
+<code class="docutils literal notranslate"><span class="pre">insert</span></code>, <code class="docutils literal notranslate"><span class="pre">pop</span></code>, <code class="docutils literal notranslate"><span class="pre">remove</span></code>, <code class="docutils literal notranslate"><span class="pre">clear</span></code> and <code class="docutils literal notranslate"><span class="pre">del</span></code>) change the list
+only, and unlink it from the tensordict: later item assignments no longer
+write back. A <a class="reference internal" href="#tensordict.utils.LinkedList" title="tensordict.utils.LinkedList"><code class="xref py py-class docutils literal notranslate"><span class="pre">LinkedList</span></code></a> compares equal to a list with the same
+items. If the write to the tensordict raises, the list is unchanged.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
@@ -1661,39 +1666,37 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.append">
 <span class="sig-name descname"><span class="pre">append</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.append" title="Link to this definition">#</a></dt>
-<dd><p>Append object to the end of the list.</p>
+<dd><p>Appends <code class="docutils literal notranslate"><span class="pre">object</span></code> to the list and unlinks the list from the tensordict.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.clear">
 <span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.clear" title="Link to this definition">#</a></dt>
-<dd><p>Remove all items from list.</p>
+<dd><p>Removes every item and unlinks the list from the tensordict.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.extend">
 <span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.extend" title="Link to this definition">#</a></dt>
-<dd><p>Extend list by appending elements from the iterable.</p>
+<dd><p>Extends the list with the items of <code class="docutils literal notranslate"><span class="pre">object</span></code> and unlinks it from the tensordict.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.insert">
 <span class="sig-name descname"><span class="pre">insert</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.insert" title="Link to this definition">#</a></dt>
-<dd><p>Insert object before index.</p>
+<dd><p>Inserts <code class="docutils literal notranslate"><span class="pre">object</span></code> before <code class="docutils literal notranslate"><span class="pre">index</span></code> and unlinks the list from the tensordict.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.pop">
 <span class="sig-name descname"><span class="pre">pop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.pop" title="Link to this definition">#</a></dt>
-<dd><p>Remove and return item at index (default last).</p>
-<p>Raises IndexError if list is empty or index is out of range.</p>
+<dd><p>Removes and returns the item at <code class="docutils literal notranslate"><span class="pre">index</span></code> and unlinks the list from the tensordict.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.remove">
 <span class="sig-name descname"><span class="pre">remove</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.remove" title="Link to this definition">#</a></dt>
-<dd><p>Remove first occurrence of value.</p>
-<p>Raises ValueError if the value is not present.</p>
+<dd><p>Removes the first item equal to <code class="docutils literal notranslate"><span class="pre">value</span></code> and unlinks the list from the tensordict.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2062,7 +2065,7 @@ document.write(`
        "headline": "LinkedList",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - LinkedList",
        "url": "/reference/generated/tensordict.utils.LinkedList.html",
-       "articleBody": "LinkedList# class tensordict.utils.LinkedList(*args, td: TensorDictBase, **kwargs)# Bases: list A list of the values of a non-tensor entry that writes item assignments back to the tensordict. td[key] returns a LinkedList when the entry is a NonTensorStack. Setting an item (values[0] = \"z\") writes the value to the tensordict. append and extend change the list only, and unlink it from the tensordict. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[3]) \u003e\u003e\u003e td[\"names\"] = [\"a\", \"b\", \"c\"] \u003e\u003e\u003e values = td[\"names\"] \u003e\u003e\u003e values[0] = \"z\" \u003e\u003e\u003e td.get(\"names\").tolist() [\u0027z\u0027, \u0027b\u0027, \u0027c\u0027] append(object: Any) \u2192 None# Append object to the end of the list. clear() \u2192 None# Remove all items from list. extend(object: Any) \u2192 None# Extend list by appending elements from the iterable. insert(index: int, object: Any) \u2192 None# Insert object before index. pop(index: int = -1) \u2192 Any# Remove and return item at index (default last). Raises IndexError if list is empty or index is out of range. remove(value: Any) \u2192 None# Remove first occurrence of value. Raises ValueError if the value is not present.",
+       "articleBody": "LinkedList# class tensordict.utils.LinkedList(*args, td: TensorDictBase, **kwargs)# Bases: list A list of the values of a non-tensor entry that writes item assignments back to the tensordict. td[key] returns a LinkedList when the entry is a NonTensorStack, and so does tolist() with as_linked_list=True. Setting an item (values[0] = \"z\") writes the value to the tensordict. The methods that change the length of the list (append, extend, insert, pop, remove, clear and del) change the list only, and unlink it from the tensordict: later item assignments no longer write back. A LinkedList compares equal to a list with the same items. If the write to the tensordict raises, the list is unchanged. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[3]) \u003e\u003e\u003e td[\"names\"] = [\"a\", \"b\", \"c\"] \u003e\u003e\u003e values = td[\"names\"] \u003e\u003e\u003e values[0] = \"z\" \u003e\u003e\u003e td.get(\"names\").tolist() [\u0027z\u0027, \u0027b\u0027, \u0027c\u0027] append(object: Any) \u2192 None# Appends object to the list and unlinks the list from the tensordict. clear() \u2192 None# Removes every item and unlinks the list from the tensordict. extend(object: Any) \u2192 None# Extends the list with the items of object and unlinks it from the tensordict. insert(index: int, object: Any) \u2192 None# Inserts object before index and unlinks the list from the tensordict. pop(index: int = -1) \u2192 Any# Removes and returns the item at index and unlinks the list from the tensordict. remove(value: Any) \u2192 None# Removes the first item equal to value and unlinks the list from the tensordict.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

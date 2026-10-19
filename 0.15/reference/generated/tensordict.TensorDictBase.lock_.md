@@ -2,14 +2,14 @@
 
 TensorDictBase.lock_() → Self
 
-Locks the tensordict and its sub-tensordicts, and returns it.
+Locks the tensordict and its nested tensordicts, and returns it.
 
 A locked tensordict raises `RuntimeError` on any operation that adds,
 removes or renames an entry, or that replaces a leaf with a new tensor:
 [`set()`](tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set), `__setitem__`, [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update), [`pop()`](tensordict.TensorDictBase.pop.html#tensordict.TensorDictBase.pop),
 [`rename_key_()`](tensordict.TensorDictBase.rename_key_.html#tensordict.TensorDictBase.rename_key_), `del`. Writes into the existing leaves still
 work: [`set_()`](tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_), [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_), and `set(..., inplace=True)`.
-Check the state with [`is_locked`](tensordict.TensorDictBase.is_locked.html#tensordict.TensorDictBase.is_locked). See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
+Check the state with [`is_locked`](tensordict.TensorDictBase.is_locked.html#tensordict.TensorDictBase.is_locked). See [Locking and temporary changes](../../concepts/keys.html#keys-locking).
 
 Can be used as a context manager: the tensordict is unlocked when the
 `with` block exits, also if the block raises an exception.

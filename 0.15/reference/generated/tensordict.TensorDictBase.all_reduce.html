@@ -1642,26 +1642,39 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.all_reduce">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">all_reduce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">op</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'torch.distributed.ProcessGroup'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">async_op</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.all_reduce" title="Link to this definition">#</a></dt>
-<dd><p>All-reduces the tensordict across all ranks in-place.</p>
-<p>Each leaf tensor is reduced individually via <code class="docutils literal notranslate"><span class="pre">dist.all_reduce</span></code>.
-After the call, every rank holds the reduced values.</p>
+<dd><p>Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result.</p>
+<p>Every rank of the group must call it, with a tensordict of the same
+structure. Each leaf is reduced with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_reduce" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_reduce()</span></code></a>,
+for example to sum or average gradients. See
+<a class="reference internal" href="../../distributed.html#distributed-collectives"><span class="std std-ref">Collectives</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>op</strong> (<em>dist.ReduceOp</em><em>, </em><em>optional</em>) – The reduce operation (e.g.
-<code class="docutils literal notranslate"><span class="pre">ReduceOp.SUM</span></code>). Defaults to <code class="docutils literal notranslate"><span class="pre">ReduceOp.SUM</span></code>.</p>
+<dd class="field-odd"><p><strong>op</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.ReduceOp" title="(in PyTorch v2.14)"><em>ReduceOp</em></a><em>, </em><em>optional</em>) – the reduction. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, which is <code class="docutils literal notranslate"><span class="pre">torch.distributed.ReduceOp.SUM</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – The process group
-to use. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (default group).</p></li>
-<li><p><strong>async_op</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns a list of futures.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group.</p></li>
+<li><p><strong>async_op</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns the list of <code class="docutils literal notranslate"><span class="pre">Work</span></code>
+objects of the reductions without waiting for them: call <code class="docutils literal notranslate"><span class="pre">wait()</span></code>
+on each one before you use the tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>None, or a list of futures if <code class="docutils literal notranslate"><span class="pre">async_op=True</span></code>.</p>
+<dd class="field-odd"><p>With <code class="docutils literal notranslate"><span class="pre">async_op=True</span></code>, a list of <code class="docutils literal notranslate"><span class="pre">Work</span></code> objects. Otherwise, <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<p>This example runs in two processes: add it to the
+<a class="reference internal" href="../../distributed.html#distributed"><span class="std std-ref">runner script of the distributed guide</span></a> and
+pass it to <code class="docutils literal notranslate"><span class="pre">run</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">all_reduce</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">):</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">rank</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">td</span><span class="o">.</span><span class="n">all_reduce</span><span class="p">(</span><span class="n">op</span><span class="o">=</span><span class="n">dist</span><span class="o">.</span><span class="n">ReduceOp</span><span class="o">.</span><span class="n">SUM</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">])</span>  <span class="c1"># with 2 ranks: tensor([1., 1., 1.]) on every rank</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2022,7 +2035,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.all_reduce",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.all_reduce",
        "url": "/reference/generated/tensordict.TensorDictBase.all_reduce.html",
-       "articleBody": "TensorDictBase.all_reduce# TensorDictBase.all_reduce(op=None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, async_op: bool = False) \u2192 None# All-reduces the tensordict across all ranks in-place. Each leaf tensor is reduced individually via dist.all_reduce. After the call, every rank holds the reduced values. Parameters: op (dist.ReduceOp, optional) \u2013 The reduce operation (e.g. ReduceOp.SUM). Defaults to ReduceOp.SUM. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 The process group to use. Defaults to None (default group). async_op (bool) \u2013 if True, returns a list of futures. Defaults to False. Returns: None, or a list of futures if async_op=True. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.all_reduce# TensorDictBase.all_reduce(op=None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, async_op: bool = False) \u2192 None# Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result. Every rank of the group must call it, with a tensordict of the same structure. Each leaf is reduced with torch.distributed.all_reduce(), for example to sum or average gradients. See Collectives. Parameters: op (ReduceOp, optional) \u2013 the reduction. Defaults to None, which is torch.distributed.ReduceOp.SUM. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. async_op (bool, optional) \u2013 if True, returns the list of Work objects of the reductions without waiting for them: call wait() on each one before you use the tensordict. Defaults to False. Returns: With async_op=True, a list of Work objects. Otherwise, None. Examples This example runs in two processes: add it to the runner script of the distributed guide and pass it to run. def all_reduce(rank, world_size): td = TensorDict(a=torch.ones(3) * rank, batch_size=[3]) td.all_reduce(op=dist.ReduceOp.SUM) print(rank, td[\"a\"]) # with 2 ranks: tensor([1., 1., 1.]) on every rank Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

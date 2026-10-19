@@ -143,6 +143,58 @@ take precedence over ``verbose``, so you can mix the two:
             label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},
         batch_size=torch.Size([32]))
 
+Compact display: ``compact=True``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With ``compact=True``, each entry prints as its dtype and its shape after
+the batch dims, and the batch size prints once, at the start. The display
+stays on one line if it fits in 80 columns, and otherwise puts one entry on
+each line:
+
+    >>> with set_printoptions(compact=True):
+    ...     print(td)
+    TensorDict(batch_size=[32], fields={image: f32[3,64,64], label: i64[]})
+    >>> sample = TensorDict(
+    ...     points=torch.zeros(1000, 3),
+    ...     cells=torch.zeros(1000, 4, dtype=torch.int64),
+    ...     data=TensorDict(pressure=torch.zeros(1000), mask=torch.zeros(1000, dtype=torch.bool)),
+    ...     batch_size=[1000],
+    ...     device="cpu",
+    ... )
+    >>> with set_printoptions(compact=True):
+    ...     print(sample)
+    TensorDict(batch_size=[1000], device=cpu, fields={
+        cells: i64[4],
+        data: {mask: bool[], pressure: f32[]},
+        points: f32[3]})
+
+The dtype codes are those of JAX and polars: ``f32`` for ``torch.float32``,
+``i64`` for ``torch.int64``, ``u8``, ``c64``, ``bf16``, ``bool``. The rules:
+
+- A nested tensordict prints as ``{...}``, and with its class name when it is
+  not a :class:`~tensordict.TensorDict` (``Mesh{...}`` for a tensorclass). A
+  nested tensordict with more batch dims than its parent shows them first:
+  ``sub: [5]{y: f32[3]}``.
+- In a lazy stack, a dim whose size differs between the members prints as
+  ``-1``, the header shows ``stack_dim=``, and the keys that only some members
+  have follow under ``exclusive_fields=``. A lazy stack nested in another
+  entry shows only the keys that all its members have; the default display
+  shows the others.
+- A non-tensor entry prints as the type name of its value (``str``). In a
+  :class:`~tensordict.PersistentTensorDict`, it prints as ``NonTensorData`` or
+  ``NonTensorStack`` instead, since reading the type of the value would read
+  the file.
+- When the tensordict has no device (``device=None``), a leaf that is not on
+  the CPU shows its device: ``f32[3]@cuda:0``.
+- ``show_batch_size``, ``show_device``, ``show_dtype`` and ``sort_keys``
+  apply; ``show_dtype=False`` (or ``verbose=False``) prints the shapes only,
+  as ``[3]``. The other options, ``plain`` included, are ignored.
+- The display reads no data and syncs no device: it uses only the shape,
+  dtype and device of each leaf, and stacks no leaf of a lazy stack.
+- A :class:`~tensordict.store.TensorDictStore` and a
+  :class:`~tensordict.NonTensorStack` keep their usual display, and
+  :func:`~tensordict.parse_tensor_dict_string` does not read this format.
+
 Available options
 ~~~~~~~~~~~~~~~~~
 
@@ -194,6 +246,9 @@ Option                  Default             Description
 ``sort_keys``           ``"alphabetical"``   Key ordering: ``"alphabetical"`` (default),
                                              ``"insertion"`` (dict order), or a callable
                                              passed as ``key`` to :func:`sorted`.
+``compact``             ``False``            Print each entry as its dtype and its shape
+                                             after the batch dims (``f32[3]``), on one
+                                             line when it fits. See `Compact display: compact=True`_.
 ======================  ==================  =============================================
 
 Read the current options

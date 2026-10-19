@@ -4,17 +4,14 @@
 
 Bases: [`object`](https://docs.python.org/3/builtins/functions.html#object)
 
-An abstract class for nested keys.
+The type of the keys of a tensordict: a string, or a tuple of strings for a nested entry.
 
-Nested keys are the generic key type accepted by TensorDict.
+A nested key is either a string or a non-empty tuple of nested keys.
+`td["a", "b"]` and `td[("a", "b")]` read the entry `"b"` of the
+nested tensordict `"a"`. Nested tuples are flattened: `("a", ("b",))`
+is the same key as `("a", "b")`. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
-A nested key is either a string or a non-empty tuple of NestedKeys
-instances. `td["a", "b"]` and `td[("a", "b")]` read the entry `"b"`
-of the nested tensordict `"a"`. Nested tuples are flattened:
-`("a", ("b",))` is the same key as `("a", "b")`. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
-
-The NestedKey class supports instance checks. Use it in type hints and
-in `isinstance` checks.
+Use `NestedKey` in type hints and in `isinstance` checks.
 
 Examples
 

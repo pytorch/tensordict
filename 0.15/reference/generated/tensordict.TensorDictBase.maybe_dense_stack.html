@@ -1642,12 +1642,28 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.maybe_dense_stack">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">maybe_dense_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.maybe_dense_stack" title="Link to this definition">#</a></dt>
-<dd><p>Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required.</p>
+<dd><p>Stacks tensordicts densely if possible, or into a lazy stack otherwise.</p>
 <p>The result is a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> if the tensordicts
 have the same keys and shapes, and a
 <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a> otherwise. See
-<a class="reference internal" href="../../concepts/stacking.html#stacking"><span class="std std-ref">Stacking and variable-size data</span></a>, and <a class="reference internal" href="tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="tensordict.maybe_dense_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.maybe_dense_stack()</span></code></a> for the
-arguments.</p>
+<a class="reference internal" href="../../concepts/stacking.html#stacking"><span class="std std-ref">Stacking and variable-size data</span></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensordicts to stack.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the new batch dimension. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a tensordict to write the result
+into. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – passed to
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.maybe_dense_stack" title="tensordict.LazyStackedTensorDict.maybe_dense_stack"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LazyStackedTensorDict.maybe_dense_stack</span></code></a>, for
+example <code class="docutils literal notranslate"><span class="pre">strict</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2020,7 +2036,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.maybe_dense_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.maybe_dense_stack",
        "url": "/reference/generated/tensordict.TensorDictBase.maybe_dense_stack.html",
-       "articleBody": "TensorDictBase.maybe_dense_stack# classmethod TensorDictBase.maybe_dense_stack(input, dim: int = 0, *, out=None, **kwargs)# Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required. The result is a TensorDict if the tensordicts have the same keys and shapes, and a LazyStackedTensorDict otherwise. See Stacking and variable-size data, and tensordict.maybe_dense_stack() for the arguments. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e b = TensorDict(x=torch.ones(3), batch_size=[3]) \u003e\u003e\u003e c = TensorDict(y=torch.ones(3), batch_size=[3]) \u003e\u003e\u003e type(TensorDict.maybe_dense_stack([a, b])).__name__ \u0027TensorDict\u0027 \u003e\u003e\u003e type(TensorDict.maybe_dense_stack([a, c])).__name__ \u0027LazyStackedTensorDict\u0027 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.maybe_dense_stack# classmethod TensorDictBase.maybe_dense_stack(input, dim: int = 0, *, out=None, **kwargs)# Stacks tensordicts densely if possible, or into a lazy stack otherwise. The result is a TensorDict if the tensordicts have the same keys and shapes, and a LazyStackedTensorDict otherwise. See Stacking and variable-size data. Parameters: input (sequence of TensorDictBase) \u2013 the tensordicts to stack. dim (int, optional) \u2013 the new batch dimension. Defaults to 0. Keyword Arguments: out (TensorDictBase, optional) \u2013 a tensordict to write the result into. Defaults to None. **kwargs \u2013 passed to LazyStackedTensorDict.maybe_dense_stack, for example strict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e b = TensorDict(x=torch.ones(3), batch_size=[3]) \u003e\u003e\u003e c = TensorDict(y=torch.ones(3), batch_size=[3]) \u003e\u003e\u003e type(TensorDict.maybe_dense_stack([a, b])).__name__ \u0027TensorDict\u0027 \u003e\u003e\u003e type(TensorDict.maybe_dense_stack([a, c])).__name__ \u0027LazyStackedTensorDict\u0027 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

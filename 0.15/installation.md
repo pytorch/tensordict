@@ -6,7 +6,7 @@ Install the latest release from PyPI:
 pip install tensordict
 ```
 
-tensordict needs Python 3.10+ and PyTorch 2.13+. To make sure that the
+tensordict needs Python 3.10+ and PyTorch 2.11+. To make sure that the
 install worked, print the version:
 
 ```
@@ -16,17 +16,17 @@ python -c "import tensordict; print(tensordict.__version__)"
 ## Requirements
 
 tensordict is pure Python: it has no compiled extension. Each change is
-tested with PyTorch 2.13, the latest PyTorch release, and PyTorch nightly, on
-Python 3.10 to 3.14 and the free-threaded 3.14t.
+tested with PyTorch 2.11, the latest PyTorch release, and PyTorch nightly, on
+Python 3.10 to 3.15 and the free-threaded 3.14t and 3.15t.
 
 If PyTorch is not installed, `pip` installs the default build from PyPI
 with tensordict. If you need a specific build, for example for CUDA or for a
 CPU-only machine, install PyTorch first. The [PyTorch Get Started page](https://pytorch.org/get-started/locally/) gives the command for each
 build.
 
-The other runtime dependencies are `numpy`, `cloudpickle`, `packaging`,
-`pyvers`, `orjson` before Python 3.13, and `typing_extensions>=4.0` on
-Python 3.10. `pip` and `conda` install them with tensordict.
+The other runtime dependencies are `numpy`, `cloudpickle`, `pyvers`, and
+`typing_extensions>=4.0` on Python 3.10. `pip` and `conda` install them
+with tensordict.
 
 ## Optional dependencies
 
@@ -98,7 +98,7 @@ If you do not want `pip` to change your PyTorch installation, pass
 install them first:
 
 ```
-pip install numpy cloudpickle packaging orjson "pyvers>=0.2,<0.3" "typing_extensions>=4.0"
+pip install numpy cloudpickle "pyvers>=0.2,<0.3" "typing_extensions>=4.0"
 pip install -e . --no-deps
 ```
 

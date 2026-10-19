@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.fromkeys">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">fromkeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.fromkeys" title="Link to this definition">#</a></dt>
-<dd><p>Creates a tensordict from a list of keys and a single value.</p>
+<dd><p>Creates a tensordict with the same value for every key, like <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict.fromkeys" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dict.fromkeys()</span></code></a>.</p>
 <p>Same as <a class="reference internal" href="tensordict.TensorDictBase.fromkeys.html#tensordict.TensorDictBase.fromkeys" title="tensordict.TensorDict.fromkeys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tensordict.TensorDict.fromkeys()</span></code></a>, and as <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict.fromkeys" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dict.fromkeys()</span></code></a>
 for a dict. The batch size of the result is <code class="docutils literal notranslate"><span class="pre">[]</span></code>.</p>
 <dl class="field-list simple">
@@ -1650,12 +1650,12 @@ for a dict. The batch size of the result is <code class="docutils literal notran
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>keys</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the keys of the new tensordict. A tuple of
 strings creates a nested entry.</p></li>
-<li><p><strong>value</strong> (<em>compatible type</em><em>, </em><em>optional</em>) – the value of every entry. Defaults
-to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em>, </em><em>number</em><em> or </em><em>Any</em><em>, </em><em>optional</em>) – the value of every
+entry. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
+<dd class="field-even"><p>A <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2023,7 +2023,7 @@ to <code class="docutils literal notranslate"><span class="pre">0</span></code>.
        "headline": "fromkeys",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - fromkeys",
        "url": "/reference/generated/tensordict.fromkeys.html",
-       "articleBody": "fromkeys# tensordict.fromkeys(keys: list[NestedKey], value: Any = 0)# Creates a tensordict from a list of keys and a single value. Same as tensordict.TensorDict.fromkeys(), and as dict.fromkeys() for a dict. The batch size of the result is []. Parameters: keys (list of NestedKey) \u2013 the keys of the new tensordict. A tuple of strings creates a nested entry. value (compatible type, optional) \u2013 the value of every entry. Defaults to 0. Returns: a TensorDict. Examples \u003e\u003e\u003e import tensordict \u003e\u003e\u003e td = tensordict.fromkeys([\"a\", (\"b\", \"c\")], 1) \u003e\u003e\u003e td[\"b\", \"c\"] tensor(1)",
+       "articleBody": "fromkeys# tensordict.fromkeys(keys: list[NestedKey], value: Any = 0)# Creates a tensordict with the same value for every key, like dict.fromkeys(). Same as tensordict.TensorDict.fromkeys(), and as dict.fromkeys() for a dict. The batch size of the result is []. Parameters: keys (list of NestedKey) \u2013 the keys of the new tensordict. A tuple of strings creates a nested entry. value (Tensor, number or Any, optional) \u2013 the value of every entry. Defaults to 0. Returns: A TensorDict. Examples \u003e\u003e\u003e import tensordict \u003e\u003e\u003e td = tensordict.fromkeys([\"a\", (\"b\", \"c\")], 1) \u003e\u003e\u003e td[\"b\", \"c\"] tensor(1)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

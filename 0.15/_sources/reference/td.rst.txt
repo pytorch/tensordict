@@ -35,6 +35,10 @@ Its subclasses keep their entries in different places:
 :class:`MemoryMappedTensor` is not a tensordict. It is a tensor whose data
 is in a file, and the type of the entries of a memory-mapped tensordict.
 
+:class:`TensorCollection` is the common base class of the tensordicts and
+the subclasses of :class:`TensorClass`: the type hint for "a tensordict or
+a tensorclass".
+
 Other containers have their own pages: :class:`TensorClass`, the class
 form with typed fields and methods, and non-tensor data
 (:ref:`api-tensorclass`), :class:`TypedTensorDict`
@@ -56,6 +60,7 @@ form with typed fields and methods, and non-tensor data
     :template: class.rst
 
     MemoryMappedTensor
+    TensorCollection
 
 .. _api-tensordict-methods:
 
@@ -174,6 +179,7 @@ see :ref:`keys`. For values that are not tensors, see
     TensorDictBase.split_keys
     TensorDictBase.separates
     TensorDictBase.rename_key_
+    TensorDictBase.rename_keys
     TensorDictBase.flatten_keys
     TensorDictBase.unflatten_keys
     TensorDictBase.create_nested
@@ -209,6 +215,7 @@ see :ref:`keys`. For values that are not tensors, see
 
     unravel_key
     unravel_key_list
+    unravel_key_to_tuple
     merge_tensordicts
 
 .. _api-methods-indexing:
@@ -318,6 +325,8 @@ dimensions do not change. See :ref:`batch-size` and :ref:`stacking`.
     dense_stack_tds
     pad
     pad_sequence
+    unpad_sequence
+    collate
 
 .. _api-methods-device:
 
@@ -341,6 +350,7 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.clear_device_
     TensorDictBase.is_cpu
     TensorDictBase.is_cuda
+    TensorDictBase.is_meta
     TensorDictBase.pin_memory
     TensorDictBase.share_memory_
     TensorDictBase.is_shared
@@ -388,6 +398,11 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.quint8
     TensorDictBase.quint4x2
 
+``to`` and the dtype shorthands take a ``cast_filter`` predicate
+``fn(key, value) -> bool`` that selects the leaves to cast. The predicates
+below test the dtype of their last argument, so they serve as a
+``cast_filter`` and as a test in :meth:`~tensordict.TensorDictBase.apply`.
+
 .. rubric:: Functions
 
 .. autosummary::
@@ -395,6 +410,10 @@ control the memory that holds them. See :ref:`devices`.
     :template: function.rst
 
     from_consolidated
+    is_inexact
+    is_floating
+    is_integer
+    is_bool
 
 .. _api-methods-pointwise:
 
@@ -798,8 +817,8 @@ what to use instead.
 Deprecated functions
 ~~~~~~~~~~~~~~~~~~~~
 
-These functions still work, and each call raises a ``DeprecationWarning``.
-Their pages name the replacement and the release that removes them.
+These functions still work. Their pages name the replacement and the
+release that removes them.
 
 .. autosummary::
     :toctree: generated/
@@ -812,6 +831,19 @@ Their pages name the replacement and the release that removes them.
 
 Package constants
 -----------------
+
+.. py:data:: KEY_SEPARATOR
+    :module: tensordict
+
+    ``"."``, the default ``separator`` of
+    :meth:`~tensordict.TensorDictBase.flatten_keys` and
+    :meth:`~tensordict.TensorDictBase.unflatten_keys`, for code that joins or
+    splits nested keys the same way, such as
+    ``tuple(name.split(KEY_SEPARATOR))``. The names of
+    :meth:`~tensordict.TensorDictBase.state_dict` also use ``"."``, the
+    ``torch.nn.Module`` convention, independently of this constant.
+    Reassigning it has no effect: the defaults are bound when the methods are
+    defined. It can also be imported from ``tensordict.utils``.
 
 .. py:data:: NO_DEFAULT
     :module: tensordict.base

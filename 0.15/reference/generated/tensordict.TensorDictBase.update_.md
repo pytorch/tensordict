@@ -1,64 +1,62 @@
 # TensorDictBase.update
 
-TensorDictBase.update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → Self
+TensorDictBase.update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → Self
 
-Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
+Copies the entries of a dictionary or tensordict into the existing entries, and returns `self`.
 
-Unlike [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update), this function will throw an error if the key is unknown to `self`.
+Each value is copied into the existing tensor, which keeps its
+storage, as with [`set_()`](tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_). `update_` therefore works on a
+locked tensordict. Every key of the input must exist in the tensordict.
+Keyword arguments are top-level entries, and win over an entry of the
+input with the same key. A key named like an argument of `update_`
+must go in the input dictionary. See [In-place operations](../../concepts/operations.html#inplace-conventions).
+
+On a shared or memory-mapped tensordict, a non-tensor value that its
+shared buffer cannot store (for example `None`, or an int where a
+string is shared) is skipped, with a [`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning) that names
+its key.
 
 Parameters:
 
-- **input_dict_or_td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - input data to be written
-in self. If `None`, only the keyword arguments are used.
-- **clone** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether the tensors in the input (
-tensor) dict should be cloned before being set. Defaults to `False`.
+- **input_dict_or_td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - the entries to
+copy. If `None`, only the keyword arguments are copied.
+Defaults to `None`.
+- **clone** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, clones the tensors of the
+input before copying them. Defaults to `False`.
 
 Keyword Arguments:
 
-- **keys_to_update** (*sequence**of**NestedKeys**,**optional*) - if provided, only
-the list of keys in `key_to_update` will be updated.
-This is aimed at avoiding calls to
-`data_dest.update_(data_src.select(*keys_to_update))`.
-- **non_blocking** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and this copy is between
-different devices, the copy may occur asynchronously with respect
-to the host.
-- ****kwargs** - additional key-value pairs to write into `self` as top-level entries. As with the
-positional form, any key that does not already exist in `self` raises [`KeyError`](https://docs.python.org/3/builtins/exceptions.html#KeyError).
-When both `input_dict_or_td` and `kwargs` are provided, kwargs win on key conflict.
-
-Note
-
-Keyword arguments are treated as top-level keys only. Nested structures still work when
-the kwarg value is itself a dict or tensor collection. Keys whose names collide with reserved
-parameters (`clone`, `non_blocking`, `keys_to_update`) must be passed through the positional
-dict form.
-
-Note
-
-On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot
-store (for instance `None`, or an int where a string is shared) is skipped, with a
-[`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning) that names its key.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+can run asynchronously with respect to the host. Defaults to
+`False`.
+- **keys_to_update** (*sequence**of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - if passed, only
+these keys are copied, without the cost of
+`td.update_(other.select(*keys_to_update))`. Defaults to
+`None`, which copies every entry.
+- ****kwargs** - entries to copy at the top level, by key.
 
 Returns:
 
-self
+`self`.
+
+Raises:
+
+- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if a key of the input is missing from the tensordict.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a value does not fit the shape of its entry.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> a = torch.randn(3)
->>> b = torch.randn(3, 4)
->>> td = TensorDict({"a": a, "b": b}, batch_size=[3])
->>> other_td = TensorDict({"a": a*0, "b": b*0}, batch_size=[])
->>> _ = td.update_(other_td)
->>> assert td['a'] is not other_td['a']
->>> assert (td['a'] == other_td['a']).all()
->>> assert (td['a'] == 0).all()
->>> # keyword form for top-level entries (key must already exist)
->>> _ = td.update_(a=torch.ones(3))
->>> assert (td["a"] == 1).all()
+>>> a = torch.ones(3)
+>>> td = TensorDict(a=a, b=torch.ones(3, 4), batch_size=[3])
+>>> _ = td.update_(TensorDict(a=torch.zeros(3), b=torch.zeros(3, 4), batch_size=[3]))
+>>> td["a"] is a, a.sum()
+(True, tensor(0.))
+>>> _ = td.update_(a=torch.ones(3)) # keyword form
+>>> a.sum()
+tensor(3.)
 ```
 
 Every tensordict class and every tensorclass has this method. For the

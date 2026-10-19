@@ -22,95 +22,85 @@ Warning
 
 Warning
 
-This module requires the wrapped function to meet a few requirements. It is the user responsibility
-to make sure that all of these are fulfilled.
+The wrapped function must meet the requirements below. `CudaGraphModule`
+does not check all of them: a function that breaks one can give wrong
+results.
 
-> - The function cannot have dynamic control flow. For instance, the following code snippet will fail to be
-> wrapped in CudaGraphModule:
-> 
-> 
-> 
-> 
-> ```
-> def func(x):
-> if x.norm() > 1:
-> return x + 1
-> else:
-> return x - 1
-> ```
-> 
-> 
-> 
-> 
-> 
-> Use [`torch.where()`](https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where) instead:
-> 
-> 
-> 
-> 
-> ```
-> def func(x):
-> return torch.where(x.norm() > 1, x + 1, x - 1)
-> ```
-> - The function must execute a code that can be exactly re-run using the same buffers. This means that
-> dynamic shapes (changing shape in the input or during the code execution) is not supported. In other words,
-> the input must have a constant shape. After the capture, a tensor input with a different shape, or a
-> tensordict input with a different batch size or an entry of a different shape, raises a `ValueError`, and
-> a tensordict input that lacks one of the `in_keys` raises a `KeyError`.
-> - The output of the function must be detached. If a call to the optimizers is required, put it in the input
-> function. For instance, the following function is a valid operator:
-> 
-> 
-> 
-> 
-> ```
-> def func(x, y):
-> optim.zero_grad()
-> loss_val = loss_fn(x, y)
-> loss_val.backward()
-> optim.step()
-> return loss_val.detach()
-> ```
-> - The inputs must not require gradients. If the function uses `nn.Parameter` instances (or other tensors
-> that require gradients), do not pass them as arguments of the call. Read them from the enclosing scope, or
-> bind them as default values, as in `def func(x, w=w)`:
-> 
-> 
-> 
-> 
-> ```
-> w = nn.Parameter(torch.randn((), device="cuda"))
-> optim = torch.optim.Adam([w], lr=1)
-> 
-> def func(x): # right: w is not an argument of the call
-> optim.zero_grad()
-> (x * w).backward()
-> optim.step()
-> 
-> def func(x, w): # wrong: w is passed at each call
-> ...
-> ```
-> - Tensor and tensordict arguments can change between calls, if their device and shape stay the same.
-> Arguments that are not tensors (a `float`, a `str`) must not change after the capture. If the
-> function takes tensors, a changed value raises a `ValueError`. If it takes a tensordict, the replay uses
-> the captured value, ignores the new one and emits a `FutureWarning`. Starting with TensorDict 0.17, the
-> default will change to raising a `ValueError` there too (pytorch/tensordict#2075).
-> The keyword arguments of a tensordict module are its `in_keys` (see [`dispatch()`](tensordict.nn.dispatch.html#tensordict.nn.dispatch))
-> and `tensordict_out`.
-> - If the module is a [`TensorDictModuleBase`](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) instance and the output id matches the input
-> id, then this identity will be preserved during a call to `CudaGraphModule`, and the outputs written into
-> the input are clones of the graph's output buffers. In all other cases, the output will be cloned,
-> irrespective of whether its elements match or do not match one of the inputs.
-> - In-place writes to the input tensors inside the function (e.g. `x.add_(1)`) do not reach the caller's
-> inputs once the graph is captured: the graph reads and writes its own copies of the inputs.
-> - The inputs are copied into the graph's buffers, and the graph is replayed, on the current stream. As for any
-> CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
-> `torch.cuda.current_stream().wait_stream(producer_stream)`. Consecutive calls share the graph's buffers:
-> issue them from one stream, or order each call after the previous one in the same way.
-> - The replay repeats the branch that each [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) took at
-> capture: a graph captured under `set_interaction_type("random")` keeps sampling under
-> `set_interaction_type("deterministic")`. The first replay under another interaction type emits a
-> `UserWarning`. Capture one `CudaGraphModule` per interaction type.
+- The function cannot have dynamic control flow. For instance, the following code snippet will fail to be
+wrapped in `CudaGraphModule`:
+
+```
+def func(x):
+ if x.norm() > 1:
+ return x + 1
+ else:
+ return x - 1
+```
+
+Use [`torch.where()`](https://docs.pytorch.org/docs/stable/generated/torch.where.html#torch.where) instead:
+
+```
+def func(x):
+ return torch.where(x.norm() > 1, x + 1, x - 1)
+```
+- The function must execute a code that can be exactly re-run using the same buffers. This means that
+dynamic shapes (changing shape in the input or during the code execution) is not supported. In other words,
+the input must have a constant shape. After the capture, a tensor input with a different shape, or a
+tensordict input with a different batch size or an entry of a different shape, raises a `ValueError`, and
+a tensordict input that lacks one of the `in_keys` raises a `KeyError`.
+- The output of the function must be detached. If a call to the optimizers is required, put it in the input
+function. For instance, the following function is a valid operator:
+
+```
+def func(x, y):
+ optim.zero_grad()
+ loss_val = loss_fn(x, y)
+ loss_val.backward()
+ optim.step()
+ return loss_val.detach()
+```
+- The inputs must not require gradients. If the function uses `nn.Parameter` instances (or other tensors
+that require gradients), do not pass them as arguments of the call. Read them from the enclosing scope, or
+bind them as default values, as in `def func(x, w=w)`:
+
+```
+w = nn.Parameter(torch.randn((), device="cuda"))
+optim = torch.optim.Adam([w], lr=1)
+
+def func(x): # right: w is not an argument of the call
+ optim.zero_grad()
+ (x * w).backward()
+ optim.step()
+
+def func(x, w): # wrong: w is passed at each call
+ ...
+```
+- Tensor and tensordict arguments can change between calls, if their device and shape stay the same.
+Arguments that are not tensors (a `float`, a `str`) must not change after the capture. If the
+function takes tensors, a changed value raises a `ValueError`. If it takes a tensordict, the replay uses
+the captured value, ignores the new one and emits a `FutureWarning`. Starting with TensorDict 0.17, the
+default will change to raising a `ValueError` there too (pytorch/tensordict#2075).
+The keyword arguments of a tensordict module are its `in_keys` (see [`dispatch()`](tensordict.nn.dispatch.html#tensordict.nn.dispatch))
+and `tensordict_out`.
+- If the module is a [`TensorDictModuleBase`](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) instance and the output id matches the input
+id, then this identity will be preserved during a call to `CudaGraphModule`, and the outputs written into
+the input are clones of the graph's output buffers. In all other cases, the output will be cloned,
+irrespective of whether its elements match or do not match one of the inputs.
+- In-place writes to the input tensors inside the function (e.g. `x.add_(1)`) do not reach the caller's
+inputs once the graph is captured: the graph reads and writes its own copies of the inputs.
+- The inputs are copied into the graph's buffers, and the graph is replayed, on the current stream. As for any
+CUDA operation, inputs written on another stream must be ordered before the call by the caller, e.g. with
+`torch.cuda.current_stream().wait_stream(producer_stream)`. Consecutive calls share the graph's buffers:
+issue them from one stream, or order each call after the previous one in the same way.
+- The replay repeats the branch that each [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) took at
+capture: a graph captured under `set_interaction_type("random")` keeps sampling under
+`set_interaction_type("deterministic")`. The first replay under another interaction type emits a
+`UserWarning`. The check covers only the [`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule) instances
+inside the wrapped [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module): other code that branches on
+`interaction_type()` (for example an exploration module) and wrapped
+functions that are not modules are not checked; if the wrapped module holds no
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), the replay repeats the captured branch without a
+warning. Capture one `CudaGraphModule` per interaction type whenever the output depends on it.
 
 Warning
 
@@ -119,26 +109,25 @@ of the input module and passing them to an optimizer.
 
 Parameters:
 
-- **module** (*Callable*) - a function that receives tensors (or tensordict) as input and outputs a
-PyTreeable collection of tensors. If a tensordict is provided, the module can be run with keyword arguments
-too (see example below).
+- **module** (*Callable*) - a function that takes tensors (or a tensordict) and returns a tensor, a tensordict, or
+a pytree of them, such as a tuple or a dict. A tensordict module can also be called with keyword
+arguments (see the example).
 - **warmup** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the call that records the graph. The first `warmup - 1` calls run the function
 on a side stream, the next call records the graph, and later calls replay it. A compiled function needs
 enough calls to finish compiling before the capture, for example
 `CudaGraphModule(torch.compile(module), warmup=3)`. Defaults to `2`.
-- **in_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of**NestedKeys*) - 
-
-the input keys, if the module takes a TensorDict as input.
-Defaults to `module.in_keys` if this value exists, otherwise `None`.
-
-Note
-
-If `in_keys` is provided but empty, the module is assumed to receive a tensordict as input.
-This is sufficient to make `CudaGraphModule` aware that the function should be treated as a
-TensorDictModule, but keyword arguments will not be dispatched. See below for some examples.
-- **out_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of**NestedKeys*) - the output keys, if the module takes and outputs TensorDict as output.
-Defaults to `module.out_keys` if this value exists, otherwise `None`.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of the stream to use.
+- **in_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the input keys, if the module takes a tensordict. If `module`
+has an `in_keys` attribute, that attribute is used and this argument is ignored, with a
+`UserWarning` if the argument is a non-empty str, list, tuple or set of keys that differs from
+the attribute. An empty list marks a function that takes a tensordict, without keyword calls.
+Defaults to `None`, which means that the function takes tensors.
+- **out_keys** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the output keys, if the module returns a tensordict. If
+`module` has an `out_keys` attribute, that attribute is used and this argument is ignored,
+with a `UserWarning` if the argument is a non-empty str, list, tuple or set of keys that differs
+from the attribute.
+Defaults to `None`, which becomes `[]` when `in_keys` is given.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of the CUDA streams that run the warmup and the capture.
+Defaults to `None`, the current CUDA device.
 
 Examples
 
@@ -170,17 +159,22 @@ Note
 
 Tips on debugging CudaGraphModule errors:
 
-- Errors of the sort of operation would make the legacy stream depend on a capturing blocking stream are
+- Debug errors such as `operation would make the legacy stream depend on a capturing blocking stream`
+on a version of your code that is not compiled first: compiled code hides the part of the code that
+creates the cross-stream dependency. The cause is often an operation between devices, which makes
+the capturing stream depend on other streams.
+- Errors such as `Cannot call CUDAGeneratorImpl::current_seed during CUDA graph capture`, or other
+errors that come from the compiler (not the compiled code), usually mean that the graph was captured
+while the function was recompiling. List the recompiles with
+`TORCH_LOGS="+recompiles" python myscript.py` and remove them, or use more warmup calls.
 
-to be debugged using a non-compiled version of your code first (compiled code will hide the part of the
-code that is responsible for the cross-stream dependency). It can happen because you are
-doing inter-device operations which make the capturing stream dependent on other streams.
-- Errors like Cannot call CUDAGeneratorImpl::current_seed during CUDA graph capture or other errors originating
+load_state_dict(*state_dict*)
 
-from the compiler (not the compiled code!) probably point to a capture of the graph while recompiling.
-Capture the recompiles with TORCH_LOGS="+recompiles" python myscript.py and try to fix these.
-In general, make sure you are using enough warmup steps.
-Please file an issue if you're struggling with these.
+Loads `state_dict` into the wrapped module. Does nothing if the module has no `load_state_dict`.
+
+state_dict()
+
+Returns the `state_dict` of the wrapped module, or an empty dict if it has none.
 
 ## Tutorials that use `CudaGraphModule`
 

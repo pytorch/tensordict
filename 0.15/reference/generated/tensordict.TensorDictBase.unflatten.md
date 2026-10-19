@@ -2,14 +2,33 @@
 
 TensorDictBase.unflatten(*dim*, *unflattened_size*, ***, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Unflattens a tensordict dim expanding it to a desired shape.
+Returns a tensordict whose batch dimension `dim` is split into several.
+
+It works as [`torch.unflatten()`](https://docs.pytorch.org/docs/stable/generated/torch.unflatten.html#torch.unflatten) does on the batch. The leaves keep
+their feature dimensions, and are views of the original leaves when the
+memory layout allows it. The last new dimension keeps the name of
+`dim`, and the others have no name.
+
+It can be used as a context manager, as [`unsqueeze()`](tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze) can: when
+the `with` block exits, the entries of the block are written back to
+the tensordict with the inverse operation.
 
 Parameters:
 
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - specifies the dimension of the input tensor to be
-unflattened.
-- **unflattened_size** (*shape*) - is the new shape of the unflattened
-dimension of the tensordict.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the batch dimension to unflatten.
+- **unflattened_size** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)) - the sizes of the new
+dimensions. Their product is `batch_size[dim]`, and one of
+them can be `-1`.
+
+Keyword Arguments:
+
+**inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
+identity and keys, its leaves are replaced one by one, and the
+call returns `self`. A leaf keeps its storage when the
+unflatten can return a view of it. A lazy stack, or a
+tensordict that holds one, raises a `NotImplementedError`:
+call [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. See
+[In-place operations](../../concepts/operations.html#inplace-conventions). Defaults to `False`.
 
 Examples
 

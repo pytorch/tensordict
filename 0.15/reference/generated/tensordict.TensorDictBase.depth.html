@@ -1642,8 +1642,9 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.depth">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">depth</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></em><a class="headerlink" href="#tensordict.TensorDictBase.depth" title="Link to this definition">#</a></dt>
-<dd><p>the maximum number of levels of sub-tensordicts.</p>
-<p>A tensordict with no sub-tensordict has depth 0.</p>
+<dd><p>the maximum number of levels of nested tensordicts.</p>
+<p>A tensordict with no nested tensordict has depth 0. Empty nested
+tensordicts do not count.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span><span class="o">.</span><span class="n">depth</span>
@@ -1654,7 +1655,7 @@ document.write(`
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Returns the depth of the tensordict</p>
+<dd class="field-odd"><p>The depth of the tensordict</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2017,7 +2018,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.depth",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.depth",
        "url": "/reference/generated/tensordict.TensorDictBase.depth.html",
-       "articleBody": "TensorDictBase.depth# property TensorDictBase.depth: int# the maximum number of levels of sub-tensordicts. A tensordict with no sub-tensordict has depth 0. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e TensorDict({\"a\": 0}).depth 0 \u003e\u003e\u003e TensorDict({\"a\": {\"b\": {\"c\": 0}}}).depth 2 Type: Returns the depth of the tensordict Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.depth# property TensorDictBase.depth: int# the maximum number of levels of nested tensordicts. A tensordict with no nested tensordict has depth 0. Empty nested tensordicts do not count. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e TensorDict({\"a\": 0}).depth 0 \u003e\u003e\u003e TensorDict({\"a\": {\"b\": {\"c\": 0}}}).depth 2 Type: The depth of the tensordict Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1642,14 +1642,18 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.flip">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">flip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.flip" title="Link to this definition">#</a></dt>
-<dd><p>Reverse the order of elements in the tensordict along the given dimensions.</p>
-<p>The shape of the tensordict is preserved, but the elements are reordered.</p>
+<dd><p>Returns a tensordict with the elements reversed along batch dimensions, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.flip.html#torch.flip" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.flip()</span></code></a> does.</p>
+<p>The batch size and the names do not change, and the feature dimensions
+are not flipped. The data is copied.</p>
+<p>It can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> can: when
+the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, the entries of the block are written back to
+the tensordict with the inverse operation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><em>ints</em>) – Dimensions to flip.</p>
+<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the batch dimensions to flip.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict with the dimensions flipped.</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#IndexError" title="(in Python v3.15)"><strong>IndexError</strong></a> – if a dimension is not a batch dimension.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2024,7 +2028,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.flip",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.flip",
        "url": "/reference/generated/tensordict.TensorDictBase.flip.html",
-       "articleBody": "TensorDictBase.flip# TensorDictBase.flip(dims: int | tuple[int, ...])# Reverse the order of elements in the tensordict along the given dimensions. The shape of the tensordict is preserved, but the elements are reordered. Parameters: dims (int or tuple of ints) \u2013 Dimensions to flip. Returns: a new tensordict with the dimensions flipped. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.flip(0)[\"a\"]) tensor([[3, 4, 5], [0, 1, 2]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.flip# TensorDictBase.flip(dims: int | tuple[int, ...])# Returns a tensordict with the elements reversed along batch dimensions, as torch.flip() does. The batch size and the names do not change, and the feature dimensions are not flipped. The data is copied. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: dims (int or tuple of int) \u2013 the batch dimensions to flip. Raises: IndexError \u2013 if a dimension is not a batch dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.flip(0)[\"a\"]) tensor([[3, 4, 5], [0, 1, 2]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

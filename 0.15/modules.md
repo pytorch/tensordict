@@ -665,7 +665,7 @@ tensor([1, 1, 1, 1, 1, 1, 1, 1])
 
 `set_interaction_type()` with no argument sets `DETERMINISTIC`.
 `set_interaction_type(None)` restores the `default_interaction_type` of
-each module. The function `tensordict.nn.probabilistic.interaction_type()`
+each module. The function `tensordict.nn.interaction_type()`
 returns the type of the current block, or `None` outside a block. TorchRL
 collectors sample with `RANDOM` by default (their `exploration_type`
 argument).

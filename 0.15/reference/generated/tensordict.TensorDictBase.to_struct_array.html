@@ -1642,22 +1642,23 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_struct_array">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_struct_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.to_struct_array" title="Link to this definition">#</a></dt>
-<dd><p>Converts a tensordict to a numpy structured array.</p>
-<p>In a <a class="reference internal" href="tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array" title="tensordict.TensorDictBase.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a> - <a class="reference internal" href="#tensordict.TensorDictBase.to_struct_array" title="tensordict.TensorDictBase.to_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_struct_array()</span></code></a> loop, the content of the input and output arrays should match.
-However, <cite>to_struct_array</cite> will not keep the memory content of the original arrays.</p>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array" title="tensordict.TensorDictBase.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a> for more information.</p>
-</div>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.TensorDictBase.numpy.html#tensordict.TensorDictBase.numpy" title="tensordict.TensorDictBase.numpy"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numpy()</span></code></a> to convert to a dictionary of numpy arrays.</p>
-</div>
+<dd><p>Converts the tensordict to a NumPy structured array, with one field per entry.</p>
+<p>The shape of the array is the batch size. A nested tensordict becomes
+a nested structured field, and the feature dimensions of a tensor
+become the shape of its field. String values become <code class="docutils literal notranslate"><span class="pre">&quot;U&quot;</span></code> fields of
+at least 10 characters. Unlike <a class="reference internal" href="tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array" title="tensordict.TensorDictBase.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a>, this
+method copies the data: the array does not share memory with the
+tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A numpy structured array representation of the input TensorDict.</p>
+<dd class="field-odd"><p>A <code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code> with a structured dtype.</p>
 </dd>
 </dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array" title="tensordict.TensorDictBase.from_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_struct_array()</span></code></a>, which converts back, and
+<a class="reference internal" href="tensordict.TensorDictBase.numpy.html#tensordict.TensorDictBase.numpy" title="tensordict.TensorDictBase.numpy"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numpy()</span></code></a> to convert to a dict of NumPy arrays.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2027,7 +2028,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_struct_array",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_struct_array",
        "url": "/reference/generated/tensordict.TensorDictBase.to_struct_array.html",
-       "articleBody": "TensorDictBase.to_struct_array# TensorDictBase.to_struct_array() \u2192 ndarray# Converts a tensordict to a numpy structured array. In a from_struct_array() - to_struct_array() loop, the content of the input and output arrays should match. However, to_struct_array will not keep the memory content of the original arrays. See also from_struct_array() for more information. See also numpy() to convert to a dictionary of numpy arrays. Returns: A numpy structured array representation of the input TensorDict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\u0027a\u0027: torch.tensor([1, 2, 3]), \u0027b\u0027: torch.tensor([4.0, 5.0, 6.0])}, batch_size=[3]) \u003e\u003e\u003e arr = td.to_struct_array() \u003e\u003e\u003e print(arr) [(1, 4.) (2, 5.) (3, 6.)] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_struct_array# TensorDictBase.to_struct_array() \u2192 ndarray# Converts the tensordict to a NumPy structured array, with one field per entry. The shape of the array is the batch size. A nested tensordict becomes a nested structured field, and the feature dimensions of a tensor become the shape of its field. String values become \"U\" fields of at least 10 characters. Unlike from_struct_array(), this method copies the data: the array does not share memory with the tensordict. Returns: A np.ndarray with a structured dtype. See also from_struct_array(), which converts back, and numpy() to convert to a dict of NumPy arrays. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\u0027a\u0027: torch.tensor([1, 2, 3]), \u0027b\u0027: torch.tensor([4.0, 5.0, 6.0])}, batch_size=[3]) \u003e\u003e\u003e arr = td.to_struct_array() \u003e\u003e\u003e print(arr) [(1, 4.) (2, 5.) (3, 6.)] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

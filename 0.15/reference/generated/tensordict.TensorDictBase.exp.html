@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.exp">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">exp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.exp" title="Link to this definition">#</a></dt>
-<dd><p>Computes the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.exp.html#torch.exp" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">exp()</span></code></a> value of each element of the TensorDict.</p>
+<dd><p>Returns a new tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.exp.html#torch.exp" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.exp()</span></code></a> applied to every leaf.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.exp",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.exp",
        "url": "/reference/generated/tensordict.TensorDictBase.exp.html",
-       "articleBody": "TensorDictBase.exp# TensorDictBase.exp() \u2192 Self# Computes the exp() value of each element of the TensorDict. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.exp# TensorDictBase.exp() \u2192 Self# Returns a new tensordict with torch.exp() applied to every leaf. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

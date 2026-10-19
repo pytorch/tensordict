@@ -2,19 +2,14 @@
 
 *property*TensorDictBase.device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None)*
 
-Device of a TensorDict.
+The device of the tensordict, or `None` if it has none.
 
-If the TensorDict has a specified device, all
-its tensors (incl. nested ones) must live on the same device: the
-tensors that you pass to the constructor or set later are moved to
-it. If the TensorDict device is `None`, different values can be
-located on different devices. The device is not inferred from the
-tensors. See [Devices, dtypes, and memory](../../concepts/devices.html#devices).
-
-Returns:
-
-torch.device object indicating the device where the tensors
-are placed, or None if TensorDict does not have a device.
+If the tensordict has a device, all its leaves, nested ones included,
+are on that device: the tensors that you pass to the constructor or
+set later are moved to it. If the device is `None`, the leaves can be
+on different devices. The device is not inferred from the tensors.
+Assigning it raises a `RuntimeError`: use [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) to get a
+tensordict on another device. See [Devices, dtypes, and memory](../../concepts/devices.html#devices).
 
 Examples
 

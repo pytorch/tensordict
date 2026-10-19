@@ -1642,17 +1642,21 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.rot90">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">rot90</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">(0,</span> <span class="pre">1)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.rot90" title="Link to this definition">#</a></dt>
-<dd><p>Rotate the tensordict by 90 degrees in the plane specified by dims.</p>
-<p>Rotation direction is from the first towards the second axis.</p>
+<dd><p>Returns a tensordict rotated by 90 degrees in the plane of two batch dimensions.</p>
+<p>As for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.rot90.html#torch.rot90" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.rot90()</span></code></a>, the rotation goes from the first dimension
+of <code class="docutils literal notranslate"><span class="pre">dims</span></code> towards the second. The tensordict needs at least 2 batch
+dimensions, or a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> is raised. The feature dimensions are
+not rotated, the names follow their dimensions, and the data is copied.</p>
+<p>It can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> can: when
+the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, the entries of the block are written back to
+the tensordict with the inverse operation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>k</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of times to rotate. Default: 1.</p></li>
-<li><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><em>two ints</em>) – The plane to rotate in. Default: (0, 1).</p></li>
+<li><p><strong>k</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the number of rotations. Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the two batch dimensions of the
+plane. Defaults to <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">1)</span></code>.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict rotated by 90 degrees.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2028,7 +2032,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.rot90",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.rot90",
        "url": "/reference/generated/tensordict.TensorDictBase.rot90.html",
-       "articleBody": "TensorDictBase.rot90# TensorDictBase.rot90(k: int = 1, dims: tuple[int, int] = (0, 1))# Rotate the tensordict by 90 degrees in the plane specified by dims. Rotation direction is from the first towards the second axis. Parameters: k (int) \u2013 Number of times to rotate. Default: 1. dims (tuple of two ints) \u2013 The plane to rotate in. Default: (0, 1). Returns: a new tensordict rotated by 90 degrees. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.rot90()[\"a\"]) tensor([[2, 5], [1, 4], [0, 3]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.rot90# TensorDictBase.rot90(k: int = 1, dims: tuple[int, int] = (0, 1))# Returns a tensordict rotated by 90 degrees in the plane of two batch dimensions. As for torch.rot90(), the rotation goes from the first dimension of dims towards the second. The tensordict needs at least 2 batch dimensions, or a RuntimeError is raised. The feature dimensions are not rotated, the names follow their dimensions, and the data is copied. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: k (int, optional) \u2013 the number of rotations. Defaults to 1. dims (tuple of int, optional) \u2013 the two batch dimensions of the plane. Defaults to (0, 1). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.rot90()[\"a\"]) tensor([[2, 5], [1, 4], [0, 3]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -2,103 +2,53 @@
 
 TensorDictBase.init_remote(*dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group: 'ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *use_broadcast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *_tensorclass_type: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Initializes a remote tensordict by sending its metadata and content.
+Sends the structure and the content of the tensordict to a rank that does not know them.
 
-Two transport modes are available:
+The receiver calls [`from_remote_init()`](tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init), which builds a new
+consolidated tensordict. The tensordict is consolidated (see
+[`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)), then its metadata is sent with
+[`torch.distributed.send_object_list()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.send_object_list), which pickles it, and its
+storage as one tensor. Send the next batches with
+`send(consolidated=True)`, into the tensordict that
+[`from_remote_init()`](tensordict.TensorDictBase.from_remote_init.html#tensordict.TensorDictBase.from_remote_init) returned. See [Distributed tensordicts](../../distributed.html#distributed).
 
-- **Point-to-point** (default): uses `send_object_list` +
-`dist.send` to transfer metadata and storage to a single
-destination rank. Only the sender and receiver need to call the
-pair `init_remote` / `from_remote_init`.
-- **Broadcast** (`use_broadcast=True`): delegates to
-[`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast). Metadata and storage are broadcast to
-*every* rank in the group. All ranks must participate (receivers
-call `from_remote_init(src=..., use_broadcast=True)`). `dst`
-is ignored in this mode.
+With `use_broadcast=True`, it calls [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast) instead, and
+every rank of the group must take part: the others call
+`from_remote_init(src=..., use_broadcast=True)`.
 
 Parameters:
 
-- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - The rank of the destination process. Required
-when `use_broadcast=False` (the default). Ignored when
-`use_broadcast=True`.
-- **group** (*"ProcessGroup"**,**optional*) - The process group to use for communication. Defaults to None.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device to use for tensor operations. Defaults to None.
-- **use_broadcast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - If `True`, use [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast) instead
-of point-to-point send. Defaults to `False`.
-
-See also
-
-The receiving process should call ~.from_remote_init or an equivalent method to receive and initialize a new tensordict based on the sent metadata.
+- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the rank of the receiver. Required unless
+`use_broadcast=True`, which ignores it. Defaults to `None`.
+- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
+Defaults to `None`, the default process group.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - point-to-point, the device
+that the metadata goes through, as in
+[`torch.distributed.send_object_list()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.send_object_list) (with `nccl`, a CUDA
+device). With `use_broadcast=True`, the device of the
+consolidated storage, as in [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast). Defaults to
+`None`.
+- **use_broadcast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, broadcasts the tensordict
+to every rank of the group. Defaults to `False`.
 
 Examples
 
+This example runs in two processes: add it to the
+[runner script of the distributed guide](../../distributed.html#distributed) and
+pass it to `run`.
+
 ```
->>> import os
->>> import torch
->>> import torch.distributed as dist
->>> from tensordict import TensorDict, MemoryMappedTensor
->>> import multiprocessing as mp
->>>
->>> def server(queue):
-... # Set environment variables for distributed communication
-... os.environ["MASTER_ADDR"] = "localhost"
-... os.environ["MASTER_PORT"] = "29505"
-...
-... # Initialize the distributed backend
-... dist.init_process_group("gloo", rank=0, world_size=2)
-...
-... # Create a sample tensordict
-... td = (
-... TensorDict(
-... {
-... ("a", "b"): torch.ones(2),
-... "c": torch.ones(2),
-... ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.ones(2, 2)),
-... },
-... [2],
-... )
-... .expand(1, 2)
-... .contiguous()
-... )
-...
-... # Send the tensordict metadata and content to the client
-... td.init_remote(dst=1)
-...
->>> def client(queue):
-... # Set environment variables for distributed communication
-... os.environ["MASTER_ADDR"] = "localhost"
-... os.environ["MASTER_PORT"] = "29505"
-...
-... # Initialize the distributed backend
-... dist.init_process_group("gloo", rank=1, world_size=2)
-...
-... # Receive the tensordict metadata and content from the server
-... received_td = TensorDict.from_remote_init(src=0)
-...
-... # Verify that the received tensordict matches the expected structure and values
-... assert set(received_td.keys()) == {"a", "c", "d"}
-... assert (received_td == 1).all()
-...
-... # Signal that the test has completed successfully
-... queue.put("yuppie")
->>>
->>> if __name__ == "__main__":
-... queue = mp.Queue(1)
-...
-... # Create and start the server and client processes
-... main_worker = mp.Process(target=server, args=(queue,))
-... secondary_worker = mp.Process(target=client, args=(queue,))
-...
-... main_worker.start()
-... secondary_worker.start()
-...
-... try:
-... out = queue.get(timeout=10) # Wait for the signal with a timeout
-... print(out) # Should print "yuppie"
-... finally:
-... queue.close()
-... main_worker.join(timeout=10)
-... secondary_worker.join(timeout=10)
+def cold_start(rank, world_size):
+ if rank == 0:
+ td = TensorDict(obs=torch.ones(2, 84), reward=torch.ones(2, 1), batch_size=[2])
+ td.init_remote(dst=1)
+ td["obs"].add_(1)
+ td.send(dst=1, consolidated=True)
+ elif rank == 1:
+ td = TensorDict.from_remote_init(src=0)
+ print(td.batch_size, td.is_consolidated()) # torch.Size([2]) True
+ td.recv(src=0, consolidated=True)
+ print(td["obs"][0, 0]) # tensor(2.)
 ```
 
 Every tensordict class and every tensorclass has this method. For the

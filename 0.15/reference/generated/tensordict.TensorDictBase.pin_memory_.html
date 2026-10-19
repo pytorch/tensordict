@@ -1642,18 +1642,18 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.pin_memory_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">pin_memory_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.pin_memory_" title="Link to this definition">#</a></dt>
-<dd><p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.pin_memory.html#torch.Tensor.pin_memory" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> on the stored tensors and returns the TensorDict modifies in-place.</p>
+<dd><p>Pins the tensor leaves of the tensordict and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <div class="deprecated">
 <p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <code class="docutils literal notranslate"><span class="pre">pin_memory(inplace=True)</span></code> instead. Pinning allocates new
-storage, so it does not fit the trailing-underscore convention.
-<code class="docutils literal notranslate"><span class="pre">pin_memory_()</span></code> pins on the main thread by default
-(<code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code>); pass <code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> to
-<a class="reference internal" href="tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory" title="tensordict.TensorDictBase.pin_memory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a> to keep that behavior.</p>
+storage, so it does not fit the trailing-underscore convention
+(see <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>). <code class="docutils literal notranslate"><span class="pre">pin_memory_</span></code> will be removed
+in TensorDict 0.17.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – if provided, the number of threads to
-use to call <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code> on the leaves. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p>
+<dd class="field-odd"><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the number of threads that pin the
+leaves, as in <a class="reference internal" href="tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory" title="tensordict.TensorDictBase.pin_memory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>, which
+pins them on the calling thread.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2016,7 +2016,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.pin_memory",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.pin_memory",
        "url": "/reference/generated/tensordict.TensorDictBase.pin_memory_.html",
-       "articleBody": "TensorDictBase.pin_memory# TensorDictBase.pin_memory_(num_threads: int = 0) \u2192 Self# Calls pin_memory() on the stored tensors and returns the TensorDict modifies in-place. Deprecated since version 0.15: Use pin_memory(inplace=True) instead. Pinning allocates new storage, so it does not fit the trailing-underscore convention. pin_memory_() pins on the main thread by default (num_threads=0); pass num_threads=0 to pin_memory() to keep that behavior. Parameters: num_threads (int, optional) \u2013 if provided, the number of threads to use to call pin_memory on the leaves. Defaults to 0. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.pin_memory# TensorDictBase.pin_memory_(num_threads: int = 0) \u2192 Self# Pins the tensor leaves of the tensordict and returns self. Deprecated since version 0.15: Use pin_memory(inplace=True) instead. Pinning allocates new storage, so it does not fit the trailing-underscore convention (see In-place operations). pin_memory_ will be removed in TensorDict 0.17. Parameters: num_threads (int, optional) \u2013 the number of threads that pin the leaves, as in pin_memory(). Defaults to 0, which pins them on the calling thread. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -13,25 +13,27 @@ with [`to_module()`](tensordict.TensorDictBase.to_module.html#tensordict.TensorD
 
 The result is a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) (or a
 `TensorDictParams` with `as_module=True`),
-whichever class this method is called on.
+whatever class this method is called on.
+
+Note
+
+This method locks the result by default (`lock=True`), but its
+override [`TensorDict.from_module`](tensordict.TensorDict.html#tensordict.TensorDict.from_module) does not.
 
 Parameters:
 
 - **module** (*nn.Module*) - the module to get the parameters from.
-- **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a `TensorDictParams`
-instance will be returned which can be used to store parameters
-within a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to `False`.
-- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the resulting tensordict will be locked.
-Defaults to `True`.
-- **use_state_dict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - 
-
-if `True`, the state-dict from the
-module will be used and unflattened into a TensorDict with
-the tree structure of the model. Defaults to `False`.
-
-Note
-
-This is particularly useful when state-dict hooks have to be used.
+- **as_module** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns a
+`TensorDictParams`, which can be stored
+as a submodule of a [`torch.nn.Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). Defaults to
+`False`.
+- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the result is locked (see
+[Locking and temporary changes](../../concepts/keys.html#keys-locking)). Defaults to `True`.
+- **use_state_dict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, reads the module's
+`state_dict()`, so that its state-dict hooks run, and
+unflattens it into the tree of the submodules. The leaves are
+then the tensors of the state dict, not the parameters.
+Defaults to `False`.
 
 Examples
 

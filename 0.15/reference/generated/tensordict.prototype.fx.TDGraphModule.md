@@ -13,7 +13,7 @@ tensordict, runs the graph, and writes the outputs at `out_keys`, into
 [`torch.fx.GraphModule`](https://docs.pytorch.org/docs/stable/fx.html#torch.fx.GraphModule).
 
 This class is a prototype: its API can change without a deprecation
-period.
+period. See `symbolic_trace()` for an example.
 
 Parameters:
 
@@ -22,13 +22,16 @@ Parameters:
 
 forward(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Define the computation performed at every call.
+Runs the graph on `tensordict` and writes the outputs at `out_keys`.
 
-Should be overridden by all subclasses.
+Parameters:
 
-Note
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the input tensordict.
+- **tensordict_out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - the tensordict to write
+the outputs into. Defaults to `None`, which writes them into
+`tensordict`.
+- ****kwargs** - passed to the graph.
 
-Although the recipe for forward pass needs to be defined within
-this function, one should call the `Module` instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.
+Returns:
+
+The tensordict that holds the outputs.

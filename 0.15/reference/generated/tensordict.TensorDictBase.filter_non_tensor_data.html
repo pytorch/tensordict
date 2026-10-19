@@ -1642,7 +1642,16 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.filter_non_tensor_data">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">filter_non_tensor_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.filter_non_tensor_data" title="Link to this definition">#</a></dt>
-<dd><p>Filters out all non-tensor-data.</p>
+<dd><p>Returns a tensordict without the non-tensor entries, nested ones included.</p>
+<p>The other leaves are not copied.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="s2">"text"</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">filter_non_tensor_data</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">['a', ('n', 'd')]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.filter_non_tensor_data",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.filter_non_tensor_data",
        "url": "/reference/generated/tensordict.TensorDictBase.filter_non_tensor_data.html",
-       "articleBody": "TensorDictBase.filter_non_tensor_data# TensorDictBase.filter_non_tensor_data() \u2192 Self# Filters out all non-tensor-data. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.filter_non_tensor_data# TensorDictBase.filter_non_tensor_data() \u2192 Self# Returns a tensordict without the non-tensor entries, nested ones included. The other leaves are not copied. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=\"text\", n={\"c\": \"text\", \"d\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e list(td.filter_non_tensor_data().keys(include_nested=True, leaves_only=True)) [\u0027a\u0027, (\u0027n\u0027, \u0027d\u0027)] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

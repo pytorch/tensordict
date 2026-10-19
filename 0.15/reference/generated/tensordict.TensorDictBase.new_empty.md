@@ -12,23 +12,24 @@ leaf keeps its dtype and device.
 
 Parameters:
 
-**size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*...*) - the batch size of the result, as integers or as one
-list, tuple or `torch.Size`.
+***size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or**sequence**of*[*int*](https://docs.python.org/3/builtins/functions.html#int)) - the batch size of the result, as
+integers or as one list, tuple or `torch.Size`.
 
 Keyword Arguments:
 
 - **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - the dtype of every leaf of the
 result. Defaults to `None`: each leaf keeps its dtype.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of every leaf of the
-result. If not passed, each leaf keeps its device.
-- **requires_grad** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, autograd records the
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result and of its leaves. If not passed, each leaf keeps its
+device, and the result keeps the device of the tensordict.
+- **requires_grad** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, autograd records the
 operations on the new leaves. Defaults to `False`.
 - **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the new leaves.
 Defaults to `torch.strided`.
-- **pin_memory** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the new leaves are
+- **pin_memory** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the new leaves are
 allocated in pinned memory. Works only for CPU tensors.
 Defaults to `False`.
-- **empty_lazy** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the lazy stacks of the
+- **empty_lazy** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the lazy stacks of the
 result are emptied of their content. Use it when the content
 of a lazy stack is likely to change while you fill the new
 tensordict. It applies to the sub-tensordicts too. Defaults to

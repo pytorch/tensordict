@@ -7,9 +7,7 @@ Returns a view of the keys of the tensordict.
 By default, only the top-level keys are returned. A nested key is a
 tuple of strings, for example `("nested", "b")`. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
 
-Warning
-
-The view is lazy. If you modify the tensordict after you call
+The view is lazy: if you modify the tensordict after you call
 `keys()` and before you iterate over the result, the iteration
 returns the keys after the change.
 
@@ -18,7 +16,7 @@ Note
 On a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), and on most other types,
 `key in td.keys(include_nested=True, leaves_only=True)` checks
 that `key` exists, not that it is a leaf: it is `True` for a
-sub-tensordict, although iterating the view does not list it. To
+nested tensordict, although iterating the view does not list it. To
 test that a key is a leaf, call `is_leaf(td.entry_class(key))`,
 with [`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is_leaf) as the default
 `is_leaf`. A nested key is never in a view built with
@@ -31,22 +29,25 @@ with [`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is
 Parameters:
 
 - **include_nested** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the entries of the
-sub-tensordicts are also returned, with nested keys (tuples of
-strings). Defaults to `False`.
-- **leaves_only** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, only leaves are returned,
-and sub-tensordicts are skipped. Defaults to `False`.
-- **is_leaf** (*callable**,**optional*) - a function that takes a class and
+nested tensordicts are also returned, under nested keys (tuples
+of strings). Defaults to `False`.
+- **leaves_only** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, only the leaves are
+returned, and nested tensordicts are skipped. Defaults to
+`False`.
+- **is_leaf** (*Callable**,**optional*) - a function that takes a class and
 returns `True` if values of that class count as leaves. It
-only filters the result when `leaves_only=True`. It does not
-stop the recursion: with `include_nested=True`, a
-sub-tensordict is still searched even if `is_leaf` returns
-`True` for it. By default, tensordicts and tensorclasses are
-not leaves. See [`is_leaf_nontensor()`](tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor) and
-[`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is_leaf).
+filters the result only when `leaves_only=True`. It does not
+stop the recursion: with `include_nested=True`, a nested
+tensordict is still searched even if `is_leaf` returns
+`True` for it. Defaults to `None`, which uses
+[`default_is_leaf()`](tensordict.default_is_leaf.html#tensordict.default_is_leaf): tensordicts,
+tensorclasses and non-tensor data are not leaves. Pass
+[`is_leaf_nontensor()`](tensordict.is_leaf_nontensor.html#tensordict.is_leaf_nontensor) to count non-tensor data
+as leaves.
 
 Keyword Arguments:
 
-**sort** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the keys are sorted. Nested keys
+**sort** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the keys are sorted. Nested keys
 are sorted by their joined name: `("a", "key")` sorts as
 `"a.key"`. Sorting takes extra time on large tensordicts.
 Defaults to `False`.

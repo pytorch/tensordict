@@ -1642,7 +1642,9 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.asend">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">asend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dst</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><span class="pre">TensorDictPipe</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.asend" title="Link to this definition">#</a></dt>
-<dd><p>Sends the content of a tensordict through a UCXX pipe (async).</p>
+<dd><p>Sends the tensordict through a UCXX pipe, asynchronously.</p>
+<p>Awaits <code class="docutils literal notranslate"><span class="pre">dst.asend(self)</span></code>. See <a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a>,
+which needs the optional <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> package.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>dst</strong> (<a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><em>TensorDictPipe</em></a>) – the pipe to send through.</p>
@@ -1650,8 +1652,16 @@ document.write(`
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a> for the synchronous variant and
-torch.distributed-based transport.</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send" title="tensordict.TensorDictBase.send"><code class="xref py py-meth docutils literal notranslate"><span class="pre">send()</span></code></a>, which also takes a pipe, and works without
+<code class="docutils literal notranslate"><span class="pre">await</span></code>.</p>
+</div>
+<p class="rubric">Examples</p>
+<p>This example needs <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> and a receiver on the other end of the
+pipe:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">produce</span><span class="p">(</span><span class="n">pipe</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+        <span class="k">await</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">84</span><span class="p">))</span><span class="o">.</span><span class="n">asend</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -2013,7 +2023,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.asend",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.asend",
        "url": "/reference/generated/tensordict.TensorDictBase.asend.html",
-       "articleBody": "TensorDictBase.asend# async TensorDictBase.asend(dst: TensorDictPipe) \u2192 None# Sends the content of a tensordict through a UCXX pipe (async). Parameters: dst (TensorDictPipe) \u2013 the pipe to send through. See also send() for the synchronous variant and torch.distributed-based transport. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.asend# async TensorDictBase.asend(dst: TensorDictPipe) \u2192 None# Sends the tensordict through a UCXX pipe, asynchronously. Awaits dst.asend(self). See TensorDictPipe, which needs the optional ucxx package. Parameters: dst (TensorDictPipe) \u2013 the pipe to send through. See also send(), which also takes a pipe, and works without await. Examples This example needs ucxx and a receiver on the other end of the pipe: async def produce(pipe): for _ in range(10): await TensorDict(obs=torch.randn(64, 84)).asend(pipe) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

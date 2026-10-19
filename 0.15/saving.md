@@ -106,7 +106,8 @@ replaces the leaves of the tensordict itself.
 - [`load()`](reference/generated/tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load) and
 [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) are one method.
 
-`memmap`, `memmap_`, and `save` lock the tensordict that they return.
+`memmap`, `memmap_`, and `save` lock the tensordict that they return,
+except when `memmap` or `save` writes a `.tdz` archive.
 You can write into its tensors in place, but you cannot add, remove, or
 replace an entry (see [Locking and temporary changes](concepts/keys.html#keys-locking)).
 
@@ -485,6 +486,44 @@ pickle file. `load_memmap_` and `memmap_refresh_` take the same
 argument. For [`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load), keep `weights_only=True` and allowlist
 only the classes that you trust (see torch.save and torch.load).
 
+A module `state_dict()` round-trips this way:
+
+```
+>>> model = torch.nn.Linear(2, 2)
+>>> _ = TensorDict.from_pytree(model.state_dict()).memmap(root / "model")
+>>> sd = TensorDict.load_memmap(root / "model", allow_pickle=False).to_pytree()
+>>> all(torch.equal(sd[k], v) for k, v in model.state_dict().items())
+True
+```
+
+The state dicts of an optimizer and of a learning-rate scheduler hold
+`None`, `str` values and Python numbers, which `from_pytree` rejects
+(`None` and `str` leaves) or returns as tensors (numbers). Save them with
+[`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) and load them with `torch.load(path, weights_only=True)`,
+which round-trips them exactly without unpickling arbitrary objects:
+
+```
+>>> optim = torch.optim.Adam(model.parameters(), lr=1e-3)
+>>> model(torch.randn(3, 2)).sum().backward()
+>>> optim.step()
+>>> torch.save(optim.state_dict(), root / "optim.pt")
+>>> optim_sd = torch.load(root / "optim.pt", weights_only=True)
+>>> optim_sd["param_groups"] == optim.state_dict()["param_groups"]
+True
+>>> optim_sd["param_groups"][0]["foreach"] is None
+True
+>>> torch.optim.Adam(model.parameters()).load_state_dict(optim_sd)
+```
+
+The zarr backend has a separate, additive `allow_pickle` read policy on
+`from_zarr` and `PersistentTensorDict`. `False` rejects pickle before
+decoding; `True` permits it for trusted data; the current default,
+`None`, reads it with a `FutureWarning` only when a pickled field is
+accessed. Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False` for zarr. This does not change the memory-mapped
+loader's 0.16 schedule. Tensor and JSON zarr entries need no opt-in.
+See [zarr](storage.html#storage-zarr) for the policy of newly written stores.
+
 tensordict also protects the paths that it writes:
 
 - If the path of a new leaf file is a symbolic link, tensordict raises an
@@ -497,9 +536,10 @@ fixed name in a shared `/tmp`.
 directory, also for keys that contain `/` or `..`. `robust_key=False`
 turns this off for old layouts. Do not use it with keys or metadata that
 you do not trust.
-- A save overwrites a leaf file that exists. To get an error instead, pass
-`existsok=False`. `save` still rewrites the metadata files of a
-directory that it reuses.
+- A save overwrites a leaf file that exists. To get an error instead, call
+`memmap` with `existsok=False`: `save` has no `existsok`
+argument. `memmap` still rewrites the metadata files of a directory
+that it reuses.
 
 Two other features unpickle what they receive: the Redis backend of
 [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) (see [Share data between nodes with Redis](storage.html#storage-redis)) and the

@@ -1643,64 +1643,70 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.nn.set_skip_existing">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">set_skip_existing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_key_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'in_keys'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_key_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'out_keys'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thread_local</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.set_skip_existing" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_DecoratorContextManager</span></code></p>
-<p>A context manager for skipping existing nodes in a TensorDict graph.</p>
-<p>When used as a context manager, it will set the <cite>skip_existing()</cite> value
-to the <code class="docutils literal notranslate"><span class="pre">mode</span></code> indicated, leaving the user able to code up methods that
-will check the global value and execute the code accordingly.</p>
-<p>When used as a method decorator, it will check the tensordict input keys
-and skip the method if the current mode applies to all output keys and they
-are already present.
-This is not expected to be used as a decorator for methods that do not
-respect the following signature: <code class="docutils literal notranslate"><span class="pre">def</span> <span class="pre">fun(self,</span> <span class="pre">tensordict,</span> <span class="pre">*args,</span> <span class="pre">**kwargs)</span></code>.</p>
+<p>Makes modules skip their computation when their outputs are already in the tensordict.</p>
+<p>As a context manager, it sets the value that <a class="reference internal" href="tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-func docutils literal notranslate"><span class="pre">skip_existing()</span></code></a>
+returns inside the block. <a class="reference internal" href="tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>,
+<a class="reference internal" href="tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> and the probabilistic
+modules read that value: when it is on, a module whose <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> are
+all in the input returns the input without running. A module whose
+<code class="docutils literal notranslate"><span class="pre">in_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> share a key always runs.</p>
+<p>As a decorator of a method <code class="docutils literal notranslate"><span class="pre">forward(self,</span> <span class="pre">tensordict,</span> <span class="pre">...)</span></code>, it applies
+the same check before the method runs, with <code class="docutils literal notranslate"><span class="pre">mode</span></code> as the value.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, it indicates that existing entries in the graph
-won’t be overwritten, unless they are only partially present. <a class="reference internal" href="tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-func docutils literal notranslate"><span class="pre">skip_existing()</span></code></a>
-will return <code class="docutils literal notranslate"><span class="pre">True</span></code>.
-If <code class="docutils literal notranslate"><span class="pre">False</span></code>, no check will be performed.
-If a list of keys, only modules whose output keys are all in the
-list can be skipped. The keys follow TensorDict’s nested-key
-conventions. If any output key is not in the list, the module runs
-and recomputes all of its outputs.
-If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the value of <a class="reference internal" href="tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-func docutils literal notranslate"><span class="pre">skip_existing()</span></code></a> will not be
-changed. This is intended to be used exclusively for decorating
-methods and allow their behaviour to depend on the same class
-when used as a context manager (see example below).
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>in_key_attr</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the name of the input key list attribute
-in the module’s method being decorated. Defaults to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.</p></li>
-<li><p><strong>out_key_attr</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the name of the output key list attribute
-in the module’s method being decorated. Defaults to <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p></li>
+<li><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, or </em><em>None</em><em>, </em><em>optional</em>) – <p>the value of
+<a class="reference internal" href="tensordict.nn.skip_existing.html#tensordict.nn.skip_existing" title="tensordict.nn.skip_existing"><code class="xref py py-func docutils literal notranslate"><span class="pre">skip_existing()</span></code></a>.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: a module is skipped if all its <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> are in the
+input.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>: no module is skipped.</p></li>
+<li><p>A list of keys: only the modules whose <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> are all in
+the list can be skipped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code>: for a decorator only; the method follows the value of
+the enclosing block (see the third example). As a context
+manager, <code class="docutils literal notranslate"><span class="pre">None</span></code> raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p></li>
+</ul>
+<p>Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</p></li>
+<li><p><strong>in_key_attr</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – for a decorator, the name of the
+attribute of the module that holds its input keys. Defaults to
+<code class="docutils literal notranslate"><span class="pre">&quot;in_keys&quot;</span></code>.</p></li>
+<li><p><strong>out_key_attr</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – for a decorator, the name of the
+attribute of the module that holds its output keys. Defaults to
+<code class="docutils literal notranslate"><span class="pre">&quot;out_keys&quot;</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>thread_local</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the mode applies to the
+<dd class="field-even"><p><strong>thread_local</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the mode applies to the
 calling thread only, and blocks that other threads enter do not
 change it. Inside the block, blocks without this flag that the
 same thread enters stay in that thread too. Threads started inside
 the block see the process-wide mode. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the mode applies
 to the whole process. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a block with a mode other than <code class="docutils literal notranslate"><span class="pre">False</span></code> or <code class="docutils literal notranslate"><span class="pre">None</span></code>
+    is entered under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
+</dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"y"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_skip_existing</span><span class="p">():</span>
-<span class="gp">... </span>    <span class="k">if</span> <span class="n">skip_existing</span><span class="p">():</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"True"</span><span class="p">)</span>
-<span class="gp">... </span>    <span class="k">else</span><span class="p">:</span>
-<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"False"</span><span class="p">)</span>
-<span class="gp">...</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">skip_existing</span><span class="p">())</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">module</span><span class="p">(</span><span class="n">td</span><span class="p">)[</span><span class="s2">"y"</span><span class="p">])</span>  <span class="c1"># "y" exists: the module does not run</span>
 <span class="go">True</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">"calling from outside:"</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">())</span>
-<span class="go">calling from outside: False</span>
+<span class="go">tensor(0.)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">td</span><span class="p">)[</span><span class="s2">"y"</span><span class="p">]</span>
+<span class="go">tensor(1.)</span>
 </pre></div>
 </div>
-<p>This class can also be used as a decorator:</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
+<p>As a decorator, it skips the method when the outputs exist:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
@@ -1710,29 +1716,14 @@ to the whole process. Defaults to <code class="docutils literal notranslate"><sp
 <span class="gp">... </span>        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"out"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># does not print anything</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">())</span>  <span class="c1"># prints hello</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())}))</span>  <span class="c1"># does not print anything</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">())</span>
 <span class="go">hello</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
-<p>Decorating a method with the mode set to <code class="docutils literal notranslate"><span class="pre">None</span></code> is useful whenever one
-wants to let the context manager take care of skipping things from the outside:</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<p>With <code class="docutils literal notranslate"><span class="pre">mode=None</span></code>, the decorated method runs unless the caller opens a
+<code class="docutils literal notranslate"><span class="pre">set_skip_existing</span></code> block:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
 <span class="gp">... </span>    <span class="nd">@set_skip_existing</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
@@ -1741,17 +1732,13 @@ wants to let the context manager take care of skipping things from the outside:<
 <span class="gp">... </span>        <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">"out"</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># prints "hello"</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())}))</span>
 <span class="go">hello</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_skip_existing</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
-<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># no print</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())}))</span>  <span class="c1"># does not print anything</span>
 </pre></div>
 </div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>To allow for modules to have the same input and output keys and not
-mistakenly ignoring subgraphs, <code class="docutils literal notranslate"><span class="pre">&#64;set_skip_existing(True)</span></code> will be
-deactivated whenever the output keys are also the input keys:</p>
+<p>A module whose input is also an output always runs:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">MyModule</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">in_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
 <span class="gp">... </span>    <span class="n">out_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"out"</span><span class="p">]</span>
@@ -1760,17 +1747,9 @@ deactivated whenever the output keys are also the input keys:</p>
 <span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">"calling the method!"</span><span class="p">)</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">tensordict</span>
 <span class="gp">...</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())},</span> <span class="p">[]))</span>  <span class="c1"># runs: in_keys and out_keys overlap</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">MyModule</span><span class="p">()(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"out"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())}))</span>
 <span class="go">calling the method!</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
 </pre></div>
-</div>
 </div>
 </dd></dl>
 
@@ -2130,7 +2109,7 @@ deactivated whenever the output keys are also the input keys:</p>
        "headline": "set_skip_existing",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_skip_existing",
        "url": "/reference/generated/tensordict.nn.set_skip_existing.html",
-       "articleBody": "set_skip_existing# class tensordict.nn.set_skip_existing(mode: bool | list[NestedKey] | None = True, in_key_attr=\u0027in_keys\u0027, out_key_attr=\u0027out_keys\u0027, *, thread_local: bool = False)# Bases: _DecoratorContextManager A context manager for skipping existing nodes in a TensorDict graph. When used as a context manager, it will set the skip_existing() value to the mode indicated, leaving the user able to code up methods that will check the global value and execute the code accordingly. When used as a method decorator, it will check the tensordict input keys and skip the method if the current mode applies to all output keys and they are already present. This is not expected to be used as a decorator for methods that do not respect the following signature: def fun(self, tensordict, *args, **kwargs). Parameters: mode (bool, list of NestedKey, optional) \u2013 If True, it indicates that existing entries in the graph won\u2019t be overwritten, unless they are only partially present. skip_existing() will return True. If False, no check will be performed. If a list of keys, only modules whose output keys are all in the list can be skipped. The keys follow TensorDict\u2019s nested-key conventions. If any output key is not in the list, the module runs and recomputes all of its outputs. If None, the value of skip_existing() will not be changed. This is intended to be used exclusively for decorating methods and allow their behaviour to depend on the same class when used as a context manager (see example below). Defaults to True. in_key_attr (str, optional) \u2013 the name of the input key list attribute in the module\u2019s method being decorated. Defaults to in_keys. out_key_attr (str, optional) \u2013 the name of the output key list attribute in the module\u2019s method being decorated. Defaults to out_keys. Keyword Arguments: thread_local (bool, optional) \u2013 if True, the mode applies to the calling thread only, and blocks that other threads enter do not change it. Inside the block, blocks without this flag that the same thread enters stay in that thread too. Threads started inside the block see the process-wide mode. If False, the mode applies to the whole process. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import set_skip_existing, skip_existing \u003e\u003e\u003e with set_skip_existing(): ... if skip_existing(): ... print(\"True\") ... else: ... print(\"False\") ... True \u003e\u003e\u003e print(\"calling from outside:\", skip_existing()) calling from outside: False This class can also be used as a decorator: Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import set_skip_existing, skip_existing, TensorDictModuleBase \u003e\u003e\u003e class MyModule(TensorDictModuleBase): ... in_keys = [] ... out_keys = [\"out\"] ... @set_skip_existing() ... def forward(self, tensordict): ... print(\"hello\") ... tensordict.set(\"out\", torch.zeros(())) ... return tensordict \u003e\u003e\u003e module = MyModule() \u003e\u003e\u003e module(TensorDict({\"out\": torch.zeros(())}, [])) # does not print anything TensorDict( fields={ out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e module(TensorDict()) # prints hello hello TensorDict( fields={ out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Decorating a method with the mode set to None is useful whenever one wants to let the context manager take care of skipping things from the outside: Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import set_skip_existing, skip_existing, TensorDictModuleBase \u003e\u003e\u003e class MyModule(TensorDictModuleBase): ... in_keys = [] ... out_keys = [\"out\"] ... @set_skip_existing(None) ... def forward(self, tensordict): ... print(\"hello\") ... tensordict.set(\"out\", torch.zeros(())) ... return tensordict \u003e\u003e\u003e module = MyModule() \u003e\u003e\u003e _ = module(TensorDict({\"out\": torch.zeros(())}, [])) # prints \"hello\" hello \u003e\u003e\u003e with set_skip_existing(True): ... _ = module(TensorDict({\"out\": torch.zeros(())}, [])) # no print Note To allow for modules to have the same input and output keys and not mistakenly ignoring subgraphs, @set_skip_existing(True) will be deactivated whenever the output keys are also the input keys: \u003e\u003e\u003e class MyModule(TensorDictModuleBase): ... in_keys = [\"out\"] ... out_keys = [\"out\"] ... @set_skip_existing() ... def forward(self, tensordict): ... print(\"calling the method!\") ... return tensordict ... \u003e\u003e\u003e module = MyModule() \u003e\u003e\u003e module(TensorDict({\"out\": torch.zeros(())}, [])) # runs: in_keys and out_keys overlap calling the method! TensorDict( fields={ out: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)",
+       "articleBody": "set_skip_existing# class tensordict.nn.set_skip_existing(mode: bool | list[NestedKey] | None = True, in_key_attr=\u0027in_keys\u0027, out_key_attr=\u0027out_keys\u0027, *, thread_local: bool = False)# Bases: _DecoratorContextManager Makes modules skip their computation when their outputs are already in the tensordict. As a context manager, it sets the value that skip_existing() returns inside the block. TensorDictModule, TensorDictSequential and the probabilistic modules read that value: when it is on, a module whose out_keys are all in the input returns the input without running. A module whose in_keys and out_keys share a key always runs. As a decorator of a method forward(self, tensordict, ...), it applies the same check before the method runs, with mode as the value. Parameters: mode (bool, list of NestedKey, or None, optional) \u2013 the value of skip_existing(). True: a module is skipped if all its out_keys are in the input. False: no module is skipped. A list of keys: only the modules whose out_keys are all in the list can be skipped. None: for a decorator only; the method follows the value of the enclosing block (see the third example). As a context manager, None raises a RuntimeError. Defaults to True. in_key_attr (str, optional) \u2013 for a decorator, the name of the attribute of the module that holds its input keys. Defaults to \"in_keys\". out_key_attr (str, optional) \u2013 for a decorator, the name of the attribute of the module that holds its output keys. Defaults to \"out_keys\". Keyword Arguments: thread_local (bool, optional) \u2013 if True, the mode applies to the calling thread only, and blocks that other threads enter do not change it. Inside the block, blocks without this flag that the same thread enters stay in that thread too. Threads started inside the block see the process-wide mode. If False, the mode applies to the whole process. Defaults to False. Raises: RuntimeError \u2013 if a block with a mode other than False or None is entered under torch.compile(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import set_skip_existing, skip_existing, TensorDictModule \u003e\u003e\u003e module = TensorDictModule(lambda x: x + 1, in_keys=[\"x\"], out_keys=[\"y\"]) \u003e\u003e\u003e td = TensorDict(x=torch.zeros(()), y=torch.zeros(())) \u003e\u003e\u003e with set_skip_existing(): ... print(skip_existing()) ... print(module(td)[\"y\"]) # \"y\" exists: the module does not run True tensor(0.) \u003e\u003e\u003e module(td)[\"y\"] tensor(1.) As a decorator, it skips the method when the outputs exist: \u003e\u003e\u003e from tensordict.nn import TensorDictModuleBase \u003e\u003e\u003e class MyModule(TensorDictModuleBase): ... in_keys = [] ... out_keys = [\"out\"] ... @set_skip_existing() ... def forward(self, tensordict): ... print(\"hello\") ... tensordict.set(\"out\", torch.zeros(())) ... return tensordict \u003e\u003e\u003e module = MyModule() \u003e\u003e\u003e _ = module(TensorDict({\"out\": torch.zeros(())})) # does not print anything \u003e\u003e\u003e _ = module(TensorDict()) hello With mode=None, the decorated method runs unless the caller opens a set_skip_existing block: \u003e\u003e\u003e class MyModule(TensorDictModuleBase): ... in_keys = [] ... out_keys = [\"out\"] ... @set_skip_existing(None) ... def forward(self, tensordict): ... print(\"hello\") ... tensordict.set(\"out\", torch.zeros(())) ... return tensordict \u003e\u003e\u003e module = MyModule() \u003e\u003e\u003e _ = module(TensorDict({\"out\": torch.zeros(())})) hello \u003e\u003e\u003e with set_skip_existing(True): ... _ = module(TensorDict({\"out\": torch.zeros(())})) # does not print anything A module whose input is also an output always runs: \u003e\u003e\u003e class MyModule(TensorDictModuleBase): ... in_keys = [\"out\"] ... out_keys = [\"out\"] ... @set_skip_existing() ... def forward(self, tensordict): ... print(\"calling the method!\") ... return tensordict ... \u003e\u003e\u003e _ = MyModule()(TensorDict({\"out\": torch.zeros(())})) calling the method!",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

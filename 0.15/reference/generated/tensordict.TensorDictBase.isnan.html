@@ -1642,8 +1642,8 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.isnan">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">isnan</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.isnan" title="Link to this definition">#</a></dt>
-<dd><p>Returns a new tensordict with boolean elements representing if each element of input is NaN or not.</p>
-<p>Complex values are considered NaN when either their real and/or imaginary part is NaN.</p>
+<dd><p>Returns a new tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.isnan.html#torch.isnan" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.isnan()</span></code></a> applied to every leaf.</p>
+<p>The leaves of the result are <code class="docutils literal notranslate"><span class="pre">True</span></code> where an element is NaN.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2004,7 +2004,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.isnan",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.isnan",
        "url": "/reference/generated/tensordict.TensorDictBase.isnan.html",
-       "articleBody": "TensorDictBase.isnan# TensorDictBase.isnan() \u2192 Self# Returns a new tensordict with boolean elements representing if each element of input is NaN or not. Complex values are considered NaN when either their real and/or imaginary part is NaN. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.isnan# TensorDictBase.isnan() \u2192 Self# Returns a new tensordict with torch.isnan() applied to every leaf. The leaves of the result are True where an element is NaN. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

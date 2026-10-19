@@ -1642,13 +1642,21 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.is_consolidated">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">is_consolidated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.is_consolidated" title="Link to this definition">#</a></dt>
-<dd><p>Checks if a TensorDict has a consolidated storage.</p>
-<p>Returns <code class="docutils literal notranslate"><span class="pre">False</span></code> once <a class="reference internal" href="tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> moves the leaves out of the
-consolidated storage, once an in-place write changes a non-tensor
-entry, or once a write replaces, adds or deletes an entry of an
-unpickled copy, which is not locked, as the consolidated storage and
-metadata no longer match the content. <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> then
-builds a new consolidated copy.</p>
+<dd><p>Whether the leaves of the tensordict are views into one storage made by <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>.</p>
+<p>Becomes <code class="docutils literal notranslate"><span class="pre">False</span></code> when the storage no longer matches the content: after
+<a class="reference internal" href="tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> moves the leaves out of it, after an in-place write
+into a non-tensor entry, or after an entry is replaced, added or
+deleted in an unpickled copy (which is not locked). In-place writes
+into the tensor leaves keep it <code class="docutils literal notranslate"><span class="pre">True</span></code>. Call <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>
+to build a new consolidated copy.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_consolidated</span><span class="p">(),</span> <span class="n">td</span><span class="o">.</span><span class="n">consolidate</span><span class="p">()</span><span class="o">.</span><span class="n">is_consolidated</span><span class="p">()</span>
+<span class="go">(False, True)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2009,7 +2017,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.is_consolidated",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.is_consolidated",
        "url": "/reference/generated/tensordict.TensorDictBase.is_consolidated.html",
-       "articleBody": "TensorDictBase.is_consolidated# TensorDictBase.is_consolidated()# Checks if a TensorDict has a consolidated storage. Returns False once memmap_() moves the leaves out of the consolidated storage, once an in-place write changes a non-tensor entry, or once a write replaces, adds or deletes an entry of an unpickled copy, which is not locked, as the consolidated storage and metadata no longer match the content. consolidate() then builds a new consolidated copy. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.is_consolidated# TensorDictBase.is_consolidated()# Whether the leaves of the tensordict are views into one storage made by consolidate(). Becomes False when the storage no longer matches the content: after memmap_() moves the leaves out of it, after an in-place write into a non-tensor entry, or after an entry is replaced, added or deleted in an unpickled copy (which is not locked). In-place writes into the tensor leaves keep it True. Call consolidate() to build a new consolidated copy. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3)) \u003e\u003e\u003e td.is_consolidated(), td.consolidate().is_consolidated() (False, True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

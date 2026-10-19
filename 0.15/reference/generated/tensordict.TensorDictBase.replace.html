@@ -1642,15 +1642,44 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.replace">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">replace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.replace" title="Link to this definition">#</a></dt>
-<dd><p>Creates a shallow copy of the tensordict where entries have been replaced.</p>
-<p>Accepts one unnamed argument which must be a dictionary of a <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass.
-Additionally, first-level entries can be updated with the named keyword arguments.</p>
+<dd><p>Returns a shallow copy of the tensordict with some entries replaced.</p>
+<p>The copy is made with <a class="reference internal" href="tensordict.TensorDictBase.copy.html#tensordict.TensorDictBase.copy" title="tensordict.TensorDictBase.copy"><code class="xref py py-meth docutils literal notranslate"><span class="pre">copy()</span></code></a>, and the new entries are written
+into it with <a class="reference internal" href="tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDictBase.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>: nested tensordicts are merged, and the
+tensordict does not change. With no entry to write, <code class="docutils literal notranslate"><span class="pre">replace</span></code>
+returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>When both a positional argument and <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code> are given, the
+keyword entries are merged into a copy of the positional argument
+(with <code class="docutils literal notranslate"><span class="pre">dict</span></code> unpacking for a dictionary, with <a class="reference internal" href="tensordict.TensorDictBase.copy.html#tensordict.TensorDictBase.copy" title="tensordict.TensorDictBase.copy"><code class="xref py py-meth docutils literal notranslate"><span class="pre">copy()</span></code></a> and
+<a class="reference internal" href="tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDictBase.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> for a tensordict), so the argument does not change.
+A tensordict backed by a file or a store, such as a
+<a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>, shares that storage with
+its copy and still receives the keyword entries.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a copy of <code class="docutils literal notranslate"><span class="pre">self</span></code> with updated entries if the input is non-empty. If an empty dict or no dict is provided
-and the kwargs are empty, <code class="docutils literal notranslate"><span class="pre">self</span></code> is returned.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>*args</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em> or </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – at most one, the entries to write.</p></li>
+<li><p><strong>**kwargs</strong> – top-level entries to write, by key. They take
+precedence over the entries of the positional argument.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A shallow copy of the tensordict, or <code class="docutils literal notranslate"><span class="pre">self</span></code> if there is no entry
+to write.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if more than one positional argument is passed, or if
+    it is not a dictionary or a tensordict.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">new</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">new</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">new</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]</span>
+<span class="go">(tensor([1., 1., 1.]), tensor([0., 0., 0.]), True)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2011,7 +2040,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.replace",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.replace",
        "url": "/reference/generated/tensordict.TensorDictBase.replace.html",
-       "articleBody": "TensorDictBase.replace# TensorDictBase.replace(*args, **kwargs)# Creates a shallow copy of the tensordict where entries have been replaced. Accepts one unnamed argument which must be a dictionary of a TensorDictBase subclass. Additionally, first-level entries can be updated with the named keyword arguments. Returns: a copy of self with updated entries if the input is non-empty. If an empty dict or no dict is provided and the kwargs are empty, self is returned. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.replace# TensorDictBase.replace(*args, **kwargs)# Returns a shallow copy of the tensordict with some entries replaced. The copy is made with copy(), and the new entries are written into it with update(): nested tensordicts are merged, and the tensordict does not change. With no entry to write, replace returns self. When both a positional argument and **kwargs are given, the keyword entries are merged into a copy of the positional argument (with dict unpacking for a dictionary, with copy() and update() for a tensordict), so the argument does not change. A tensordict backed by a file or a store, such as a PersistentTensorDict, shares that storage with its copy and still receives the keyword entries. Parameters: *args (dict or TensorDictBase) \u2013 at most one, the entries to write. **kwargs \u2013 top-level entries to write, by key. They take precedence over the entries of the positional argument. Returns: A shallow copy of the tensordict, or self if there is no entry to write. Raises: RuntimeError \u2013 if more than one positional argument is passed, or if it is not a dictionary or a tensordict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e new = td.replace(a=torch.ones(3)) \u003e\u003e\u003e new[\"a\"], td[\"a\"], new[\"b\"] is td[\"b\"] (tensor([1., 1., 1.]), tensor([0., 0., 0.]), True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

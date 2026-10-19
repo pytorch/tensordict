@@ -2,7 +2,7 @@
 
 tensordict.get_printoptions() → [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)
 
-Returns the current TensorDict print options as a dict.
+Returns the current print options of tensordicts as a dict.
 
 The keys are the options of [`set_printoptions`](tensordict.set_printoptions.html#tensordict.set_printoptions). See
 [Printing and display](../../printing.html#printing).

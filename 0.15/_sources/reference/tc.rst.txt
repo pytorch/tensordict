@@ -21,6 +21,9 @@ listed by task in :ref:`api-tensordict-methods`. On a tensorclass, the
 methods that return a ``TensorDict`` on a ``TensorDict`` return an
 instance of the tensorclass. Examples are ``select``, ``clone``, ``to``,
 ``apply``, indexing, and reshaping.
+On a tensorclass, :meth:`~tensordict.TensorDictBase.rename_keys` raises
+``AttributeError`` for a destination that is not a field, and keeps the
+sub-tensordict fields that it empties.
 
 Tensorclasses
 -------------

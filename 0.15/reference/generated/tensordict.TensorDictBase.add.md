@@ -1,25 +1,49 @@
 # TensorDictBase.add
 
-TensorDictBase.add(*other: TensorCollection | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.add(*other: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *alpha: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Adds `other`, scaled by `alpha`, to `self`.
+Returns a new tensordict with `other`, scaled by `alpha`, added to every leaf.
+
+`td + other` and `other + td` call this method.
 
 \[\text{out}_i = \text{input}_i + \text{alpha} \times \text{other}_i\]
 
 Parameters:
 
-**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the tensor or TensorDict to add to `self`.
+**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the value to add. A
+tensordict is paired with the tensordict key by key. A tensor is
+aligned with the batch dimensions of each leaf and expanded over
+its feature dimensions. Batch sizes that differ are broadcast
+together.
 
 Keyword Arguments:
 
-- **alpha** (*Number**,**optional*) - the multiplier for `other`.
-- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the value to use for an
-entry that only one of the two tensordicts has. If `None`
-(default), the two tensordicts must have the same keys, and a
-missing key raises `KeyError`. If `"intersection"`, only
-the keys that both tensordicts have are computed, and the
-other keys are dropped. Any other value replaces the missing
-entries on both sides of the operation.
+- **alpha** (*Number**,**optional*) - the multiplier for `other`. Defaults to
+`None`, which adds `other` as it is.
+- **default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - what to do with the keys
+that only one of the two tensordicts has. `None` requires the
+same keys and raises a `KeyError` otherwise.
+`"intersection"` computes the keys that both have and drops
+the others. A tensor stands in for the missing entry on either
+side, and the result has the keys of both. Defaults to `None`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(2, 3), b=torch.ones(2), batch_size=[2])
+>>> td.add(1, alpha=2)["b"]
+tensor([3., 3.])
+>>> td.add(torch.tensor([1.0, 2.0]))["a"] # one value per batch element
+tensor([[1., 1., 1.],
+ [2., 2., 2.]])
+>>> other = TensorDict(b=torch.ones(2), c=torch.ones(2), batch_size=[2])
+>>> sorted(td.add(other, default="intersection").keys())
+['b']
+>>> sorted(td.add(other, default=torch.zeros(())).keys())
+['a', 'b', 'c']
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

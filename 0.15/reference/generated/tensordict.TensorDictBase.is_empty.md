@@ -4,7 +4,11 @@ TensorDictBase.is_empty() → [bool](https://docs.python.org/3/builtins/function
 
 Returns `True` if the tensordict has no leaf.
 
-Empty sub-tensordicts do not count as leaves.
+Empty sub-tensordicts do not count as leaves. A lazy stack counts only
+the tensors that all its members share: it returns `True` when they
+share none, and warns when some member holds a leaf. Starting with
+TensorDict 0.17, the default will change to returning `True` only if
+every member is empty.
 
 Examples
 

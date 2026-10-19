@@ -1642,23 +1642,21 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.swapdims">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">swapdims</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axis0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.swapdims" title="Link to this definition">#</a></dt>
-<dd><p>Interchange two axes of the tensordict.</p>
-<p>This is an alias for <a class="reference internal" href="tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>.</p>
+<dd><p>Returns a tensordict with two batch dimensions swapped, as <a class="reference internal" href="tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a> does.</p>
+<p><code class="docutils literal notranslate"><span class="pre">swapaxes</span></code> and <code class="docutils literal notranslate"><span class="pre">swapdims</span></code> are aliases of <a class="reference internal" href="tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>. It
+can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.transpose.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a> can.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>axis0</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – First axis.</p></li>
-<li><p><strong>axis1</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Second axis.</p></li>
+<li><p><strong>axis0</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the first batch dimension to swap.</p></li>
+<li><p><strong>axis1</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the second batch dimension to swap.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict with the axes swapped.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 <span class="go">torch.Size([4, 3])</span>
 </pre></div>
@@ -2023,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.swapdims",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.swapdims",
        "url": "/reference/generated/tensordict.TensorDictBase.swapdims.html",
-       "articleBody": "TensorDictBase.swapdims# TensorDictBase.swapdims(axis0: int, axis1: int)# Interchange two axes of the tensordict. This is an alias for transpose(). Parameters: axis0 (int) \u2013 First axis. axis1 (int) \u2013 Second axis. Returns: a new tensordict with the axes swapped. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.randn(3, 4, 5)}, batch_size=[3, 4]) \u003e\u003e\u003e print(td.swapaxes(0, 1).shape) torch.Size([4, 3]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.swapdims# TensorDictBase.swapdims(axis0: int, axis1: int)# Returns a tensordict with two batch dimensions swapped, as transpose() does. swapaxes and swapdims are aliases of transpose(). It can be used as a context manager, as transpose() can. Parameters: axis0 (int) \u2013 the first batch dimension to swap. axis1 (int) \u2013 the second batch dimension to swap. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3, 4, 5)}, batch_size=[3, 4]) \u003e\u003e\u003e print(td.swapaxes(0, 1).shape) torch.Size([4, 3]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

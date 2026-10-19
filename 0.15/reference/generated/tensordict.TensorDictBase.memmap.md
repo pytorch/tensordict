@@ -2,80 +2,117 @@
 
 TensorDictBase.memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
+Writes every leaf to a memory-mapped file and returns a new tensordict of them.
+
+The tensordict is not changed: the result holds new
+[`MemoryMappedTensor`](tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) leaves. Each leaf is written to
+`<prefix>/<key>.memmap`, each nested tensordict to a subdirectory,
+and each level has a `meta.json` file. Read the files back with
+[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap). [`save()`](tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) and [`dumps()`](tensordict.TensorDictBase.dumps.html#tensordict.TensorDictBase.dumps) call this
+method, and [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_) writes in place. See [Save and load tensordicts](../../saving.html#saving).
+
+The result is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)): you can write into its
+leaves in place, but you cannot add, remove or replace an entry. Once
+it is unlocked, [`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap) returns `False`.
 
 Parameters:
 
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - directory prefix where the memory-mapped tensors will
-be stored. The directory tree structure will mimic the tensordict's.
-If `prefix` ends with `".tdz"` (or `archive=True` is
-passed), a single-file archive is written instead of a
-directory: a standard zip file whose entries replicate the
-memmap directory layout. See `archive` below.
-- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - If False (default), an exception will be raised if an
-entry in the tensordict is already a tensor stored on disk
-with an associated file, but is not saved in the correct
-location according to prefix.
-If `True`, any existing Tensor will be copied to the new location.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory to write to. If it
+ends with `".tdz"`, a single archive file is written instead
+(see `archive`). Defaults to `None`, which writes into the
+directory of the tensordict if it is already memory-mapped
+there, and otherwise into anonymous shared memory, which has no
+file name and lasts as long as the process.
+- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, a leaf that is
+already a memory-mapped tensor with a file at another path
+raises a `RuntimeError`, so that data on disk is not
+duplicated by accident. If `True`, the file is copied to the
+new path. Defaults to `False`.
 
 Keyword Arguments:
 
-- **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of threads used to write the memmap
-tensors. Defaults to 0.
-- **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and `num_threads>0`,
-the method will return a future of the tensordict.
-- **share_non_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the non-tensor data will be
-shared between the processes and writing operation (such as inplace update
-or set) on any of the workers within a single node will update the value
-on all other workers. If the number of non_tensor leaves is high (e.g.,
-sharing large stacks of non-tensor data) this may result in OOM or similar
-errors. Defaults to `False`.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `False`, an exception will be raised if a tensor already
-exists in the same path. Defaults to `True`.
-- **robust_key** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` (default), uses robust key encoding that safely
-handles keys with path separators and special characters. If `False`,
-uses legacy behavior (keys used as-is). If `None`, uses the default
-robust behavior.
-- **archive** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, `prefix` designates a
-single file rather than a directory and the tensordict is
-written as a memmap archive: a zip file mirroring the memmap
-directory tree, with tensor payloads stored uncompressed and
-aligned so that [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) can memory-map the file
-and expose every leaf as a zero-copy view. If `None`
-(default), archive mode is enabled when `prefix` ends with
-`".tdz"`. The result of [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) on an archive
-behaves like the result of [`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated): all
-leaves are views into a single storage, and in-place writes do
-not propagate to the file. Archives and memmap directories are
-mutually convertible with [`pack_memmap()`](tensordict.pack_memmap.html#tensordict.pack_memmap) /
-[`unpack_memmap()`](tensordict.unpack_memmap.html#tensordict.unpack_memmap) (or any zip tool). Note that
-archives are written sequentially (single data pass) and
-`num_threads` has no effect on them. An existing archive
-is replaced by a new file rather than rewritten in place: a
-symlink is followed, but other hard links to the old file
-keep the old contents.
-- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - compression for archive
-entries (`"stored"`, `"deflate"`, `"bzip2"`, `"lzma"`
-or a [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant). Defaults to `"stored"`
-(uncompressed), which is what enables zero-copy loading.
-Compressed archives load correctly but leaves are
-decompressed in memory on access. Only valid in archive mode.
-
-The TensorDict is then locked, meaning that any writing operations that
-isn't in-place will throw an exception (eg, rename, set or remove an
-entry).
-Once the tensordict is unlocked, the memory-mapped attribute is turned to `False`,
-because cross-process identity is not guaranteed anymore.
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that write the
+files. `0` and `1` write them one after the other in the
+calling thread. Threads help with a few large leaves and slow
+down many small ones. Defaults to `0`.
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `num_threads > 1`,
+returns a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) at once,
+while the threads write the files: `future.result()` waits
+for them and returns the tensordict. Not supported for an
+archive. Defaults to `False`.
+- **share_non_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, non-tensor data is
+shared between the processes of the node, so that an in-place
+write of a non-tensor entry in one process is seen by the
+others. Many non-tensor leaves (for example a large stack of
+non-tensor data) can use up the memory. Defaults to `False`.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, a file that already exists
+at the path of a leaf (or at the archive path) raises a
+`RuntimeError`. If `True`, it is overwritten. Defaults to
+`True`.
+- **robust_key** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, keys are percent-encoded
+in file and directory names (`"a/b"` is written to
+`a%2Fb.memmap`), so that every file stays inside `prefix`.
+If `False`, keys are used as file names unchanged, as in the
+legacy layout: do not use it with keys you do not trust.
+`None` is the same as `True`. Defaults to `True`.
+- **archive** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, `prefix` is a file, and
+the tensordict is written to it as an archive: a zip file
+whose entries are the files of the directory layout, with
+uncompressed and aligned tensor payloads. Defaults to `None`,
+which writes an archive if `prefix` ends with `".tdz"`.
+- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression of the archive
+entries: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"`,
+or a [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. A compressed leaf is
+decompressed in memory when it is loaded, instead of being
+memory-mapped. Only valid for an archive. Defaults to `None`,
+which stores the entries uncompressed.
 
 Returns:
 
-A new tensordict with the tensors stored on disk if `return_early=False`,
-otherwise a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) instance.
+A new memory-mapped tensordict, or a
+[`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) of it if
+`return_early=True` and `num_threads > 1`.
+
+Raises:
+
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
+ `copy_existing=False`, or if a file exists and
+ `existsok=False`.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `compression` is given without an archive, or if
+ an archive is requested without `prefix`.
+- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` for an archive.
 
 Note
 
-Serialising in this fashion might be slow with deeply nested tensordicts, so
-it is not recommended to call this method inside a training loop.
+For an archive, the result is `load_memmap(prefix)`: its leaves
+are views into one copy-on-write mapping of the file, so in-place
+writes do not reach the file, and it is not locked. Archives are
+written in one pass, so `num_threads` does not speed them up. An
+existing archive is replaced by a new file: a symlink is followed,
+but other hard links keep the old content.
+[`pack_memmap()`](tensordict.pack_memmap.html#tensordict.pack_memmap) and
+[`unpack_memmap()`](tensordict.unpack_memmap.html#tensordict.unpack_memmap) convert between archives and
+directories.
+
+Examples
+
+```
+>>> import os
+>>> import tempfile
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(
+... obs=torch.zeros(3, 4),
+... next=TensorDict(reward=torch.ones(3, 1), batch_size=[3]),
+... batch_size=[3],
+... )
+>>> with tempfile.TemporaryDirectory() as path:
+... mm = td.memmap(path)
+... print(type(mm["obs"]).__name__, mm.is_locked)
+... print(sorted(os.listdir(path)))
+MemoryMappedTensor True
+['meta.json', 'next', 'obs.memmap']
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

@@ -1642,13 +1642,35 @@ document.write(`
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.set_list_to_stack">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">set_list_to_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.set_list_to_stack" title="Link to this definition">#</a></dt>
-<dd><p>Context manager and decorator to control list handling in TensorDict.</p>
+<dd><p>Sets whether assigning a list to a key stores a stack of non-tensor data.</p>
+<p>By default (<code class="docutils literal notranslate"><span class="pre">mode=True</span></code>), <code class="docutils literal notranslate"><span class="pre">td[key]</span> <span class="pre">=</span> <span class="pre">[&quot;a&quot;,</span> <span class="pre">&quot;b&quot;]</span></code> stores a
+<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> with one value per element along the
+first batch dimension. With <code class="docutils literal notranslate"><span class="pre">mode=False</span></code>, the list is stored as one
+<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> value. The <code class="docutils literal notranslate"><span class="pre">LIST_TO_STACK</span></code>
+environment variable sets the mode at import. Use it as a context manager
+or a decorator, or call <code class="docutils literal notranslate"><span class="pre">set_list_to_stack(mode).set()</span></code> to change the
+mode for the rest of the program.</p>
 <div class="deprecated">
 <p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Turning list-to-stack conversion off (<code class="docutils literal notranslate"><span class="pre">set_list_to_stack(False)</span></code> or
 <code class="docutils literal notranslate"><span class="pre">LIST_TO_STACK=0</span></code>) is deprecated and will be removed in TensorDict 0.17.
 Use <a class="reference internal" href="tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor" title="tensordict.TensorDictBase.set_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">td.set_non_tensor(key,</span> <span class="pre">value)</span></code></a>
 to store a list as one value. <code class="docutils literal notranslate"><span class="pre">set_list_to_stack(True)</span></code>, the default,
 does not warn, and will keep working, doing nothing, after the removal.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a list is stored as a stack. <code class="docutils literal notranslate"><span class="pre">False</span></code>
+stores it as one value, and emits a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">set_list_to_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_list_to_stack</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">))</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span>
+<span class="go">('NonTensorStack', LinkedList(['a', 'b']))</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -2008,7 +2030,7 @@ does not warn, and will keep working, doing nothing, after the removal.</p>
        "headline": "set_list_to_stack",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_list_to_stack",
        "url": "/reference/generated/tensordict.set_list_to_stack.html",
-       "articleBody": "set_list_to_stack# class tensordict.set_list_to_stack(mode: bool)# Context manager and decorator to control list handling in TensorDict. Deprecated since version 0.15: Turning list-to-stack conversion off (set_list_to_stack(False) or LIST_TO_STACK=0) is deprecated and will be removed in TensorDict 0.17. Use td.set_non_tensor(key, value) to store a list as one value. set_list_to_stack(True), the default, does not warn, and will keep working, doing nothing, after the removal.",
+       "articleBody": "set_list_to_stack# class tensordict.set_list_to_stack(mode: bool)# Sets whether assigning a list to a key stores a stack of non-tensor data. By default (mode=True), td[key] = [\"a\", \"b\"] stores a NonTensorStack with one value per element along the first batch dimension. With mode=False, the list is stored as one NonTensorData value. The LIST_TO_STACK environment variable sets the mode at import. Use it as a context manager or a decorator, or call set_list_to_stack(mode).set() to change the mode for the rest of the program. Deprecated since version 0.15: Turning list-to-stack conversion off (set_list_to_stack(False) or LIST_TO_STACK=0) is deprecated and will be removed in TensorDict 0.17. Use td.set_non_tensor(key, value) to store a list as one value. set_list_to_stack(True), the default, does not warn, and will keep working, doing nothing, after the removal. Parameters: mode (bool) \u2013 if True, a list is stored as a stack. False stores it as one value, and emits a DeprecationWarning. Examples \u003e\u003e\u003e from tensordict import TensorDict, set_list_to_stack \u003e\u003e\u003e td = TensorDict(batch_size=[2]) \u003e\u003e\u003e with set_list_to_stack(True): ... td[\"x\"] = [\"a\", \"b\"] \u003e\u003e\u003e type(td.get(\"x\")).__name__, td[\"x\"] (\u0027NonTensorStack\u0027, LinkedList([\u0027a\u0027, \u0027b\u0027]))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

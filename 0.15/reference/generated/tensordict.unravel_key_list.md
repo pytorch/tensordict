@@ -10,11 +10,7 @@ Parameters:
 
 Returns:
 
-strings, or flat tuples of strings.
-
-Return type:
-
-a list of keys
+A list of the unraveled keys (strings, or flat tuples of strings).
 
 Raises:
 

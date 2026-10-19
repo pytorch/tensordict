@@ -1642,9 +1642,22 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.unravel_key">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">unravel_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.unravel_key" title="Link to this definition">#</a></dt>
-<dd><p>Unravel a nested key.</p>
-<p>A tuple with a part that is neither a str nor a tuple of str unravels to
-<code class="docutils literal notranslate"><span class="pre">()</span></code>. A key that is neither a str nor a tuple raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
+<dd><p>Unravels a nested key into a str or a flat tuple of str.</p>
+<p>Nested tuples are flattened, and a tuple with a single str gives that
+str, so equal keys compare equal: <code class="docutils literal notranslate"><span class="pre">unravel_key((&quot;a&quot;,))</span> <span class="pre">==</span> <span class="pre">&quot;a&quot;</span></code>. A tuple
+with a part that is neither a str nor a tuple of str unravels to <code class="docutils literal notranslate"><span class="pre">()</span></code>.
+See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key to unravel.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A str, a flat tuple of at least two str, or <code class="docutils literal notranslate"><span class="pre">()</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">key</span></code> is neither a str nor a tuple.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">unravel_key</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">unravel_key</span><span class="p">(</span><span class="s2">"a"</span><span class="p">)</span>
@@ -2015,7 +2028,7 @@ document.write(`
        "headline": "unravel_key",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - unravel_key",
        "url": "/reference/generated/tensordict.unravel_key.html",
-       "articleBody": "unravel_key# tensordict.unravel_key(key)# Unravel a nested key. A tuple with a part that is neither a str nor a tuple of str unravels to (). A key that is neither a str nor a tuple raises a RuntimeError. Examples \u003e\u003e\u003e from tensordict import unravel_key \u003e\u003e\u003e unravel_key(\"a\") \u0027a\u0027 \u003e\u003e\u003e unravel_key((\"a\",)) \u0027a\u0027 \u003e\u003e\u003e unravel_key(((\"a\", (\"b\",)))) (\u0027a\u0027, \u0027b\u0027) \u003e\u003e\u003e unravel_key((\"a\", 1)) ()",
+       "articleBody": "unravel_key# tensordict.unravel_key(key)# Unravels a nested key into a str or a flat tuple of str. Nested tuples are flattened, and a tuple with a single str gives that str, so equal keys compare equal: unravel_key((\"a\",)) == \"a\". A tuple with a part that is neither a str nor a tuple of str unravels to (). See Keys, nested keys, and locking. Parameters: key (NestedKey) \u2013 the key to unravel. Returns: A str, a flat tuple of at least two str, or (). Raises: RuntimeError \u2013 if key is neither a str nor a tuple. Examples \u003e\u003e\u003e from tensordict import unravel_key \u003e\u003e\u003e unravel_key(\"a\") \u0027a\u0027 \u003e\u003e\u003e unravel_key((\"a\",)) \u0027a\u0027 \u003e\u003e\u003e unravel_key(((\"a\", (\"b\",)))) (\u0027a\u0027, \u0027b\u0027) \u003e\u003e\u003e unravel_key((\"a\", 1)) ()",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

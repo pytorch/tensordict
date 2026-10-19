@@ -1642,7 +1642,16 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.nn.skip_existing">
 <span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">skip_existing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.nn.skip_existing" title="Link to this definition">#</a></dt>
-<dd><p>Returns which existing entries should not be re-computed by a module.</p>
+<dd><p>Returns the mode set by <a class="reference internal" href="tensordict.nn.set_skip_existing.html#tensordict.nn.set_skip_existing" title="tensordict.nn.set_skip_existing"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_skip_existing</span></code></a>: <code class="docutils literal notranslate"><span class="pre">False</span></code> (the default), <code class="docutils literal notranslate"><span class="pre">True</span></code>, or a list of keys.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">set_skip_existing</span><span class="p">,</span> <span class="n">skip_existing</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">skip_existing</span><span class="p">()</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_skip_existing</span><span class="p">([</span><span class="s2">"a"</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">skip_existing</span><span class="p">()</span>
+<span class="go">['a']</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2001,7 +2010,7 @@ document.write(`
        "headline": "skip_existing",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - skip_existing",
        "url": "/reference/generated/tensordict.nn.skip_existing.html",
-       "articleBody": "skip_existing# tensordict.nn.skip_existing() \u2192 bool | list[NestedKey]# Returns which existing entries should not be re-computed by a module.",
+       "articleBody": "skip_existing# tensordict.nn.skip_existing() \u2192 bool | list[NestedKey]# Returns the mode set by set_skip_existing: False (the default), True, or a list of keys. Examples \u003e\u003e\u003e from tensordict.nn import set_skip_existing, skip_existing \u003e\u003e\u003e skip_existing() False \u003e\u003e\u003e with set_skip_existing([\"a\"]): ... skip_existing() [\u0027a\u0027]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

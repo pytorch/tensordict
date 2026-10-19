@@ -2,7 +2,7 @@
 
 TensorDictBase.ceil() → Self
 
-Computes the [`ceil()`](https://docs.pytorch.org/docs/stable/generated/torch.ceil.html#torch.ceil) value of each element of the TensorDict.
+Returns a new tensordict with [`torch.ceil()`](https://docs.pytorch.org/docs/stable/generated/torch.ceil.html#torch.ceil) applied to every leaf.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

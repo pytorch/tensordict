@@ -19,22 +19,24 @@ Parameters:
 
 Keyword Arguments:
 
-- **inplace** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the parameters or tensors
-in the module are updated in-place. Defaults to `None`, which
-behaves like `False`. Cannot be passed together with
-`use_state_dict=True`.
-- **return_swap** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the old parameter configuration
-will be returned. Defaults to `True`.
-- **swap_dest** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - if `return_swap` is `True`,
-the tensordict where the swap should be written.
-- **memo** - deprecated. Passing it raises `RuntimeError`.
-- **use_state_dict** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, state-dict API will be
-used to load the parameters (including the state-dict hooks).
-Defaults to `False`.
-- **non_blocking** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and this copy is between
-different devices, the copy may occur asynchronously with respect
-to the host.
-- **preserve_module_state** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - 
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies the values into the
+existing parameters and buffers of the module, which keep
+their identity. Otherwise the leaves of the tensordict replace
+them. Defaults to `None`, which behaves like `False`.
+Cannot be passed with `use_state_dict=True`.
+- **return_swap** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns the parameters
+and buffers that the module held before the call. Defaults to
+`True`.
+- **swap_dest** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - with `return_swap`, a
+tensordict to write the old values into and to return.
+Defaults to `None`, which returns a new tensordict.
+- **use_state_dict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, loads the values
+through the state-dict API, so that the module's state-dict
+hooks run. Defaults to `False`.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+can run asynchronously with respect to the host. Defaults to
+`False`.
+- **preserve_module_state** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - 
 
 if `True`, existing
 `Parameter` and buffer registrations are
@@ -43,18 +45,20 @@ remain parameters with their original `requires_grad` value,
 and buffers remain registered buffers. Leaves that are not
 parameters but require gradients, or that are batched by
 [`vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap), are registered as they are, so that
-gradients still reach them. If `False`, tensor
-leaves are written with the historical replacement semantics,
-which may deregister an existing parameter when the source leaf
-is not an `Parameter`. Defaults to `True`.
-Pass `False` to retain the historical replacement behavior.
+gradients still reach them. If `False`, a leaf that is not a
+`Parameter` replaces the attribute as it is,
+which can deregister an existing parameter (the historical
+behavior). Defaults to `True`.
 
 Changed in version 0.15: `preserve_module_state=None`, deprecated in 0.14, is no
 longer accepted.
+- **memo** - no longer accepted: passing it raises a `RuntimeError`.
 
 Returns:
 
-A tensordict containing the values from the module if `return_swap` is `True`, `None` otherwise.
+A tensordict of the values that the module held before the call
+(or `swap_dest`) if `return_swap` is `True`, `None`
+otherwise.
 
 Examples
 
@@ -66,24 +70,27 @@ Examples
 >>> params = TensorDict.from_module(module)
 >>> zeros = params.data.clone().zero_()
 >>> old_params = zeros.to_module(module)
->>> assert (module.weight == 0).all()
+>>> bool((module.weight == 0).all())
+True
 >>> _ = old_params.to_module(module) # restores the original values
->>> assert (module.weight != 0).any()
+>>> bool((module.weight != 0).any())
+True
 ```
 
-Use the tensordict as a context manager to make a functional call:
+Use the tensordict as a context manager to make a functional call.
+When the block exits, the original parameters are written back:
 
 ```
->>> zeros = params.data * 0
 >>> with zeros.to_module(module):
 ... y = module(torch.ones(2, 3)) # runs with zeroed parameters
->>> assert (y == 0).all()
->>> # When the block exits, the original parameters are written back.
->>> assert (module.weight != 0).any()
+>>> bool((y == 0).all())
+True
+>>> bool((module.weight != 0).any())
+True
 ```
 
-> The original parameters are written back if the block raises an
-> exception too:
+The original parameters are written back if the block raises an
+exception too:
 
 ```
 >>> try:
@@ -91,7 +98,8 @@ Use the tensordict as a context manager to make a functional call:
 ... raise ValueError("stop")
 ... except ValueError:
 ... pass
->>> assert (module.weight != 0).any()
+>>> bool((module.weight != 0).any())
+True
 ```
 
 Every tensordict class and every tensorclass has this method. For the

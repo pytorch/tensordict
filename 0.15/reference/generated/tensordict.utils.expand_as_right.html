@@ -1642,25 +1642,35 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.utils.expand_as_right">
 <span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">expand_as_right</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.utils.expand_as_right" title="Link to this definition">#</a></dt>
-<dd><p>Expand a tensor on the right to match another tensor shape.</p>
+<dd><p>Expands a tensor on the right to the shape of <code class="docutils literal notranslate"><span class="pre">dest</span></code>.</p>
+<p>Broadcasting adds dimensions on the left; this function adds them on the
+right instead, then expands every dimension of size one. The leading
+dimensions of <code class="docutils literal notranslate"><span class="pre">tensor</span></code> must match those of <code class="docutils literal notranslate"><span class="pre">dest</span></code> or be of size one.
+The result is a view of <code class="docutils literal notranslate"><span class="pre">tensor</span></code>, as with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.expand()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tensor</strong> – tensor to be expanded</p></li>
-<li><p><strong>dest</strong> – tensor providing the target shape</p></li>
+<li><p><strong>tensor</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensor to expand.</p></li>
+<li><p><strong>dest</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensor whose shape the
+result takes. For a tensordict, the shape is its batch size.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a tensor with shape matching the dest input tensor shape.</p>
+<dd class="field-even"><p>A view of <code class="docutils literal notranslate"><span class="pre">tensor</span></code> with the shape of <code class="docutils literal notranslate"><span class="pre">dest</span></code>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">dest</span></code> has fewer dimensions than <code class="docutils literal notranslate"><span class="pre">tensor</span></code>, or if
+    their leading dimensions do not match.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_as_right</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dest</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">expand_as_right</span><span class="p">(</span><span class="n">tensor</span><span class="p">,</span> <span class="n">dest</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-<span class="go">torch.Size([3, 4, 5])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expand_as_right</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+<span class="go">tensor([[0, 0],</span>
+<span class="go">        [1, 1],</span>
+<span class="go">        [2, 2]])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2021,7 +2031,7 @@ document.write(`
        "headline": "expand_as_right",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - expand_as_right",
        "url": "/reference/generated/tensordict.utils.expand_as_right.html",
-       "articleBody": "expand_as_right# tensordict.utils.expand_as_right(tensor: Tensor | TensorDictBase, dest: Tensor | TensorDictBase) \u2192 Tensor | TensorDictBase# Expand a tensor on the right to match another tensor shape. Parameters: tensor \u2013 tensor to be expanded dest \u2013 tensor providing the target shape Returns: a tensor with shape matching the dest input tensor shape. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.utils import expand_as_right \u003e\u003e\u003e tensor = torch.zeros(3,4) \u003e\u003e\u003e dest = torch.zeros(3,4,5) \u003e\u003e\u003e print(expand_as_right(tensor, dest).shape) torch.Size([3, 4, 5])",
+       "articleBody": "expand_as_right# tensordict.utils.expand_as_right(tensor: Tensor | TensorDictBase, dest: Tensor | TensorDictBase) \u2192 Tensor | TensorDictBase# Expands a tensor on the right to the shape of dest. Broadcasting adds dimensions on the left; this function adds them on the right instead, then expands every dimension of size one. The leading dimensions of tensor must match those of dest or be of size one. The result is a view of tensor, as with torch.Tensor.expand(). Parameters: tensor (Tensor or TensorDictBase) \u2013 the tensor to expand. dest (Tensor or TensorDictBase) \u2013 the tensor whose shape the result takes. For a tensordict, the shape is its batch size. Returns: A view of tensor with the shape of dest. Raises: RuntimeError \u2013 if dest has fewer dimensions than tensor, or if their leading dimensions do not match. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.utils import expand_as_right \u003e\u003e\u003e x = torch.arange(3) \u003e\u003e\u003e expand_as_right(x, torch.zeros(3, 2)) tensor([[0, 0], [1, 1], [2, 2]])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

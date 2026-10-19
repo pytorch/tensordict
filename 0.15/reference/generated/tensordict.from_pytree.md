@@ -2,7 +2,7 @@
 
 tensordict.from_pytree(*pytree*, ***, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Converts a pytree to a TensorDict instance.
+Converts a pytree (nested lists, tuples and dicts of tensors) to a tensordict.
 
 Lists, tuples, named tuples and dicts become nested tensordicts, and
 non-tensor entries record their types, so
@@ -12,20 +12,27 @@ details.
 
 Parameters:
 
-**pytree** - the pytree to convert.
+**pytree** (*Any*) - the pytree to convert.
 
 Keyword Arguments:
 
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size of the result.
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch size is the
-largest leading shape that all leaves share. Defaults to
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result. Defaults to `None`, which gives `[]` unless
+`auto_batch_size` is `True`.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size to
+the largest leading shape that all the leaves share. Defaults to
 `False`.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - used with `auto_batch_size`: the
-number of batch dimensions to keep.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict).
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict).
 
 Examples
 

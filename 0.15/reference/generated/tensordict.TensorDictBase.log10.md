@@ -2,7 +2,7 @@
 
 TensorDictBase.log10() → Self
 
-Computes the [`log10()`](https://docs.pytorch.org/docs/stable/generated/torch.log10.html#torch.log10) value of each element of the TensorDict.
+Returns a new tensordict with [`torch.log10()`](https://docs.pytorch.org/docs/stable/generated/torch.log10.html#torch.log10) applied to every leaf.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

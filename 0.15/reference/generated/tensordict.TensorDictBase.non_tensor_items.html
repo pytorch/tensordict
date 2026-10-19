@@ -1642,7 +1642,27 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.non_tensor_items">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">non_tensor_items</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">include_nested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.non_tensor_items" title="Link to this definition">#</a></dt>
-<dd><p>Returns all non-tensor leaves, maybe recursively.</p>
+<dd><p>Returns a tuple of the <code class="docutils literal notranslate"><span class="pre">(key,</span> <span class="pre">value)</span></code> pairs of the non-tensor data of the tensordict.</p>
+<p>The values are <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> (or
+<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>) instances. See
+<a class="reference internal" href="../../concepts/non_tensor.html#non-tensor-data"><span class="std std-ref">Non-tensor data and unbatched entries</span></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>include_nested</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the non-tensor data of
+the nested tensordicts is also returned, under nested keys.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">s</span><span class="o">=</span><span class="s2">"text"</span><span class="p">,</span> <span class="n">nested</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">t</span><span class="o">=</span><span class="s2">"more"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">non_tensor_items</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span>
+<span class="go">['s', ('nested', 't')]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">non_tensor_items</span><span class="p">()[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>
+<span class="go">'text'</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2023,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.non_tensor_items",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.non_tensor_items",
        "url": "/reference/generated/tensordict.TensorDictBase.non_tensor_items.html",
-       "articleBody": "TensorDictBase.non_tensor_items# TensorDictBase.non_tensor_items(include_nested: bool = False)# Returns all non-tensor leaves, maybe recursively. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.non_tensor_items# TensorDictBase.non_tensor_items(include_nested: bool = False)# Returns a tuple of the (key, value) pairs of the non-tensor data of the tensordict. The values are NonTensorData (or NonTensorStack) instances. See Non-tensor data and unbatched entries. Parameters: include_nested (bool, optional) \u2013 if True, the non-tensor data of the nested tensordicts is also returned, under nested keys. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(2), s=\"text\", nested=TensorDict(t=\"more\")) \u003e\u003e\u003e [key for key, _ in td.non_tensor_items(include_nested=True)] [\u0027s\u0027, (\u0027nested\u0027, \u0027t\u0027)] \u003e\u003e\u003e td.non_tensor_items()[0][1].data \u0027text\u0027 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

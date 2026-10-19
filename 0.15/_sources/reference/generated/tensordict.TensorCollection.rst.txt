@@ -1,0 +1,12 @@
+﻿.. currentmodule:: tensordict
+
+
+TensorCollection
+================
+
+.. autoclass:: TensorCollection
+    :members:
+    :show-inheritance:
+
+.. minigallery:: tensordict.TensorCollection
+    :add-heading: Tutorials that use ``TensorCollection``

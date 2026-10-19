@@ -2,116 +2,75 @@
 
 TensorDictBase.isend(*dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *group: 'torch.distributed.ProcessGroup' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *group_dst: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *init_tag: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *pseudo_rand: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [int](https://docs.python.org/3/builtins/functions.html#int) | List['Work'] | [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Sends the content of the tensordict asynchronously.
+Sends the leaves of the tensordict to another rank, one asynchronous transfer per leaf.
+
+As [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send), but the transfers of all the leaves run at the same
+time. By default, the call waits until they are done. With
+`return_early=True`, it returns at once: call `wait()` on each
+returned `Work` object before you change the tensordict. The receiver
+calls [`irecv()`](tensordict.TensorDictBase.irecv.html#tensordict.TensorDictBase.irecv) or [`recv()`](tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv). See [Distributed tensordicts](../../distributed.html#distributed).
 
 Parameters:
 
-**dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the global rank of the destination worker
-where the content should be sent. Mutually exclusive with
-`group_dst`; exactly one of the two must be provided.
+**dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the global rank of the receiver. Exclusive with
+`group_dst`: pass exactly one of them. Defaults to `None`.
 
 Keyword Arguments:
 
-- **group** (*torch.distributed.ProcessGroup**,**optional*) - if set, the specified process group
-will be used for communication. Otherwise, the default process group
-will be used.
-Defaults to `None`.
-- **group_dst** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the rank of the destination worker
-*relative to* `group`. Requires `group` to be passed and is
-mutually exclusive with `dst`. When set, the p2p calls are
-issued directly on the group's backend, so `group` may be a
-standalone `ProcessGroup` built
-against a store (never registered through
-[`init_process_group()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) or
-[`new_group()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group)).
-Defaults to `None`.
-- **init_tag** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)) - the initial tag to be used to mark the tensors.
-Note that this will be incremented by as much as the number of
-tensors contained in the TensorDict.
-- **pseudo_rand** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if True, the sequence of tags will be pseudo-
-random, allowing to send multiple data from different nodes
-without overlap. Notice that the generation of these pseudo-random
-numbers is expensive (1e-5 sec/number), meaning that it could
-slow down the runtime of your algorithm.
+- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
+Defaults to `None`, the default process group.
+- **group_dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the rank of the receiver in `group`,
+which must be given. Exclusive with `dst`. As in [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send),
+`group` can then be a standalone process group. Defaults to
+`None`.
+- **init_tag** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the tag of the first leaf. The next leaves
+use `init_tag + 1`, `init_tag + 2`, and so on. The receiver must
+pass the same value. Defaults to `0`.
+- **pseudo_rand** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tags are pseudo-random
+numbers seeded by `init_tag`. The receiver must pass the same
+value. Defaults to `False`.
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns the list of
+`Work` objects of the transfers without waiting for them.
 Defaults to `False`.
-- **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if True, a list of futures
-will be returned instead of the tag of the last tensor sent.
-Defaults to `False`.
-- **consolidated** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if True, sends the consolidated storage as a
-single tensor (1 message), as [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) does. The tensordict
-is consolidated first if needed, which copies every leaf on
-each call: a sender that keeps a consolidated copy and
-refreshes it with [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) avoids that copy. The
-receiver must use `irecv(consolidated=True)` or
-`recv(consolidated=True)` and must already hold a
-consolidated tensordict with matching schema. With
-`return_early=True`, the returned list holds the single
-future; otherwise `None` is returned once the message is
-sent. `init_tag` and `pseudo_rand` are ignored.
-Defaults to `False`.
+- **consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sends all the leaves as one
+message, as `send(consolidated=True)` does. A tensordict that is
+not consolidated is consolidated on each call, which copies every
+leaf: keep a consolidated copy and refresh it with
+[`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) to avoid the copy. The receiver must call
+`irecv(consolidated=True)` or `recv(consolidated=True)`.
+`init_tag` and `pseudo_rand` are ignored. Defaults to `False`.
 
-Example
+Returns:
+
+With `return_early=True`, a list of `Work` objects. Otherwise, the
+tag of the last leaf sent, or `None` with `consolidated=True`.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if both or none of `dst` and `group_dst` are given, or
+ if `group_dst` is given without `group`.
+
+Examples
+
+This example runs in two processes: add it to the
+[runner script of the distributed guide](../../distributed.html#distributed) and
+pass it to `run`.
 
 ```
->>> import torch
->>> from tensordict import TensorDict
->>> from torch import multiprocessing as mp
->>> def client():
-... torch.distributed.init_process_group(
-... "gloo",
-... rank=1,
-... world_size=2,
-... init_method=f"tcp://localhost:10003",
-... )
-...
-... td = TensorDict(
-... {
-... ("a", "b"): torch.randn(2),
-... "c": torch.randn(2, 3),
-... "_": torch.ones(2, 1, 5),
-... },
-... [2],
-... )
-... td.isend(0)
-...
->>>
->>> def server(queue, return_premature=True):
-... torch.distributed.init_process_group(
-... "gloo",
-... rank=0,
-... world_size=2,
-... init_method=f"tcp://localhost:10003",
-... )
-... td = TensorDict(
-... {
-... ("a", "b"): torch.zeros(2),
-... "c": torch.zeros(2, 3),
-... "_": torch.zeros(2, 1, 5),
-... },
-... [2],
-... )
-... out = td.irecv(1, return_premature=return_premature)
-... if return_premature:
-... for fut in out:
-... fut.wait()
-... assert (td != 0).all()
-... queue.put("yuppie")
-...
->>>
->>> if __name__ == "__main__":
-... queue = mp.Queue(1)
-... main_worker = mp.Process(
-... target=server,
-... args=(queue, )
-... )
-... secondary_worker = mp.Process(target=client)
-...
-... main_worker.start()
-... secondary_worker.start()
-... out = queue.get(timeout=10)
-... assert out == "yuppie"
-... main_worker.join()
-... secondary_worker.join()
+def isend_irecv(rank, world_size):
+ if rank == 0:
+ td = TensorDict(a=torch.ones(4), b=torch.ones(4, 3), batch_size=[4])
+ works = td.isend(dst=1, return_early=True)
+ # ... other work, which does not change td ...
+ for work in works:
+ work.wait()
+ elif rank == 1:
+ td = TensorDict(a=torch.zeros(4), b=torch.zeros(4, 3), batch_size=[4])
+ works = td.irecv(src=0, return_premature=True)
+ # ... other work, which does not read td ...
+ for work in works:
+ work.wait()
+ print(td["b"].sum()) # tensor(12.)
 ```
 
 Every tensordict class and every tensorclass has this method. For the

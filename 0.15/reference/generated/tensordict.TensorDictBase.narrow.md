@@ -2,19 +2,17 @@
 
 TensorDictBase.narrow(*dim: [int](https://docs.python.org/3/builtins/functions.html#int)*, *start: [int](https://docs.python.org/3/builtins/functions.html#int)*, *length: [int](https://docs.python.org/3/builtins/functions.html#int)*)
 
-Returns a new tensordict that is a narrowed version of the input.
+Returns a tensordict narrowed along a batch dimension, as [`torch.Tensor.narrow()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.narrow.html#torch.Tensor.narrow) does.
 
-The dimension dim is input from start to start + length.
+The result keeps the elements `start` to `start + length - 1` of
+`dim`. Its leaves are views of the original leaves, and it keeps the
+names.
 
 Parameters:
 
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - The dimension along which to narrow.
-- **start** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - Starting index.
-- **length** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - Length of the narrowed dimension.
-
-Returns:
-
-a new tensordict narrowed along the specified dimension.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the batch dimension to narrow.
+- **start** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the first element to keep.
+- **length** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the number of elements to keep.
 
 Examples
 

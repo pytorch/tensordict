@@ -1642,14 +1642,14 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.unlock_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">unlock_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.unlock_" title="Link to this definition">#</a></dt>
-<dd><p>Unlocks the tensordict and its sub-tensordicts, and returns it.</p>
+<dd><p>Unlocks the tensordict and its nested tensordicts, and returns it.</p>
 <p>After this call, entries can be added, removed and renamed again. See
 <a class="reference internal" href="tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a> for what a lock blocks.</p>
 <p>Can be used as a context manager: the tensordict is locked again when
 the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, also if the block raises an exception.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if this tensordict, or one of its sub-tensordicts,
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict, or one of its nested tensordicts,
     is also an entry of another locked tensordict. Unlock that
     parent first. The tensordict stays locked.</p>
 </dd>
@@ -2033,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.unlock",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.unlock",
        "url": "/reference/generated/tensordict.TensorDictBase.unlock_.html",
-       "articleBody": "TensorDictBase.unlock# TensorDictBase.unlock_() \u2192 Self# Unlocks the tensordict and its sub-tensordicts, and returns it. After this call, entries can be added, removed and renamed again. See lock_() for what a lock blocks. Can be used as a context manager: the tensordict is locked again when the with block exits, also if the block raises an exception. Raises: RuntimeError \u2013 if this tensordict, or one of its sub-tensordicts, is also an entry of another locked tensordict. Unlock that parent first. The tensordict stays locked. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3], lock=True) \u003e\u003e\u003e with td.unlock_(): ... td[\"b\"] = torch.ones(3) \u003e\u003e\u003e td.is_locked True \u003e\u003e\u003e sorted(td.keys()) [\u0027a\u0027, \u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unlock_# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.unlock# TensorDictBase.unlock_() \u2192 Self# Unlocks the tensordict and its nested tensordicts, and returns it. After this call, entries can be added, removed and renamed again. See lock_() for what a lock blocks. Can be used as a context manager: the tensordict is locked again when the with block exits, also if the block raises an exception. Raises: RuntimeError \u2013 if the tensordict, or one of its nested tensordicts, is also an entry of another locked tensordict. Unlock that parent first. The tensordict stays locked. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3], lock=True) \u003e\u003e\u003e with td.unlock_(): ... td[\"b\"] = torch.ones(3) \u003e\u003e\u003e td.is_locked True \u003e\u003e\u003e sorted(td.keys()) [\u0027a\u0027, \u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use unlock_# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

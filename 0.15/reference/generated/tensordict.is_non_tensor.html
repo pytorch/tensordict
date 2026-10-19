@@ -1642,7 +1642,23 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.is_non_tensor">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">is_non_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.is_non_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Checks if an item is a non-tensor.</p>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="docutils literal notranslate"><span class="pre">data</span></code> is non-tensor data or a stack of non-tensor data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><em>object</em></a>) – the object to check, for example a value read from a
+tensordict with <a class="reference internal" href="tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonTensorData</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">is_non_tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="n">NonTensorData</span><span class="p">(</span><span class="s2">"a"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">is_non_tensor</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">)),</span> <span class="n">is_non_tensor</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">))</span>
+<span class="go">(True, False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+<span class="go">'a'</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2001,7 +2017,7 @@ document.write(`
        "headline": "is_non_tensor",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - is_non_tensor",
        "url": "/reference/generated/tensordict.is_non_tensor.html",
-       "articleBody": "is_non_tensor# tensordict.is_non_tensor(data) \u2192 bool# Checks if an item is a non-tensor.",
+       "articleBody": "is_non_tensor# tensordict.is_non_tensor(data) \u2192 bool# Returns True if data is non-tensor data or a stack of non-tensor data. Parameters: data (object) \u2013 the object to check, for example a value read from a tensordict with get(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import NonTensorData, TensorDict, is_non_tensor \u003e\u003e\u003e td = TensorDict(x=torch.zeros(2), name=NonTensorData(\"a\")) \u003e\u003e\u003e is_non_tensor(td.get(\"name\")), is_non_tensor(td.get(\"x\")) (True, False) \u003e\u003e\u003e td[\"name\"] \u0027a\u0027",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

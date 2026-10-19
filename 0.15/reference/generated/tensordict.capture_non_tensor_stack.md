@@ -9,5 +9,13 @@ See [`set_capture_non_tensor_stack`](tensordict.set_capture_non_tensor_stack.htm
 Parameters:
 
 **allow_none** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and the option was never
-set, `None` is returned instead of the default (`False`).
+set, returns `None` instead of the default (`False`).
 Defaults to `False`.
+
+Examples
+
+```
+>>> from tensordict import capture_non_tensor_stack
+>>> capture_non_tensor_stack()
+False
+```

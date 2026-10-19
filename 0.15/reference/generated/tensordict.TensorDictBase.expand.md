@@ -2,16 +2,27 @@
 
 TensorDictBase.expand(**args*, ***kwargs*) → Self
 
-Expands each tensor of the tensordict according to [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand), ignoring the feature dimensions.
+Returns a tensordict whose batch dimensions are expanded to `shape`.
 
-The new shape is the new batch size. As for [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand),
-it can add leading dimensions and expand the dimensions of size 1. The
-other dimensions must keep their size. The result holds views of the
-original tensors: no memory is allocated, and the expanded leaves are
-not contiguous. Call [`clone()`](tensordict.TensorDictBase.clone.html#tensordict.TensorDictBase.clone) or [`contiguous()`](tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) before
-you write into them.
+The new shape is the new batch size, and the leaves keep their feature
+dimensions. As for [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand), it can add leading
+dimensions and expand the dimensions of size 1, and `-1` keeps the
+size of a dimension. The other dimensions must keep their size. The
+new leading dimensions have no name.
 
-Supports iterables to specify the shape.
+The result holds views of the original tensors: no memory is
+allocated, and the expanded leaves are not contiguous. Call
+[`clone()`](tensordict.TensorDictBase.clone.html#tensordict.TensorDictBase.clone) or [`contiguous()`](tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) before you write into them.
+
+Parameters:
+
+***shape** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the new batch size, as integers or as one
+`torch.Size`, list or tuple.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `shape` has fewer dimensions than the batch
+ size, or changes the size of a dimension that is not 1.
 
 Examples
 
@@ -22,8 +33,10 @@ Examples
 ... 'a': torch.zeros(3, 4, 5),
 ... 'b': torch.zeros(3, 4, 10)}, batch_size=[3, 4])
 >>> td_expand = td.expand(10, 3, 4)
->>> assert td_expand.shape == torch.Size([10, 3, 4])
->>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
+>>> td_expand.batch_size, td_expand["a"].shape
+(torch.Size([10, 3, 4]), torch.Size([10, 3, 4, 5]))
+>>> td.expand(2, -1, -1).batch_size
+torch.Size([2, 3, 4])
 ```
 
 Every tensordict class and every tensorclass has this method. For the

@@ -2,23 +2,25 @@
 
 TensorDictBase.stack_tensors(**keys: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *out_key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *keep_entries: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
-Stacks entries into a new entry and possibly remove the original values.
+Stacks entries of the tensordict into a new entry, and removes them by default.
 
 Parameters:
 
-**keys** (*sequence**of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - entries to stack.
+***keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the entries to stack, with [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack).
 
 Keyword Arguments:
 
-- **out_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - new key name for the stacked inputs.
-- **keep_entries** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `False`, entries in `keys` will be deleted.
-Defaults to `False`. Entries are deleted only after the result
-has been written. If stacking fails, or if the result cannot
-be written, every input entry is kept with its original value.
-- **dim** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the dimension along which the stack must occur.
-Defaults to `0`.
+- **out_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the result.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the new dimension, counted in the dimensions
+of the result. Defaults to `0`.
+- **keep_entries** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, removes the entries
+of `keys` once the result is written. If the stack or the
+write fails, every entry is kept with its original value.
+Defaults to `False`.
 
-Returns: self
+Returns:
+
+`self`.
 
 Examples
 

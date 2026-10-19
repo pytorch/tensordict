@@ -1642,7 +1642,17 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.as_tensor">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">as_tensor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.as_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Converts every leaf of a tensordict to a plain torch.Tensor.</p>
+<dd><p>Returns a tensordict whose leaves are converted with their <code class="docutils literal notranslate"><span class="pre">as_tensor()</span></code> method, if they have one.</p>
+<p>The leaves without an <code class="docutils literal notranslate"><span class="pre">as_tensor()</span></code> method, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>
+and <a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> included, are kept as they
+are. No tensordict leaf type defines <code class="docutils literal notranslate"><span class="pre">as_tensor()</span></code>, so the result
+holds the same leaves as the tensordict. A locked tensordict gives a
+locked result.</p>
+<p>A tensordict with <a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryMappedTensor</span></code></a> leaves also
+emits a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. Starting with TensorDict 0.17, the
+default will change to returning those leaves as plain
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> over the same storage, with
+<code class="docutils literal notranslate"><span class="pre">as_subclass(torch.Tensor)</span></code>, without a copy.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2013,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.as_tensor",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.as_tensor",
        "url": "/reference/generated/tensordict.TensorDictBase.as_tensor.html",
-       "articleBody": "TensorDictBase.as_tensor# TensorDictBase.as_tensor() \u2192 Self# Converts every leaf of a tensordict to a plain torch.Tensor. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.as_tensor# TensorDictBase.as_tensor() \u2192 Self# Returns a tensordict whose leaves are converted with their as_tensor() method, if they have one. The leaves without an as_tensor() method, torch.Tensor and MemoryMappedTensor included, are kept as they are. No tensordict leaf type defines as_tensor(), so the result holds the same leaves as the tensordict. A locked tensordict gives a locked result. A tensordict with MemoryMappedTensor leaves also emits a FutureWarning. Starting with TensorDict 0.17, the default will change to returning those leaves as plain torch.Tensor over the same storage, with as_subclass(torch.Tensor), without a copy. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

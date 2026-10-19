@@ -1645,67 +1645,68 @@ document.write(`
 <dt class="sig sig-object py">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span></em><span class="sig-paren">)</span></dt>
 <dd><p>Returns the value stored at <code class="docutils literal notranslate"><span class="pre">key</span></code>, or <code class="docutils literal notranslate"><span class="pre">default</span></code> if the key is missing.</p>
-<p><code class="docutils literal notranslate"><span class="pre">td.get(key)</span></code> is the same as <code class="docutils literal notranslate"><span class="pre">td[key]</span></code>, except for a missing key:
-<code class="docutils literal notranslate"><span class="pre">td[key]</span></code> raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>, and <code class="docutils literal notranslate"><span class="pre">get</span></code> returns <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">td.get(key)</span></code> reads the same entry as <code class="docutils literal notranslate"><span class="pre">td[key]</span></code>, with two
+differences: a missing key returns <code class="docutils literal notranslate"><span class="pre">default</span></code> where <code class="docutils literal notranslate"><span class="pre">td[key]</span></code>
+raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>, and a non-tensor entry returns its
+<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> where <code class="docutils literal notranslate"><span class="pre">td[key]</span></code> returns the
+content.</p>
+<p>A lazy stack reads the entry of every stacked tensordict and stacks
+the results into a new tensor. If their shapes differ, this raises a
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>: pass <code class="docutils literal notranslate"><span class="pre">as_list</span></code>, <code class="docutils literal notranslate"><span class="pre">as_padded_tensor</span></code> or
+<code class="docutils literal notranslate"><span class="pre">as_nested_tensor</span></code> to get a list, a padded tensor or a nested tensor
+instead. See <a class="reference internal" href="../../concepts/stacking.html#stacking-variable-size"><span class="std std-ref">Variable-size data</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key to read. A tuple reads a nested entry:
 <code class="docutils literal notranslate"><span class="pre">td.get((&quot;a&quot;,</span> <span class="pre">&quot;b&quot;))</span></code> is <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;][&quot;b&quot;]</span></code>. See <a class="reference internal" href="../../concepts/keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>.</p></li>
-<li><p><strong>default</strong> (<em>optional</em>) – the value returned if the key is missing.
+<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value returned if the key is missing.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, as for <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict.get" title="(in Python v3.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dict.get()</span></code></a>. A nested key
 that runs through a tensor is missing too: <code class="docutils literal notranslate"><span class="pre">get</span></code> returns
 the default passed to it, and without one raises a
 <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> that names the tensor.</p></li>
 </ul>
 </dd>
-</dl>
-<div class="versionchanged">
-<p><span class="versionmodified changed">Changed in version 0.7: </span>A missing key returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of raising <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.
-<code class="docutils literal notranslate"><span class="pre">set_get_defaults_to_none(False)</span></code> and <code class="docutils literal notranslate"><span class="pre">TD_GET_DEFAULTS_TO_NONE=0</span></code>
-restore the old behavior. They are deprecated and will be removed
-in 0.17.</p>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>as_list</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack returns the
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>as_list</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack returns the
 entries as a list, one item per stacked tensordict.
 Exclusive with <code class="docutils literal notranslate"><span class="pre">as_padded_tensor</span></code> and <code class="docutils literal notranslate"><span class="pre">as_nested_tensor</span></code>.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>as_padded_tensor</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack pads
-the entries to the largest shape and returns them as one
-tensor: each dim is padded to its largest size, also across
-the levels of a lazy stack of lazy stacks. <code class="docutils literal notranslate"><span class="pre">padding_value</span></code>
-sets the padding value and <code class="docutils literal notranslate"><span class="pre">padding_side</span></code> sets the side of
-every padded dim.
-Exclusive with <code class="docutils literal notranslate"><span class="pre">as_list</span></code> and <code class="docutils literal notranslate"><span class="pre">as_nested_tensor</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>as_nested_tensor</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack returns
-the entries as a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). <code class="docutils literal notranslate"><span class="pre">layout</span></code>
-sets its layout. A lazy stack of lazy stacks raises a
-<code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, as a nested tensor has a single nested level.
-Exclusive with <code class="docutils literal notranslate"><span class="pre">as_list</span></code> and <code class="docutils literal notranslate"><span class="pre">as_padded_tensor</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><em>layout</em></a><em>, </em><em>optional</em>) – the layout of the nested tensor
-when <code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code>: <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> or
+<li><p><strong>as_padded_tensor</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack pads
+the entries to the largest size of each dimension, also across
+the levels of a lazy stack of lazy stacks, and stacks them
+into one tensor. Exclusive with <code class="docutils literal notranslate"><span class="pre">as_list</span></code> and
+<code class="docutils literal notranslate"><span class="pre">as_nested_tensor</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>as_nested_tensor</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack returns
+the entries as a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). A lazy
+stack of lazy stacks raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, as a nested
+tensor has a single nested level. Exclusive with <code class="docutils literal notranslate"><span class="pre">as_list</span></code>
+and <code class="docutils literal notranslate"><span class="pre">as_padded_tensor</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><em>layout</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code>,
+the layout of the nested tensor: <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> or
 <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code>.</p></li>
-<li><p><strong>padding_side</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The side of padding. Must be <cite>“left”</cite> or <cite>“right”</cite>. Defaults to <cite>“right”</cite>.</p></li>
-<li><p><strong>padding_value</strong> (<em>scalar</em><em> or </em><a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – The padding value. Defaults to 0.0.</p></li>
+<li><p><strong>padding_side</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">as_padded_tensor=True</span></code>, the
+side of every dimension that gets the padding: <code class="docutils literal notranslate"><span class="pre">&quot;left&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">&quot;right&quot;</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;right&quot;</span></code>.</p></li>
+<li><p><strong>padding_value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – with
+<code class="docutils literal notranslate"><span class="pre">as_padded_tensor=True</span></code>, the value of the padding. Defaults
+to <code class="docutils literal notranslate"><span class="pre">0.0</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
-<p>A lazy stack reads the entry of every stacked tensordict and stacks
-the results into a new tensor. If the entry shapes differ, the plain
-call raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>: pass <code class="docutils literal notranslate"><span class="pre">as_list</span></code>, <code class="docutils literal notranslate"><span class="pre">as_padded_tensor</span></code>
-or <code class="docutils literal notranslate"><span class="pre">as_nested_tensor</span></code> to get a list, a padded tensor or a nested
-tensor instead.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>A dense tensordict ignores the keyword arguments today and
 warns for <code class="docutils literal notranslate"><span class="pre">as_list=True</span></code> and <code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code>. Starting
 with TensorDict 0.17, the default will change to returning a list
 or a nested tensor, as a lazy stack does.</p>
+</div>
+<div class="versionchanged">
+<p><span class="versionmodified changed">Changed in version 0.7: </span>A missing key returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of raising <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.
+<code class="docutils literal notranslate"><span class="pre">set_get_defaults_to_none(False)</span></code> and <code class="docutils literal notranslate"><span class="pre">TD_GET_DEFAULTS_TO_NONE=0</span></code>
+restore the old behavior. They are deprecated and will be removed
+in TensorDict 0.17.</p>
 </div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -1720,18 +1721,21 @@ or a nested tensor, as a lazy stack does.</p>
 <span class="go">0</span>
 </pre></div>
 </div>
+<p>On a lazy stack of entries of different shapes:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span>
 <span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1</span><span class="p">,)}),</span>
 <span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">,)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">}),</span>
 <span class="gp">... </span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">as_nested_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span><span class="o">.</span><span class="n">is_nested</span><span class="p">,</span> <span class="n">nested</span><span class="o">.</span><span class="n">offsets</span><span class="p">()</span>
-<span class="go">(True, tensor([0, 1, 3]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">[tensor([1.]), tensor([2., 2.])]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="go">tensor([[1., 0.],</span>
 <span class="go">        [2., 2.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">as_nested_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span><span class="o">.</span><span class="n">is_nested</span><span class="p">,</span> <span class="n">nested</span><span class="o">.</span><span class="n">offsets</span><span class="p">()</span>
+<span class="go">(True, tensor([0, 1, 3]))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2104,7 +2108,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.get",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.get",
        "url": "/reference/generated/tensordict.TensorDictBase.get.html",
-       "articleBody": "TensorDictBase.get# TensorDictBase.get(key)# TensorDictBase.get(key, default) Returns the value stored at key, or default if the key is missing. td.get(key) is the same as td[key], except for a missing key: td[key] raises KeyError, and get returns default. Parameters: key (NestedKey) \u2013 the key to read. A tuple reads a nested entry: td.get((\"a\", \"b\")) is td[\"a\"][\"b\"]. See Keys, nested keys, and locking. default (optional) \u2013 the value returned if the key is missing. Defaults to None, as for dict.get(). A nested key that runs through a tensor is missing too: get returns the default passed to it, and without one raises a ValueError that names the tensor. Changed in version 0.7: A missing key returns None instead of raising KeyError. set_get_defaults_to_none(False) and TD_GET_DEFAULTS_TO_NONE=0 restore the old behavior. They are deprecated and will be removed in 0.17. Keyword Arguments: as_list (bool, optional) \u2013 if True, a lazy stack returns the entries as a list, one item per stacked tensordict. Exclusive with as_padded_tensor and as_nested_tensor. Defaults to False. as_padded_tensor (bool, optional) \u2013 if True, a lazy stack pads the entries to the largest shape and returns them as one tensor: each dim is padded to its largest size, also across the levels of a lazy stack of lazy stacks. padding_value sets the padding value and padding_side sets the side of every padded dim. Exclusive with as_list and as_nested_tensor. Defaults to False. as_nested_tensor (bool, optional) \u2013 if True, a lazy stack returns the entries as a nested tensor (torch.nested). layout sets its layout. A lazy stack of lazy stacks raises a ValueError, as a nested tensor has a single nested level. Exclusive with as_list and as_padded_tensor. Defaults to False. layout (layout, optional) \u2013 the layout of the nested tensor when as_nested_tensor=True: torch.jagged or torch.strided. Defaults to torch.jagged. padding_side (str) \u2013 The side of padding. Must be \u201cleft\u201d or \u201cright\u201d. Defaults to \u201cright\u201d. padding_value (scalar or bool, optional) \u2013 The padding value. Defaults to 0.0. A lazy stack reads the entry of every stacked tensordict and stacks the results into a new tensor. If the entry shapes differ, the plain call raises a RuntimeError: pass as_list, as_padded_tensor or as_nested_tensor to get a list, a padded tensor or a nested tensor instead. Note A dense tensordict ignores the keyword arguments today and warns for as_list=True and as_nested_tensor=True. Starting with TensorDict 0.17, the default will change to returning a list or a nested tensor, as a lazy stack does. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"x\": 1, \"nested\": {\"y\": 2}}, batch_size=[]) \u003e\u003e\u003e td.get(\"x\") tensor(1) \u003e\u003e\u003e td.get((\"nested\", \"y\")) tensor(2) \u003e\u003e\u003e print(td.get(\"z\")) None \u003e\u003e\u003e td.get(\"z\", 0) 0 \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e td = lazy_stack([ ... TensorDict({\"x\": torch.ones(1,)}), ... TensorDict({\"x\": torch.ones(2,) * 2}), ... ]) \u003e\u003e\u003e nested = td.get(\"x\", as_nested_tensor=True) \u003e\u003e\u003e nested.is_nested, nested.offsets() (True, tensor([0, 1, 3])) \u003e\u003e\u003e td.get(\"x\", as_padded_tensor=True) tensor([[1., 0.], [2., 2.]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use get# Getting, setting, and nesting keys Getting, setting, and nesting keys Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.get# TensorDictBase.get(key)# TensorDictBase.get(key, default) Returns the value stored at key, or default if the key is missing. td.get(key) reads the same entry as td[key], with two differences: a missing key returns default where td[key] raises KeyError, and a non-tensor entry returns its NonTensorData where td[key] returns the content. A lazy stack reads the entry of every stacked tensordict and stacks the results into a new tensor. If their shapes differ, this raises a RuntimeError: pass as_list, as_padded_tensor or as_nested_tensor to get a list, a padded tensor or a nested tensor instead. See Variable-size data. Parameters: key (NestedKey) \u2013 the key to read. A tuple reads a nested entry: td.get((\"a\", \"b\")) is td[\"a\"][\"b\"]. See Keys, nested keys, and locking. default (Any, optional) \u2013 the value returned if the key is missing. Defaults to None, as for dict.get(). A nested key that runs through a tensor is missing too: get returns the default passed to it, and without one raises a ValueError that names the tensor. Keyword Arguments: as_list (bool, optional) \u2013 if True, a lazy stack returns the entries as a list, one item per stacked tensordict. Exclusive with as_padded_tensor and as_nested_tensor. Defaults to False. as_padded_tensor (bool, optional) \u2013 if True, a lazy stack pads the entries to the largest size of each dimension, also across the levels of a lazy stack of lazy stacks, and stacks them into one tensor. Exclusive with as_list and as_nested_tensor. Defaults to False. as_nested_tensor (bool, optional) \u2013 if True, a lazy stack returns the entries as a nested tensor (torch.nested). A lazy stack of lazy stacks raises a ValueError, as a nested tensor has a single nested level. Exclusive with as_list and as_padded_tensor. Defaults to False. layout (layout, optional) \u2013 with as_nested_tensor=True, the layout of the nested tensor: torch.jagged or torch.strided. Defaults to torch.jagged. padding_side (str, optional) \u2013 with as_padded_tensor=True, the side of every dimension that gets the padding: \"left\" or \"right\". Defaults to \"right\". padding_value (float, int or bool, optional) \u2013 with as_padded_tensor=True, the value of the padding. Defaults to 0.0. Note A dense tensordict ignores the keyword arguments today and warns for as_list=True and as_nested_tensor=True. Starting with TensorDict 0.17, the default will change to returning a list or a nested tensor, as a lazy stack does. Changed in version 0.7: A missing key returns None instead of raising KeyError. set_get_defaults_to_none(False) and TD_GET_DEFAULTS_TO_NONE=0 restore the old behavior. They are deprecated and will be removed in TensorDict 0.17. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"x\": 1, \"nested\": {\"y\": 2}}, batch_size=[]) \u003e\u003e\u003e td.get(\"x\") tensor(1) \u003e\u003e\u003e td.get((\"nested\", \"y\")) tensor(2) \u003e\u003e\u003e print(td.get(\"z\")) None \u003e\u003e\u003e td.get(\"z\", 0) 0 On a lazy stack of entries of different shapes: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e td = lazy_stack([ ... TensorDict({\"x\": torch.ones(1,)}), ... TensorDict({\"x\": torch.ones(2,) * 2}), ... ]) \u003e\u003e\u003e td.get(\"x\", as_list=True) [tensor([1.]), tensor([2., 2.])] \u003e\u003e\u003e td.get(\"x\", as_padded_tensor=True) tensor([[1., 0.], [2., 2.]]) \u003e\u003e\u003e nested = td.get(\"x\", as_nested_tensor=True) \u003e\u003e\u003e nested.is_nested, nested.offsets() (True, tensor([0, 1, 3])) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use get# Getting, setting, and nesting keys Getting, setting, and nesting keys Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

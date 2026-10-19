@@ -1642,12 +1642,25 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.get_item_shape">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">get_item_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.get_item_shape" title="Link to this definition">#</a></dt>
-<dd><p>Returns the shape of the entry, without reading it with <a class="reference internal" href="tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get" title="tensordict.TensorDictBase.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> when possible.</p>
+<dd><p>Returns the shape of the entry at <code class="docutils literal notranslate"><span class="pre">key</span></code>, without reading the entry when possible.</p>
+<p>For a lazy stack, a dimension whose size differs between the stacked
+entries has size <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the entry.</p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the tensordict has no entry at <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p>
+</dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">lazy_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get_item_shape</span><span class="p">(</span><span class="s2">"x"</span><span class="p">)</span>
+<span class="go">torch.Size([2, -1])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2008,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.get_item_shape",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.get_item_shape",
        "url": "/reference/generated/tensordict.TensorDictBase.get_item_shape.html",
-       "articleBody": "TensorDictBase.get_item_shape# TensorDictBase.get_item_shape(key: NestedKey)# Returns the shape of the entry, without reading it with get() when possible. Parameters: key (NestedKey) \u2013 the key of the entry. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.get_item_shape# TensorDictBase.get_item_shape(key: NestedKey)# Returns the shape of the entry at key, without reading the entry when possible. For a lazy stack, a dimension whose size differs between the stacked entries has size -1. Parameters: key (NestedKey) \u2013 the key of the entry. Raises: KeyError \u2013 if the tensordict has no entry at key. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, lazy_stack \u003e\u003e\u003e td = lazy_stack([TensorDict(x=torch.zeros(2)), TensorDict(x=torch.zeros(3))]) \u003e\u003e\u003e td.get_item_shape(\"x\") torch.Size([2, -1]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -2,61 +2,86 @@
 
 TensorDictBase.memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*) → Self
 
-Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
+Writes every leaf to a memory-mapped file in place, and returns `self`.
+
+Writes the same files as [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap), then replaces each leaf of
+the tensordict with its [`MemoryMappedTensor`](tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor), so the
+`data_ptr()` of every leaf changes. The device of the tensordict
+becomes `"cpu"`. See [Save and load tensordicts](../../saving.html#saving).
+
+The tensordict is then locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)): you can write
+into its leaves in place, but you cannot add, remove or replace an
+entry. Once it is unlocked, [`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap) returns `False`.
 
 Parameters:
 
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - directory prefix where the memory-mapped tensors will
-be stored. The directory tree structure will mimic the tensordict's.
-- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - If False (default), an exception will be raised if an
-entry in the tensordict is already a tensor stored on disk
-with an associated file, but is not saved in the correct
-location according to prefix.
-If `True`, any existing Tensor will be copied to the new location.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory to write to.
+Defaults to `None`, which writes into the directory of the
+tensordict if it is already memory-mapped there, and otherwise
+into anonymous shared memory, which has no file name and lasts
+as long as the process.
+- **copy_existing** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, a leaf that is
+already a memory-mapped tensor with a file at another path
+raises a `RuntimeError`, so that data on disk is not
+duplicated by accident. If `True`, the file is copied to the
+new path. Defaults to `False`.
 
 Keyword Arguments:
 
-- **num_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of threads used to write the memmap
-tensors. Defaults to 0.
-- **return_early** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and `num_threads>0`,
-the method will return a future of the tensordict. The resulting
-tensordict can be queried using future.result().
-- **share_non_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the non-tensor data will be
-shared between the processes and writing operation (such as inplace update
-or set) on any of the workers within a single node will update the value
-on all other workers. If the number of non-tensor leaves is high (e.g.,
-sharing large stacks of non-tensor data) this may result in OOM or similar
-errors. Defaults to `False`.
-- **existsok** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `False`, an exception will be raised if a tensor already
-exists in the same path. Defaults to `True`.
-- **robust_key** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` (default), uses robust key encoding that safely
-handles keys with path separators and special characters. If `False`,
-uses legacy behavior (keys used as-is). If `None`, uses the default
-robust behavior.
-
-The TensorDict is then locked, meaning that any writing operations that
-isn't in-place will throw an exception (eg, rename, set or remove an
-entry).
-Once the tensordict is unlocked, the memory-mapped attribute is turned to `False`,
-because cross-process identity is not guaranteed anymore.
+- **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of threads that write the
+files. `0` and `1` write them one after the other in the
+calling thread. Threads help with a few large leaves and slow
+down many small ones. Defaults to `0`.
+- **return_early** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and `num_threads > 1`,
+returns a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) at once,
+while the threads write the files: `future.result()` waits
+for them and returns the tensordict. Defaults to `False`.
+- **share_non_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, non-tensor data is
+shared between the processes of the node, so that an in-place
+write of a non-tensor entry in one process is seen by the
+others. Many non-tensor leaves (for example a large stack of
+non-tensor data) can use up the memory. Defaults to `False`.
+- **existsok** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, a file that already exists
+at the path of a leaf raises a `RuntimeError`. If `True`,
+it is overwritten. Defaults to `True`.
+- **robust_key** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, keys are percent-encoded
+in file and directory names (`"a/b"` is written to
+`a%2Fb.memmap`), so that every file stays inside `prefix`.
+If `False`, keys are used as file names unchanged, as in the
+legacy layout: do not use it with keys you do not trust.
+`None` is the same as `True`. Defaults to `True`.
 
 Returns:
 
-self if `return_early=False`, otherwise a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) instance.
+`self`, or a [`TensorDictFuture`](tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture) of it if
+`return_early=True` and `num_threads > 1`.
 
-Note
+Raises:
 
-Serialising in this fashion might be slow with deeply nested tensordicts, so
-it is not recommended to call this method inside a training loop.
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
+ `copy_existing=False`, if a file exists and
+ `existsok=False`, if the tensordict is in shared memory
+ (see [`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_)), or if it is a
+ [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), a
+ [`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore), a
+ [`LazyStackedTensorDictStore`](tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore) or one of
+ their elements. Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to make a memory-mapped
+ copy of those.
 
-Note
+Examples
 
-A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), a
-[`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) or a
-[`LazyStackedTensorDictStore`](tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore) (or one of its
-elements) cannot be memory-mapped in-place: this method raises a
-`RuntimeError`. Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to
-build a memory-mapped copy instead.
+```
+>>> import tempfile
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(obs=torch.zeros(3, 4), batch_size=[3])
+>>> with tempfile.TemporaryDirectory() as path:
+... out = td.memmap_(path)
+... print(out is td, td.is_memmap(), td.is_locked)
+... print(type(td["obs"]).__name__)
+True True True
+MemoryMappedTensor
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

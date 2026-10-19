@@ -423,6 +423,15 @@ Stream between nodes with UCXX
     ``recv_tensordict`` are experimental: their API can change in a minor
     release without a deprecation cycle.
 
+.. warning::
+
+    UCXX helpers, pipes, and servers require trusted peers and a trusted
+    network. The TensorDict protocol does not authenticate or authorize peers.
+    Peers control allocation sizes and, for pipes, the default receive device.
+    Set the receiver's ``device=`` to pin placement. Metadata checks do not
+    bound memory use or prevent out-of-memory errors from large valid messages.
+    After a protocol error, close the connection rather than retrying a receive.
+
 :class:`~tensordict._ucxx.TensorDictPipe` sends tensordicts from one process
 to one other process over `UCXX <https://github.com/rapidsai/ucxx>`_, the
 Python bindings of `UCX <https://openucx.org/>`_. Use it when one node

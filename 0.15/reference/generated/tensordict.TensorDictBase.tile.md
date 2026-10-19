@@ -2,17 +2,17 @@
 
 TensorDictBase.tile(*dims: [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[int](https://docs.python.org/3/builtins/functions.html#int), ...]*)
 
-Construct a tensordict by repeating the elements.
+Returns a tensordict whose batch is repeated, as [`torch.tile()`](https://docs.pytorch.org/docs/stable/generated/torch.tile.html#torch.tile) does.
 
-The dims argument specifies the number of repetitions in each dimension.
+If `dims` has fewer entries than the batch dimensions, it is padded
+with leading ones. If it has more, the result gets new leading batch
+dimensions. The feature dimensions are not repeated, the result has no
+names, and the data is copied. See also [`repeat()`](tensordict.TensorDictBase.repeat.html#tensordict.TensorDictBase.repeat).
 
 Parameters:
 
-**dims** ([*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of**ints*) - The number of repetitions per dimension.
-
-Returns:
-
-a new tensordict with elements repeated.
+**dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)) - the number of repetitions along each
+batch dimension.
 
 Examples
 

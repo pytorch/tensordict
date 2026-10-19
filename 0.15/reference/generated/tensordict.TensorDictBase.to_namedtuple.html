@@ -1642,15 +1642,24 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_namedtuple">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_namedtuple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dest_cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><span class="pre">type</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.to_namedtuple" title="Link to this definition">#</a></dt>
-<dd><p>Converts a tensordict to a namedtuple.</p>
+<dd><p>Converts the tensordict to a named tuple, recursively.</p>
+<p>Each nested tensordict becomes a nested named tuple. Without
+<code class="docutils literal notranslate"><span class="pre">dest_cls</span></code>, each level is an instance of a new named tuple class,
+<code class="docutils literal notranslate"><span class="pre">GenericDict</span></code>, whose fields are the keys. The <code class="docutils literal notranslate"><span class="pre">None</span></code> fields of
+tensorclasses are dropped.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dest_cls</strong> (<em>Type</em><em>, </em><em>optional</em>) – an optional namedtuple class to use
-for the result. A nested tensordict is converted to
-<code class="docutils literal notranslate"><span class="pre">dest_cls</span></code> too if <code class="docutils literal notranslate"><span class="pre">dest_cls</span></code> takes its keys, and to a
-<code class="docutils literal notranslate"><span class="pre">GenericDict</span></code> otherwise.</p>
+<dd class="field-odd"><p><strong>dest_cls</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em>, </em><em>optional</em>) – the named tuple class of the result. A
+nested tensordict is converted to <code class="docutils literal notranslate"><span class="pre">dest_cls</span></code> too if
+<code class="docutils literal notranslate"><span class="pre">dest_cls</span></code> takes its keys, and to a <code class="docutils literal notranslate"><span class="pre">GenericDict</span></code>
+otherwise. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 </dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple" title="tensordict.TensorDict.from_namedtuple"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_namedtuple()</span></code></a>, which
+converts back.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -2021,7 +2030,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_namedtuple",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_namedtuple",
        "url": "/reference/generated/tensordict.TensorDictBase.to_namedtuple.html",
-       "articleBody": "TensorDictBase.to_namedtuple# TensorDictBase.to_namedtuple(dest_cls: type | None = None) \u2192 Any# Converts a tensordict to a namedtuple. Parameters: dest_cls (Type, optional) \u2013 an optional namedtuple class to use for the result. A nested tensordict is converted to dest_cls too if dest_cls takes its keys, and to a GenericDict otherwise. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e data = TensorDict({ ... \"a_tensor\": torch.zeros((3)), ... \"nested\": {\"a_tensor\": torch.zeros((3)), \"a_string\": \"zero!\"}}, [3]) \u003e\u003e\u003e data.to_namedtuple() GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string=\u0027zero!\u0027)) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_namedtuple# TensorDictBase.to_namedtuple(dest_cls: type | None = None) \u2192 Any# Converts the tensordict to a named tuple, recursively. Each nested tensordict becomes a nested named tuple. Without dest_cls, each level is an instance of a new named tuple class, GenericDict, whose fields are the keys. The None fields of tensorclasses are dropped. Parameters: dest_cls (type, optional) \u2013 the named tuple class of the result. A nested tensordict is converted to dest_cls too if dest_cls takes its keys, and to a GenericDict otherwise. Defaults to None. See also from_namedtuple(), which converts back. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e data = TensorDict({ ... \"a_tensor\": torch.zeros((3)), ... \"nested\": {\"a_tensor\": torch.zeros((3)), \"a_string\": \"zero!\"}}, [3]) \u003e\u003e\u003e data.to_namedtuple() GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string=\u0027zero!\u0027)) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

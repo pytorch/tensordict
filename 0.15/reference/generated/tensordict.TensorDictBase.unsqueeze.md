@@ -2,9 +2,10 @@
 
 TensorDictBase.unsqueeze(**args*, ***kwargs*)
 
-Inserts a batch dimension of size 1 in every tensor, and returns them in a new tensordict.
+Returns a tensordict with a new batch dimension of size 1 at position `dim`.
 
-The tensors of the result are views of the original tensors.
+The tensors of the result are views of the original tensors. The new
+dimension has no name.
 
 Parameters:
 

@@ -4,6 +4,10 @@ TensorDictBase.__iter__() → [Iterator](https://docs.python.org/3/library/typin
 
 Iterates over the first batch dimension of the tensordict.
 
+Each item is a tensordict with the remaining batch dimensions, as
+returned by `td.unbind(0)`. To iterate over the keys, use
+[`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys).
+
 Raises:
 
 [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if the tensordict has no batch dimensions, as `iter()`

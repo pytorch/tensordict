@@ -2,17 +2,17 @@
 
 TensorDictBase.squeeze(**args*, ***kwargs*)
 
-Removes batch dimensions of size 1 from every tensor, and returns them in a new tensordict.
+Returns a tensordict without the batch dimensions of size 1.
 
 The tensors of the result are views of the original tensors. Feature
 dimensions of size 1 are kept.
 
 Parameters:
 
-**dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*|**None*) - the batch dimension to remove, in
-`[-batch_dims, batch_dims - 1]`. If dim is
-`None`, all singleton batch dimensions will be squeezed.
-Defaults to `None`.
+**dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch dimension to remove, in
+`[-batch_dims, batch_dims - 1]`. If its size is not 1, the
+tensordict is returned as it is. Defaults to `None`, which
+removes every batch dimension of size 1.
 
 Examples
 

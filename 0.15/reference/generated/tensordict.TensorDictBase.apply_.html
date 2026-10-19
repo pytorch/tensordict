@@ -1642,23 +1642,37 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.apply_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">apply_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">others</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.apply_" title="Link to this definition">#</a></dt>
-<dd><p>Applies a callable to all values stored in the tensordict and re-writes them in-place.</p>
+<dd><p>Applies a callable to every leaf and writes the results into the existing leaves.</p>
+<p>Same as <a class="reference internal" href="tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply" title="tensordict.TensorDictBase.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>: each result is copied
+into the leaf it comes from (as <a class="reference internal" href="tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_" title="tensordict.TensorDictBase.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a> does), so the leaves
+keep their storage.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>fn</strong> (<em>Callable</em>) – function to be applied to the tensors in the
-tensordict.</p></li>
-<li><p><strong>*others</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the other
-tensordicts to be used.</p></li>
+<li><p><strong>fn</strong> (<em>Callable</em>) – the function called on each tensor leaf. It returns
+a tensor that can be copied into the leaf.</p></li>
+<li><p><strong>*others</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – other tensordicts with the same
+structure. <code class="docutils literal notranslate"><span class="pre">fn</span></code> receives the leaf of each, after the leaf of
+the tensordict, under the same key.</p></li>
+<li><p><strong>**kwargs</strong> – the keyword arguments of <a class="reference internal" href="tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply" title="tensordict.TensorDictBase.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a>.</p></li>
 </ul>
 </dd>
-</dl>
-<p>Keyword Args: See <a class="reference internal" href="tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply" title="tensordict.TensorDictBase.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>self</p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">apply_</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span>
+<span class="go">tensor([1., 1., 1.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span>
+<span class="go">tensor([2., 2., 2.])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2019,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.apply",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.apply",
        "url": "/reference/generated/tensordict.TensorDictBase.apply_.html",
-       "articleBody": "TensorDictBase.apply# TensorDictBase.apply_(fn: Callable, *others, **kwargs) \u2192 Self# Applies a callable to all values stored in the tensordict and re-writes them in-place. Parameters: fn (Callable) \u2013 function to be applied to the tensors in the tensordict. *others (sequence of TensorDictBase, optional) \u2013 the other tensordicts to be used. Keyword Args: See apply(). Returns: self Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.apply# TensorDictBase.apply_(fn: Callable, *others, **kwargs) \u2192 Self# Applies a callable to every leaf and writes the results into the existing leaves. Same as apply() with inplace=True: each result is copied into the leaf it comes from (as set_() does), so the leaves keep their storage. Parameters: fn (Callable) \u2013 the function called on each tensor leaf. It returns a tensor that can be copied into the leaf. *others (TensorDictBase) \u2013 other tensordicts with the same structure. fn receives the leaf of each, after the leaf of the tensordict, under the same key. **kwargs \u2013 the keyword arguments of apply(). Returns: self. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3))) \u003e\u003e\u003e a = td[\"a\"] \u003e\u003e\u003e _ = td.apply_(lambda x: x + 1) \u003e\u003e\u003e a tensor([1., 1., 1.]) \u003e\u003e\u003e td[\"b\", \"c\"] tensor([2., 2., 2.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

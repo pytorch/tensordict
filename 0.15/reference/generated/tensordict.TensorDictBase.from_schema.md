@@ -2,48 +2,62 @@
 
 *classmethod*TensorDictBase.from_schema(*schema: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[list](https://docs.python.org/3/builtins/stdtypes.html#list)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size), [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)]]*, ***, *batch_size: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *storage: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device=None*, ***kwargs*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Pre-allocate a zero-filled TensorDict from a schema.
+Allocates a zero-filled tensordict from a schema of shapes and dtypes.
 
-Creates a [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) whose storage backend is selected
-by `storage`. Each entry in `schema` maps a field name to an
-`(element_shape, dtype)` pair; the full stored shape is
-`[*batch_size, *element_shape]`.
+Each entry of `schema` maps a key to an `(element_shape, dtype)`
+pair, and the entry gets the shape `[*batch_size, *element_shape]`.
+`storage` selects where the zeros are stored, so that a buffer on
+disk or on a server can be created without building it in memory
+first.
 
 Parameters:
 
-**schema** - Mapping from field name to `(element_shape, dtype)`.
-`element_shape` is the per-element shape (excluding
-`batch_size`).
+**schema** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - maps each key (a `str`) to a pair
+`(element_shape, dtype)`, where `element_shape` (a list of
+int or a `torch.Size`) is the shape of the entry after the
+batch dimensions.
 
 Keyword Arguments:
 
-- **batch_size** - Overall batch dimensions prepended to every element
-shape. Defaults to `()`.
-- **storage** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*None*](https://docs.python.org/3/builtins/constants.html#None)) - 
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result, prepended to every element shape. Defaults to
+`None`, an empty batch size.
+- **storage** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - 
 
-Backend selector:
+where the entries are stored:
 
-- `None` - plain [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with regular tensors.
-- `"memmap"` - memory-mapped tensors on disk.
-Pass `prefix=<dir>` in *kwargs*.
-- `"h5"` - HDF5 via [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
-Pass `filename=<path>` in *kwargs*.
-- `"zarr"` - zarr (requires `zarr>=3.0`) via
-[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). Pass `filename=<path or store>`
-in *kwargs*.
-- `"shared"` - CPU shared-memory tensors.
-- `"redis"` / `"dragonfly"` - delegates to
-`TensorDictStore.from_schema()`.
-- **device** - Device for the resulting tensors (ignored by some
-backends).
-- ****kwargs** - Backend-specific arguments forwarded to the
-underlying constructor (e.g. `prefix` for memmap,
-`filename` for h5, `host`/`port` for redis).
+- `None`: a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) of regular
+tensors.
+- `"memmap"`: memory-mapped tensors, in the directory given
+by `prefix=<dir>` (see [`memmap_like()`](tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like)).
+- `"h5"`: a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) in the
+HDF5 file given by `filename=<path>`.
+- `"zarr"`: a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) in
+the zarr store given by `filename=<path or store>`
+(requires `zarr>=3.0`).
+- `"shared"`: tensors in shared memory (see
+[`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_)).
+- `"redis"` or `"dragonfly"`: a
+[`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) on a server,
+through [`TensorDictStore.from_schema`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore.from_schema).
+
+Defaults to `None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. The `"memmap"` storage ignores it. Defaults to
+`None`.
+- ****kwargs** - passed to the backend: `prefix` and the other
+arguments of [`memmap_like()`](tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like) for `"memmap"`,
+`filename` for `"h5"` and `"zarr"`, `host`, `port`
+and the like for `"redis"` and `"dragonfly"`.
 
 Returns:
 
-A new [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass instance with
-pre-allocated (zero-filled) keys.
+A new tensordict of the type that `storage` selects, filled with
+zeros.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `storage` is not one of the values above.
 
 Examples
 
@@ -68,7 +82,8 @@ torch.Size([1000, 84, 84, 3])
 ... storage="memmap",
 ... prefix=d,
 ... )
-... assert td_mm.is_memmap()
+... print(td_mm.is_memmap())
+True
 ```
 
 Every tensordict class and every tensorclass has this method. For the

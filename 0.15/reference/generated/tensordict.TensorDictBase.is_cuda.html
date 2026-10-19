@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.is_cuda.html" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="TensorDictBase.pin_memory" href="tensordict.TensorDictBase.pin_memory.html" />
+    <link rel="next" title="TensorDictBase.is_meta" href="tensordict.TensorDictBase.is_meta.html" />
     <link rel="prev" title="TensorDictBase.is_cpu" href="tensordict.TensorDictBase.is_cpu.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1642,7 +1642,8 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.is_cuda">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">is_cuda</span></span><a class="headerlink" href="#tensordict.TensorDictBase.is_cuda" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+<dd><p>Whether the tensordict has a CUDA device (<code class="docutils literal notranslate"><span class="pre">False</span></code> if it has no device).</p>
+</dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
 other methods, see <a class="reference internal" href="../td.html#api-tensordict-methods"><span class="std std-ref">Methods by task</span></a>.</p>
@@ -1700,11 +1701,11 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.TensorDictBase.pin_memory.html"
+       href="tensordict.TensorDictBase.is_meta.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">TensorDictBase.pin_memory</p>
+        <p class="prev-next-title">TensorDictBase.is_meta</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1739,11 +1740,11 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.TensorDictBase.pin_memory.html"
+       href="tensordict.TensorDictBase.is_meta.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">TensorDictBase.pin_memory</p>
+        <p class="prev-next-title">TensorDictBase.is_meta</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2002,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.is_cuda",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.is_cuda",
        "url": "/reference/generated/tensordict.TensorDictBase.is_cuda.html",
-       "articleBody": "TensorDictBase.is_cuda# property TensorDictBase.is_cuda# Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.is_cuda# property TensorDictBase.is_cuda# Whether the tensordict has a CUDA device (False if it has no device). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

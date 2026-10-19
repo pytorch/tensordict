@@ -1642,19 +1642,40 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.parse_tensor_dict_string">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">parse_tensor_dict_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.parse_tensor_dict_string" title="Link to this definition">#</a></dt>
-<dd><p>Parse a TensorDict repr to a TensorDict.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This functions is intended to be used for debugging, to reproduce a tensordict
-given its printed version, and should not be used in real applications.</p>
-</div>
+<dd><p>Builds a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> from its printed form.</p>
+<p>It is a debugging tool: it rebuilds a tensordict with the keys, shapes,
+dtypes, devices and batch sizes of a printed one, so that you can
+reproduce a tensordict from a log. The values are not in the repr, so
+every tensor of the result is filled with zeros.</p>
 <dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>s</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – the repr of a tensordict, as printed with the default print
+options (see <a class="reference internal" href="tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_printoptions()</span></code></a>).</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
+</dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if a field is not a <code class="docutils literal notranslate"><span class="pre">Tensor</span></code> or a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> printed
     with the default print options, or if <code class="docutils literal notranslate"><span class="pre">s</span></code> is the repr of a lazy
     stack with exclusive keys.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">parse_tensor_dict_string</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">obs</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="nb">next</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rebuilt</span> <span class="o">=</span> <span class="n">parse_tensor_dict_string</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">td</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rebuilt</span><span class="p">[</span><span class="s2">"next"</span><span class="p">,</span> <span class="s2">"done"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">rebuilt</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">(torch.bool, torch.Size([3]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rebuilt</span><span class="p">[</span><span class="s2">"obs"</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<span class="go">tensor(0.)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2013,7 +2034,7 @@ given its printed version, and should not be used in real applications.</p>
        "headline": "parse_tensor_dict_string",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - parse_tensor_dict_string",
        "url": "/reference/generated/tensordict.parse_tensor_dict_string.html",
-       "articleBody": "parse_tensor_dict_string# tensordict.parse_tensor_dict_string(s: str)# Parse a TensorDict repr to a TensorDict. Note This functions is intended to be used for debugging, to reproduce a tensordict given its printed version, and should not be used in real applications. Raises: ValueError \u2013 if a field is not a Tensor or a TensorDict printed with the default print options, or if s is the repr of a lazy stack with exclusive keys.",
+       "articleBody": "parse_tensor_dict_string# tensordict.parse_tensor_dict_string(s: str)# Builds a TensorDict from its printed form. It is a debugging tool: it rebuilds a tensordict with the keys, shapes, dtypes, devices and batch sizes of a printed one, so that you can reproduce a tensordict from a log. The values are not in the repr, so every tensor of the result is filled with zeros. Parameters: s (str) \u2013 the repr of a tensordict, as printed with the default print options (see set_printoptions()). Returns: A new TensorDict. Raises: ValueError \u2013 if a field is not a Tensor or a TensorDict printed with the default print options, or if s is the repr of a lazy stack with exclusive keys. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, parse_tensor_dict_string \u003e\u003e\u003e td = TensorDict( ... obs=torch.ones(3, 4), ... next=TensorDict(done=torch.ones(3, 1, dtype=torch.bool)), ... batch_size=[3], ... ) \u003e\u003e\u003e rebuilt = parse_tensor_dict_string(repr(td)) \u003e\u003e\u003e rebuilt[\"next\", \"done\"].dtype, rebuilt.batch_size (torch.bool, torch.Size([3])) \u003e\u003e\u003e rebuilt[\"obs\"].sum() tensor(0.)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1642,17 +1642,24 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.lazy_legacy">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">lazy_legacy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">allow_none</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.lazy_legacy" title="Link to this definition">#</a></dt>
-<dd><p>Returns <cite>True</cite> if lazy representations will be used for selected methods.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>allow_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the option was never
-set, <code class="docutils literal notranslate"><span class="pre">None</span></code> is returned instead of the default (<code class="docutils literal notranslate"><span class="pre">False</span></code>).
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-</dd>
-</dl>
+<dd><p>Returns whether the legacy lazy mode is on.</p>
+<p>See <a class="reference internal" href="tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>.</p>
 <div class="deprecated">
 <p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>The legacy lazy mode is deprecated and will be removed in TensorDict 0.17,
 see <a class="reference internal" href="tensordict.set_lazy_legacy.html#tensordict.set_lazy_legacy" title="tensordict.set_lazy_legacy"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_lazy_legacy</span></code></a>.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>allow_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the option was never
+set, returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of the default (<code class="docutils literal notranslate"><span class="pre">False</span></code>).
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_legacy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_legacy</span><span class="p">()</span>
+<span class="go">False</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -2012,7 +2019,7 @@ see <a class="reference internal" href="tensordict.set_lazy_legacy.html#tensordi
        "headline": "lazy_legacy",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - lazy_legacy",
        "url": "/reference/generated/tensordict.lazy_legacy.html",
-       "articleBody": "lazy_legacy# tensordict.lazy_legacy(allow_none=False)# Returns True if lazy representations will be used for selected methods. Parameters: allow_none (bool, optional) \u2013 if True and the option was never set, None is returned instead of the default (False). Defaults to False. Deprecated since version 0.15: The legacy lazy mode is deprecated and will be removed in TensorDict 0.17, see set_lazy_legacy.",
+       "articleBody": "lazy_legacy# tensordict.lazy_legacy(allow_none=False)# Returns whether the legacy lazy mode is on. See set_lazy_legacy. Deprecated since version 0.15: The legacy lazy mode is deprecated and will be removed in TensorDict 0.17, see set_lazy_legacy. Parameters: allow_none (bool, optional) \u2013 if True and the option was never set, returns None instead of the default (False). Defaults to False. Examples \u003e\u003e\u003e from tensordict import lazy_legacy \u003e\u003e\u003e lazy_legacy() False",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

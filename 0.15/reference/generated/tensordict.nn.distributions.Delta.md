@@ -4,27 +4,32 @@
 
 Bases: [`Distribution`](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution)
 
-Delta distribution.
+A distribution with all its mass on one value, `param`.
 
-A distribution with all its mass on `param`. `sample()`,
-`rsample()`, `mean`, `mode` and
-`deterministic_sample` return `param`. `log_prob()` returns
-`inf` for a value equal to `param` (within `atol` and `rtol`) and
-`-inf` otherwise. It is the default `distribution_class` of
-[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule).
+`sample()` and `rsample()` return `param` (expanded to the
+sample shape), and `mean`, `mode` and
+`deterministic_sample` return it as it is. `log_prob()` returns
+`inf` for a value equal to `param` (within `atol` and `rtol`, on
+every element of the event) and `-inf` otherwise. It is the default
+`distribution_class` of
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), which then copies
+its input to its output.
 
 Parameters:
 
-- **param** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - parameter of the delta distribution;
-- **atol** (*number**,**optional*) - absolute tolerance to consider that a tensor matches the distribution parameter;
-Default is 1e-6
-- **rtol** (*number**,**optional*) - relative tolerance to consider that a tensor matches the distribution parameter;
-Default is 1e-6
-- **batch_shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - batch shape;
-- **event_shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - shape of the outcome.
-If neither `batch_shape` nor `event_shape` is given, the last
-dimension of `param` is the event shape and the others are the
-batch shape.
+- **param** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the value that holds all the mass.
+- **atol** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,**optional*) - the absolute tolerance with which
+`log_prob()` compares a value with `param`. Defaults to
+`1e-6`.
+- **rtol** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,**optional*) - the relative tolerance with which
+`log_prob()` compares a value with `param`. Defaults to
+`1e-6`.
+- **batch_shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch shape. Defaults to
+`None`: see `event_shape`.
+- **event_shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the shape of one value. If
+neither `batch_shape` nor `event_shape` is given (or both
+are empty), the last dimension of `param` is the event shape and
+the others are the batch shape. Defaults to `None`.
 
 Examples
 
@@ -68,3 +73,7 @@ sample(*sample_shape: [Sequence](https://docs.python.org/3/library/typing.html#t
 
 Generates a sample_shape shaped sample or sample_shape shaped batch of
 samples if the distribution parameters are batched.
+
+update(*param: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
+
+Replaces `param`. The batch and event shapes do not change.

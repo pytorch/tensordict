@@ -62,7 +62,8 @@ Another key set
   An operation that goes over all the entries (arithmetic, ``apply``,
   ``clone``, reductions) is compiled for the keys it saw. An input with another
   key set compiles a new graph. Reading one entry (``td["obs"]``) does not
-  depend on the other keys.
+  depend on the other keys. A ``td.get(key, default)`` that returned
+  ``default`` compiles again once the input has ``key``.
 
 Writing into an input tensordict
   ``td["y"] = ...``, ``td.set``, ``td.update``, and a
@@ -173,6 +174,12 @@ nightly. Other versions can word them differently.
      - Dynamo cannot build the new module inside the graph:
        ``Unexpected type in sourceless builder``.
      - Build the subsequence once, outside, and call it inside.
+
+PyTorch 2.11 and 2.12 also break the graph on ``state_dict()``, as 2.14 does
+(`pytorch/pytorch#201124 <https://github.com/pytorch/pytorch/issues/201124>`_).
+On PyTorch 2.12, building a frozen ``tensor_only`` tensorclass whose custom
+``__init__`` calls ``object.__setattr__`` raises ``InternalTorchDynamoError``
+inside a compiled function: build it outside.
 
 torch.func
 ----------
@@ -290,11 +297,11 @@ data-dependent control flow, and inputs that do not require gradients.
   >>> from tensordict.nn import CudaGraphModule, TensorDictModule
   >>> module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
   >>> graph_module = CudaGraphModule(module)
-  >>> results = [
+  >>> results = [  # doctest: +SKIP
   ...     graph_module(TensorDict({"x": torch.full((3,), float(i), device="cuda")}, batch_size=[3]))
   ...     for i in range(4)
   ... ]
-  >>> [result["y"][0].item() for result in results]
+  >>> [result["y"][0].item() for result in results]  # doctest: +SKIP
   [1.0, 2.0, 3.0, 4.0]
 
 The replay follows these rules:
@@ -343,16 +350,16 @@ and the PyTorch rules apply:
 
 For example:
 
-  >>> policy = torch.compile(
+  >>> policy = torch.compile(  # doctest: +SKIP
   ...     TensorDictModule(nn.Linear(3, 4).cuda(), in_keys=["obs"], out_keys=["action"]),
   ...     mode="reduce-overhead",
   ... )
-  >>> with torch.no_grad():
+  >>> with torch.no_grad():  # doctest: +SKIP
   ...     outputs = [
   ...         policy(TensorDict({"obs": torch.randn(8, 3, device="cuda")}, batch_size=[8])).clone()
   ...         for _ in range(4)
   ...     ]
-  >>> outputs[0]["action"].shape
+  >>> outputs[0]["action"].shape  # doctest: +SKIP
   torch.Size([8, 4])
 
 See also

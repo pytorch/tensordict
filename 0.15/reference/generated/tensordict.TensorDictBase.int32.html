@@ -1641,8 +1641,17 @@ document.write(`
 <h1>TensorDictBase.int32<a class="headerlink" href="#tensordictbase-int32" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.int32">
-<span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">int32</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.int32" title="Link to this definition">#</a></dt>
-<dd><p>Casts all tensors to <code class="docutils literal notranslate"><span class="pre">torch.int32</span></code>.</p>
+<span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">int32</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cast_filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.int32" title="Link to this definition">#</a></dt>
+<dd><p>Returns a tensordict whose tensor leaves are cast to <code class="docutils literal notranslate"><span class="pre">torch.int32</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cast_filter</strong> (<em>Callable</em><em>, </em><em>optional</em>) – a predicate
+<code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code> that selects the tensor leaves to
+cast, as in <a class="reference internal" href="tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDictBase.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which casts every
+tensor leaf (a tensorclass uses its own <code class="docutils literal notranslate"><span class="pre">cast_filter</span></code>, if it
+declares one).</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.int32",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.int32",
        "url": "/reference/generated/tensordict.TensorDictBase.int32.html",
-       "articleBody": "TensorDictBase.int32# TensorDictBase.int32() \u2192 Self# Casts all tensors to torch.int32. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.int32# TensorDictBase.int32(*, cast_filter: Callable | None = None) \u2192 Self# Returns a tensordict whose tensor leaves are cast to torch.int32. Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

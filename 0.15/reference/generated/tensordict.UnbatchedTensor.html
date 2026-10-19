@@ -1643,7 +1643,7 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">UnbatchedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_UnbatchedTensorMixin</span></code>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a></p>
-<p>A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict.</p>
+<p>A tensor entry that has no batch dimensions and that batch operations leave unchanged.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p><code class="docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code> is experimental: its API can change in a minor
@@ -1654,32 +1654,12 @@ the batch dimensions: a lookup table, the parameters of a model, a
 mask shared by every element. A plain tensor entry must have a shape
 that starts with the batch size. An <a class="reference internal" href="#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> can have
 any shape. See <a class="reference internal" href="../../concepts/non_tensor.html#unbatched-tensor"><span class="std std-ref">UnbatchedTensor</span></a>.</p>
-<p>When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze,
-squeeze, transpose, etc.) on the parent TensorDict leave the payload of
-this tensor unchanged. Data operations (arithmetic, clone, to, etc.) work
-through standard PyTorch tensor dispatch.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">UnbatchedTensor</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">UnbatchedTensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-<span class="go">torch.Size([3, 4])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span> <span class="o">==</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span>
-<span class="go">True</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-<span class="go">torch.Size([3, 4])</span>
-</pre></div>
-</div>
-<p>Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a
-TensorDict returns a usable tensor directly:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">val</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
-<span class="go">True</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">UnbatchedTensor</span><span class="p">)</span>
-<span class="go">True</span>
-</pre></div>
-</div>
+<p>In a tensordict, the shape operations of the tensordict (indexing,
+<code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze</span></code>, <code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">transpose</span></code>…) return the
+unbatched entry with its data and shape unchanged. Other operations
+(arithmetic, <code class="docutils literal notranslate"><span class="pre">clone</span></code>, <code class="docutils literal notranslate"><span class="pre">to</span></code>…) apply to it as to any tensor, and
+return an <a class="reference internal" href="#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>. It is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>
+subclass, so <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;]</span></code> can be used as a tensor.</p>
 <p>An <a class="reference internal" href="#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> has these constraints:</p>
 <ul class="simple">
 <li><p>Indexed assignment (<code class="docutils literal notranslate"><span class="pre">td[:,</span> <span class="pre">:2]</span> <span class="pre">=</span> <span class="pre">other</span></code>) leaves an unbatched entry
@@ -1692,30 +1672,43 @@ unbatched entries: the batch size comes from the other entries.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>tensor-like</em>) – payload tensor.</p></li>
-<li><p><strong>batch_size</strong> (<em>torch.Size compatible</em><em>, </em><em>optional</em>) – TensorDict-facing
-batch-size metadata used by <code class="docutils literal notranslate"><span class="pre">torch.vmap</span></code>. The payload shape is
-left unchanged.</p></li>
+<li><p><strong>data</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>array-like</em>) – the payload. Data that is not a
+tensor is converted with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.as_tensor()</span></code></a>.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size
+of the tensordict that holds the tensor, read by
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>. A tensordict sets it when the tensor is
+stored, so you rarely pass it. It does not change the shape
+of the payload. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which gives <code class="docutils literal notranslate"><span class="pre">[]</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">UnbatchedTensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">UnbatchedTensor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([3, 4])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([3, 4])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_reshaped</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span> <span class="o">==</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.data_ptr">
-<span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.data_ptr" title="Link to this definition">#</a></dt>
-<dd><p>Returns the address of the first element of <code class="xref py py-attr docutils literal notranslate"><span class="pre">self</span></code> tensor.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If the tensor is a copy-on-write tensor (e.g. created via
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">_lazy_clone()</span></code>), calling this method will materialize the
-copy. Use <code class="xref py py-meth docutils literal notranslate"><span class="pre">const_data_ptr()</span></code> if you only need read-only access
-to the data pointer.</p>
-</div>
+<span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.data_ptr" title="Link to this definition">#</a></dt>
+<dd><p>Returns the address of the first element of the payload, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.data_ptr.html#torch.Tensor.data_ptr" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.data_ptr()</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.untyped_storage">
-<span class="sig-name descname"><span class="pre">untyped_storage</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/storage.html#torch.UntypedStorage" title="(in PyTorch v2.14)"><span class="pre">UntypedStorage</span></a></span></span><a class="headerlink" href="#tensordict.UnbatchedTensor.untyped_storage" title="Link to this definition">#</a></dt>
-<dd><p>Returns the underlying <code class="xref py py-class docutils literal notranslate"><span class="pre">UntypedStorage</span></code>.</p>
+<span class="sig-name descname"><span class="pre">untyped_storage</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.untyped_storage" title="Link to this definition">#</a></dt>
+<dd><p>Returns the storage of the payload, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.untyped_storage.html#torch.Tensor.untyped_storage" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.untyped_storage()</span></code></a>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2080,7 +2073,7 @@ to the data pointer.</p>
        "headline": "UnbatchedTensor",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - UnbatchedTensor",
        "url": "/reference/generated/tensordict.UnbatchedTensor.html",
-       "articleBody": "UnbatchedTensor# class tensordict.UnbatchedTensor(data, batch_size=None)# Bases: _UnbatchedTensorMixin, Tensor A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict. Warning UnbatchedTensor is experimental: its API can change in a minor release without a deprecation cycle. Use it for an entry that belongs to the whole batch and does not have the batch dimensions: a lookup table, the parameters of a model, a mask shared by every element. A plain tensor entry must have a shape that starts with the batch size. An UnbatchedTensor can have any shape. See UnbatchedTensor. When stored in a TensorDict, shape operations (indexing, reshape, unsqueeze, squeeze, transpose, etc.) on the parent TensorDict leave the payload of this tensor unchanged. Data operations (arithmetic, clone, to, etc.) work through standard PyTorch tensor dispatch. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, UnbatchedTensor \u003e\u003e\u003e td = TensorDict(a=UnbatchedTensor(torch.randn(3, 4)), b=torch.randn(2, 3), batch_size=(2,)) \u003e\u003e\u003e td_reshaped = td.reshape((1, 2)) \u003e\u003e\u003e td_reshaped[\"a\"].shape torch.Size([3, 4]) \u003e\u003e\u003e td_reshaped[\"a\"].data_ptr() == td[\"a\"].data_ptr() True \u003e\u003e\u003e td[0][\"a\"].shape torch.Size([3, 4]) Since UnbatchedTensor is a torch.Tensor subclass, retrieving it from a TensorDict returns a usable tensor directly: \u003e\u003e\u003e val = td[\"a\"] \u003e\u003e\u003e isinstance(val, torch.Tensor) True \u003e\u003e\u003e isinstance(val, UnbatchedTensor) True An UnbatchedTensor has these constraints: Indexed assignment (td[:, :2] = other) leaves an unbatched entry unchanged if other does not have that key. If other has it with a payload of the same shape, the payload is written whole, whatever the index, because the whole batch shares it. auto_batch_size_() ignores unbatched entries: the batch size comes from the other entries. Parameters: data (Tensor or tensor-like) \u2013 payload tensor. batch_size (torch.Size compatible, optional) \u2013 TensorDict-facing batch-size metadata used by torch.vmap. The payload shape is left unchanged. data_ptr() \u2192 int# Returns the address of the first element of self tensor. Note If the tensor is a copy-on-write tensor (e.g. created via _lazy_clone()), calling this method will materialize the copy. Use const_data_ptr() if you only need read-only access to the data pointer. untyped_storage() \u2192 UntypedStorage# Returns the underlying UntypedStorage.",
+       "articleBody": "UnbatchedTensor# class tensordict.UnbatchedTensor(data, batch_size=None)# Bases: _UnbatchedTensorMixin, Tensor A tensor entry that has no batch dimensions and that batch operations leave unchanged. Warning UnbatchedTensor is experimental: its API can change in a minor release without a deprecation cycle. Use it for an entry that belongs to the whole batch and does not have the batch dimensions: a lookup table, the parameters of a model, a mask shared by every element. A plain tensor entry must have a shape that starts with the batch size. An UnbatchedTensor can have any shape. See UnbatchedTensor. In a tensordict, the shape operations of the tensordict (indexing, reshape, unsqueeze, squeeze, transpose\u2026) return the unbatched entry with its data and shape unchanged. Other operations (arithmetic, clone, to\u2026) apply to it as to any tensor, and return an UnbatchedTensor. It is a torch.Tensor subclass, so td[\"a\"] can be used as a tensor. An UnbatchedTensor has these constraints: Indexed assignment (td[:, :2] = other) leaves an unbatched entry unchanged if other does not have that key. If other has it with a payload of the same shape, the payload is written whole, whatever the index, because the whole batch shares it. auto_batch_size_() ignores unbatched entries: the batch size comes from the other entries. Parameters: data (Tensor or array-like) \u2013 the payload. Data that is not a tensor is converted with torch.as_tensor(). batch_size (Size or list of int, optional) \u2013 the batch size of the tensordict that holds the tensor, read by torch.vmap(). A tensordict sets it when the tensor is stored, so you rarely pass it. It does not change the shape of the payload. Defaults to None, which gives []. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, UnbatchedTensor \u003e\u003e\u003e td = TensorDict( ... a=UnbatchedTensor(torch.zeros(3, 4)), b=torch.zeros(2, 3), batch_size=[2] ... ) \u003e\u003e\u003e td[0][\"a\"].shape torch.Size([3, 4]) \u003e\u003e\u003e td_reshaped = td.reshape(1, 2) \u003e\u003e\u003e td_reshaped[\"a\"].shape torch.Size([3, 4]) \u003e\u003e\u003e td_reshaped[\"a\"].data_ptr() == td[\"a\"].data_ptr() True \u003e\u003e\u003e isinstance(td[\"a\"], torch.Tensor) True data_ptr()# Returns the address of the first element of the payload, as torch.Tensor.data_ptr(). untyped_storage()# Returns the storage of the payload, as torch.Tensor.untyped_storage().",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

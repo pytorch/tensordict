@@ -16,6 +16,9 @@ listed by task in [Methods by task](td.html#api-tensordict-methods). On a tensor
 methods that return a `TensorDict` on a `TensorDict` return an
 instance of the tensorclass. Examples are `select`, `clone`, `to`,
 `apply`, indexing, and reshaping.
+On a tensorclass, [`rename_keys()`](generated/tensordict.TensorDictBase.rename_keys.html#tensordict.TensorDictBase.rename_keys) raises
+`AttributeError` for a destination that is not a field, and keeps the
+sub-tensordict fields that it empties.
 
 ## Tensorclasses
 
@@ -24,7 +27,7 @@ instance of the tensorclass. Examples are `select`, `clone`, `to`,
 
 | [`tensorclass`](generated/tensordict.tensorclass.html#tensordict.tensorclass)([cls, autocast, frozen, nocast, ...]) | A decorator that turns a class with annotated fields into a tensorclass. |
 | --- | --- |
-| [`from_dataclass`](generated/tensordict.from_dataclass.html#tensordict.from_dataclass)(obj, *[, dest_cls, ...]) | Converts a dataclass instance or a type into a tensorclass instance or type, respectively. |
+| [`from_dataclass`](generated/tensordict.from_dataclass.html#tensordict.from_dataclass)(obj, *[, dest_cls, ...]) | Converts a dataclass instance to a tensorclass instance, or a dataclass type to a tensorclass type. |
 
 ## Non-tensor data
 
@@ -43,7 +46,7 @@ an entry: [`attrs()`](generated/tensordict.TensorDictBase.attrs.html#tensordict.
 | [`NonTensorData`](generated/tensordict.NonTensorData.html#tensordict.NonTensorData)(data[, _metadata, ...]) | A tensordict entry that holds a Python object instead of a tensor. |
 | [`NonTensorStack`](generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack)(*args, **kwargs) | A lazy stack of [`NonTensorData`](generated/tensordict.NonTensorData.html#tensordict.NonTensorData), one value per batch element. |
 | [`MetaData`](generated/tensordict.MetaData.html#tensordict.MetaData)(data[, _metadata, _is_non_tensor, ...]) | A tensordict entry that holds one Python object for the whole batch. |
-| [`TensorAttrs`](generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs)([tgt_device, tgt_dtype, ...]) | Per-leaf carrier describing a tensor's attributes -- device, dtype, and shape. |
+| [`TensorAttrs`](generated/tensordict.TensorAttrs.html#tensordict.TensorAttrs)([tgt_device, tgt_dtype, ...]) | A tensorclass that holds the device, dtype and shape of one tensor. |
 
 ## Entries that ignore the batch shape
 
@@ -58,7 +61,7 @@ Operations on its data, such as arithmetic or
 [`to()`](generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to), still apply to it. See
 [UnbatchedTensor](../concepts/non_tensor.html#unbatched-tensor).
 
-| [`UnbatchedTensor`](generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)(data[, batch_size]) | A torch.Tensor subclass whose shape is ignored during batch operations on a TensorDict. |
+| [`UnbatchedTensor`](generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)(data[, batch_size]) | A tensor entry that has no batch dimensions and that batch operations leave unchanged. |
 | --- | --- |
 
 ## See also

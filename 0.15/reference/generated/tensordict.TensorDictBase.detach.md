@@ -2,11 +2,24 @@
 
 TensorDictBase.detach() → Self
 
-Detach the tensors in the tensordict.
+Returns a new tensordict with every tensor leaf detached from the autograd graph.
 
-Returns:
+The leaves are [`torch.Tensor.detach()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.detach.html#torch.Tensor.detach) views: they share their
+storage with the leaves of the tensordict, and do not require
+gradients. A locked tensordict gives a locked result.
 
-a new tensordict with no tensor requiring gradient.
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3, requires_grad=True) + 1)
+>>> out = td.detach()
+>>> out["a"].requires_grad, td["a"].requires_grad
+(False, True)
+>>> out["a"].data_ptr() == td["a"].data_ptr()
+True
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

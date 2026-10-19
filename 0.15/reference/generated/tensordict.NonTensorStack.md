@@ -24,6 +24,8 @@ element holds the same value, `data` returns it. To keep one shared
 value for the whole batch, use [`MetaData`](tensordict.MetaData.html#tensordict.MetaData). See
 [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data).
 
+Note
+
 `torch.utils._pytree.tree_unflatten` and `tree_map` rebuild a
 `NonTensorStack` entry of a tensordict whose values are all equal
 from the input, as a [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData), and drop the value
@@ -47,18 +49,17 @@ LinkedList(['a', 'b', 'c'])
 >>> type(td.get("names")).__name__
 'NonTensorStack'
 >>> data = torch.stack([
-... torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
+... torch.stack([NonTensorData(data=(i, j)) for i in range(2)])
 ... for j in range(3)])
->>> print(data)
-NonTensorStack(
- [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, ...,
- batch_size=torch.Size([3, 2]),
- device=None)
+>>> data.batch_size
+torch.Size([3, 2])
+>>> data[2, 1]
+NonTensorData(data=(1, 2), batch_size=torch.Size([]), device=None)
 ```
 
 *property*data*: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*
 
-Returns the value of the stack, if every element holds the same value.
+The value that every element of the stack holds.
 
 Raises:
 
@@ -86,23 +87,31 @@ itself, whereas this method returns a copy.
 
 maybe_to_stack()
 
-Placeholder for interchangeability between stack and non-stack of non-tensors.
+Returns a new stack in which each element with a batch size is a stack too.
+
+It calls [`NonTensorDataBase.maybe_to_stack`](tensordict.NonTensorDataBase.html#tensordict.NonTensorDataBase.maybe_to_stack) on each element, so that
+`maybe_to_stack` can be called on any non-tensor entry.
 
 tolist(***, *convert_nodes: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *convert_tensors: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['numpy'] = False*, *tolist_first: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_linked_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
 
-Extracts the content of a `tensordict.tensorclass.NonTensorStack` in a nested list.
+Returns the values of the stack in a nested list, with one item per batch element.
 
 Keyword Arguments:
 
-- **convert_nodes** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - accepted for compatibility with
+- **convert_nodes** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - accepted for compatibility with
 [`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist). It has no effect:
-the elements are the stored values, not tensordicts. Default: `True`.
-- **convert_tensors** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - if `True`, tensors will be converted to lists.
-Otherwise, they will remain as tensors. Default: `False`.
-- **tolist_first** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensordict will be converted to a list first when
-it has batch dimensions. Default: `False`.
-- **as_linked_list** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the list will be converted to a [`tensordict.utils.LinkedList`](tensordict.utils.LinkedList.html#tensordict.utils.LinkedList)
-which will automatically update the tensordict when the list is modified. Default: `False`.
+the items are the stored values, not tensordicts. Defaults to
+`True`.
+- **convert_tensors** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*or**"numpy"**,**optional*) - accepted for
+compatibility with [`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist).
+It has no effect: a value that is a tensor stays a tensor.
+Defaults to `False`.
+- **tolist_first** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - accepted for compatibility with
+[`tolist()`](tensordict.TensorDictBase.tolist.html#tensordict.TensorDictBase.tolist). It has no effect.
+Defaults to `False`.
+- **as_linked_list** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns a
+`tensordict.utils.LinkedList` bound to the stack: assigning
+one of its items writes into the stack. Defaults to `False`.
 
 Examples
 
@@ -110,7 +119,7 @@ Examples
 >>> from tensordict import NonTensorData
 >>> import torch
 >>> data = torch.stack([
-... torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
+... torch.stack([NonTensorData(data=(i, j)) for i in range(2)])
 ... for j in range(3)])
 >>> data.tolist()
 [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, 2)]]

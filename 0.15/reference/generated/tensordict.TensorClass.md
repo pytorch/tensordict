@@ -7,7 +7,7 @@ documentation.
 
 *class*tensordict.TensorClass(**args*, ***kwargs*)
 
-Bases: `TensorCollection`
+Bases: [`TensorCollection`](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 A base class for dataclass-like containers of tensors.
 
@@ -28,50 +28,24 @@ checkers to know the fields, or when you want to add methods. Use a
 `**state` unpacking). [Which container should I use?](../../choosing_a_container.html#choosing-a-container) compares the
 containers, and [TensorClass](../../tensorclass.html#tensorclass-guide) is the user guide.
 
-Examples
-
-```
->>> from typing import Any
->>> import torch
->>> from tensordict import TensorClass
->>> class Foo(TensorClass):
-... tensor: torch.Tensor
-... non_tensor: Any
-... nested: Any = None
->>> foo = Foo(tensor=torch.randn(3), non_tensor="a string!", nested=None, batch_size=[3])
->>> print(foo)
-Foo(
- non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
- tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested=None,
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
->>> foo[0].non_tensor
-'a string!'
->>> foo.reshape(1, 3).batch_size
-torch.Size([1, 3])
-```
-
-Instances support the methods of [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
-(`apply`, `reshape`, `to`, `memmap`, ...). The pages of these
-methods are under [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase), because the
-tensorclass forwards the call to the tensordict that holds its fields.
+The constructor of a subclass takes the fields, by name or in order, and
+these keyword arguments: `Foo(tensor=..., batch_size=[3])`.
 
 Keyword Arguments:
 
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the instance.
-Defaults to `torch.Size([])`.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device of the instance. Defaults
-to `None`.
-- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - The names of the batch dimensions.
-Defaults to `None`.
-- **lock** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, the instance is locked: writing a
-field raises a `RuntimeError`. Defaults to `False`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the instance: the leading dimensions that all its fields share.
+See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size). Defaults to `torch.Size([])`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+instance. Tensors on another device are moved to it. Defaults to
+`None`, which leaves each tensor where it is.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the batch dimensions, one
+per dimension. Defaults to `None`.
+- **lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the instance is locked: writing a
+field raises a `RuntimeError`. See [Locking and temporary changes](../../concepts/keys.html#keys-locking).
+Defaults to `False`.
 
-These keyword arguments go to the constructor, with the fields:
-`Foo(tensor=..., batch_size=[3])`. The class flags below go to the
-class definition instead.
+The class flags below go to the class definition instead.
 
 Class flags
 
@@ -79,7 +53,8 @@ A flag changes the behavior of every instance of the class. Set it in
 one of three equivalent forms:
 
 ```
->>> from tensordict import tensorclass
+>>> import torch
+>>> from tensordict import TensorClass, tensorclass
 >>> class Foo(TensorClass["autocast"]): # bracket form
 ... integer: int
 >>> class Foo(TensorClass, autocast=True): # keyword form
@@ -185,6 +160,25 @@ checked
 `autocast`, `nocast` and `tensor_only` are exclusive: combining two
 of them raises a `TypeError`.
 
+A class keyword that is not a flag, `cast_filter`, sets the default
+`cast_filter` of [`to()`](tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) and of the dtype
+shorthands (`float()`, `bfloat16()`, ...): a predicate
+`fn(key, value) -> bool` that selects the tensor leaves a dtype cast
+applies to. A `cast_filter` passed to the call overrides it, and
+`cast_filter=None` there casts every leaf. Subclasses inherit it. It
+applies to calls on the tensorclass itself, not when the tensorclass is a
+value of another tensordict or tensorclass that is cast.
+
+```
+>>> from tensordict import is_inexact
+>>> class Mesh(TensorClass, cast_filter=is_inexact):
+... points: torch.Tensor
+... cells: torch.Tensor
+>>> mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long))
+>>> mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype
+(torch.bfloat16, torch.int64)
+```
+
 Subclassing
 
 A class with flags is a regular class. You can subclass it and add
@@ -220,6 +214,31 @@ See also
 - [`TensorClassModuleBase`](tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase) for typed `nn.Module` I/O backed by
 tensorclasses.
 
+Examples
+
+```
+>>> from typing import Any
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... tensor: torch.Tensor
+... non_tensor: Any
+... nested: Any = None
+>>> foo = Foo(tensor=torch.zeros(3), non_tensor="a string!", batch_size=[3])
+>>> print(foo)
+Foo(
+ non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
+ tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+ nested=None,
+ batch_size=torch.Size([3]),
+ device=None,
+ is_shared=False)
+>>> foo[0].non_tensor
+'a string!'
+>>> foo.reshape(1, 3).batch_size
+torch.Size([1, 3])
+```
+
 *classmethod*from_dict(*input_dict*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size=None*, *device=None*, *batch_dims=None*)
 
 Builds an instance of the tensorclass from a dictionary of its fields.
@@ -237,10 +256,37 @@ tensordicts, or tensorclasses for the fields annotated with one.
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - whether to infer the batch size.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of batch dimensions to infer.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size to
+the largest leading shape that all the entries share. Defaults to
+`None`, which behaves like `False`, unless `batch_dims` is
+passed: then it behaves like `True`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Defaults to `None`, which gives an empty batch size unless
+`auto_batch_size` is on.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. Defaults to
+`None`, which leaves each leaf where it is.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Exclusive with `batch_size`.
+Defaults to `None`.
+
+Returns:
+
+A new instance of the class.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+>>> foo = Foo.from_dict({"x": torch.zeros(3, 4), "y": torch.zeros(3)}, auto_batch_size=True)
+>>> foo.batch_size
+torch.Size([3])
+```
 
 from_tensordict(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *non_tensordict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *safe: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
@@ -257,10 +303,17 @@ Parameters:
 
 - **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict that holds the tensor fields.
 - **non_tensordict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - the values of the non-tensor fields. The
-fields that neither argument holds are set to `None`.
-- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - Deprecated in 0.15, to be removed in TensorDict 0.17. Whether to
-raise an error if `tensordict` is not a [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase).
-Without it, such a tensordict raises an error.
+fields that neither argument holds are set to `None`. Defaults
+to `None`.
+- **safe** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - deprecated in 0.15, will be removed in TensorDict 0.17.
+If `False`, skips the check that `tensordict` is a
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase). By default, the check runs, and
+another type raises a `RuntimeError`.
+
+Returns:
+
+A new instance of the class, whose fields are the entries of
+`tensordict`.
 
 Examples
 
@@ -278,73 +331,177 @@ Examples
 
 get(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, **args*, ***kwargs*)
 
-Gets the value stored with the input key.
+Returns the value of a field, or `default` if the key is missing.
+
+`tc.get("x")` is the same as `tc.x`: a non-tensor field returns the
+Python object, not a [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData). The keyword
+arguments of [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) (`as_list`,
+`as_padded_tensor`, ...) are passed to the tensordict that holds the
+fields.
+
+A nested key that runs through a tensor field, such as
+`tc.get(("x", "y"))` for a tensor `x`, returns `None` and warns.
+Starting with TensorDict 0.17, the default will change to raising the
+`ValueError` that [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) raises. A
+default passed explicitly, as in `tc.get(("x", "y"), None)`, is
+returned without a warning.
 
 Parameters:
 
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - key to be queried. If tuple of str it is
-equivalent to chained calls of getattr.
-- **default** - default value if the key is not found in the tensorclass.
+- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to read. A tuple reads an entry of a nested
+field: `tc.get(("a", "b"))` is `tc.a.get("b")`.
+- **default** (*optional*) - the value returned if the key is missing.
+Defaults to `None`.
 
-Returns:
+Examples
 
-value stored with the input key
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... name: str
+>>> foo = Foo(x=torch.zeros(3), name="a", batch_size=[3])
+>>> foo.get("name")
+'a'
+>>> foo.get("z", "missing")
+'missing'
+```
 
 load_memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path)*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, ***, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *mode: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Loads the content of a memory-mapped tensorclass within the tensorclass where `load_memmap_` is called.
+Loads a memory-mapped tensorclass into this instance, and returns `self`.
 
-See [`load_memmap_()`](tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_) for more info.
-
-load_state_dict(*state_dict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]*, *strict=True*, *assign=False*, *from_flatten=None*)
-
-Loads a state_dict into the tensorclass.
-
-Supports both the new format (logical keys with `_metadata`) and the
-legacy format (`_tensordict`/`_non_tensordict` wrapper keys).
-
-set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *value: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
-
-Sets a new key-value pair.
+Works as [`load_memmap_()`](tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_), and also loads
+the non-tensor fields.
 
 Parameters:
 
-- **key** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,*[*tuple*](https://docs.python.org/3/builtins/stdtypes.html#tuple)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - name of the key to be set.
-If tuple of str it is equivalent to chained calls of getattr
-followed by a final setattr.
-- **value** (*Any*) - value to be stored in the tensorclass
-- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, set will tentatively try to
-update the value in-place. If `False` or if the key isn't present,
-the value will be simply written at its destination.
-
-Returns:
-
-self
-
-state_dict(*destination=None*, *prefix=''*, *keep_vars=False*, *flatten=True*) → [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]
-
-Returns a state_dict with logical keys, matching TensorDictBase conventions.
-
-Tensor fields appear as data keys. Non-tensor fields (strings, ints, etc.)
-and the tensorclass type are stored in `_metadata`. This replaces the
-legacy `_tensordict`/`_non_tensordict` wrapper format.
-
-to_tensordict(***, *retain_none: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
-
-Convert the tensorclass into a regular TensorDict.
-
-Makes a copy of all entries. Memmap and shared memory tensors are converted to
-regular tensors.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the directory, or the `".tdz"` archive file,
+to read.
+- **robust_key** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the key encoding used when the data was
+saved. See [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap). Defaults to
+`True`.
 
 Keyword Arguments:
 
-**retain_none** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, fields set to `None` are
-written as `None` entries. Defaults to `None`, which drops
-them.
+- **allow_pickle** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether pickled non-tensor fields may
+be loaded. See [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap).
+Defaults to `None`, which loads pickled fields with a
+`FutureWarning`.
+- **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the mode of the memory maps. See
+[`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap). Defaults to
+`None`.
+
+load_state_dict(*state_dict: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]*, *strict=True*, *assign=False*, *from_flatten=None*)
+
+Loads a state dict made by `state_dict()` into the tensorclass, and returns `self`.
+
+Works as [`load_state_dict()`](tensordict.TensorDictBase.load_state_dict.html#tensordict.TensorDictBase.load_state_dict), which
+describes the arguments, and also loads the non-tensor fields. It also
+reads the state dicts of older versions, which hold `"_tensordict"` and
+`"_non_tensordict"` entries.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... name: str
+>>> sd = Foo(x=torch.zeros(3), name="a", batch_size=[3]).state_dict()
+>>> foo = Foo(x=torch.ones(3), name="b", batch_size=[3])
+>>> _ = foo.load_state_dict(sd)
+>>> foo.x, foo.name
+(tensor([0., 0., 0.]), 'a')
+```
+
+set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *value: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+
+Sets a field, and returns the tensorclass.
+
+`tc.set("x", value)` is the same as `tc.x = value`: the value is cast
+according to the class flags (see `TensorClass`).
+Otherwise, it works as [`set()`](tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set).
+
+Parameters:
+
+- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the field to set. A tuple sets an entry of a nested
+field: `tc.set(("a", "b"), value)` is `tc.a.set("b", value)`.
+- **value** (*Any*) - the value of the field.
+- **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and the field holds a tensor,
+the value is copied into it, which keeps its storage. Defaults to
+`False`. See [In-place operations](../../concepts/operations.html#inplace-conventions).
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+can run asynchronously with respect to the host. Defaults to
+`False`.
 
 Returns:
 
-A new TensorDict object containing the same values as the tensorclass.
+`self`.
+
+Raises:
+
+- [**AttributeError**](https://docs.python.org/3/builtins/exceptions.html#AttributeError) - if `key` is not a field of the class.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensorclass is locked, also with
+ `inplace=True`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+>>> foo = Foo(x=torch.zeros(3), batch_size=[3])
+>>> foo.set("x", torch.ones(3)).x
+tensor([1., 1., 1.])
+>>> foo.set("z", torch.ones(3))
+Traceback (most recent call last):
+ ...
+AttributeError: Cannot set the attribute 'z': Foo has no such field. Its fields are ['x'].
+```
+
+state_dict(*destination=None*, *prefix=''*, *keep_vars=False*, *flatten=True*) → [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]
+
+Returns the state dict of the tensorclass.
+
+Works as [`state_dict()`](tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict), which describes
+the arguments. The tensor fields are the entries of the state dict. The
+non-tensor fields and the name of the class go to the `_metadata`
+attribute, under the `"_non_tensor"` and `"_type"` keys of their
+level.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+... name: str
+>>> foo = Foo(x=torch.zeros(3), name="a", batch_size=[3])
+>>> sd = foo.state_dict()
+>>> list(sd.keys())
+['x']
+>>> sd._metadata[""]["_non_tensor"]
+{'name': 'a'}
+```
+
+to_tensordict(***, *retain_none: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
+
+Returns a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with a copy of the fields of the tensorclass.
+
+The tensors are copied, and memory-mapped or shared tensors become regular
+tensors. Nested tensorclasses become tensordicts, and non-tensor fields
+become [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) entries.
+
+Keyword Arguments:
+
+**retain_none** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, fields set to `None` are
+written as `None` entries. Defaults to `None`, which drops
+them.
 
 Examples
 
@@ -364,27 +521,65 @@ Examples
 
 unbind(*dim: [int](https://docs.python.org/3/builtins/functions.html#int)*)
 
-Returns a tuple of indexed tensorclass instances unbound along the indicated dimension.
+Returns a tuple of tensorclasses, one per index along a batch dimension.
 
-Resulting tensorclass instances will share the storage of the initial tensorclass instance.
+Works as [`unbind()`](tensordict.TensorDictBase.unbind.html#tensordict.TensorDictBase.unbind): the results share
+the storage of the tensorclass.
 
-update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
+Parameters:
 
-Writes the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
+**dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the batch dimension to remove.
 
-See [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_). A tensorclass or dict
-source ignores `keys_to_update`: the entries that it leaves out are
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+>>> foo = Foo(x=torch.arange(6).reshape(2, 3), batch_size=[2, 3])
+>>> [item.x for item in foo.unbind(1)]
+[tensor([0, 3]), tensor([1, 4]), tensor([2, 5])]
+```
+
+update_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs*)
+
+Copies the entries of a dictionary, a tensordict or a tensorclass into the existing entries.
+
+Returns `self`. Works as [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_), which describes the
+arguments: the existing tensors keep their storage. The fields can also
+be passed as keyword arguments, `tc.update_(x=value)`. `inplace` has
+no effect.
+
+A tensorclass or dict source ignores `clone`, `non_blocking` and
+`keys_to_update`: the entries that `keys_to_update` leaves out are
 written too, and the call warns. Starting with TensorDict 0.17, the default
 will change to writing only the entries in `keys_to_update`, as for a
 TensorDict source.
 
-update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection] | T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+Examples
 
-Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index.
+```
+>>> import torch
+>>> from tensordict import TensorClass
+>>> class Foo(TensorClass):
+... x: torch.Tensor
+>>> foo = Foo(x=torch.zeros(3), batch_size=[3])
+>>> x = foo.x
+>>> _ = foo.update_({"x": torch.ones(3)})
+>>> x
+tensor([1., 1., 1.])
+```
 
-See [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_). A tensorclass or dict
-source that [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) accepts, such as one with the batch size of
-the tensorclass, goes to [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) instead: its entries replace
+update_at_(*input_dict_or_td: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)] | T*, *idx: [None](https://docs.python.org/3/builtins/constants.html#None) | [int](https://docs.python.org/3/builtins/functions.html#int) | [slice](https://docs.python.org/3/builtins/functions.html#slice) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Any](https://docs.python.org/3/library/typing.html#typing.Any)] | [Tuple](https://docs.python.org/3/library/typing.html#typing.Tuple)[[Any](https://docs.python.org/3/library/typing.html#typing.Any), ...]*, *clone: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *keys_to_update: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+
+Writes the entries of a dictionary, a tensordict or a tensorclass in place at an index, and returns `self`.
+
+Works as [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_), which describes
+the arguments, with one difference. A tensorclass or dict source that
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) accepts, such as one with the
+batch size of the tensorclass, goes to
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) instead: its entries replace
 those of the tensorclass whatever the index, and the call warns. Starting
 with TensorDict 0.17, the default will change to writing such a source in
 place at the index, as [`update_at_()`](tensordict.TensorDictBase.update_at_.html#tensordict.TensorDictBase.update_at_)

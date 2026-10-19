@@ -4,7 +4,7 @@
 
 Bases: [`object`](https://docs.python.org/3/builtins/functions.html#object)
 
-A persistent point-to-point channel for streaming TensorDicts over UCXX.
+A channel between two processes that streams tensordicts over UCXX.
 
 Warning
 
@@ -12,28 +12,61 @@ Warning
 release without a deprecation cycle.
 
 It needs the optional `ucxx` package. Import it from
-`tensordict._ucxx`: there is no public import path.
+`tensordict._ucxx`: there is no public import path. Create a pipe with
+`connect()` on one side and `listen()` on the other, rather than
+with the constructor. The protocol does not authenticate the peer, which
+controls the size of the allocations: use it only on a trusted network.
+See [Distributed tensordicts](../../distributed.html#distributed).
 
-Implements a two-phase protocol:
+With `consolidated=True`, a pipe sends a tensordict in two phases:
 
-- Handshake (first send): transmits consolidation metadata and data.
-The receiver allocates a buffer and builds a TensorDict whose leaves
-are views into the consolidated storage.
-- Steady state (subsequent sends with same schema): transmits only
-the raw storage buffer. The receiver overwrites its pre-allocated
-buffer in place, without a new allocation and without metadata parsing.
+- The first message, and each message with a new structure (keys,
+shapes or dtypes), carries the metadata and then the consolidated
+storage (see [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)). The
+receiver allocates one buffer, and builds a tensordict whose leaves
+are views into it.
+- The next messages carry the storage only. The receiver writes it into
+the buffer of the first message, without allocating memory or parsing
+metadata.
+
+With `consolidated=False`, each message carries a JSON header, with the
+batch size and the non-tensor entries, and then the tensor leaves of the
+tensordict, nested ones included, one by one. The receiver builds a new
+tensordict each time, with the batch size of the sent one; its nested
+tensordicts get the same batch size. A non-tensor entry must be a
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) or [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack)
+whose values are `str`, `int`, `float`, `bool`, `None`, or lists
+or dicts (with `str` keys) of them: a send of any other non-tensor entry
+raises a `ValueError`. A stack comes back with the same batch size and
+stack dimension.
+
+A pipe is a context manager and an async context manager, which close
+it at the end of the block, and an async iterator: `async for td in
+pipe` receives until the pipe is closed.
 
 Warning
 
-With `consolidated=True` (the default), every receive with the same
-schema writes into the same TensorDict, and returns it. The next
-receive overwrites the values of the previous one. Call `clone()`
-on a received TensorDict to keep it.
+With `consolidated=True`, every receive with the same structure
+writes into the same tensordict, and returns it. The next receive
+overwrites the values of the previous one. Call `clone()` on a
+received tensordict to keep it.
 
 Warning
 
 `async for td in pipe` stops at the first error, without raising
 it. To see the error, call `arecv()` or `recv()` in a loop.
+
+Parameters:
+
+**endpoint** (*ucxx.Endpoint*) - the UCXX endpoint of the connection.
+
+Keyword Arguments:
+
+- **consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sends and receives
+consolidated tensordicts, in the two phases above. Both ends must
+pass the same value. Defaults to `True`.
+- **listener** (*ucxx.Listener**,**optional*) - a listener that the pipe closes
+when it closes, as `listen()` passes. Defaults to `None`.
 
 Examples
 
@@ -73,113 +106,164 @@ asyncio.run(main())
 
 *async*aclose() → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Close this pipe (async).
+Closes the pipe, its endpoint and its listener (if any), asynchronously.
+
+Closing a closed pipe does nothing.
 
 *async*arecv(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Receive a TensorDict from this pipe (async).
+Receives a tensordict from the pipe, asynchronously.
 
-On the first call, receives into `td` if its consolidated layout
-matches, otherwise builds a new TensorDict from the received metadata.
-On subsequent calls with the same schema, overwrites the existing
-storage in-place (zero allocation).
+With `consolidated=True`, the first message, and each message with a new
+structure, carries the metadata: the pipe receives into `td` if its
+consolidated layout matches, and builds a new tensordict otherwise. The
+next messages carry the storage only, and the pipe writes it into the
+same tensordict, without allocating memory. So each receive can overwrite
+the values of the previous one: clone a tensordict to keep it.
+
+With `consolidated=False`, each call returns a new tensordict with the
+batch size of the sent one (an empty batch size from an older sender).
 
 Parameters:
 
-**td** - if provided and consolidated, receives into its storage
-when its layout matches the received data. Otherwise the
-pipe returns a new TensorDict, or on a message with the same
-schema its own TensorDict from the previous receive, so use
-the return value. If `None`, uses the internally cached
-TensorDict from the previous receive (if any). Not used when
-the pipe has `consolidated=False`.
+**td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a consolidated tensordict to receive
+into, if its layout matches the data. Otherwise the pipe returns a
+new tensordict, or the tensordict of its previous receive, so use the
+return value. Not used with `consolidated=False`. Defaults to
+`None`, which receives into the tensordict of the previous
+receive.
 
 Keyword Arguments:
 
-**device** - device for storage allocation on first receive.
+**device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the storage
+that the pipe allocates for a new structure. Defaults to `None`,
+which uses the device of the sender with `consolidated=True`, and
+the CPU otherwise.
 
 Returns:
 
-The received TensorDict.
+The received tensordict.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the pipe is closed, or if the sender and the receiver
+ are out of sync.
 
 *async*asend(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Send a TensorDict through this pipe (async).
+Sends a tensordict through the pipe, asynchronously.
 
-On the first call (or when the schema changes), sends metadata + data.
-On subsequent calls with the same schema, sends only the raw buffer.
+With `consolidated=True`, the first call, and each call where the
+structure of the tensordict changes, sends the metadata and then the
+storage. The other calls send the storage only. A tensordict that is not
+consolidated is consolidated on each call, which copies every leaf:
+consolidate it once and refresh it with
+[`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) to avoid the copy.
 
 Parameters:
 
-**td** - the TensorDict to send.
+**td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict to send.
+
+Raises:
+
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the pipe is closed.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - with `consolidated=False`, if `td` holds a non-tensor
+ entry that the pipe cannot send (see the class description).
 
 close() → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Close this pipe (sync).
+Closes the pipe, and waits until it is closed.
+
+Runs `aclose()` in a new event loop. In a coroutine, `await
+pipe.aclose()` instead. A pipe also closes at the end of a `with` or
+`async with` block, and when it is garbage collected.
+
+*property*closed*: [bool](https://docs.python.org/3/builtins/functions.html#bool)*
+
+Whether the pipe is closed.
 
 *async classmethod*connect(*host: [str](https://docs.python.org/3/builtins/stdtypes.html#str)*, *port: [int](https://docs.python.org/3/builtins/functions.html#int)*, ***, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → TensorDictPipe
 
-Connect to a remote TensorDictPipe listener.
+Connects to a pipe that listens on `host` and `port`, and returns the pipe.
+
+The other process calls `listen()` with the same port.
 
 Parameters:
 
-- **host** - hostname or IP address of the remote listener.
-- **port** - port number.
+- **host** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - the host name or IP address of the listener.
+- **port** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the port of the listener.
 
 Keyword Arguments:
 
-**consolidated** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - whether to use consolidated transfers.
-Defaults to `True`.
+**consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sends and receives
+consolidated tensordicts (see the class description). Both ends must
+pass the same value. Defaults to `True`.
 
 Returns:
 
-A connected TensorDictPipe.
+A connected `TensorDictPipe`.
+
+Raises:
+
+[**ImportError**](https://docs.python.org/3/builtins/exceptions.html#ImportError) - if `ucxx` is not installed.
 
 *async classmethod*listen(*port: [int](https://docs.python.org/3/builtins/functions.html#int)*, ***, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → TensorDictPipe
 
-Listen for an incoming connection and return a pipe to the first client.
+Listens on `port`, and returns a pipe to the first client that connects.
+
+Waits until a client calls `connect()`. The listener stops when the
+pipe is closed. To accept several clients, use [`TensorDictServer`](tensordict._ucxx.TensorDictServer.html#tensordict._ucxx.TensorDictServer).
 
 Parameters:
 
-**port** - port number to listen on.
+**port** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the port to listen on.
 
 Keyword Arguments:
 
-**consolidated** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)) - whether to use consolidated transfers.
-Defaults to `True`.
+**consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sends and receives
+consolidated tensordicts (see the class description). Both ends must
+pass the same value. Defaults to `True`.
 
 Returns:
 
-A connected TensorDictPipe for the first accepted client.
+A connected `TensorDictPipe`.
+
+Raises:
+
+[**ImportError**](https://docs.python.org/3/builtins/exceptions.html#ImportError) - if `ucxx` is not installed.
 
 recv(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
-Receive a TensorDict from this pipe (sync).
+Receives a tensordict from the pipe, and waits until it is received.
 
-Blocking wrapper around `arecv()`.
+Runs `arecv()` in a new event loop, with the same arguments. In a
+coroutine, `await pipe.arecv()` instead: in a thread where an event loop
+runs, `recv` raises a `RuntimeError`.
 
 Parameters:
 
-**td** - if provided, receives into this TensorDict in-place when
-it is consolidated and its layout matches the received data.
-Otherwise the pipe returns a new TensorDict or its own
-TensorDict from the previous receive, so use the return
-value.
+**td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a consolidated tensordict to receive
+into, if its layout matches the data. See `arecv()`. Defaults to
+`None`.
 
 Keyword Arguments:
 
-**device** - device for storage allocation on first receive.
+**device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the storage
+that the pipe allocates for a new structure. See `arecv()`.
+Defaults to `None`.
 
 Returns:
 
-The received TensorDict.
+The received tensordict.
 
 send(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Send a TensorDict through this pipe (sync).
+Sends a tensordict through the pipe, and waits until it is sent.
 
-Blocking wrapper around `asend()`.
+Runs `asend()` in a new event loop. In a coroutine, `await
+pipe.asend(td)` instead: in a thread where an event loop runs, `send`
+raises a `RuntimeError`.
 
 Parameters:
 
-**td** - the TensorDict to send.
+**td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict to send.

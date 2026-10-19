@@ -4,24 +4,25 @@
 
 Bases: [`Generic`](https://docs.python.org/3/library/typing.html#typing.Generic)[`InputClass`, `OutputClass`], [`ABC`](https://docs.python.org/3/library/abc.html#abc.ABC), [`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
 
-A TensorClassModuleBase is a base class for modules that operate on TensorClass instances.
+Base class of the modules that take and return a tensorclass.
 
-TensorClassModuleBase subclasses provide a type-safe way to define modules that work with TensorClass
-inputs and outputs. The class automatically extracts input and output type information from the
-generic type parameters.
+Subclass `TensorClassModuleBase[InputClass, OutputClass]`, where each
+type is a [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) subclass or
+[`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), and implement `forward()`. A type checker
+then knows the type of the input and output, and can report a wrong
+field name. The class reads both types from the subscript: a subclass
+without it has no `input_type` and `output_type`, and its
+`as_td_module()` raises a `ValueError`.
 
-The module can be converted to a TensorDictModule using the `as_td_module()`
-method, allowing it to be used in TensorDict-based workflows.
-
-Type Parameters:
-
-InputClass: The input type, must be a TensorClass or Tensor.
-OutputClass: The output type, must be a TensorClass or Tensor.
+When both types are tensorclasses, `as_td_module()` returns a
+module that takes and returns a tensordict, for example to put the
+module in a [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). See
+[TensorClass](../../tensorclass.html#tensorclass-guide).
 
 Variables:
 
-- **input_type** ([*type*](https://docs.python.org/3/builtins/functions.html#type)*[**InputClass**]*) - The input type class.
-- **output_type** ([*type*](https://docs.python.org/3/builtins/functions.html#type)*[**OutputClass**]*) - The output type class.
+- **input_type** ([*type*](https://docs.python.org/3/builtins/functions.html#type)) - the input type, `InputClass`.
+- **output_type** ([*type*](https://docs.python.org/3/builtins/functions.html#type)) - the output type, `OutputClass`.
 
 Examples
 
@@ -46,34 +47,24 @@ Examples
 ...
 >>> module = AddModule()
 >>> input_tc = InputTC(a=torch.tensor([1.0]), b=torch.tensor([2.0]), batch_size=[1])
->>> output = module(input_tc)
->>> assert output.result == torch.tensor([3.0])
+>>> module(input_tc).result
+tensor([3.])
 ```
 
 as_td_module() → [TensorClassModuleWrapper](tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper)
 
-Convert this module to a module that takes and returns a TensorDict.
+Returns a [`TensorClassModuleWrapper`](tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper) of the module, which takes and returns a tensordict.
 
-This method wraps the TensorClassModuleBase in a
-[`TensorClassModuleWrapper`](tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper), a
-[`TensorDictModuleBase`](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) subclass. Its `in_keys`
-and `out_keys` are the fields of the input and output classes. It
-returns a new TensorDict with only the output fields (see
+The wrapper is a [`TensorDictModuleBase`](tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase). Its
+`in_keys` and `out_keys` are the fields of the input and output
+classes. It returns a new TensorDict with only the output fields (see
 [`TensorClassModuleWrapper`](tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper)).
-
-Returns:
-
-A wrapper that converts between TensorDict
-
-and TensorClass representations.
-
-Return type:
-
-[*TensorClassModuleWrapper*](tensordict.nn.TensorClassModuleWrapper.html#tensordict.nn.TensorClassModuleWrapper)
 
 Raises:
 
-[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - If either input_type or output_type is not a TensorClass.
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `input_type` or `output_type` is not a
+ tensorclass, or if the subclass did not set each of them to a
+ class with the subscript.
 
 Examples
 
@@ -96,22 +87,18 @@ Examples
 >>> module = MyModule()
 >>> td_module = module.as_td_module()
 >>> td = TensorDict({"x": torch.ones(3)}, batch_size=[3])
->>> result = td_module(td)
->>> assert (result["y"] == 2).all()
+>>> td_module(td)["y"]
+tensor([2., 2., 2.])
 ```
 
 *abstract*forward(*x: InputClass*) → OutputClass
 
-Forward pass of the module.
+Computes the output of the module. Subclasses implement it.
 
 Parameters:
 
-**x** (*InputClass*) - Input instance.
+**x** (*InputClass*) - the input.
 
 Returns:
 
-Output instance.
-
-Return type:
-
-OutputClass
+An instance of `OutputClass`.

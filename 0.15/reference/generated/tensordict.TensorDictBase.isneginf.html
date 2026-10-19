@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.isneginf">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">isneginf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.isneginf" title="Link to this definition">#</a></dt>
-<dd><p>Returns a tensordict of boolean leaves that are <code class="docutils literal notranslate"><span class="pre">True</span></code> where the element is negative infinity.</p>
+<dd><p>Returns a new tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.isneginf.html#torch.isneginf" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.isneginf()</span></code></a> applied to every leaf.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.isneginf",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.isneginf",
        "url": "/reference/generated/tensordict.TensorDictBase.isneginf.html",
-       "articleBody": "TensorDictBase.isneginf# TensorDictBase.isneginf() \u2192 Self# Returns a tensordict of boolean leaves that are True where the element is negative infinity. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.isneginf# TensorDictBase.isneginf() \u2192 Self# Returns a new tensordict with torch.isneginf() applied to every leaf. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

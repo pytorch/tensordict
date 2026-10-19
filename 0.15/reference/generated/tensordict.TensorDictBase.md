@@ -6,7 +6,25 @@ with one page for each method.
 
 *class*tensordict.TensorDictBase(**args*, ***kwargs*)
 
-TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container.
+The abstract base class of every tensordict.
+
+[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict),
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) and the other tensordict classes
+subclass it, and tensorclasses have the same methods. You do not create a
+`TensorDictBase`: use it in type hints and in `isinstance` checks. A
+tensorclass is not an instance of it: use
+[`is_tensor_collection()`](tensordict.is_tensor_collection.html#tensordict.is_tensor_collection) to accept both. The methods are
+listed by task in [Methods by task](../td.html#api-tensordict-methods).
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict, TensorDictBase, lazy_stack
+>>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
+>>> isinstance(td, TensorDictBase), isinstance(lazy_stack([td, td]), TensorDictBase)
+(True, True)
+```
 
 ## Tutorials that use `TensorDictBase`
 

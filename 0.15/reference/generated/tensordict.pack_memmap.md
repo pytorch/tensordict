@@ -4,48 +4,54 @@ tensordict.pack_memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtype
 
 Packs a memory-mapped tensordict directory into a single-file zip archive.
 
-The archive entries replicate the directory layout, so the operation is
-the exact inverse of [`unpack_memmap()`](tensordict.unpack_memmap.html#tensordict.unpack_memmap) (and of a plain `unzip`).
-Tensor payloads are stored uncompressed by default and aligned to
-64 bytes, which lets [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap)
-memory-map the archive and expose every leaf as a zero-copy view.
+The entries of the archive are the files of the directory, so
+[`unpack_memmap()`](tensordict.unpack_memmap.html#tensordict.unpack_memmap) (or `unzip`) gives the directory back. Tensor
+payloads are stored uncompressed by default and aligned to 64 bytes, so
+that [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) can memory-map the
+archive and make each leaf a view into the mapping, without a copy.
+`td.save("x.tdz")` writes the same archive from a tensordict.
 
 Parameters:
 
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - path to a directory previously produced by
-[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) and similar methods.
-- **archive_path** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - path of the archive to create. Keep it
-outside the source directory. It must not refer to a source file.
-An existing file is replaced rather than rewritten in place: a
-symlink is followed, but other hard links to the old file keep
-the old contents. Overwriting requires write access to both the
-existing file and its directory.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - a directory written by
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) or a similar method.
+- **archive_path** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the archive to create, outside
+`prefix`. An existing file is replaced by a new file, which
+needs write access to the file and to its directory: a symlink is
+followed, but other hard links keep the old content.
 
 Keyword Arguments:
 
-- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - one of `"stored"` (default),
-`"deflate"`, `"bzip2"`, `"lzma"` or a
-[`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) compression constant. Any value other than
-`"stored"` trades memory-mapped (zero-copy) loading for a
-smaller file: compressed leaves are decompressed in memory when
-accessed.
-- **compresslevel** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - compression level forwarded to
-[`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile).
+- **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression of the tensor
+payloads: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"`, or
+a [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. A compressed archive is smaller, but its
+leaves are decompressed in memory when they are loaded, instead of
+being memory-mapped. Defaults to `None`, which stores them
+uncompressed.
+- **compresslevel** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression level, passed to
+[`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile). Defaults to `None`, which uses the default
+level of the compression method.
 
 Returns:
 
-the path to the archive.
+The path of the archive, as a [`Path`](https://docs.python.org/3/library/pathlib.html#pathlib.Path).
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `prefix` has no `meta.json` file, or if
+ `archive_path` is inside `prefix` or is one of its files.
 
 Examples
 
 ```
+>>> import tempfile
+>>> from pathlib import Path
 >>> import torch
 >>> from tensordict import TensorDict, pack_memmap
->>> td = TensorDict(a=torch.randn(3), b=TensorDict(c=torch.zeros(3, 2)))
->>> td = td.memmap("./saved_td")
->>> path = pack_memmap("./saved_td", "./saved_td.tdz")
->>> path
-PosixPath('saved_td.tdz')
->>> td2 = TensorDict.load_memmap("./saved_td.tdz")
->>> assert (td == td2).all()
+>>> td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.ones(3, 2)))
+>>> with tempfile.TemporaryDirectory() as path:
+... _ = td.memmap(Path(path) / "saved")
+... archive = pack_memmap(Path(path) / "saved", Path(path) / "saved.tdz")
+... print(archive.name, (TensorDict.load_memmap(archive) == td).all())
+saved.tdz True
 ```

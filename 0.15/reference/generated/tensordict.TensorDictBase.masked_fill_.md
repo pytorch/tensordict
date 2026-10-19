@@ -2,20 +2,21 @@
 
 TensorDictBase.masked_fill_(*mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *value: [float](https://docs.python.org/3/builtins/functions.html#float) | [bool](https://docs.python.org/3/builtins/functions.html#bool)*) → Self
 
-Fills the values corresponding to the mask with the desired value.
+Writes `value` into every leaf where `mask` is `True`, in place.
 
-The values are written into the existing leaves, which keep their
-storage. See [In-place operations](../../concepts/operations.html#inplace-conventions).
+The leaves keep their storage, and the call works on a locked
+tensordict. See [In-place operations](../../concepts/operations.html#inplace-conventions).
 
 Parameters:
 
-- **mask** (*boolean torch.Tensor*) - mask of values to be filled. Its
-shape must match the leading dims of the batch size.
-- **value** - value to used to fill the tensors.
+- **mask** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a boolean mask over the leading batch
+dimensions: its shape is the batch size, or its first
+dimensions. It is expanded to the shape of each leaf.
+- **value** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*or*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)) - the value to write.
 
 Returns:
 
-self
+`self`.
 
 Examples
 

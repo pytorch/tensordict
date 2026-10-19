@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.composite_lp_aggregate.html" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="interaction_type" href="tensordict.nn.probabilistic.interaction_type.html" />
+    <link rel="next" title="interaction_type" href="tensordict.nn.interaction_type.html" />
     <link rel="prev" title="set_composite_lp_aggregate" href="tensordict.nn.set_composite_lp_aggregate.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1641,21 +1641,30 @@ document.write(`
 <h1>composite_lp_aggregate<a class="headerlink" href="#composite-lp-aggregate" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.nn.composite_lp_aggregate">
-<span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nowarn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.nn.composite_lp_aggregate" title="Link to this definition">#</a></dt>
-<dd><p>Returns whether a <a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> log-probabilities and entropies will be aggregated in a single tensor.</p>
-<p>Returns <code class="docutils literal notranslate"><span class="pre">False</span></code> unless <a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a>
-or the <code class="docutils literal notranslate"><span class="pre">COMPOSITE_LP_AGGREGATE</span></code> environment variable set it to <code class="docutils literal notranslate"><span class="pre">True</span></code>.
+<span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">composite_lp_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nowarn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.nn.composite_lp_aggregate" title="Link to this definition">#</a></dt>
+<dd><p>Returns whether a <a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> sums its log-probabilities in one tensor.</p>
+<p>The value also applies to entropies. It is <code class="docutils literal notranslate"><span class="pre">False</span></code> unless
+<a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_composite_lp_aggregate</span></code></a> or the
+<code class="docutils literal notranslate"><span class="pre">COMPOSITE_LP_AGGREGATE</span></code> environment variable set it to <code class="docutils literal notranslate"><span class="pre">True</span></code>.
 See the <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#log-prob-keys"><span class="std std-ref">log-probability key table</span></a> of
 <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> for what each value
 changes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>nowarn</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – has no effect. Defaults to False.</p>
+<dd class="field-odd"><p><strong>nowarn</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – has no effect. It is kept so that calls
+that pass it keep working. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p><a class="reference internal" href="tensordict.nn.set_composite_lp_aggregate.html#tensordict.nn.set_composite_lp_aggregate" title="tensordict.nn.set_composite_lp_aggregate"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_composite_lp_aggregate()</span></code></a></p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">composite_lp_aggregate</span><span class="p">,</span> <span class="n">set_composite_lp_aggregate</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">composite_lp_aggregate</span><span class="p">()</span>
+<span class="go">True</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -1713,7 +1722,7 @@ changes.</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.nn.probabilistic.interaction_type.html"
+       href="tensordict.nn.interaction_type.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
@@ -1752,7 +1761,7 @@ changes.</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.nn.probabilistic.interaction_type.html"
+       href="tensordict.nn.interaction_type.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
@@ -2015,7 +2024,7 @@ changes.</p>
        "headline": "composite_lp_aggregate",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - composite_lp_aggregate",
        "url": "/reference/generated/tensordict.nn.composite_lp_aggregate.html",
-       "articleBody": "composite_lp_aggregate# tensordict.nn.composite_lp_aggregate(nowarn: bool = False) \u2192 bool | None# Returns whether a CompositeDistribution log-probabilities and entropies will be aggregated in a single tensor. Returns False unless set_composite_lp_aggregate or the COMPOSITE_LP_AGGREGATE environment variable set it to True. See the log-probability key table of ProbabilisticTensorDictModule for what each value changes. Parameters: nowarn (bool, optional) \u2013 has no effect. Defaults to False. See also set_composite_lp_aggregate()",
+       "articleBody": "composite_lp_aggregate# tensordict.nn.composite_lp_aggregate(nowarn: bool = False) \u2192 bool# Returns whether a CompositeDistribution sums its log-probabilities in one tensor. The value also applies to entropies. It is False unless set_composite_lp_aggregate or the COMPOSITE_LP_AGGREGATE environment variable set it to True. See the log-probability key table of ProbabilisticTensorDictModule for what each value changes. Parameters: nowarn (bool, optional) \u2013 has no effect. It is kept so that calls that pass it keep working. Defaults to False. See also set_composite_lp_aggregate() Examples \u003e\u003e\u003e from tensordict.nn import composite_lp_aggregate, set_composite_lp_aggregate \u003e\u003e\u003e with set_composite_lp_aggregate(True): ... composite_lp_aggregate() True",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

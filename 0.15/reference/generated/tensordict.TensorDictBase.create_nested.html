@@ -1642,42 +1642,38 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.create_nested">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">create_nested</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.create_nested" title="Link to this definition">#</a></dt>
-<dd><p>Creates a nested tensordict of the same shape, device and dim names as the current tensordict.</p>
-<p>If the value already exists, it will be overwritten by this operation.
-This operation is blocked in locked tensordicts.</p>
+<dd><p>Adds an empty nested tensordict at <code class="docutils literal notranslate"><span class="pre">key</span></code>, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>The new tensordict has the batch size, device and names of the
+tensordict it is added to. An existing entry at <code class="docutils literal notranslate"><span class="pre">key</span></code> is replaced.
+For a tuple key, a plain <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> keeps a
+plain, unlocked <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> already on the path with its entries:
+<code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code> adds <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> to an existing <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;]</span></code>. A lazy stack of
+plain <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> instances does this in each member, and a
+tensorclass or a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> follows the
+rule of the tensordict it wraps. Any other entry on the path, such as a
+tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
+tensordict, is replaced by a new empty tensordict, and so is every
+level of the path when the tensordict is of any other type, such as a
+view, a typed tensordict or a file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the new tensordict.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is locked.</p>
+</dd>
+</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">create_nested</span><span class="p">(</span><span class="s2">"root"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">create_nested</span><span class="p">((</span><span class="s2">"some"</span><span class="p">,</span> <span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        root: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">            },</span>
-<span class="go">            batch_size=torch.Size([3, 4, 5]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False),</span>
-<span class="go">        some: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                nested: TensorDict(</span>
-<span class="go">                    fields={</span>
-<span class="go">                        value: TensorDict(</span>
-<span class="go">                            fields={</span>
-<span class="go">                            },</span>
-<span class="go">                            batch_size=torch.Size([3, 4, 5]),</span>
-<span class="go">                            device=None,</span>
-<span class="go">                            is_shared=False)},</span>
-<span class="go">                    batch_size=torch.Size([3, 4, 5]),</span>
-<span class="go">                    device=None,</span>
-<span class="go">                    is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([3, 4, 5]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([3, 4, 5]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"some"</span><span class="p">,</span> <span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">]</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([3, 4, 5])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[('some', 'nested', 'value'), ('some', 'nested'), 'some']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">create_nested</span><span class="p">((</span><span class="s2">"some"</span><span class="p">,</span> <span class="s2">"other"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="go">[('some', 'nested', 'value'), ('some', 'nested'), ('some', 'other'), 'some']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2040,7 +2036,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.create_nested",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.create_nested",
        "url": "/reference/generated/tensordict.TensorDictBase.create_nested.html",
-       "articleBody": "TensorDictBase.create_nested# TensorDictBase.create_nested(key)# Creates a nested tensordict of the same shape, device and dim names as the current tensordict. If the value already exists, it will be overwritten by this operation. This operation is blocked in locked tensordicts. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({}, [3, 4, 5]) \u003e\u003e\u003e _ = data.create_nested(\"root\") \u003e\u003e\u003e _ = data.create_nested((\"some\", \"nested\", \"value\")) \u003e\u003e\u003e print(data) TensorDict( fields={ root: TensorDict( fields={ }, batch_size=torch.Size([3, 4, 5]), device=None, is_shared=False), some: TensorDict( fields={ nested: TensorDict( fields={ value: TensorDict( fields={ }, batch_size=torch.Size([3, 4, 5]), device=None, is_shared=False)}, batch_size=torch.Size([3, 4, 5]), device=None, is_shared=False)}, batch_size=torch.Size([3, 4, 5]), device=None, is_shared=False)}, batch_size=torch.Size([3, 4, 5]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.create_nested# TensorDictBase.create_nested(key)# Adds an empty nested tensordict at key, and returns self. The new tensordict has the batch size, device and names of the tensordict it is added to. An existing entry at key is replaced. For a tuple key, a plain TensorDict keeps a plain, unlocked TensorDict already on the path with its entries: (\"a\", \"b\") adds \"b\" to an existing td[\"a\"]. A lazy stack of plain TensorDict instances does this in each member, and a tensorclass or a TensorDictParams follows the rule of the tensordict it wraps. Any other entry on the path, such as a tensor, a lazy stack, a tensorclass, a typed tensordict or a locked tensordict, is replaced by a new empty tensordict, and so is every level of the path when the tensordict is of any other type, such as a view, a typed tensordict or a file. Parameters: key (NestedKey) \u2013 the key of the new tensordict. Raises: RuntimeError \u2013 if the tensordict is locked. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({}, [3, 4, 5]) \u003e\u003e\u003e _ = data.create_nested((\"some\", \"nested\", \"value\")) \u003e\u003e\u003e data[\"some\", \"nested\", \"value\"].batch_size torch.Size([3, 4, 5]) \u003e\u003e\u003e list(data.keys(include_nested=True)) [(\u0027some\u0027, \u0027nested\u0027, \u0027value\u0027), (\u0027some\u0027, \u0027nested\u0027), \u0027some\u0027] \u003e\u003e\u003e _ = data.create_nested((\"some\", \"other\")) \u003e\u003e\u003e list(data.keys(include_nested=True)) [(\u0027some\u0027, \u0027nested\u0027, \u0027value\u0027), (\u0027some\u0027, \u0027nested\u0027), (\u0027some\u0027, \u0027other\u0027), \u0027some\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

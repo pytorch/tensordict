@@ -1642,14 +1642,15 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.tile">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">tile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.tile" title="Link to this definition">#</a></dt>
-<dd><p>Construct a tensordict by repeating the elements.</p>
-<p>The dims argument specifies the number of repetitions in each dimension.</p>
+<dd><p>Returns a tensordict whose batch is repeated, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.tile.html#torch.tile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.tile()</span></code></a> does.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">dims</span></code> has fewer entries than the batch dimensions, it is padded
+with leading ones. If it has more, the result gets new leading batch
+dimensions. The feature dimensions are not repeated, the result has no
+names, and the data is copied. See also <a class="reference internal" href="tensordict.TensorDictBase.repeat.html#tensordict.TensorDictBase.repeat" title="tensordict.TensorDictBase.repeat"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repeat()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><em>ints</em>) – The number of repetitions per dimension.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict with elements repeated.</p>
+<dd class="field-odd"><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the number of repetitions along each
+batch dimension.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2026,7 +2027,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.tile",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.tile",
        "url": "/reference/generated/tensordict.TensorDictBase.tile.html",
-       "articleBody": "TensorDictBase.tile# TensorDictBase.tile(dims: tuple[int, ...])# Construct a tensordict by repeating the elements. The dims argument specifies the number of repetitions in each dimension. Parameters: dims (tuple of ints) \u2013 The number of repetitions per dimension. Returns: a new tensordict with elements repeated. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.tile((2, 1))[\"a\"]) tensor([[0, 1, 2], [3, 4, 5], [0, 1, 2], [3, 4, 5]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.tile# TensorDictBase.tile(dims: tuple[int, ...])# Returns a tensordict whose batch is repeated, as torch.tile() does. If dims has fewer entries than the batch dimensions, it is padded with leading ones. If it has more, the result gets new leading batch dimensions. The feature dimensions are not repeated, the result has no names, and the data is copied. See also repeat(). Parameters: dims (int or tuple of int) \u2013 the number of repetitions along each batch dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.tile((2, 1))[\"a\"]) tensor([[0, 1, 2], [3, 4, 5], [0, 1, 2], [3, 4, 5]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

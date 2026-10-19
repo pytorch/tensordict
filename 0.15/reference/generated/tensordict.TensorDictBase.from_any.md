@@ -2,50 +2,92 @@
 
 *classmethod*TensorDictBase.from_any(*obj*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Recursively converts any object to a TensorDict.
+Converts a dict, tuple, dataclass, array or file to a tensordict, recursively.
 
-Note
+`from_any` picks the conversion from the type of `obj`, and
+applies it to the values inside `obj` too. It accepts more types
+than the [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) constructor, at the cost of
+some overhead and of opinionated choices about how each type maps to
+entries:
 
-`from_any` is less restrictive than the regular TensorDict constructor. It can cast data structures like
-dataclasses or tuples to a tensordict using custom heuristics. This approach may incur some extra overhead and
-involves more opinionated choices in terms of mapping strategies.
+- a dict or [`collections.UserDict`](https://docs.python.org/3/library/collections.html#collections.UserDict): [`from_dict()`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict);
+- a named tuple: [`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple);
+- a tuple: [`from_tuple()`](tensordict.TensorDictBase.from_tuple.html#tensordict.TensorDictBase.from_tuple), with the keys `"0"`, `"1"`, ...
+This includes the results of `torch.return_types` (`max`,
+`sort`, `topk`, ...), which also emit a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning).
+Starting with TensorDict 0.17, the default will change to their
+field names (`"values"`, `"indices"`, ...), as
+[`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple) gives;
+- a dataclass instance: [`from_dataclass()`](tensordict.TensorDictBase.from_dataclass.html#tensordict.TensorDictBase.from_dataclass) (the result is a
+tensordict, not a tensorclass). A dataclass type whose fields all
+have defaults gives a tensordict of the defaults too, with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the default
+will change to returning the type unchanged, as for any other
+class;
+- a NumPy structured array: [`from_struct_array()`](tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array);
+- a pandas DataFrame: [`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas);
+- an open `h5py.File`: a
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) (see [`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5)).
 
-Note
-
-This method recursively converts the input object to a TensorDict. If the object is already a
-TensorDict (or any similar tensor collection object), it will be returned as is.
+A tensor or a tensor collection is returned as it is. A list becomes a
+tensor if [`torch.tensor()`](https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor) takes it, and a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) otherwise. Any other object is
+returned unchanged.
 
 Parameters:
 
-**obj** - The object to be converted.
+**obj** - the object to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch size will be computed automatically.
-Defaults to `False`.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output tensordict
-should have. Defaults to `None` (full batch-size at each level).
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device on which the TensorDict will be created.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict.
-Exclusive with `auto_batch_size`.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Exclusive with `batch_size`, except for a dict, where
+`batch_size` wins, and for an `h5py.File`, where
+`auto_batch_size` wins. Defaults to `False`.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
+Defaults to `None`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`, except for a dict, where
+`batch_size` wins and no batch size is computed, and for an
+`h5py.File`, where `auto_batch_size` wins and
+`batch_size` is ignored. Defaults to `None`.
 
 Returns:
 
-A TensorDict representation of the input object.
+A tensordict (a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) for an
+HDF5 file), a tensor or a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) for
+a list, or `obj` itself for the other types.
 
-Supported objects:
+Examples
 
-- Dataclasses through [`from_dataclass()`](tensordict.TensorDictBase.from_dataclass.html#tensordict.TensorDictBase.from_dataclass) (dataclasses will be converted to TensorDict instances, not tensorclasses).
-- Namedtuples through [`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple).
-- Dictionaries through [`from_dict()`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict).
-- Tuples through [`from_tuple()`](tensordict.TensorDictBase.from_tuple.html#tensordict.TensorDictBase.from_tuple). This includes the results of
-`torch.return_types` (`max`, `sort`, `topk`, ...), which get
-the keys `"0"`, `"1"`, ... and a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning).
-Starting with TensorDict 0.17, the default will change to their
-field names (`"values"`, `"indices"`, ...), as
-[`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple) gives.
-- NumPy's structured arrays through [`from_struct_array()`](tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array).
-- HDF5 objects through [`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5).
+```
+>>> import dataclasses
+>>> import torch
+>>> from tensordict import TensorDict
+>>> @dataclasses.dataclass
+... class Data:
+... obs: torch.Tensor
+... extra: tuple
+>>> data = Data(obs=torch.zeros(3, 4), extra=(torch.ones(3), {"x": torch.ones(3)}))
+>>> td = TensorDict.from_any(data, auto_batch_size=True)
+>>> td.batch_size
+torch.Size([3])
+>>> sorted(td.keys(include_nested=True, leaves_only=True), key=str)
+[('extra', '0'), ('extra', '1', 'x'), 'obs']
+>>> TensorDict.from_any([1, 2, 3])
+tensor([1, 2, 3])
+```
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

@@ -1643,7 +1643,11 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.is_empty">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">is_empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.is_empty" title="Link to this definition">#</a></dt>
 <dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if the tensordict has no leaf.</p>
-<p>Empty sub-tensordicts do not count as leaves.</p>
+<p>Empty sub-tensordicts do not count as leaves. A lazy stack counts only
+the tensors that all its members share: it returns <code class="docutils literal notranslate"><span class="pre">True</span></code> when they
+share none, and warns when some member holds a leaf. Starting with
+TensorDict 0.17, the default will change to returning <code class="docutils literal notranslate"><span class="pre">True</span></code> only if
+every member is empty.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -2015,7 +2019,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.is_empty",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.is_empty",
        "url": "/reference/generated/tensordict.TensorDictBase.is_empty.html",
-       "articleBody": "TensorDictBase.is_empty# TensorDictBase.is_empty() \u2192 bool# Returns True if the tensordict has no leaf. Empty sub-tensordicts do not count as leaves. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e TensorDict().is_empty() True \u003e\u003e\u003e TensorDict({\"nested\": TensorDict()}).is_empty() True \u003e\u003e\u003e TensorDict({\"a\": torch.zeros(())}).is_empty() False Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.is_empty# TensorDictBase.is_empty() \u2192 bool# Returns True if the tensordict has no leaf. Empty sub-tensordicts do not count as leaves. A lazy stack counts only the tensors that all its members share: it returns True when they share none, and warns when some member holds a leaf. Starting with TensorDict 0.17, the default will change to returning True only if every member is empty. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e TensorDict().is_empty() True \u003e\u003e\u003e TensorDict({\"nested\": TensorDict()}).is_empty() True \u003e\u003e\u003e TensorDict({\"a\": torch.zeros(())}).is_empty() False Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

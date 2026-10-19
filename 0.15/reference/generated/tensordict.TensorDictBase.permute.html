@@ -1642,44 +1642,32 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.permute">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">permute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.permute" title="Link to this definition">#</a></dt>
-<dd><p>Returns a view of a tensordict with the batch dimensions permuted according to dims.</p>
+<dd><p>Returns a tensordict with its batch dimensions permuted, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.permute.html#torch.Tensor.permute" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.permute()</span></code></a> does.</p>
+<p>The leaves keep their feature dimensions after the batch dimensions,
+and are views of the original leaves. The names are permuted with the
+dimensions.</p>
+<p>It can be used as a context manager, as <a class="reference internal" href="tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> can: when
+the <code class="docutils literal notranslate"><span class="pre">with</span></code> block exits, the entries of the block are written back to
+the tensordict with the inverse operation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>*dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the new ordering of the batch dims of the tensordict. Alternatively,
-a single iterable of integers can be provided.</p></li>
-<li><p><strong>dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – alternative way of calling permute(…).</p></li>
-</ul>
+<dd class="field-odd"><p><strong>*dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the new order of the batch dimensions, as integers,
+as one list or tuple, or as the keyword argument <code class="docutils literal notranslate"><span class="pre">dims</span></code>.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict with the batch dimensions in the desired order.</p>
+<dd class="field-even"><p>A tensordict with the batch dimensions in the new order.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">tensordict</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">permute</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4, 3]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4, 3]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4, 3]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([4, 3, 5])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">permute</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([4, 3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([4, 3])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2049,7 +2037,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.permute",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.permute",
        "url": "/reference/generated/tensordict.TensorDictBase.permute.html",
-       "articleBody": "TensorDictBase.permute# TensorDictBase.permute(*args, **kwargs)# Returns a view of a tensordict with the batch dimensions permuted according to dims. Parameters: *dims (int) \u2013 the new ordering of the batch dims of the tensordict. Alternatively, a single iterable of integers can be provided. dims (list of int) \u2013 alternative way of calling permute(\u2026). Returns: a new tensordict with the batch dimensions in the desired order. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e tensordict = TensorDict({\"a\": torch.randn(3, 4, 5)}, [3, 4]) \u003e\u003e\u003e print(tensordict.permute([1, 0])) TensorDict( fields={ a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False) \u003e\u003e\u003e print(tensordict.permute(1, 0)) TensorDict( fields={ a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False) \u003e\u003e\u003e print(tensordict.permute(dims=[1, 0])) TensorDict( fields={ a: Tensor(shape=torch.Size([4, 3, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([4, 3]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use permute# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.permute# TensorDictBase.permute(*args, **kwargs)# Returns a tensordict with its batch dimensions permuted, as torch.Tensor.permute() does. The leaves keep their feature dimensions after the batch dimensions, and are views of the original leaves. The names are permuted with the dimensions. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: *dims (int) \u2013 the new order of the batch dimensions, as integers, as one list or tuple, or as the keyword argument dims. Returns: A tensordict with the batch dimensions in the new order. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.zeros(3, 4, 5)}, [3, 4]) \u003e\u003e\u003e td.permute(1, 0)[\"a\"].shape torch.Size([4, 3, 5]) \u003e\u003e\u003e td.permute([1, 0]).batch_size torch.Size([4, 3]) \u003e\u003e\u003e td.permute(dims=[1, 0]).batch_size torch.Size([4, 3]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use permute# Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

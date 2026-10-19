@@ -1642,10 +1642,17 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.sorted_keys">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">sorted_keys</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict._nestedkey.NestedKey"><span class="pre">NestedKey</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#tensordict.TensorDictBase.sorted_keys" title="Link to this definition">#</a></dt>
-<dd><p>Returns the keys sorted in alphabetical order.</p>
-<p>Does not support extra arguments.</p>
-<p>If the TensorDict is locked, the keys are cached until the tensordict
-is unlocked for faster execution.</p>
+<dd><p>The top-level keys of the tensordict, as a list sorted in alphabetical order.</p>
+<p>For nested keys, call <code class="docutils literal notranslate"><span class="pre">keys(include_nested=True,</span> <span class="pre">sort=True)</span></code>. On a
+locked tensordict, the sorted keys are cached until the tensordict is
+unlocked.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">b</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">d</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">sorted_keys</span>
+<span class="go">['a', 'b', 'c']</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2006,7 +2013,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.sorted_keys",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.sorted_keys",
        "url": "/reference/generated/tensordict.TensorDictBase.sorted_keys.html",
-       "articleBody": "TensorDictBase.sorted_keys# property TensorDictBase.sorted_keys: list[NestedKey]# Returns the keys sorted in alphabetical order. Does not support extra arguments. If the TensorDict is locked, the keys are cached until the tensordict is unlocked for faster execution. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.sorted_keys# property TensorDictBase.sorted_keys: list[NestedKey]# The top-level keys of the tensordict, as a list sorted in alphabetical order. For nested keys, call keys(include_nested=True, sort=True). On a locked tensordict, the sorted keys are cached until the tensordict is unlocked. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(b=0, a=1, c=TensorDict(d=2)) \u003e\u003e\u003e td.sorted_keys [\u0027a\u0027, \u0027b\u0027, \u0027c\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

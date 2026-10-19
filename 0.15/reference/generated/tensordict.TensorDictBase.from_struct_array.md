@@ -2,43 +2,53 @@
 
 *classmethod*TensorDictBase.from_struct_array(*struct_array: [ndarray](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray)*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Converts a structured numpy array to a TensorDict.
+Converts a NumPy structured array to a tensordict, with one entry per field.
 
-The resulting TensorDict will share the same memory content as the numpy array (it is a zero-copy operation).
-Changing values of the structured numpy array in-place will affect the content of the TensorDict.
-
-Note
-
-This method performs a zero-copy operation, meaning that the resulting TensorDict will share the same memory
-content as the input numpy array. Therefore, changing values of the numpy array in-place will affect the content
-of the TensorDict.
-The exception is a field whose item size does not divide the size of a record, such as the `"i8"`
-field of a packed array of `"i8"` and `"f4"` fields (12 bytes per record): torch cannot view such a
-field, so it is copied.
+The batch size is the shape of the array, and each entry holds a
+field. The conversion is zero-copy: the tensors share memory with the
+array, so an in-place change to the array changes the tensordict, and
+the other way around. Two cases copy the data: a `device` other
+than the CPU, and a field whose item size does not divide the size of
+a record, such as the `"i8"` field of a packed array of `"i8"` and
+`"f4"` fields (12 bytes per record), which torch cannot view. String
+fields become non-tensor data. [`to_struct_array()`](tensordict.TensorDictBase.to_struct_array.html#tensordict.TensorDictBase.to_struct_array) converts
+back.
 
 Parameters:
 
-**struct_array** (*np.ndarray*) - The structured numpy array to be converted.
+**struct_array** (*np.ndarray*) - the structured array to convert.
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - If `True`, the batch size will be computed automatically. Defaults to `False`.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - If `auto_batch_size` is `True`, defines how many dimensions the output
-tensordict should have. Defaults to `None` (full batch-size at each level).
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - 
-
-The device on which the TensorDict will be created.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share,
+which can add the dimensions of array fields. Exclusive with
+`batch_size`. Defaults to `False`.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Leaves on another device are moved to it. `None`
+leaves each leaf where it is, and the result has no device.
 Defaults to `None`.
-
-Note
-
-Changing the device (i.e., specifying any device other than `None` or `"cpu"`) will transfer the data,
-resulting in a change to the memory location of the returned data.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to None.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Exclusive with `auto_batch_size`. Defaults to `None`,
+which uses the shape of the array.
 
 Returns:
 
-A TensorDict representation of the input structured numpy array.
+A tensordict of the class this method is called on
+([`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) for `TensorDictBase`).
+
+Raises:
+
+[**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if both `auto_batch_size=True` and `batch_size`
+ are given.
 
 Examples
 
@@ -50,12 +60,13 @@ Examples
 ... dtype=[("name", "U10"), ("age", "i4"), ("weight", "f4")],
 ... )
 >>> td = TensorDict.from_struct_array(x)
->>> x_recon = td.to_struct_array()
->>> assert (x_recon == x).all()
->>> assert x_recon.shape == x.shape
->>> # Try modifying x age field and check effect on td
->>> x["age"] += 1
->>> assert (td["age"] == np.array([10, 4])).all()
+>>> td.batch_size, td["age"]
+(torch.Size([2]), tensor([9, 3], dtype=torch.int32))
+>>> x["age"] += 1 # the tensordict shares memory with the array
+>>> td["age"]
+tensor([10, 4], dtype=torch.int32)
+>>> bool((td.to_struct_array() == x).all())
+True
 ```
 
 Every tensordict class and every tensorclass has this method. For the

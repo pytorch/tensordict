@@ -1642,18 +1642,17 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.narrow">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">narrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.narrow" title="Link to this definition">#</a></dt>
-<dd><p>Returns a new tensordict that is a narrowed version of the input.</p>
-<p>The dimension dim is input from start to start + length.</p>
+<dd><p>Returns a tensordict narrowed along a batch dimension, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.narrow.html#torch.Tensor.narrow" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.narrow()</span></code></a> does.</p>
+<p>The result keeps the elements <code class="docutils literal notranslate"><span class="pre">start</span></code> to <code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">+</span> <span class="pre">length</span> <span class="pre">-</span> <span class="pre">1</span></code> of
+<code class="docutils literal notranslate"><span class="pre">dim</span></code>. Its leaves are views of the original leaves, and it keeps the
+names.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – The dimension along which to narrow.</p></li>
-<li><p><strong>start</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Starting index.</p></li>
-<li><p><strong>length</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Length of the narrowed dimension.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the batch dimension to narrow.</p></li>
+<li><p><strong>start</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the first element to keep.</p></li>
+<li><p><strong>length</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the number of elements to keep.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new tensordict narrowed along the specified dimension.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2028,7 +2027,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.narrow",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.narrow",
        "url": "/reference/generated/tensordict.TensorDictBase.narrow.html",
-       "articleBody": "TensorDictBase.narrow# TensorDictBase.narrow(dim: int, start: int, length: int)# Returns a new tensordict that is a narrowed version of the input. The dimension dim is input from start to start + length. Parameters: dim (int) \u2013 The dimension along which to narrow. start (int) \u2013 Starting index. length (int) \u2013 Length of the narrowed dimension. Returns: a new tensordict narrowed along the specified dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.narrow(1, 1, 2)[\"a\"]) tensor([[1, 2], [4, 5]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.narrow# TensorDictBase.narrow(dim: int, start: int, length: int)# Returns a tensordict narrowed along a batch dimension, as torch.Tensor.narrow() does. The result keeps the elements start to start + length - 1 of dim. Its leaves are views of the original leaves, and it keeps the names. Parameters: dim (int) \u2013 the batch dimension to narrow. start (int) \u2013 the first element to keep. length (int) \u2013 the number of elements to keep. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(6).view(2, 3)}, batch_size=[2, 3]) \u003e\u003e\u003e print(td[\"a\"]) tensor([[0, 1, 2], [3, 4, 5]]) \u003e\u003e\u003e print(td.narrow(1, 1, 2)[\"a\"]) tensor([[1, 2], [4, 5]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

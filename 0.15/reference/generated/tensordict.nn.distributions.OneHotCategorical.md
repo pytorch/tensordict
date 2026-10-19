@@ -4,10 +4,10 @@
 
 Bases: [`Categorical`](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.categorical.Categorical)
 
-One-hot categorical distribution.
+A categorical distribution whose values are one-hot tensors.
 
-This class behaves exactly as torch.distributions.Categorical except that it reads and produces one-hot encodings
-of the discrete tensors. `sample()`, `mode` and
+It behaves as `torch.distributions.Categorical`, except that it
+reads and produces one-hot encodings. `sample()`, `mode` and
 `deterministic_sample` return `torch.long` one-hot tensors, and
 `log_prob()` takes one. When several logits tie for the maximum,
 `mode` marks the first, as `torch.distributions.OneHotCategorical`
@@ -46,28 +46,24 @@ tensor(-0.4076)
 
 *property*deterministic_sample*: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*
 
-Returns the mode of the distribution.
+The one-hot encoding of the most likely category, the first one if several tie.
 
 log_prob(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
-Returns the log of the probability density/mass function evaluated at
-value.
+Returns the log-probability of the category of `value`, a one-hot tensor.
 
-Parameters:
-
-**value** (*Tensor*) -
+The category is the index of the maximum along the last dimension.
 
 *property*mode*: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*
 
-Returns the mode of the distribution.
+The one-hot encoding of the most likely category, the first one if several tie.
 
 rsample(*sample_shape: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
-Generates a sample_shape shaped reparameterized sample or sample_shape
-shaped batch of reparameterized samples if the distribution parameters
-are batched.
+Draws straight-through one-hot samples, which carry the gradient of a relaxed sample.
+
+See the class description.
 
 sample(*sample_shape: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[int](https://docs.python.org/3/builtins/functions.html#int)] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
-Generates a sample_shape shaped sample or sample_shape shaped batch of
-samples if the distribution parameters are batched.
+Draws one-hot `torch.long` samples of shape `sample_shape + batch_shape + (num_categories,)`.

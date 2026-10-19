@@ -1642,7 +1642,16 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.filter_empty_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">filter_empty_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.filter_empty_" title="Link to this definition">#</a></dt>
-<dd><p>Filters out all empty tensordicts in-place.</p>
+<dd><p>Removes the nested tensordicts that have no leaf, in place, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>A nested tensordict that holds only empty tensordicts is removed too.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{},</span> <span class="n">c</span><span class="o">=</span><span class="p">{</span><span class="s2">"d"</span><span class="p">:</span> <span class="p">{}},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">filter_empty_</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['a']</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.filter_empty",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.filter_empty",
        "url": "/reference/generated/tensordict.TensorDictBase.filter_empty_.html",
-       "articleBody": "TensorDictBase.filter_empty# TensorDictBase.filter_empty_()# Filters out all empty tensordicts in-place. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.filter_empty# TensorDictBase.filter_empty_()# Removes the nested tensordicts that have no leaf, in place, and returns self. A nested tensordict that holds only empty tensordicts is removed too. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b={}, c={\"d\": {}}, batch_size=[3]) \u003e\u003e\u003e list(td.filter_empty_().keys()) [\u0027a\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

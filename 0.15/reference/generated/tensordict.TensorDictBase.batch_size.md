@@ -19,13 +19,9 @@ You can assign a new batch size if every tensor has the new leading
 dimensions. Otherwise, the assignment raises `RuntimeError`. An empty
 batch size `()` always fits a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict). A
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) raises `RuntimeError` for
-any new batch size. A sub-tensordict with fewer batch dimensions than
-the new batch size gets the new batch size. The other sub-tensordicts
+any new batch size. A nested tensordict with fewer batch dimensions than
+the new batch size gets the new batch size. The other nested tensordicts
 keep theirs. See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size).
-
-Returns:
-
-a [`torch.Size`](https://docs.pytorch.org/docs/stable/size.html#torch.Size) object that describes the batch size.
 
 Examples
 

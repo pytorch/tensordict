@@ -2,13 +2,13 @@
 
 *classmethod*TensorDictBase.stack(*input*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, ***, *out=None*)
 
-Stacks tensordicts into a single tensordict along the given dimension.
+Stacks tensordicts into one dense tensordict along a new dimension `dim`.
 
-This call is equivalent to calling [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) but is compatible with torch.compile.
-The tensordicts must have the same batch size and the same keys.
-Otherwise, the call raises `RuntimeError`. To stack tensordicts with
-different keys or shapes, use [`lazy_stack()`](tensordict.TensorDictBase.lazy_stack.html#tensordict.TensorDictBase.lazy_stack). See
-[Stacking and variable-size data](../../concepts/stacking.html#stacking).
+It is equivalent to [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack), and also works under
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile). The tensordicts must have the same batch size
+and the same keys, or a `RuntimeError` is raised. To stack
+tensordicts with different keys or shapes, use [`lazy_stack()`](tensordict.TensorDictBase.lazy_stack.html#tensordict.TensorDictBase.lazy_stack).
+See [Stacking and variable-size data](../../concepts/stacking.html#stacking).
 
 Parameters:
 
@@ -18,7 +18,7 @@ Parameters:
 Keyword Arguments:
 
 **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
-into.
+into. Defaults to `None`.
 
 Examples
 

@@ -4,9 +4,13 @@
 
 Returns the class of an entry, possibly without reading the entry.
 
-It returns `type(tensordict.get(key))`. Prefer it to that expression
+It is the same as `type(td.get(key))`. Prefer it to that expression
 when [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) is expensive, for example on a lazy stack or a
 tensordict stored on disk.
+
+Parameters:
+
+**key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the entry.
 
 Examples
 

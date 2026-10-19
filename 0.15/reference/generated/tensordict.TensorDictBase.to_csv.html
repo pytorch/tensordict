@@ -1642,21 +1642,45 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_csv">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_csv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">separator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.to_csv" title="Link to this definition">#</a></dt>
-<dd><p>Writes this TensorDict to a CSV file.</p>
-<p>Requires pandas to be installed.</p>
+<dd><p>Writes the tensordict to a CSV file, with one column per leaf.</p>
+<p>The tensordict is converted with <a class="reference internal" href="tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas" title="tensordict.TensorDictBase.to_pandas"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_pandas()</span></code></a>, so the same
+rules apply, and written with <code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_csv()</span></code>
+without the index. Requires pandas. <a class="reference internal" href="tensordict.TensorDictBase.from_csv.html#tensordict.TensorDictBase.from_csv" title="tensordict.TensorDictBase.from_csv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_csv()</span></code></a> reads the
+file back.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – Path to the output CSV file.</p>
+<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the path of the CSV file.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – If provided, nested keys are joined
-with this separator. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>**kwargs</strong> – Additional keyword arguments forwarded to
-<code class="docutils literal notranslate"><span class="pre">pandas.DataFrame.to_csv</span></code>.</p></li>
+<li><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – if given, joins the keys of nested
+entries with it to build the column names: with
+<code class="docutils literal notranslate"><span class="pre">separator=&quot;.&quot;</span></code>, the entry <code class="docutils literal notranslate"><span class="pre">(&quot;obs&quot;,</span> <span class="pre">&quot;x&quot;)</span></code> becomes the
+column <code class="docutils literal notranslate"><span class="pre">&quot;obs.x&quot;</span></code>. Required when the tensordict has nested
+tensordicts. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – passed to <code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_csv()</span></code>.</p></li>
 </ul>
 </dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – as <a class="reference internal" href="tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas" title="tensordict.TensorDictBase.to_pandas"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_pandas()</span></code></a>.</p>
+</dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmpdir</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tmpdir</span><span class="p">,</span> <span class="s2">"data.csv"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">separator</span><span class="o">=</span><span class="s2">"."</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+<span class="go">a,b.c</span>
+<span class="go">0,0.0</span>
+<span class="go">1,0.0</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2017,7 +2041,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_csv",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_csv",
        "url": "/reference/generated/tensordict.TensorDictBase.to_csv.html",
-       "articleBody": "TensorDictBase.to_csv# TensorDictBase.to_csv(path, *, separator: str | None = None, **kwargs)# Writes this TensorDict to a CSV file. Requires pandas to be installed. Parameters: path (str or Path) \u2013 Path to the output CSV file. Keyword Arguments: separator (str, optional) \u2013 If provided, nested keys are joined with this separator. Defaults to None. **kwargs \u2013 Additional keyword arguments forwarded to pandas.DataFrame.to_csv. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_csv# TensorDictBase.to_csv(path, *, separator: str | None = None, **kwargs)# Writes the tensordict to a CSV file, with one column per leaf. The tensordict is converted with to_pandas(), so the same rules apply, and written with pandas.DataFrame.to_csv() without the index. Requires pandas. from_csv() reads the file back. Parameters: path (str or Path) \u2013 the path of the CSV file. Keyword Arguments: separator (str, optional) \u2013 if given, joins the keys of nested entries with it to build the column names: with separator=\".\", the entry (\"obs\", \"x\") becomes the column \"obs.x\". Required when the tensordict has nested tensordicts. Defaults to None. **kwargs \u2013 passed to pandas.DataFrame.to_csv(). Raises: ValueError \u2013 as to_pandas(). Examples \u003e\u003e\u003e import os \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.arange(2), b=TensorDict(c=torch.zeros(2)), batch_size=[2]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... path = os.path.join(tmpdir, \"data.csv\") ... td.to_csv(path, separator=\".\") ... with open(path) as f: ... print(f.read()) a,b.c 0,0.0 1,0.0 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

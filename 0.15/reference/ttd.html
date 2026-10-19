@@ -1646,7 +1646,7 @@ listed by task in <a class="reference internal" href="td.html#api-tensordict-met
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict" title="tensordict.TypedTensorDict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TypedTensorDict</span></code></a>(*args, **kwargs)</p></td>
-<td><p>A TensorDictBase subclass with typed field declarations and backend composition.</p></td>
+<td><p>A <a class="reference internal" href="generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass whose fields are declared as class annotations.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2035,7 +2035,7 @@ listed by task in <a class="reference internal" href="td.html#api-tensordict-met
        "headline": "TypedTensorDict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TypedTensorDict",
        "url": "/reference/ttd.html",
-       "articleBody": "TypedTensorDict# Warning TypedTensorDict is experimental: its API can change in a minor release without a deprecation cycle. This page lists TypedTensorDict, a TensorDictBase subclass whose fields you declare as class annotations, as in a TypedDict. A subclass adds fields to the fields of its parent, and from_tensordict() wraps any tensordict (H5, Redis, lazy stacks) without a copy. For a guide with examples, see TypedTensorDict. TypedTensorDict has the methods of TensorDictBase, listed by task in Methods by task. TypedTensorDict(*args, **kwargs) A TensorDictBase subclass with typed field declarations and backend composition. See also# TypedTensorDict: declare and use a TypedTensorDict. Which container should I use?: tensorclass, TypedTensorDict, or TensorDict. Containers on storage backends: which containers work on which storage backends.",
+       "articleBody": "TypedTensorDict# Warning TypedTensorDict is experimental: its API can change in a minor release without a deprecation cycle. This page lists TypedTensorDict, a TensorDictBase subclass whose fields you declare as class annotations, as in a TypedDict. A subclass adds fields to the fields of its parent, and from_tensordict() wraps any tensordict (H5, Redis, lazy stacks) without a copy. For a guide with examples, see TypedTensorDict. TypedTensorDict has the methods of TensorDictBase, listed by task in Methods by task. TypedTensorDict(*args, **kwargs) A TensorDictBase subclass whose fields are declared as class annotations. See also# TypedTensorDict: declare and use a TypedTensorDict. Which container should I use?: tensorclass, TypedTensorDict, or TensorDict. Containers on storage backends: which containers work on which storage backends.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

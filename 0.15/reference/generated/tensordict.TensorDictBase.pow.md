@@ -1,27 +1,28 @@
 # TensorDictBase.pow
 
-TensorDictBase.pow(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.pow(*other: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *default: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Takes the power of each element in `self` with `other` and returns a tensor with the result.
+Returns a new tensordict with every leaf raised to the power `other`.
 
-`other` can be either a single `float` number, a Tensor or a `TensorDict`.
-
-When `other` is a tensor, the shapes of `input`
-and `other` must be broadcastable.
+`td ** other` calls this method. `other ** td` with a number
+`other` raises a `NotImplementedError`.
 
 Parameters:
 
-**other** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,**tensor**or**tensordict*) - the exponent value
+**other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the exponent. A
+tensordict is paired with the tensordict key by key. A tensor is
+aligned with the batch dimensions of each leaf and expanded over
+its feature dimensions. Batch sizes that differ are broadcast
+together.
 
 Keyword Arguments:
 
-**default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the value to use for an
-entry that only one of the two tensordicts has. If `None`
-(default), the two tensordicts must have the same keys, and a
-missing key raises `KeyError`. If `"intersection"`, only
-the keys that both tensordicts have are computed, and the
-other keys are dropped. Any other value replaces the missing
-entries on both sides of the operation.
+**default** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - what to do with the keys
+that only one of the two tensordicts has. `None` requires the
+same keys and raises a `KeyError` otherwise.
+`"intersection"` computes the keys that both have and drops
+the others. A tensor stands in for the missing entry on either
+side, and the result has the keys of both. Defaults to `None`.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

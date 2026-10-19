@@ -1642,15 +1642,30 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.bytes">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">bytes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_duplicates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.bytes" title="Link to this definition">#</a></dt>
-<dd><p>Counts the number of bytes of the contained tensors.</p>
+<dd><p>Returns the number of bytes of the tensor leaves.</p>
+<p>Each tensor leaf counts <code class="docutils literal notranslate"><span class="pre">numel()</span> <span class="pre">*</span> <span class="pre">dtype.itemsize</span></code> bytes, and a leaf
+with a gradient counts the bytes of its gradient too. Non-tensor data
+is not counted. A view counts the bytes of its own elements, not those
+of the storage it shares.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>count_duplicates</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a>) – Whether to count duplicated tensor as independent or not.
-If <code class="docutils literal notranslate"><span class="pre">False</span></code>, only strictly identical tensors will be discarded (same views but different
-ids from a common base tensor will be counted twice). Defaults to <cite>True</cite> (each tensor is assumed
-to be a single copy).</p>
+<dd class="field-odd"><p><strong>count_duplicates</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a tensor stored
+under several keys is counted once per key. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, it
+is counted once. Two different views of one tensor are counted
+twice in both cases. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">bytes</span><span class="p">()</span>
+<span class="go">72</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">bytes</span><span class="p">(</span><span class="n">count_duplicates</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="go">48</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2011,7 +2026,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.bytes",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.bytes",
        "url": "/reference/generated/tensordict.TensorDictBase.bytes.html",
-       "articleBody": "TensorDictBase.bytes# TensorDictBase.bytes(*, count_duplicates: bool = True) \u2192 int# Counts the number of bytes of the contained tensors. Keyword Arguments: count_duplicates (bool) \u2013 Whether to count duplicated tensor as independent or not. If False, only strictly identical tensors will be discarded (same views but different ids from a common base tensor will be counted twice). Defaults to True (each tensor is assumed to be a single copy). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.bytes# TensorDictBase.bytes(*, count_duplicates: bool = True) \u2192 int# Returns the number of bytes of the tensor leaves. Each tensor leaf counts numel() * dtype.itemsize bytes, and a leaf with a gradient counts the bytes of its gradient too. Non-tensor data is not counted. A view counts the bytes of its own elements, not those of the storage it shares. Keyword Arguments: count_duplicates (bool, optional) \u2013 if True, a tensor stored under several keys is counted once per key. If False, it is counted once. Two different views of one tensor are counted twice in both cases. Defaults to True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = torch.zeros(6) \u003e\u003e\u003e td = TensorDict(a=x, b=x, c=torch.zeros(2, 3)) \u003e\u003e\u003e td.bytes() 72 \u003e\u003e\u003e td.bytes(count_duplicates=False) 48 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -15,18 +15,19 @@ Parameters:
 - **input** (*sequence**of*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**tensorclass instances*) - the
 tensordicts to stack.
 - **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the new dimension. Defaults to `0`. A `dim` outside
-`[-batch_dims - 1, batch_dims]` warns, and is used on the dims
+`[-batch_dims - 1, batch_dims]` warns, and is used on the dimensions
 of the leaves. Starting with TensorDict 0.17, the default will
 change to raising an `IndexError`, as for a tensor.
 
 Keyword Arguments:
 
 **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
-into. Its batch size must be the stacked batch size.
+into. Its batch size must be the stacked batch size. Defaults to
+`None`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) whose batch size is
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) whose batch size is
 `batch_size[:dim] + [len(input)] + batch_size[dim:]`. Tensorclass
 inputs give an instance of their class. If every input is a
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), the result is a

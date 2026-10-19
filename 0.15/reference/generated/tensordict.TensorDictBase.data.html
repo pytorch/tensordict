@@ -1642,17 +1642,31 @@ document.write(`
 <dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.data">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></em><a class="headerlink" href="#tensordict.TensorDictBase.data" title="Link to this definition">#</a></dt>
-<dd><p>Returns a tensordict containing the .data attributes of the leaf tensors.</p>
-<p>The leaves of the result share storage with the leaves of <code class="docutils literal notranslate"><span class="pre">self</span></code>,
-and do not require gradients. An in-place change to the result
-changes <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<dd><p>the same storage, without autograd.</p>
+<p>The leaves of the result share storage with the leaves of the
+tensordict, and do not require gradients. An in-place change to the
+result changes the tensordict.</p>
 <p>Assigning <code class="docutils literal notranslate"><span class="pre">td.data</span> <span class="pre">=</span> <span class="pre">other</span></code> rebinds the <code class="docutils literal notranslate"><span class="pre">.data</span></code> of each leaf of
-<code class="docutils literal notranslate"><span class="pre">self</span></code> to the matching leaf of <code class="docutils literal notranslate"><span class="pre">other</span></code>, as <code class="xref py py-attr docutils literal notranslate"><span class="pre">torch.Tensor.data</span></code>
+the tensordict to the matching leaf of <code class="docutils literal notranslate"><span class="pre">other</span></code>, as <code class="xref py py-attr docutils literal notranslate"><span class="pre">torch.Tensor.data</span></code>
 does. The leaves then share storage with <code class="docutils literal notranslate"><span class="pre">other</span></code>: memory-mapped or
 shared-memory leaves stop writing to their file or shared memory.
-<code class="docutils literal notranslate"><span class="pre">other</span></code> and each of its sub-tensordicts must have the batch size of
-the matching tensordict in <code class="docutils literal notranslate"><span class="pre">self</span></code>, and each key of <code class="docutils literal notranslate"><span class="pre">other</span></code> must be
-in <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">other</span></code> and each of its nested tensordicts must have the batch size
+of the matching tensordict, and each key of <code class="docutils literal notranslate"><span class="pre">other</span></code> must be in the
+tensordict.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span> <span class="o">==</span> <span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span><span class="o">.</span><span class="n">data_ptr</span><span class="p">()</span>
+<span class="go">(False, True)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A tensordict of the <code class="docutils literal notranslate"><span class="pre">.data</span></code> of every leaf</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2013,7 +2027,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.data",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.data",
        "url": "/reference/generated/tensordict.TensorDictBase.data.html",
-       "articleBody": "TensorDictBase.data# property TensorDictBase.data: Any# Returns a tensordict containing the .data attributes of the leaf tensors. The leaves of the result share storage with the leaves of self, and do not require gradients. An in-place change to the result changes self. Assigning td.data = other rebinds the .data of each leaf of self to the matching leaf of other, as torch.Tensor.data does. The leaves then share storage with other: memory-mapped or shared-memory leaves stop writing to their file or shared memory. other and each of its sub-tensordicts must have the batch size of the matching tensordict in self, and each key of other must be in self. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.data# property TensorDictBase.data: Any# the same storage, without autograd. The leaves of the result share storage with the leaves of the tensordict, and do not require gradients. An in-place change to the result changes the tensordict. Assigning td.data = other rebinds the .data of each leaf of the tensordict to the matching leaf of other, as torch.Tensor.data does. The leaves then share storage with other: memory-mapped or shared-memory leaves stop writing to their file or shared memory. other and each of its nested tensordicts must have the batch size of the matching tensordict, and each key of other must be in the tensordict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3, requires_grad=True), batch_size=[3]) \u003e\u003e\u003e data = td.data \u003e\u003e\u003e data[\"x\"].requires_grad, data[\"x\"].data_ptr() == td[\"x\"].data_ptr() (False, True) Type: A tensordict of the .data of every leaf Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

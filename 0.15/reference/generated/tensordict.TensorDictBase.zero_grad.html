@@ -1642,14 +1642,23 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.zero_grad">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.zero_grad" title="Link to this definition">#</a></dt>
-<dd><p>Zeros all the gradients of the TensorDict recursively.</p>
+<dd><p>Resets the <code class="docutils literal notranslate"><span class="pre">.grad</span></code> of every leaf, nested ones included, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>set_to_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, tensor.grad will be <code class="docutils literal notranslate"><span class="pre">None</span></code>,
-otherwise <code class="docutils literal notranslate"><span class="pre">0</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<dd class="field-odd"><p><strong>set_to_none</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, sets each <code class="docutils literal notranslate"><span class="pre">.grad</span></code> to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, fills each existing <code class="docutils literal notranslate"><span class="pre">.grad</span></code> with zeros in
+place. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()[</span><span class="s2">"x"</span><span class="p">]</span><span class="o">.</span><span class="n">grad</span><span class="p">)</span>
+<span class="go">None</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2010,7 +2019,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.zero_grad",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.zero_grad",
        "url": "/reference/generated/tensordict.TensorDictBase.zero_grad.html",
-       "articleBody": "TensorDictBase.zero_grad# TensorDictBase.zero_grad(set_to_none: bool = True) \u2192 Self# Zeros all the gradients of the TensorDict recursively. Parameters: set_to_none (bool, optional) \u2013 if True, tensor.grad will be None, otherwise 0. Defaults to True. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.zero_grad# TensorDictBase.zero_grad(set_to_none: bool = True) \u2192 Self# Resets the .grad of every leaf, nested ones included, and returns self. Parameters: set_to_none (bool, optional) \u2013 if True, sets each .grad to None. If False, fills each existing .grad with zeros in place. Defaults to True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.ones(3, requires_grad=True), batch_size=[3]) \u003e\u003e\u003e td[\"x\"].sum().backward() \u003e\u003e\u003e print(td.zero_grad()[\"x\"].grad) None Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

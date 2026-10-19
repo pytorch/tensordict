@@ -1642,34 +1642,42 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.nn.mappings">
 <span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">mappings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a></span></span><a class="headerlink" href="#tensordict.nn.mappings" title="Link to this definition">#</a></dt>
-<dd><p>Returns the function named by <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p>
-<p>All the functions except <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> (the identity) map real numbers to
-non-negative numbers. <code class="docutils literal notranslate"><span class="pre">&quot;relu&quot;</span></code> can return 0, the others return
-positive numbers.</p>
+<dd><p>Returns the function named by <code class="docutils literal notranslate"><span class="pre">key</span></code>, which maps a tensor elementwise, for example to positive values.</p>
+<p>Modules such as <code class="xref py py-class docutils literal notranslate"><span class="pre">NormalParamExtractor</span></code> use it to
+turn the output of a network into a scale. All the functions except
+<code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> (the identity) map real numbers to non-negative numbers.
+<code class="docutils literal notranslate"><span class="pre">&quot;relu&quot;</span></code> can return 0, the others return positive numbers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – one of <cite>“softplus”</cite>, <cite>“exp”</cite>, <cite>“relu”</cite>, <cite>“expln”</cite>,
-<cite>“biased_softplus”</cite> or <cite>“none”</cite> (no mapping).</p>
+<dd class="field-odd"><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – one of <code class="docutils literal notranslate"><span class="pre">&quot;softplus&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;exp&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;relu&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;expln&quot;</span></code> (see <a class="reference internal" href="tensordict.nn.utils.expln.html#tensordict.nn.utils.expln" title="tensordict.nn.utils.expln"><code class="xref py py-func docutils literal notranslate"><span class="pre">expln()</span></code></a>),
+<code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus&quot;</span></code> (a <a class="reference internal" href="tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus" title="tensordict.nn.biased_softplus"><code class="xref py py-class docutils literal notranslate"><span class="pre">biased_softplus</span></code></a> with
+<code class="docutils literal notranslate"><span class="pre">bias=1.0</span></code>), <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>, or a name added with
+<a class="reference internal" href="tensordict.nn.add_custom_mapping.html#tensordict.nn.add_custom_mapping" title="tensordict.nn.add_custom_mapping"><code class="xref py py-func docutils literal notranslate"><span class="pre">add_custom_mapping()</span></code></a>. <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}&quot;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}_{min_val}&quot;</span></code> return a
+<a class="reference internal" href="tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus" title="tensordict.nn.biased_softplus"><code class="xref py py-class docutils literal notranslate"><span class="pre">biased_softplus</span></code></a> with these arguments, for example
+<code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_2.0_0.1&quot;</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A callable that takes a tensor and returns a tensor.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#NotImplementedError" title="(in Python v3.15)"><strong>NotImplementedError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">key</span></code> is not a known name.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if a <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_...&quot;</span></code> key does not have the form
+    <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}_{min_val}&quot;</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If the key begins with <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus&quot;</span></code>, then it needs to take the following form:
-<code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}&quot;</span></code> where <code class="docutils literal notranslate"><span class="pre">bias</span></code> can be converted to a floating point number.
-Alternatively, the <code class="docutils literal notranslate"><span class="pre">&quot;biased_softplus_{bias}_{min_val}&quot;</span></code> syntax can be used.
-The function is then <a class="reference internal" href="tensordict.nn.biased_softplus.html#tensordict.nn.biased_softplus" title="tensordict.nn.biased_softplus"><code class="xref py py-class docutils literal notranslate"><span class="pre">biased_softplus</span></code></a> with these arguments:
-<code class="docutils literal notranslate"><span class="pre">softplus(x</span> <span class="pre">+</span> <span class="pre">inv_softplus(bias</span> <span class="pre">-</span> <span class="pre">min_val))</span> <span class="pre">+</span> <span class="pre">min_val</span></code>, which returns
-<code class="docutils literal notranslate"><span class="pre">bias</span></code> for a zero input and is always greater than <code class="docutils literal notranslate"><span class="pre">min_val</span></code>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">mappings</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mappings</span><span class="p">(</span><span class="s2">"exp"</span><span class="p">)(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="go">tensor([1., 1.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mappings</span><span class="p">(</span><span class="s2">"biased_softplus_2.0_0.1"</span><span class="p">)(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="go">tensor([2., 2.])</span>
+</pre></div>
 </div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Custom mappings can be added through <code class="docutils literal notranslate"><span class="pre">tensordict.nn.add_custom_mapping</span></code>.</p>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a Callable</p>
-</dd>
-</dl>
 </dd></dl>
 
 </section>
@@ -2028,7 +2036,7 @@ The function is then <a class="reference internal" href="tensordict.nn.biased_so
        "headline": "mappings",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - mappings",
        "url": "/reference/generated/tensordict.nn.mappings.html",
-       "articleBody": "mappings# tensordict.nn.mappings(key: str) \u2192 Callable# Returns the function named by key. All the functions except \"none\" (the identity) map real numbers to non-negative numbers. \"relu\" can return 0, the others return positive numbers. Parameters: key (str) \u2013 one of \u201csoftplus\u201d, \u201cexp\u201d, \u201crelu\u201d, \u201cexpln\u201d, \u201cbiased_softplus\u201d or \u201cnone\u201d (no mapping). Note If the key begins with \"biased_softplus\", then it needs to take the following form: \"biased_softplus_{bias}\" where bias can be converted to a floating point number. Alternatively, the \"biased_softplus_{bias}_{min_val}\" syntax can be used. The function is then biased_softplus with these arguments: softplus(x + inv_softplus(bias - min_val)) + min_val, which returns bias for a zero input and is always greater than min_val. Note Custom mappings can be added through tensordict.nn.add_custom_mapping. Returns: a Callable",
+       "articleBody": "mappings# tensordict.nn.mappings(key: str) \u2192 Callable# Returns the function named by key, which maps a tensor elementwise, for example to positive values. Modules such as NormalParamExtractor use it to turn the output of a network into a scale. All the functions except \"none\" (the identity) map real numbers to non-negative numbers. \"relu\" can return 0, the others return positive numbers. Parameters: key (str) \u2013 one of \"softplus\", \"exp\", \"relu\", \"expln\" (see expln()), \"biased_softplus\" (a biased_softplus with bias=1.0), \"none\", or a name added with add_custom_mapping(). \"biased_softplus_{bias}\" and \"biased_softplus_{bias}_{min_val}\" return a biased_softplus with these arguments, for example \"biased_softplus_2.0_0.1\". Returns: A callable that takes a tensor and returns a tensor. Raises: NotImplementedError \u2013 if key is not a known name. ValueError \u2013 if a \"biased_softplus_...\" key does not have the form \"biased_softplus_{bias}\" or \"biased_softplus_{bias}_{min_val}\". Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import mappings \u003e\u003e\u003e mappings(\"exp\")(torch.zeros(2)) tensor([1., 1.]) \u003e\u003e\u003e mappings(\"biased_softplus_2.0_0.1\")(torch.zeros(2)) tensor([2., 2.])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1642,40 +1642,35 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.is_non_tensor">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">is_non_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.is_non_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Checks if the value associated with a key is a non-tensor (<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>).</p>
-<p>Unlike the standalone <a class="reference internal" href="tensordict.is_non_tensor.html#tensordict.is_non_tensor" title="tensordict.is_non_tensor"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_non_tensor()</span></code></a> function which checks
-a value directly, this method checks the <strong>internal representation</strong> of the
-stored value, making it reliable for both <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> and
-<a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> instances.</p>
-<p>This is useful because <a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> <code class="docutils literal notranslate"><span class="pre">get()</span></code> unwraps
-<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> to plain values, so calling
-<code class="docutils literal notranslate"><span class="pre">is_non_tensor(tc.get(key))</span></code> on the result would return <code class="docutils literal notranslate"><span class="pre">False</span></code>.
-This method always checks the wrapped storage.</p>
+<dd><p>Returns <code class="docutils literal notranslate"><span class="pre">True</span></code> if the entry at <code class="docutils literal notranslate"><span class="pre">key</span></code> is non-tensor data.</p>
+<p>Non-tensor data is a <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> or a
+<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>. Unlike the function
+<a class="reference internal" href="tensordict.is_non_tensor.html#tensordict.is_non_tensor" title="tensordict.is_non_tensor"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_non_tensor()</span></code></a>, which checks a value, this method
+checks the stored entry. This matters for a tensorclass, whose
+<code class="docutils literal notranslate"><span class="pre">get</span></code> returns the content of a non-tensor entry, not the
+<code class="docutils literal notranslate"><span class="pre">NonTensorData</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key to check.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> if the value stored at <code class="docutils literal notranslate"><span class="pre">key</span></code> is a
-<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> or <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>,
-<code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise.</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the key is missing.</p>
 </dd>
 </dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor" title="tensordict.TensorDictBase.set_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_non_tensor()</span></code></a> and <a class="reference internal" href="tensordict.TensorDictBase.get_non_tensor.html#tensordict.TensorDictBase.get_non_tensor" title="tensordict.TensorDictBase.get_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_non_tensor()</span></code></a>.</p>
+</div>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"obs"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">)},</span> <span class="p">[])</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"obs"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">)},</span> <span class="p">[])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">set_non_tensor</span><span class="p">(</span><span class="s2">"label"</span><span class="p">,</span> <span class="s2">"cat"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_non_tensor</span><span class="p">(</span><span class="s2">"label"</span><span class="p">)</span>
 <span class="go">True</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_non_tensor</span><span class="p">(</span><span class="s2">"obs"</span><span class="p">)</span>
 <span class="go">False</span>
 </pre></div>
-</div>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor" title="tensordict.TensorDictBase.set_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_non_tensor()</span></code></a>,
-<a class="reference internal" href="tensordict.TensorDictBase.get_non_tensor.html#tensordict.TensorDictBase.get_non_tensor" title="tensordict.TensorDictBase.get_non_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_non_tensor()</span></code></a>.</p>
 </div>
 </dd></dl>
 
@@ -2037,7 +2032,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.is_non_tensor",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.is_non_tensor",
        "url": "/reference/generated/tensordict.TensorDictBase.is_non_tensor.html",
-       "articleBody": "TensorDictBase.is_non_tensor# TensorDictBase.is_non_tensor(key: NestedKey) \u2192 bool# Checks if the value associated with a key is a non-tensor (NonTensorData). Unlike the standalone is_non_tensor() function which checks a value directly, this method checks the internal representation of the stored value, making it reliable for both TensorDict and TensorClass instances. This is useful because TensorClass get() unwraps NonTensorData to plain values, so calling is_non_tensor(tc.get(key)) on the result would return False. This method always checks the wrapped storage. Parameters: key (NestedKey) \u2013 the key to check. Returns: True if the value stored at key is a NonTensorData or NonTensorStack, False otherwise. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e td = TensorDict({\"obs\": torch.randn(4)}, []) \u003e\u003e\u003e td = td.set_non_tensor(\"label\", \"cat\") \u003e\u003e\u003e td.is_non_tensor(\"label\") True \u003e\u003e\u003e td.is_non_tensor(\"obs\") False See also set_non_tensor(), get_non_tensor(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.is_non_tensor# TensorDictBase.is_non_tensor(key: NestedKey) \u2192 bool# Returns True if the entry at key is non-tensor data. Non-tensor data is a NonTensorData or a NonTensorStack. Unlike the function is_non_tensor(), which checks a value, this method checks the stored entry. This matters for a tensorclass, whose get returns the content of a non-tensor entry, not the NonTensorData. Parameters: key (NestedKey) \u2013 the key to check. Raises: KeyError \u2013 if the key is missing. See also set_non_tensor() and get_non_tensor(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"obs\": torch.zeros(4)}, []) \u003e\u003e\u003e td = td.set_non_tensor(\"label\", \"cat\") \u003e\u003e\u003e td.is_non_tensor(\"label\") True \u003e\u003e\u003e td.is_non_tensor(\"obs\") False Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

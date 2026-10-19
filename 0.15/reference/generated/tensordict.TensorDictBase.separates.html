@@ -1642,62 +1642,53 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.separates">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">separates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">NO_DEFAULT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_empty</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.separates" title="Link to this definition">#</a></dt>
-<dd><p>Separates the specified keys from the tensordict in-place.</p>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p>This method is equivalent to calling <a class="reference internal" href="tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys" title="tensordict.TensorDictBase.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a> with
-<code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> on a single split.</p>
-</div>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<p>This method is equivalent to calling <a class="reference internal" href="tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude" title="tensordict.TensorDictBase.exclude"><code class="xref py py-meth docutils literal notranslate"><span class="pre">exclude()</span></code></a> except that it
-returns the other split of the data.</p>
-</div>
+<dd><p>Removes the entries of <code class="docutils literal notranslate"><span class="pre">keys</span></code> from the tensordict in place, and returns them in a new tensordict.</p>
+<p>The values are not copied. The result keeps the nested tensordicts
+that hold the removed entries, with the batch size of the tensordict.
+This is <a class="reference internal" href="tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys" title="tensordict.TensorDictBase.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> and one key set,
+except that only the separated part is returned: the tensordict holds
+the rest.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the keys to separate from the tensordict.</p></li>
-<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – the value to be returned when a key is missing.
-If not specified and <code class="docutils literal notranslate"><span class="pre">strict=True</span></code>, an exception is raised. Otherwise, the default of any missing key
-will be <code class="docutils literal notranslate"><span class="pre">None</span></code> unless specified otherwise.</p></li>
-<li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an exception is raised when a key
-is missing. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
-<li><p><strong>filter_empty</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, empty tensordicts within <code class="docutils literal notranslate"><span class="pre">self</span></code> will be removed.
-Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<dd class="field-odd"><p><strong>*keys</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the keys to remove.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – if given, a missing key does not raise,
+and the result holds <code class="docutils literal notranslate"><span class="pre">default</span></code> under it, as
+<a class="reference internal" href="tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys" title="tensordict.TensorDictBase.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a> does. A <code class="docutils literal notranslate"><span class="pre">default</span></code> of <code class="docutils literal notranslate"><span class="pre">None</span></code> gives a
+<code class="docutils literal notranslate"><span class="pre">None</span></code> entry. A <code class="docutils literal notranslate"><span class="pre">default</span></code> that does not fit the batch size
+(for example <code class="docutils literal notranslate"><span class="pre">0</span></code> with a batch size of <code class="docutils literal notranslate"><span class="pre">[3]</span></code>) also gives a
+<code class="docutils literal notranslate"><span class="pre">None</span></code> entry, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>: starting with
+TensorDict 0.17, the default will change to raising the error
+of <a class="reference internal" href="tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys" title="tensordict.TensorDictBase.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a>.</p></li>
+<li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a missing key raises a
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the result holds <code class="docutils literal notranslate"><span class="pre">default</span></code> under
+it, or a <code class="docutils literal notranslate"><span class="pre">None</span></code> entry if no <code class="docutils literal notranslate"><span class="pre">default</span></code> is given. Defaults to
+<code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>filter_empty</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the nested tensordicts
+of the tensordict that the removal leaves empty are removed
+too. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the separated tensordict.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>T</p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new tensordict with the removed entries.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">d</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">nested</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_a_c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">separates</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td_a_c</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">separates</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"nested"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="nb">str</span><span class="p">)</span>
+<span class="go">[('nested', 'c'), 'a']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="go">['b']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2060,7 +2051,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.separates",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.separates",
        "url": "/reference/generated/tensordict.TensorDictBase.separates.html",
-       "articleBody": "TensorDictBase.separates# TensorDictBase.separates(*keys: NestedKey, default: Any = NO_DEFAULT, strict: bool = True, filter_empty: bool = True) \u2192 Self# Separates the specified keys from the tensordict in-place. See also This method is equivalent to calling split_keys() with inplace=True on a single split. See also This method is equivalent to calling exclude() except that it returns the other split of the data. Parameters: keys (NestedKey) \u2013 the keys to separate from the tensordict. default (Any, optional) \u2013 the value to be returned when a key is missing. If not specified and strict=True, an exception is raised. Otherwise, the default of any missing key will be None unless specified otherwise. strict (bool, optional) \u2013 if True, an exception is raised when a key is missing. Defaults to True. filter_empty (bool, optional) \u2013 if True, empty tensordicts within self will be removed. Defaults to True. Returns: the separated tensordict. Return type: T Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=0, ... b=0, ... c=0, ... d=0, ... ) \u003e\u003e\u003e td_a_c = td.separates(\"a\", \"c\") \u003e\u003e\u003e print(td_a_c) TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e print(td) TensorDict( fields={ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False), d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.separates# TensorDictBase.separates(*keys: NestedKey, default: Any = NO_DEFAULT, strict: bool = True, filter_empty: bool = True) \u2192 Self# Removes the entries of keys from the tensordict in place, and returns them in a new tensordict. The values are not copied. The result keeps the nested tensordicts that hold the removed entries, with the batch size of the tensordict. This is split_keys() with inplace=True and one key set, except that only the separated part is returned: the tensordict holds the rest. Parameters: *keys (NestedKey) \u2013 the keys to remove. Keyword Arguments: default (Any, optional) \u2013 if given, a missing key does not raise, and the result holds default under it, as split_keys() does. A default of None gives a None entry. A default that does not fit the batch size (for example 0 with a batch size of [3]) also gives a None entry, with a FutureWarning: starting with TensorDict 0.17, the default will change to raising the error of split_keys(). strict (bool, optional) \u2013 if True, a missing key raises a KeyError. If False, the result holds default under it, or a None entry if no default is given. Defaults to True. filter_empty (bool, optional) \u2013 if True, the nested tensordicts of the tensordict that the removal leaves empty are removed too. Defaults to True. Returns: A new tensordict with the removed entries. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=torch.zeros(3), ... b=torch.zeros(3), ... nested=TensorDict(c=torch.zeros(3), batch_size=[3]), ... batch_size=[3], ... ) \u003e\u003e\u003e out = td.separates(\"a\", (\"nested\", \"c\")) \u003e\u003e\u003e sorted(out.keys(include_nested=True, leaves_only=True), key=str) [(\u0027nested\u0027, \u0027c\u0027), \u0027a\u0027] \u003e\u003e\u003e list(td.keys()) [\u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

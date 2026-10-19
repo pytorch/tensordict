@@ -1642,10 +1642,18 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.clear_refs_for_compile_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">clear_refs_for_compile_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.clear_refs_for_compile_" title="Link to this definition">#</a></dt>
-<dd><p>Clears the weakrefs in order for the tensordict to get out of the compile region safely.</p>
-<p>Use this whenever you hit <cite>torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable()</cite>
-before returning a TensorDict.</p>
-<p>Returns: self</p>
+<dd><p>Clears the record of the last operation of the tensordict and its nested tensordicts.</p>
+<p>The tensordict records its last operation, with a weak reference to its
+result, for the <code class="docutils literal notranslate"><span class="pre">with</span></code> form of methods such as <a class="reference internal" href="tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>. Call
+this method on a tensordict before you return it from a function
+compiled with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> when compiling fails with
+<code class="docutils literal notranslate"><span class="pre">torch._dynamo.exc.Unsupported:</span> <span class="pre">reconstruct:</span> <span class="pre">WeakRefVariable()</span></code>.
+See <a class="reference internal" href="../../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2006,7 +2014,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.clear_refs_for_compile",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.clear_refs_for_compile",
        "url": "/reference/generated/tensordict.TensorDictBase.clear_refs_for_compile_.html",
-       "articleBody": "TensorDictBase.clear_refs_for_compile# TensorDictBase.clear_refs_for_compile_() \u2192 Self# Clears the weakrefs in order for the tensordict to get out of the compile region safely. Use this whenever you hit torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable() before returning a TensorDict. Returns: self Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.clear_refs_for_compile# TensorDictBase.clear_refs_for_compile_() \u2192 Self# Clears the record of the last operation of the tensordict and its nested tensordicts. The tensordict records its last operation, with a weak reference to its result, for the with form of methods such as lock_(). Call this method on a tensordict before you return it from a function compiled with torch.compile() when compiling fails with torch._dynamo.exc.Unsupported: reconstruct: WeakRefVariable(). See torch.compile, torch.func, torch.export, and CUDA graphs. Returns: self. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

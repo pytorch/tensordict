@@ -2,7 +2,7 @@
 
 TensorDictBase.log1p() → Self
 
-Computes the [`log1p()`](https://docs.pytorch.org/docs/stable/generated/torch.log1p.html#torch.log1p) value of each element of the TensorDict.
+Returns a new tensordict with [`torch.log1p()`](https://docs.pytorch.org/docs/stable/generated/torch.log1p.html#torch.log1p) applied to every leaf.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

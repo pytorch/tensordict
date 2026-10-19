@@ -1642,20 +1642,37 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.utils.print_directory_tree">
 <span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">print_directory_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_metadata</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="headerlink" href="#tensordict.utils.print_directory_tree" title="Link to this definition">#</a></dt>
-<dd><p>Prints the directory tree starting from the specified path.</p>
+<dd><p>Logs the tree of files and directories under <code class="docutils literal notranslate"><span class="pre">path</span></code>.</p>
+<p>Each line is logged at the <code class="docutils literal notranslate"><span class="pre">INFO</span></code> level with the tensordict logger
+(<a class="reference internal" href="../utils.html#tensordict.utils.logger" title="tensordict.utils.logger"><code class="xref py py-data docutils literal notranslate"><span class="pre">tensordict.utils.logger</span></code></a>) and the tree is returned as a string.
+The entries of a directory are in the order of <a class="reference external" href="https://docs.python.org/3/library/os.html#os.listdir" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">os.listdir()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The path of the directory to print.</p></li>
-<li><p><strong>indent</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The current indentation level for formatting.</p></li>
-<li><p><strong>display_metadata</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, metadata of the dir will be
-displayed too.</p></li>
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – the directory (or file) to show.</p></li>
+<li><p><strong>indent</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – the string put before each line of the tree;
+each level adds four spaces to it. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code>.</p></li>
+<li><p><strong>display_metadata</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the first line gives
+the total size of the files under <code class="docutils literal notranslate"><span class="pre">path</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the string printed with the logger.</p>
+<dd class="field-even"><p>The lines that were logged, joined by newlines.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">print_directory_tree</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">tree</span> <span class="o">=</span> <span class="n">print_directory_tree</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">display_metadata</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">tree</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()[</span><span class="mi">1</span><span class="p">:])</span>
+<span class="go">['a.memmap', 'b.memmap', 'meta.json']</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
@@ -2014,7 +2031,7 @@ displayed too.</p></li>
        "headline": "print_directory_tree",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - print_directory_tree",
        "url": "/reference/generated/tensordict.utils.print_directory_tree.html",
-       "articleBody": "print_directory_tree# tensordict.utils.print_directory_tree(path, indent=\u0027\u0027, display_metadata=True) \u2192 str# Prints the directory tree starting from the specified path. Parameters: path (str) \u2013 The path of the directory to print. indent (str) \u2013 The current indentation level for formatting. display_metadata (bool) \u2013 if True, metadata of the dir will be displayed too. Returns: the string printed with the logger.",
+       "articleBody": "print_directory_tree# tensordict.utils.print_directory_tree(path, indent=\u0027\u0027, display_metadata=True) \u2192 str# Logs the tree of files and directories under path. Each line is logged at the INFO level with the tensordict logger (tensordict.utils.logger) and the tree is returned as a string. The entries of a directory are in the order of os.listdir(). Parameters: path (str) \u2013 the directory (or file) to show. indent (str, optional) \u2013 the string put before each line of the tree; each level adds four spaces to it. Defaults to \"\". display_metadata (bool, optional) \u2013 if True, the first line gives the total size of the files under path. Defaults to True. Returns: The lines that were logged, joined by newlines. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.utils import print_directory_tree \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = td.memmap(path) ... tree = print_directory_tree(path, display_metadata=False) \u003e\u003e\u003e sorted(line.strip() for line in tree.splitlines()[1:]) [\u0027a.memmap\u0027, \u0027b.memmap\u0027, \u0027meta.json\u0027]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

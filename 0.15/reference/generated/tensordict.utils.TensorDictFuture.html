@@ -1643,21 +1643,41 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.utils.TensorDictFuture">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.utils.</span></span><span class="sig-name descname"><span class="pre">TensorDictFuture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">futures</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resulting_td</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.utils.TensorDictFuture" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>A custom future class for TensorDict multithreaded operations.</p>
+<p>A tensordict that is still being written by background threads.</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>,
+<a class="reference internal" href="tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a>,
+<a class="reference internal" href="tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a>,
+<a class="reference internal" href="tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a> and
+<a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> return one when called
+with <code class="docutils literal notranslate"><span class="pre">return_early=True</span></code> and <code class="docutils literal notranslate"><span class="pre">num_threads</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>. Call <a class="reference internal" href="#tensordict.utils.TensorDictFuture.result" title="tensordict.utils.TensorDictFuture.result"><code class="xref py py-meth docutils literal notranslate"><span class="pre">result()</span></code></a>
+to wait for the writes and get the tensordict. You do not build one
+yourself.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>futures</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><em>futures</em>) – a list of concurrent.futures.Future objects to wait for.</p></li>
-<li><p><strong>resulting_td</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – instance that will result from the futures
-completing.</p></li>
+<li><p><strong>futures</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.Future" title="(in Python v3.15)"><em>Future</em></a>) – the writes to wait for.</p></li>
+<li><p><strong>resulting_td</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a>) – the tensordict that <a class="reference internal" href="#tensordict.utils.TensorDictFuture.result" title="tensordict.utils.TensorDictFuture.result"><code class="xref py py-meth docutils literal notranslate"><span class="pre">result()</span></code></a>
+returns.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">future</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">return_early</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">result</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">is_memmap</span><span class="p">(),</span> <span class="n">result</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+<span class="go">True [1.0, 1.0, 1.0]</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.utils.TensorDictFuture.result">
 <span class="sig-name descname"><span class="pre">result</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.utils.TensorDictFuture.result" title="Link to this definition">#</a></dt>
-<dd><p>Wait and returns the resulting tensordict.</p>
-<p>Raises the first error of the futures, if any.</p>
+<dd><p>Waits for the writes to finish and returns the tensordict.</p>
+<p>If a write failed, raises the first error of the writes.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2021,7 +2041,7 @@ completing.</p></li>
        "headline": "TensorDictFuture",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictFuture",
        "url": "/reference/generated/tensordict.utils.TensorDictFuture.html",
-       "articleBody": "TensorDictFuture# class tensordict.utils.TensorDictFuture(futures, resulting_td)# Bases: object A custom future class for TensorDict multithreaded operations. Parameters: futures (list of futures) \u2013 a list of concurrent.futures.Future objects to wait for. resulting_td (TensorDictBase) \u2013 instance that will result from the futures completing. result()# Wait and returns the resulting tensordict. Raises the first error of the futures, if any.",
+       "articleBody": "TensorDictFuture# class tensordict.utils.TensorDictFuture(futures, resulting_td)# Bases: object A tensordict that is still being written by background threads. memmap(), memmap_(), memmap_like(), save() and consolidate() return one when called with return_early=True and num_threads \u003e 1. Call result() to wait for the writes and get the tensordict. You do not build one yourself. Parameters: futures (list of Future) \u2013 the writes to wait for. resulting_td (TensorDictBase) \u2013 the tensordict that result() returns. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... future = td.memmap(path, num_threads=2, return_early=True) ... result = future.result() ... print(result.is_memmap(), result[\"b\"].tolist()) True [1.0, 1.0, 1.0] result()# Waits for the writes to finish and returns the tensordict. If a write failed, raises the first error of the writes.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

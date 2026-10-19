@@ -1642,22 +1642,38 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.arecv">
 <em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">arecv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><span class="pre">TensorDictPipe</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.arecv" title="Link to this definition">#</a></dt>
-<dd><p>Receives content into this tensordict from a UCXX pipe (async).</p>
+<dd><p>Receives a tensordict from a UCXX pipe, into the tensordict if possible, asynchronously.</p>
+<p>Awaits <code class="docutils literal notranslate"><span class="pre">src.arecv(self,</span> <span class="pre">device=device)</span></code>. If the tensordict is
+consolidated with the layout of the received data, the data is written
+into its storage. Otherwise, the pipe returns another tensordict: use the
+return value. See <a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPipe</span></code></a>, which needs
+the optional <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> package.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>src</strong> (<a class="reference internal" href="tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe" title="tensordict._ucxx.TensorDictPipe"><em>TensorDictPipe</em></a>) – the pipe to receive from.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>device</strong> – device for storage allocation on first receive.</p>
+<dd class="field-even"><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the storage
+that the pipe allocates for a new structure. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+which uses the device of the sender with a consolidated pipe, and
+the CPU otherwise.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The received TensorDict (may be <code class="docutils literal notranslate"><span class="pre">self</span></code> for in-place updates).</p>
+<dd class="field-odd"><p>The received tensordict, <code class="docutils literal notranslate"><span class="pre">self</span></code> or another tensordict.</p>
 </dd>
 </dl>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
-<p><a class="reference internal" href="tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv" title="tensordict.TensorDictBase.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a> for the synchronous variant and
-torch.distributed-based transport.</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv" title="tensordict.TensorDictBase.recv"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recv()</span></code></a>, which also takes a pipe, and works without
+<code class="docutils literal notranslate"><span class="pre">await</span></code>.</p>
+</div>
+<p class="rubric">Examples</p>
+<p>This example needs <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> and a sender on the other end of the pipe:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">consume</span><span class="p">(</span><span class="n">pipe</span><span class="p">):</span>
+    <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">TensorDict</span><span class="p">()</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>  <span class="c1"># first receive: allocates</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">9</span><span class="p">):</span>
+        <span class="n">td</span> <span class="o">=</span> <span class="k">await</span> <span class="n">td</span><span class="o">.</span><span class="n">arecv</span><span class="p">(</span><span class="n">pipe</span><span class="p">)</span>  <span class="c1"># same structure: writes into td</span>
+</pre></div>
 </div>
 </dd></dl>
 
@@ -2019,7 +2035,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.arecv",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.arecv",
        "url": "/reference/generated/tensordict.TensorDictBase.arecv.html",
-       "articleBody": "TensorDictBase.arecv# async TensorDictBase.arecv(src: TensorDictPipe, *, device: device | str | None = None) \u2192 TensorDictBase# Receives content into this tensordict from a UCXX pipe (async). Parameters: src (TensorDictPipe) \u2013 the pipe to receive from. Keyword Arguments: device \u2013 device for storage allocation on first receive. Returns: The received TensorDict (may be self for in-place updates). See also recv() for the synchronous variant and torch.distributed-based transport. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.arecv# async TensorDictBase.arecv(src: TensorDictPipe, *, device: device | str | None = None) \u2192 TensorDictBase# Receives a tensordict from a UCXX pipe, into the tensordict if possible, asynchronously. Awaits src.arecv(self, device=device). If the tensordict is consolidated with the layout of the received data, the data is written into its storage. Otherwise, the pipe returns another tensordict: use the return value. See TensorDictPipe, which needs the optional ucxx package. Parameters: src (TensorDictPipe) \u2013 the pipe to receive from. Keyword Arguments: device (device, str or int, optional) \u2013 the device of the storage that the pipe allocates for a new structure. Defaults to None, which uses the device of the sender with a consolidated pipe, and the CPU otherwise. Returns: The received tensordict, self or another tensordict. See also recv(), which also takes a pipe, and works without await. Examples This example needs ucxx and a sender on the other end of the pipe: async def consume(pipe): td = await TensorDict().arecv(pipe) # first receive: allocates for _ in range(9): td = await td.arecv(pipe) # same structure: writes into td Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

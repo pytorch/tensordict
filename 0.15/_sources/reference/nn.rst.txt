@@ -100,7 +100,7 @@ tensor.
     :template: function.rst
 
     composite_lp_aggregate
-    probabilistic.interaction_type
+    interaction_type
 
 Ensembles
 ---------

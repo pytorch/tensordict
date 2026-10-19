@@ -60,7 +60,8 @@ Another key set
 An operation that goes over all the entries (arithmetic, `apply`,
 `clone`, reductions) is compiled for the keys it saw. An input with another
 key set compiles a new graph. Reading one entry (`td["obs"]`) does not
-depend on the other keys.
+depend on the other keys. A `td.get(key, default)` that returned
+`default` compiles again once the input has `key`.
 
 Writing into an input tensordict
 
@@ -138,6 +139,12 @@ nightly. Other versions can word them differently.
 | `memmap`, `memmap_like`, `share_memory_`, `to_namedtuple`, `data_ptr` | Eager-only operations (files, shared memory, Python classes built at run time). See [Devices, dtypes, and memory](concepts/devices.html#devices) and [Save and load tensordicts](saving.html#saving). | Call them outside the compiled function. |
 | `loss.backward()` or `torch.autograd.grad` inside the compiled function | Dynamo does not trace the backward pass: `Unsupported Tensor.backward() call`. | Return the loss and call `loss.backward()` outside. |
 | Building a [`TensorDictSequential`](reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential) inside the compiled function (`seq[:2](td)`, `seq.select_subsequence(...)`) | Dynamo cannot build the new module inside the graph: `Unexpected type in sourceless builder`. | Build the subsequence once, outside, and call it inside. |
+
+PyTorch 2.11 and 2.12 also break the graph on `state_dict()`, as 2.14 does
+([pytorch/pytorch#201124](https://github.com/pytorch/pytorch/issues/201124)).
+On PyTorch 2.12, building a frozen `tensor_only` tensorclass whose custom
+`__init__` calls `object.__setattr__` raises `InternalTorchDynamoError`
+inside a compiled function: build it outside.
 
 ## torch.func
 
@@ -258,11 +265,11 @@ data-dependent control flow, and inputs that do not require gradients.
 >>> from tensordict.nn import CudaGraphModule, TensorDictModule
 >>> module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
 >>> graph_module = CudaGraphModule(module)
->>> results = [
+>>> results = [ 
 ... graph_module(TensorDict({"x": torch.full((3,), float(i), device="cuda")}, batch_size=[3]))
 ... for i in range(4)
 ... ]
->>> [result["y"][0].item() for result in results]
+>>> [result["y"][0].item() for result in results] 
 [1.0, 2.0, 3.0, 4.0]
 ```
 
@@ -312,16 +319,16 @@ CUDA graph (`Running eager function` with `TORCH_LOGS="cudagraphs"`).
 For example:
 
 ```
->>> policy = torch.compile(
+>>> policy = torch.compile( 
 ... TensorDictModule(nn.Linear(3, 4).cuda(), in_keys=["obs"], out_keys=["action"]),
 ... mode="reduce-overhead",
 ... )
->>> with torch.no_grad():
+>>> with torch.no_grad(): 
 ... outputs = [
 ... policy(TensorDict({"obs": torch.randn(8, 3, device="cuda")}, batch_size=[8])).clone()
 ... for _ in range(4)
 ... ]
->>> outputs[0]["action"].shape
+>>> outputs[0]["action"].shape 
 torch.Size([8, 4])
 ```
 

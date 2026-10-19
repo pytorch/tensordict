@@ -1,6 +1,6 @@
 # TensorDictBase.set
 
-TensorDictBase.set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self
+TensorDictBase.set(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *item: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *non_blocking: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***kwargs: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → Self
 
 Sets an entry, and returns the tensordict.
 
@@ -22,8 +22,8 @@ Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to set: a string, or a tuple of strings
 for a nested entry. See [Keys, nested keys, and locking](../../concepts/keys.html#keys).
-- **item** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**equivalent**,**TensorDictBase instance*) - value
-to be stored in the tensordict.
+- **item** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**any object*) - the value to
+store.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True` and the key exists, the value
 is copied into the existing tensor, which keeps its storage. If
 the key does not exist, the entry is added. For a write that
@@ -32,19 +32,25 @@ raises on a missing key, use [`set_()`](tensordict.TensorDictBase.set_.html#tens
 
 Keyword Arguments:
 
-**non_blocking** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True` and this copy is between
-different devices, the copy may occur asynchronously with respect
-to the host.
+- **non_blocking** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, copies between devices
+can run asynchronously with respect to the host. Defaults to
+`False`.
+- ****kwargs** - ignored, with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with
+TensorDict 0.17, the default will change to raising a
+`TypeError` for them, as [`set_()`](tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_) does.
 
 Returns:
 
-self
+`self`.
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensordict is locked (see [`lock_()`](tensordict.TensorDictBase.lock_.html#tensordict.TensorDictBase.lock_)) and
- `inplace` is `False`, or if the leading dimensions of the
- value do not match the batch size.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensordict is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking))
+ and the call adds or replaces an entry, or if the leading
+ dimensions of the value do not match the batch size.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `inplace=True` and the value does not fit the
+ shape of the existing entry. The error is also a
+ `RuntimeError`, the type that [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) raises.
 
 Examples
 

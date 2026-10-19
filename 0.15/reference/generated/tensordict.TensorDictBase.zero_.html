@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.zero_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">zero_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.zero_" title="Link to this definition">#</a></dt>
-<dd><p>Zeros all tensors in the tensordict in-place.</p>
+<dd><p>Fills every leaf with zeros in place and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2003,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.zero",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.zero",
        "url": "/reference/generated/tensordict.TensorDictBase.zero_.html",
-       "articleBody": "TensorDictBase.zero# TensorDictBase.zero_() \u2192 Self# Zeros all tensors in the tensordict in-place. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.zero# TensorDictBase.zero_() \u2192 Self# Fills every leaf with zeros in place and returns self. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

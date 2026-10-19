@@ -1642,7 +1642,12 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.clear">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.clear" title="Link to this definition">#</a></dt>
-<dd><p>Erases the content of the tensordict.</p>
+<dd><p>Removes every entry of the tensordict and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the tensordict is locked.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2008,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.clear",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.clear",
        "url": "/reference/generated/tensordict.TensorDictBase.clear.html",
-       "articleBody": "TensorDictBase.clear# TensorDictBase.clear() \u2192 Self# Erases the content of the tensordict. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.clear# TensorDictBase.clear() \u2192 Self# Removes every entry of the tensordict and returns self. Raises: RuntimeError \u2013 if the tensordict is locked. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -24,11 +24,11 @@ tensor.
 Keyword Arguments:
 
 **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
-into.
+into. Defaults to `None`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict). Tensorclass inputs give an
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict). Tensorclass inputs give an
 instance of their class. If every input is a
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), the result is a
 [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict).

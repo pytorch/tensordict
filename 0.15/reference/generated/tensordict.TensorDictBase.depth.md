@@ -2,9 +2,10 @@
 
 *property*TensorDictBase.depth*: [int](https://docs.python.org/3/builtins/functions.html#int)*
 
-the maximum number of levels of sub-tensordicts.
+the maximum number of levels of nested tensordicts.
 
-A tensordict with no sub-tensordict has depth 0.
+A tensordict with no nested tensordict has depth 0. Empty nested
+tensordicts do not count.
 
 Examples
 
@@ -18,7 +19,7 @@ Examples
 
 Type:
 
-Returns the depth of the tensordict
+The depth of the tensordict
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

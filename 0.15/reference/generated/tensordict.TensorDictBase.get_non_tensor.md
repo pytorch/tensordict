@@ -2,27 +2,25 @@
 
 TensorDictBase.get_non_tensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default=NO_DEFAULT*)
 
-Gets a non-tensor value, if it exists, or default if the non-tensor value is not found.
+Returns the content of the non-tensor entry at `key`.
 
-This method is robust to tensor/TensorDict values, meaning that if the
-value gathered is a regular tensor it will be returned too (although
-this method comes with some overhead and should not be used out of its
-natural scope).
-
-See [`set_non_tensor()`](tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor) for more information
-on how to set non-tensor values in a tensordict.
+A [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) returns its data, and a stack of
+non-tensor data returns a list. An entry that is not non-tensor data
+is returned as it is. See [Non-tensor data and unbatched entries](../../concepts/non_tensor.html#non-tensor-data).
 
 Parameters:
 
-- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the location of the NonTensorData object.
-- **default** (*Any**,**optional*) - the value to be returned if the key cannot
-be found.
+- **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the entry.
+- **default** (*Any**,**optional*) - the value returned if the key is missing.
+If not passed, a missing key raises `KeyError`.
 
-Returns: the content of the [`tensordict.tensorclass.NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData),
+Raises:
 
-or the entry corresponding to the `key` if it isn't a
-[`tensordict.tensorclass.NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) (or `default` if the
-entry cannot be found).
+[**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the key is missing and no default is passed.
+
+See also
+
+[`set_non_tensor()`](tensordict.TensorDictBase.set_non_tensor.html#tensordict.TensorDictBase.set_non_tensor).
 
 Examples
 
@@ -30,10 +28,10 @@ Examples
 >>> from tensordict import TensorDict
 >>> data = TensorDict({}, batch_size=[])
 >>> data = data.set_non_tensor(("nested", "the string"), "a string!")
->>> assert data.get_non_tensor(("nested", "the string")) == "a string!"
->>> # regular `get` works but returns a NonTensorData object
->>> data.get(("nested", "the string"))
-NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)
+>>> data.get_non_tensor(("nested", "the string"))
+'a string!'
+>>> data.get_non_tensor("missing", "default")
+'default'
 ```
 
 Every tensordict class and every tensorclass has this method. For the

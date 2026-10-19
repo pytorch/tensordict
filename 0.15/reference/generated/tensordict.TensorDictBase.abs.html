@@ -1642,7 +1642,30 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.abs">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">abs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.abs" title="Link to this definition">#</a></dt>
-<dd><p>Computes the absolute value of each element of the TensorDict.</p>
+<dd><p>Returns a new tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.abs.html#torch.abs" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.abs()</span></code></a> applied to every leaf.</p>
+<p>The other unary operations (<a class="reference internal" href="tensordict.TensorDictBase.exp.html#tensordict.TensorDictBase.exp" title="tensordict.TensorDictBase.exp"><code class="xref py py-meth docutils literal notranslate"><span class="pre">exp()</span></code></a>, <a class="reference internal" href="tensordict.TensorDictBase.log.html#tensordict.TensorDictBase.log" title="tensordict.TensorDictBase.log"><code class="xref py py-meth docutils literal notranslate"><span class="pre">log()</span></code></a>,
+<a class="reference internal" href="tensordict.TensorDictBase.sqrt.html#tensordict.TensorDictBase.sqrt" title="tensordict.TensorDictBase.sqrt"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sqrt()</span></code></a>, <a class="reference internal" href="tensordict.TensorDictBase.sin.html#tensordict.TensorDictBase.sin" title="tensordict.TensorDictBase.sin"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sin()</span></code></a>…) work the same way. Each has an
+in-place twin with a trailing underscore (<a class="reference internal" href="tensordict.TensorDictBase.abs_.html#tensordict.TensorDictBase.abs_" title="tensordict.TensorDictBase.abs_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">abs_()</span></code></a>,
+<a class="reference internal" href="tensordict.TensorDictBase.exp_.html#tensordict.TensorDictBase.exp_" title="tensordict.TensorDictBase.exp_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">exp_()</span></code></a>…) that writes into the leaves and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.
+See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">abs</span><span class="p">()[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span>
+<span class="go">tensor([3., 0.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">exp</span><span class="p">()[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([0.3679, 7.3891])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">abs_</span><span class="p">()</span> <span class="ow">is</span> <span class="n">td</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([1., 2.])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2003,7 +2026,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.abs",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.abs",
        "url": "/reference/generated/tensordict.TensorDictBase.abs.html",
-       "articleBody": "TensorDictBase.abs# TensorDictBase.abs() \u2192 Self# Computes the absolute value of each element of the TensorDict. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.abs# TensorDictBase.abs() \u2192 Self# Returns a new tensordict with torch.abs() applied to every leaf. The other unary operations (exp(), log(), sqrt(), sin()\u2026) work the same way. Each has an in-place twin with a trailing underscore (abs_(), exp_()\u2026) that writes into the leaves and returns self. See In-place operations. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=torch.tensor([-1.0, 2.0]), ... b=TensorDict(c=torch.tensor([-3.0, 0.0]), batch_size=[2]), ... batch_size=[2], ... ) \u003e\u003e\u003e td.abs()[\"b\", \"c\"] tensor([3., 0.]) \u003e\u003e\u003e td.exp()[\"a\"] tensor([0.3679, 7.3891]) \u003e\u003e\u003e td.abs_() is td True \u003e\u003e\u003e td[\"a\"] tensor([1., 2.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

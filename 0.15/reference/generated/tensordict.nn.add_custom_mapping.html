@@ -1642,13 +1642,17 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.nn.add_custom_mapping">
 <span class="sig-prename descclassname"><span class="pre">tensordict.nn.</span></span><span class="sig-name descname"><span class="pre">add_custom_mapping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.add_custom_mapping" title="Link to this definition">#</a></dt>
-<dd><p>Adds a custom mapping to be used in mapping classes.</p>
+<dd><p>Registers <code class="docutils literal notranslate"><span class="pre">mapping</span></code> under <code class="docutils literal notranslate"><span class="pre">name</span></code>, so that <a class="reference internal" href="tensordict.nn.mappings.html#tensordict.nn.mappings" title="tensordict.nn.mappings"><code class="xref py py-func docutils literal notranslate"><span class="pre">mappings()</span></code></a> returns it.</p>
+<p>The name can then be passed wherever a module takes a mapping name, such
+as the <code class="docutils literal notranslate"><span class="pre">scale_mapping</span></code> argument of
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NormalParamExtractor</span></code>. A name that exists already
+is replaced.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – a mapping name.</p></li>
-<li><p><strong>mapping</strong> (<em>callable</em>) – a callable that takes a tensor as input and outputs a tensor
-with the same shape.</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – the name of the mapping.</p></li>
+<li><p><strong>mapping</strong> (<em>Callable</em>) – a function that takes a tensor and returns a
+tensor of the same shape.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1657,7 +1661,8 @@ with the same shape.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict.nn</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_custom_mapping</span><span class="p">,</span> <span class="n">NormalParamExtractor</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">add_custom_mapping</span><span class="p">(</span><span class="s2">"my_mapping"</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">npe</span> <span class="o">=</span> <span class="n">NormalParamExtractor</span><span class="p">(</span><span class="n">scale_mapping</span><span class="o">=</span><span class="s2">"my_mapping"</span><span class="p">,</span> <span class="n">scale_lb</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">npe</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">))[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">npe</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10</span><span class="p">))[</span><span class="mi">1</span><span class="p">]</span>
+<span class="go">tensor([0., 0., 0., 0., 0.])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2018,7 +2023,7 @@ with the same shape.</p></li>
        "headline": "add_custom_mapping",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - add_custom_mapping",
        "url": "/reference/generated/tensordict.nn.add_custom_mapping.html",
-       "articleBody": "add_custom_mapping# tensordict.nn.add_custom_mapping(name: str, mapping: Callable[[Tensor], Tensor])# Adds a custom mapping to be used in mapping classes. Parameters: name (str) \u2013 a mapping name. mapping (callable) \u2013 a callable that takes a tensor as input and outputs a tensor with the same shape. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import add_custom_mapping, NormalParamExtractor \u003e\u003e\u003e add_custom_mapping(\"my_mapping\", lambda x: torch.zeros_like(x)) \u003e\u003e\u003e npe = NormalParamExtractor(scale_mapping=\"my_mapping\", scale_lb=0.0) \u003e\u003e\u003e assert (npe(torch.randn(10))[1] == torch.zeros(5)).all()",
+       "articleBody": "add_custom_mapping# tensordict.nn.add_custom_mapping(name: str, mapping: Callable[[Tensor], Tensor])# Registers mapping under name, so that mappings() returns it. The name can then be passed wherever a module takes a mapping name, such as the scale_mapping argument of NormalParamExtractor. A name that exists already is replaced. Parameters: name (str) \u2013 the name of the mapping. mapping (Callable) \u2013 a function that takes a tensor and returns a tensor of the same shape. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict.nn import add_custom_mapping, NormalParamExtractor \u003e\u003e\u003e add_custom_mapping(\"my_mapping\", lambda x: torch.zeros_like(x)) \u003e\u003e\u003e npe = NormalParamExtractor(scale_mapping=\"my_mapping\", scale_lb=0.0) \u003e\u003e\u003e npe(torch.randn(10))[1] tensor([0., 0., 0., 0., 0.])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

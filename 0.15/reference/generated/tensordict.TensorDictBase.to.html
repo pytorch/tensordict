@@ -61,7 +61,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="TensorDictBase.cpu" href="tensordict.TensorDictBase.cpu.html" />
-    <link rel="prev" title="pad_sequence" href="tensordict.pad_sequence.html" />
+    <link rel="prev" title="collate" href="tensordict.collate.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -1642,92 +1642,119 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.to" title="Link to this definition">#</a></dt>
-<dd><p>Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).</p>
-<p>When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original
-dtype (including integer and boolean leaves).</p>
+<dd><p>Returns a tensordict cast to another device, dtype or memory format, or with a new batch size.</p>
+<p>It accepts the forms of <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.to()</span></code></a>, and some more:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">to(device,</span> <span class="pre">dtype=None)</span></code>: moves every leaf to <code class="docutils literal notranslate"><span class="pre">device</span></code> and, if
+<code class="docutils literal notranslate"><span class="pre">dtype</span></code> is given, casts it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to(dtype)</span></code>: casts every tensor leaf to <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, whatever its
+original dtype (integer and boolean leaves too), unless
+<code class="docutils literal notranslate"><span class="pre">cast_filter</span></code> selects the leaves to cast.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to(tensor)</span></code>: uses the device and the dtype of <code class="docutils literal notranslate"><span class="pre">tensor</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to(other=tensordict)</span></code>: uses the device of <code class="docutils literal notranslate"><span class="pre">other</span></code>, and its
+dtype if all its leaves share one. Otherwise the dtypes are kept.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to(batch_size=...)</span></code>: only sets the batch size, in place, and
+returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to(td.attrs())</span></code>: casts each leaf to the device and the dtype that
+<a class="reference internal" href="tensordict.TensorDictBase.attrs.html#tensordict.TensorDictBase.attrs" title="tensordict.TensorDict.attrs"><code class="xref py py-meth docutils literal notranslate"><span class="pre">attrs()</span></code></a> recorded for the same key. See
+<a class="reference internal" href="../../concepts/devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>.</p></li>
+</ul>
+<p>The result is <code class="docutils literal notranslate"><span class="pre">self</span></code> when the device is already the device of the
+tensordict and no dtype or memory format is given. Otherwise it is a
+new tensordict, unless <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>. When only the device changes,
+a consolidated tensordict gives a consolidated result, whose leaves
+are views of one storage on the new device.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><em>optional</em>) – the desired device of the tensordict.</p></li>
-<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em>, </em><em>optional</em>) – the desired dtype of all the tensors in
-the tensordict.</p></li>
-<li><p><strong>tensor</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em>, </em><em>optional</em>) – Tensor whose dtype and device are the desired
-dtype and device for all tensors in this TensorDict.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the
+result. Its nested tensordicts get it too.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><em>dtype</em></a><em>, </em><em>optional</em>) – the dtype of the tensor leaves of
+the result.</p></li>
+<li><p><strong>tensor</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em>, </em><em>optional</em>) – a tensor whose device and dtype
+are the device and dtype of the result.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>non_blocking</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – controls how the leaves are copied.
-If <code class="docutils literal notranslate"><span class="pre">None</span></code> (default), the leaves are copied with <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code>
-and, when the target device is not a CUDA device (e.g. device-to-host
-copies), the tensordict synchronizes once after all the copies have been
-issued; for a CPU target, only if a leaf comes from another device.
-Under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, these copies are blocking instead.
-If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the copies are non-blocking and no synchronization
-is performed: the caller is responsible for synchronizing before reading
-the results. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the copies are blocking.</p></li>
-<li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><em>memory_format</em></a><em>, </em><em>optional</em>) – the desired memory
-format for the 4D and 5D tensors in this tensordict, as in
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.to()</span></code></a>.</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em>, </em><em>optional</em>) – resulting batch-size of the
-output tensordict. When the device or dtype changes, every
-nested tensordict gets exactly this batch size and the names
-are erased. Starting with TensorDict 0.17, the default will
-change to setting the batch size as <code class="docutils literal notranslate"><span class="pre">to(batch_size=...)</span></code>
-does without a device: nested tensordicts with more batch
-dimensions keep their batch size, nested lazy stacks stay
-lazy stacks (or raise, as there, if they need more batch
-dimensions) and the names are kept. A <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> is
-emitted when the result will change.</p></li>
-<li><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – <p>TensorDict instance whose dtype
-and device are the desired dtype and device for all tensors
-in this TensorDict.</p>
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – how the leaves are copied. <code class="docutils literal notranslate"><span class="pre">None</span></code>
+copies them with <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code> and, when the target
+is not a CUDA device (for example a copy to the host),
+synchronizes once after all the copies are issued; for a CPU
+target, only if a leaf comes from another device. Under
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, these copies are blocking instead.
+<code class="docutils literal notranslate"><span class="pre">True</span></code> copies without synchronizing: synchronize before you
+read the results. <code class="docutils literal notranslate"><span class="pre">False</span></code> makes blocking copies. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>. It can also follow the device, dtype or tensor
+positionally, as in <code class="docutils literal notranslate"><span class="pre">to(&quot;cpu&quot;,</span> <span class="pre">torch.float64,</span> <span class="pre">False)</span></code>. A
+positional <code class="docutils literal notranslate"><span class="pre">True</span></code> is ignored for now, with a
+<code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>: the copies synchronize as for <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+Starting with TensorDict 0.17, the default will change to
+honoring it as the keyword <code class="docutils literal notranslate"><span class="pre">True</span></code> is.</p></li>
+<li><p><strong>memory_format</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format" title="(in PyTorch v2.14)"><em>memory_format</em></a><em>, </em><em>optional</em>) – the memory format of
+the 4D and 5D tensors of the result, as in
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.to()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which keeps
+the memory format.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em>, </em><em>optional</em>) – the batch size of the result.
+When the device or dtype changes, every nested tensordict gets
+exactly this batch size and the names are erased. Starting with
+TensorDict 0.17, the default will change to setting the batch
+size as <code class="docutils literal notranslate"><span class="pre">to(batch_size=...)</span></code> does without a device: nested
+tensordicts with more batch dimensions keep their batch size,
+nested lazy stacks stay lazy stacks (or raise, as there, if
+they need more batch dimensions) and the names are kept. A
+<code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> is emitted when the result will change.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which keeps the batch size.</p></li>
+<li><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – a tensordict whose device, and
+dtype if all its leaves share one, are those of the result.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>cast_filter</strong> (<em>Callable</em><em>, </em><em>optional</em>) – a predicate
+<code class="docutils literal notranslate"><span class="pre">fn(key,</span> <span class="pre">value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code> that selects the tensor leaves the
+dtype cast applies to. <code class="docutils literal notranslate"><span class="pre">key</span></code> is the nested key of the leaf as
+a tuple of str, for example <code class="docutils literal notranslate"><span class="pre">(&quot;obs&quot;,)</span></code> or
+<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code>. Leaves for which it returns <code class="docutils literal notranslate"><span class="pre">False</span></code>
+keep their dtype, but still move to the new device or memory
+format. It is not called on non-tensor data, without a dtype,
+or with an attrs tensordict. An
+<a class="reference internal" href="tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> leaf is passed as is.
+Helpers such as <a class="reference internal" href="tensordict.is_inexact.html#tensordict.is_inexact" title="tensordict.is_inexact"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_inexact()</span></code></a> can be passed
+directly. Defaults to the <code class="docutils literal notranslate"><span class="pre">cast_filter</span></code> of a tensorclass that
+declares one, and to casting every leaf otherwise; pass
+<code class="docutils literal notranslate"><span class="pre">None</span></code> to cast every leaf. The dtype shorthands
+(<a class="reference internal" href="tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float" title="tensordict.TensorDictBase.float"><code class="xref py py-meth docutils literal notranslate"><span class="pre">float()</span></code></a>, <a class="reference internal" href="tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16" title="tensordict.TensorDictBase.bfloat16"><code class="xref py py-meth docutils literal notranslate"><span class="pre">bfloat16()</span></code></a>, …) take it too.</p></li>
+<li><p><strong>non_blocking_pin</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, pins the tensors
+before sending them to the device, in <code class="docutils literal notranslate"><span class="pre">num_threads</span></code>
+threads. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Since <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> instances do not have
-a dtype, the dtype is gathered from the example leaves.
-If there are more than one dtype, then no dtype
-casting is done.</p>
+<p>Each call starts and joins its pinning threads, which costs
+the same however little data there is. So
+<code class="docutils literal notranslate"><span class="pre">non_blocking_pin=True</span></code> pays off only for large
+tensordicts, with leaves of a MiB or more and tens of MiB
+in total. For smaller tensordicts, <code class="docutils literal notranslate"><span class="pre">td.to(&quot;cuda&quot;)</span></code> is
+usually the fastest, and
+<code class="docutils literal notranslate"><span class="pre">td.pin_memory().to(&quot;cuda&quot;,</span> <span class="pre">non_blocking=True)</span></code> is also
+faster than <code class="docutils literal notranslate"><span class="pre">non_blocking_pin=True</span></code>. Measure the
+crossover on your machine.</p>
 </div>
 </p></li>
-<li><p><strong>non_blocking_pin</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensors are pinned before
-being sent to device. This will be done asynchronously but can be
-controlled via the <code class="docutils literal notranslate"><span class="pre">num_threads</span></code> argument.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Calling <code class="docutils literal notranslate"><span class="pre">tensordict.pin_memory().to(&quot;cuda&quot;)</span></code> will usually
-be much slower than <code class="docutils literal notranslate"><span class="pre">tensordict.to(&quot;cuda&quot;,</span> <span class="pre">non_blocking_pin=True)</span></code> as
-the pin_memory is called asynchronously in the second case.
-Multithreaded <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code> will usually be beneficial if the tensors
-are large and numerous: when there are too few tensors to be sent,
-the overhead of spawning threads and collecting data outweighs the benefits
-of multithreading, and if the tensors are small the overhead of iterating
-over a long list is also prohibitively large.</p>
-</div>
-</p></li>
-<li><p><strong>num_threads</strong> (<a class="reference internal" href="tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int" title="tensordict.TensorDictBase.int"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><em>None</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">non_blocking_pin=True</span></code>, the number
-of threads to be used for <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>. By default,
-up to <code class="docutils literal notranslate"><span class="pre">max(1,</span> <span class="pre">torch.get_num_threads()</span> <span class="pre">//</span> <span class="pre">2)</span></code> threads are
-started, and no more than one per leaf.
-<code class="docutils literal notranslate"><span class="pre">num_threads=0</span></code> will cancel any
-multithreading for the <cite>pin_memory()</cite> calls.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the data will be written in-place in the same tensordict.
-This can be significantly faster whenever building a tensordict is CPU-overhead bound.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>num_threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">non_blocking_pin=True</span></code>, the
+number of threads that pin the leaves, at most one per leaf.
+<code class="docutils literal notranslate"><span class="pre">0</span></code> pins them on the calling thread. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+which starts up to <code class="docutils literal notranslate"><span class="pre">max(1,</span> <span class="pre">torch.get_num_threads()</span> <span class="pre">//</span> <span class="pre">2)</span></code>
+threads.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, writes the cast leaves into
+the tensordict, which keeps its identity and keys, and returns
+<code class="docutils literal notranslate"><span class="pre">self</span></code>. This can be faster when building a new tensordict is
+what costs the most. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>. Defaults
+to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a new tensordict instance if the device differs from the tensordict
-device and/or if the dtype or memory format is passed. The same
-tensordict otherwise.
-<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> only modifications are done in-place.</p>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">self</span></code> when nothing changes, with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>, or when only
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> is given; a new tensordict otherwise.</p>
 </dd>
 </dl>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>If the TensorDict is consolidated, the resulting TensorDict will be consolidated too.
-Each new tensor will be a view on the consolidated storage cast to the desired device.</p>
-</div>
 <p>This operation can be used as a context manager too. Inside the
 <code class="docutils literal notranslate"><span class="pre">with</span></code> block, you work on the cast tensordict. When the block exits,
 its entries are written back to the original tensordict, on the
@@ -1749,6 +1776,14 @@ locked. If the block raises an exception, nothing is written back.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data_int</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>  <span class="c1"># casts to int</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data_int</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
 <span class="go">tensor(1, dtype=torch.int32)</span>
+</pre></div>
+</div>
+<p>Cast the floating-point leaves only:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_inexact</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data_bf16</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span> <span class="n">cast_filter</span><span class="o">=</span><span class="n">is_inexact</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data_bf16</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">data_bf16</span><span class="p">[</span><span class="s2">"done"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+<span class="go">(torch.bfloat16, torch.bool)</span>
 </pre></div>
 </div>
 <p>The next lines need a CUDA device, so they are not run when the
@@ -1834,12 +1869,12 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="tensordict.pad_sequence.html"
+       href="tensordict.collate.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pad_sequence</p>
+        <p class="prev-next-title">collate</p>
       </div>
     </a>
     <a class="right-next"
@@ -1873,12 +1908,12 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="tensordict.pad_sequence.html"
+       href="tensordict.collate.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pad_sequence</p>
+        <p class="prev-next-title">collate</p>
       </div>
     </a>
     <a class="right-next"
@@ -2146,7 +2181,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to",
        "url": "/reference/generated/tensordict.TensorDictBase.to.html",
-       "articleBody": "TensorDictBase.to# TensorDictBase.to(*args, **kwargs) \u2192 Self# Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted). When a dtype is passed, every tensor leaf is cast to that dtype, whatever its original dtype (including integer and boolean leaves). Parameters: device (device, optional) \u2013 the desired device of the tensordict. dtype (dtype, optional) \u2013 the desired dtype of all the tensors in the tensordict. tensor (Tensor, optional) \u2013 Tensor whose dtype and device are the desired dtype and device for all tensors in this TensorDict. Keyword Arguments: non_blocking (bool, optional) \u2013 controls how the leaves are copied. If None (default), the leaves are copied with non_blocking=True and, when the target device is not a CUDA device (e.g. device-to-host copies), the tensordict synchronizes once after all the copies have been issued; for a CPU target, only if a leaf comes from another device. Under torch.compile(), these copies are blocking instead. If True, the copies are non-blocking and no synchronization is performed: the caller is responsible for synchronizing before reading the results. If False, the copies are blocking. memory_format (memory_format, optional) \u2013 the desired memory format for the 4D and 5D tensors in this tensordict, as in torch.nn.Module.to(). batch_size (Size, optional) \u2013 resulting batch-size of the output tensordict. When the device or dtype changes, every nested tensordict gets exactly this batch size and the names are erased. Starting with TensorDict 0.17, the default will change to setting the batch size as to(batch_size=...) does without a device: nested tensordicts with more batch dimensions keep their batch size, nested lazy stacks stay lazy stacks (or raise, as there, if they need more batch dimensions) and the names are kept. A FutureWarning is emitted when the result will change. other (TensorDictBase, optional) \u2013 TensorDict instance whose dtype and device are the desired dtype and device for all tensors in this TensorDict. Note Since TensorDictBase instances do not have a dtype, the dtype is gathered from the example leaves. If there are more than one dtype, then no dtype casting is done. non_blocking_pin (bool, optional) \u2013 if True, the tensors are pinned before being sent to device. This will be done asynchronously but can be controlled via the num_threads argument. Note Calling tensordict.pin_memory().to(\"cuda\") will usually be much slower than tensordict.to(\"cuda\", non_blocking_pin=True) as the pin_memory is called asynchronously in the second case. Multithreaded pin_memory will usually be beneficial if the tensors are large and numerous: when there are too few tensors to be sent, the overhead of spawning threads and collecting data outweighs the benefits of multithreading, and if the tensors are small the overhead of iterating over a long list is also prohibitively large. num_threads (int or None, optional) \u2013 if non_blocking_pin=True, the number of threads to be used for pin_memory. By default, up to max(1, torch.get_num_threads() // 2) threads are started, and no more than one per leaf. num_threads=0 will cancel any multithreading for the pin_memory() calls. inplace (bool, optional) \u2013 if True, the data will be written in-place in the same tensordict. This can be significantly faster whenever building a tensordict is CPU-overhead bound. Defaults to False. Returns: a new tensordict instance if the device differs from the tensordict device and/or if the dtype or memory format is passed. The same tensordict otherwise. batch_size only modifications are done in-place. Note If the TensorDict is consolidated, the resulting TensorDict will be consolidated too. Each new tensor will be a view on the consolidated storage cast to the desired device. This operation can be used as a context manager too. Inside the with block, you work on the cast tensordict. When the block exits, its entries are written back to the original tensordict, on the original device. Use it to run a module that expects its input on a specific device. See Devices, dtypes, and memory. Note On exit, every entry is moved back to the original device. The entries that already existed get their original dtype back, but the new entries keep the dtype of the with block: after with td.to(torch.float64) as td64, a new entry of td64 is float64 in td. The original tensordict must not be locked. If the block raises an exception, nothing is written back. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({\"a\": 1.0}, [], device=None) \u003e\u003e\u003e data_int = data.to(torch.int) # casts to int \u003e\u003e\u003e data_int[\"a\"] tensor(1, dtype=torch.int32) The next lines need a CUDA device, so they are not run when the documentation is tested. \u003e\u003e\u003e data_cuda = data.to(\"cuda:0\") \u003e\u003e\u003e data_cuda_int = data.to(\"cuda:0\", torch.int) \u003e\u003e\u003e data_cuda = data.to(torch.randn(3, device=\"cuda:0\")) \u003e\u003e\u003e data_cuda = data.to(other=TensorDict({}, [], device=\"cuda:0\")) Use it as a context manager for a temporary device change (CUDA needed): \u003e\u003e\u003e from tensordict.nn import TensorDictModule \u003e\u003e\u003e mod = TensorDictModule(lambda x: x + 1, in_keys=[\"x\"], out_keys=[\"y\"]) \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3], device=\"cpu\") \u003e\u003e\u003e with td.to(\"cuda\") as td_gpu: ... _ = td_gpu.update(mod(td_gpu)) # runs on the GPU \u003e\u003e\u003e # The entries are written back on the original device \u003e\u003e\u003e assert td[\"y\"].device.type == \"cpu\" A temporary dtype change runs on CPU. The new entry keeps the dtype of the with block: \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e with td.to(torch.float64) as td64: ... td64[\"y\"] = td64[\"x\"] + 1 \u003e\u003e\u003e td[\"x\"].dtype, td[\"y\"].dtype (torch.float32, torch.float64) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use to# Devices and memory-mapped tensors Devices and memory-mapped tensors",
+       "articleBody": "TensorDictBase.to# TensorDictBase.to(*args, **kwargs) \u2192 Self# Returns a tensordict cast to another device, dtype or memory format, or with a new batch size. It accepts the forms of torch.Tensor.to(), and some more: to(device, dtype=None): moves every leaf to device and, if dtype is given, casts it. to(dtype): casts every tensor leaf to dtype, whatever its original dtype (integer and boolean leaves too), unless cast_filter selects the leaves to cast. to(tensor): uses the device and the dtype of tensor. to(other=tensordict): uses the device of other, and its dtype if all its leaves share one. Otherwise the dtypes are kept. to(batch_size=...): only sets the batch size, in place, and returns self. to(td.attrs()): casts each leaf to the device and the dtype that attrs() recorded for the same key. See Devices, dtypes, and memory. The result is self when the device is already the device of the tensordict and no dtype or memory format is given. Otherwise it is a new tensordict, unless inplace=True. When only the device changes, a consolidated tensordict gives a consolidated result, whose leaves are views of one storage on the new device. Parameters: device (device, str or int, optional) \u2013 the device of the result. Its nested tensordicts get it too. dtype (dtype, optional) \u2013 the dtype of the tensor leaves of the result. tensor (Tensor, optional) \u2013 a tensor whose device and dtype are the device and dtype of the result. Keyword Arguments: non_blocking (bool, optional) \u2013 how the leaves are copied. None copies them with non_blocking=True and, when the target is not a CUDA device (for example a copy to the host), synchronizes once after all the copies are issued; for a CPU target, only if a leaf comes from another device. Under torch.compile(), these copies are blocking instead. True copies without synchronizing: synchronize before you read the results. False makes blocking copies. Defaults to None. It can also follow the device, dtype or tensor positionally, as in to(\"cpu\", torch.float64, False). A positional True is ignored for now, with a FutureWarning: the copies synchronize as for None. Starting with TensorDict 0.17, the default will change to honoring it as the keyword True is. memory_format (memory_format, optional) \u2013 the memory format of the 4D and 5D tensors of the result, as in torch.nn.Module.to(). Defaults to None, which keeps the memory format. batch_size (Size, optional) \u2013 the batch size of the result. When the device or dtype changes, every nested tensordict gets exactly this batch size and the names are erased. Starting with TensorDict 0.17, the default will change to setting the batch size as to(batch_size=...) does without a device: nested tensordicts with more batch dimensions keep their batch size, nested lazy stacks stay lazy stacks (or raise, as there, if they need more batch dimensions) and the names are kept. A FutureWarning is emitted when the result will change. Defaults to None, which keeps the batch size. other (TensorDictBase, optional) \u2013 a tensordict whose device, and dtype if all its leaves share one, are those of the result. Defaults to None. cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves the dtype cast applies to. key is the nested key of the leaf as a tuple of str, for example (\"obs\",) or (\"next\", \"done\"). Leaves for which it returns False keep their dtype, but still move to the new device or memory format. It is not called on non-tensor data, without a dtype, or with an attrs tensordict. An UnbatchedTensor leaf is passed as is. Helpers such as is_inexact() can be passed directly. Defaults to the cast_filter of a tensorclass that declares one, and to casting every leaf otherwise; pass None to cast every leaf. The dtype shorthands (float(), bfloat16(), \u2026) take it too. non_blocking_pin (bool, optional) \u2013 if True, pins the tensors before sending them to the device, in num_threads threads. Defaults to False. Note Each call starts and joins its pinning threads, which costs the same however little data there is. So non_blocking_pin=True pays off only for large tensordicts, with leaves of a MiB or more and tens of MiB in total. For smaller tensordicts, td.to(\"cuda\") is usually the fastest, and td.pin_memory().to(\"cuda\", non_blocking=True) is also faster than non_blocking_pin=True. Measure the crossover on your machine. num_threads (int, optional) \u2013 with non_blocking_pin=True, the number of threads that pin the leaves, at most one per leaf. 0 pins them on the calling thread. Defaults to None, which starts up to max(1, torch.get_num_threads() // 2) threads. inplace (bool, optional) \u2013 if True, writes the cast leaves into the tensordict, which keeps its identity and keys, and returns self. This can be faster when building a new tensordict is what costs the most. See In-place operations. Defaults to False. Returns: self when nothing changes, with inplace=True, or when only batch_size is given; a new tensordict otherwise. This operation can be used as a context manager too. Inside the with block, you work on the cast tensordict. When the block exits, its entries are written back to the original tensordict, on the original device. Use it to run a module that expects its input on a specific device. See Devices, dtypes, and memory. Note On exit, every entry is moved back to the original device. The entries that already existed get their original dtype back, but the new entries keep the dtype of the with block: after with td.to(torch.float64) as td64, a new entry of td64 is float64 in td. The original tensordict must not be locked. If the block raises an exception, nothing is written back. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({\"a\": 1.0}, [], device=None) \u003e\u003e\u003e data_int = data.to(torch.int) # casts to int \u003e\u003e\u003e data_int[\"a\"] tensor(1, dtype=torch.int32) Cast the floating-point leaves only: \u003e\u003e\u003e from tensordict import is_inexact \u003e\u003e\u003e data = TensorDict(x=torch.zeros(3), done=torch.zeros(3, dtype=torch.bool)) \u003e\u003e\u003e data_bf16 = data.to(torch.bfloat16, cast_filter=is_inexact) \u003e\u003e\u003e data_bf16[\"x\"].dtype, data_bf16[\"done\"].dtype (torch.bfloat16, torch.bool) The next lines need a CUDA device, so they are not run when the documentation is tested. \u003e\u003e\u003e data_cuda = data.to(\"cuda:0\") \u003e\u003e\u003e data_cuda_int = data.to(\"cuda:0\", torch.int) \u003e\u003e\u003e data_cuda = data.to(torch.randn(3, device=\"cuda:0\")) \u003e\u003e\u003e data_cuda = data.to(other=TensorDict({}, [], device=\"cuda:0\")) Use it as a context manager for a temporary device change (CUDA needed): \u003e\u003e\u003e from tensordict.nn import TensorDictModule \u003e\u003e\u003e mod = TensorDictModule(lambda x: x + 1, in_keys=[\"x\"], out_keys=[\"y\"]) \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3], device=\"cpu\") \u003e\u003e\u003e with td.to(\"cuda\") as td_gpu: ... _ = td_gpu.update(mod(td_gpu)) # runs on the GPU \u003e\u003e\u003e # The entries are written back on the original device \u003e\u003e\u003e assert td[\"y\"].device.type == \"cpu\" A temporary dtype change runs on CPU. The new entry keeps the dtype of the with block: \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e with td.to(torch.float64) as td64: ... td64[\"y\"] = td64[\"x\"] + 1 \u003e\u003e\u003e td[\"x\"].dtype, td[\"y\"].dtype (torch.float32, torch.float64) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use to# Devices and memory-mapped tensors Devices and memory-mapped tensors",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1,33 +1,33 @@
 # TensorDictBase.chunk
 
-TensorDictBase.chunk(*chunks: [int](https://docs.python.org/3/builtins/functions.html#int)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[TensorCollection, ...]
+TensorDictBase.chunk(*chunks: [int](https://docs.python.org/3/builtins/functions.html#int)*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection), ...]
 
-Splits a tensordict into the specified number of chunks, if possible.
+Splits the tensordict into `chunks` pieces along a batch dimension, as [`torch.chunk()`](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html#torch.chunk) does.
 
-Each chunk is a view of the input tensordict.
+Each piece has `ceil(batch_size[dim] / chunks)` elements, except the
+last one, which can be smaller. So there can be fewer than `chunks`
+pieces. The pieces hold views of the original tensors.
 
 Parameters:
 
-- **chunks** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - number of chunks to return
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - dimension along which to split the
-tensordict. Default is 0.
+- **chunks** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the number of pieces.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch dimension to split. Defaults to
+`0`.
+
+Returns:
+
+A tuple of tensordicts.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> td = TensorDict({
-... 'x': torch.arange(24).reshape(3, 4, 2),
-... }, batch_size=[3, 4])
->>> td0, td1 = td.chunk(dim=-1, chunks=2)
->>> td0['x']
-tensor([[[ 0, 1],
- [ 2, 3]],
- [[ 8, 9],
- [10, 11]],
- [[16, 17],
- [18, 19]]])
+>>> td = TensorDict(x=torch.arange(5), batch_size=[5])
+>>> [t["x"] for t in td.chunk(2)]
+[tensor([0, 1, 2]), tensor([3, 4])]
+>>> [t["x"] for t in td.chunk(4)]
+[tensor([0, 1]), tensor([2, 3]), tensor([4])]
 ```
 
 Every tensordict class and every tensorclass has this method. For the

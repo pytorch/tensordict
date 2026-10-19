@@ -1642,9 +1642,37 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.copy_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">copy_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.copy_" title="Link to this definition">#</a></dt>
-<dd><p>See <a class="reference internal" href="tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDictBase.update_"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorDictBase.update_</span></code></a>.</p>
-<p>The non-blocking argument will be ignored and is just present for
-compatibility with <code class="xref py py-func docutils literal notranslate"><span class="pre">torch.Tensor.copy_()</span></code>.</p>
+<dd><p>Copies the entries of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> into the existing entries, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>The same as <a class="reference internal" href="tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDictBase.update_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_()</span></code></a>, under the name of
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.copy_()</span></code></a>: the existing tensors keep their storage,
+and every key of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> must exist in the tensordict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a>) – the entries to copy.</p></li>
+<li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, copies between devices
+can run asynchronously with respect to the host. Defaults to
+<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if a key of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> is missing from the
+    tensordict.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a value does not fit the shape of its entry.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span>
+<span class="go">tensor([1., 1., 1.])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2005,7 +2033,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.copy",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.copy",
        "url": "/reference/generated/tensordict.TensorDictBase.copy_.html",
-       "articleBody": "TensorDictBase.copy# TensorDictBase.copy_(tensordict: T, non_blocking: bool = False) \u2192 Self# See TensorDictBase.update_. The non-blocking argument will be ignored and is just present for compatibility with torch.Tensor.copy_(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.copy# TensorDictBase.copy_(tensordict: T, non_blocking: bool = False) \u2192 Self# Copies the entries of tensordict into the existing entries, and returns self. The same as update_(), under the name of torch.Tensor.copy_(): the existing tensors keep their storage, and every key of tensordict must exist in the tensordict. Parameters: tensordict (TensorDictBase or dict) \u2013 the entries to copy. non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Raises: KeyError \u2013 if a key of tensordict is missing from the tensordict. RuntimeError \u2013 if a value does not fit the shape of its entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = torch.zeros(3) \u003e\u003e\u003e td = TensorDict(x=x, batch_size=[3]) \u003e\u003e\u003e _ = td.copy_(TensorDict(x=torch.ones(3), batch_size=[3])) \u003e\u003e\u003e x tensor([1., 1., 1.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

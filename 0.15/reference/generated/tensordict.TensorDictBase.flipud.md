@@ -2,16 +2,15 @@
 
 TensorDictBase.flipud()
 
-Flip the tensordict in the up/down direction.
+Returns a tensordict with the elements reversed along batch dimension 0.
 
-Flip the entries in each column in the up/down direction.
-Rows are preserved, but appear in a different order than before.
+It is `flip(0)`, as for [`torch.flipud()`](https://docs.pytorch.org/docs/stable/generated/torch.flipud.html#torch.flipud). The tensordict needs at
+least 1 batch dimension, or a `RuntimeError` is raised. The data is
+copied.
 
-Requires the tensordict to have at least 1 batch dimension.
-
-Returns:
-
-a new tensordict with the first dimension flipped.
+It can be used as a context manager, as [`unsqueeze()`](tensordict.TensorDictBase.unsqueeze.html#tensordict.TensorDictBase.unsqueeze) can: when
+the `with` block exits, the entries of the block are written back to
+the tensordict with the inverse operation.
 
 Examples
 

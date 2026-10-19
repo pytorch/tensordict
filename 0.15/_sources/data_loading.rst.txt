@@ -78,6 +78,20 @@ of points:
   >>> [cloud["points"].shape for cloud in batch.unbind(0)]
   [torch.Size([5, 3]), torch.Size([2, 3]), torch.Size([7, 3]), torch.Size([3, 3])]
 
+:func:`~tensordict.collate` does both: it stacks the samples densely if
+their shapes match, and lazily otherwise. It also reads samples that hold
+tensordicts or tensorclasses in a tuple or a dict, such as ``(td, label)``
+pairs, which ``torch.stack`` cannot stack:
+
+  >>> from tensordict import collate
+  >>> pairs = [(TensorDict({"features": torch.randn(3)}), i) for i in range(10)]
+  >>> features, labels = next(iter(DataLoader(pairs, batch_size=4, collate_fn=collate)))
+  >>> type(features).__name__, features.batch_size, labels
+  ('TensorDict', torch.Size([4]), tensor([0, 1, 2, 3]))
+  >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate)))
+  >>> type(batch).__name__
+  'LazyStackedTensorDict'
+
 Batch samplers
 --------------
 
@@ -305,13 +319,22 @@ This script computes the kinetic energy of 8 particles in two processes:
                batch_size=[8],
            ).memmap_()
            out = TensorDict({"energy": torch.zeros(8)}, batch_size=[8]).memmap_like(path)
-           particles.map(kinetic_energy, num_workers=2, chunksize=2, out=out)
+           particles.map(
+               kinetic_energy,
+               num_workers=2,
+               chunksize=2,
+               out=out,
+               generator=torch.default_generator,
+           )
            # MemoryMappedTensor([ 0.0000,  1.5000,  6.0000, 13.5000])
            print(out["energy"][:4])
 
 ``map`` also takes ``num_chunks``, a ``pool`` that you create, and a
-``generator`` that seeds each worker. :meth:`~tensordict.TensorDictBase.map_iter`
-returns the results one chunk at a time.
+``generator`` that seeds each worker. Starting with TensorDict 0.17, the
+default will change to drawing the seed from the global RNG;
+``generator=torch.default_generator`` does that now.
+:meth:`~tensordict.TensorDictBase.map_iter` returns the results one chunk at
+a time.
 
 See also
 --------

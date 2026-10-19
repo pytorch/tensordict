@@ -2,9 +2,9 @@
 
 TensorDictBase.split(*split_size: [int](https://docs.python.org/3/builtins/functions.html#int) | [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[int](https://docs.python.org/3/builtins/functions.html#int)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase), ...]
 
-Splits each tensor in the TensorDict with the specified size in the given dimension, like torch.split.
+Splits the tensordict along a batch dimension, as [`torch.split()`](https://docs.pytorch.org/docs/stable/generated/torch.split.html#torch.split) does.
 
-Returns a list of `TensorDict` instances with the view of split chunks of items.
+The pieces hold views of the original tensors, and keep the names.
 
 On a [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), sizes along the stack
 dim that are negative or do not add up to the stack size emit a
@@ -14,24 +14,31 @@ raising a `RuntimeError`, as `TensorDict.split` does.
 
 Parameters:
 
-- **split_size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or**List**(*[*int*](https://docs.python.org/3/builtins/functions.html#int)*)*) - size of a single chunk or list of sizes for each chunk.
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - dimension along which to split the tensor.
+- **split_size** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)) - the size of each piece (the last
+one can be smaller), or the list of the sizes of the pieces,
+which must add up to `batch_size[dim]`.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch dimension to split. Defaults to
+`0`.
 
 Returns:
 
-A list of TensorDict with specified size in given dimension.
+A tuple of tensordicts.
+
+Raises:
+
+[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the sizes of a list do not add up to
+ `batch_size[dim]`.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> td = TensorDict({
-... 'x': torch.arange(12).reshape(3, 4),
-... }, batch_size=[3, 4])
->>> td0, td1 = td.split([1, 2], dim=0)
->>> print(td0['x'])
-tensor([[0, 1, 2, 3]])
+>>> td = TensorDict(x=torch.arange(5), batch_size=[5])
+>>> [t["x"] for t in td.split(2)]
+[tensor([0, 1]), tensor([2, 3]), tensor([4])]
+>>> [t["x"] for t in td.split([1, 4])]
+[tensor([0]), tensor([1, 2, 3, 4])]
 ```
 
 Every tensordict class and every tensorclass has this method. For the

@@ -2,34 +2,39 @@
 
 TensorDictBase.state_dict(*destination=None*, *prefix=''*, *keep_vars=False*, *flatten=True*) → [OrderedDict](https://docs.python.org/3/library/typing.html#typing.OrderedDict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]
 
-Produces a state_dict from the tensordict.
+Returns the leaves of the tensordict in an `OrderedDict`, as [`torch.nn.Module.state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict) does.
 
-The state-dict is flat by default (dot-separated keys), following the
-convention of [`torch.nn.Module.state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict). Set `flatten=False`
-for a nested structure.
+The state dict is flat by default: the key of a nested leaf joins its
+keys with `"."` (`"n.b"` for `("n", "b")`), following
+[`torch.nn.Module.state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict). With `flatten=False`, each
+nested tensordict becomes a nested `OrderedDict`. Read it back with
+[`load_state_dict()`](tensordict.TensorDictBase.load_state_dict.html#tensordict.TensorDictBase.load_state_dict).
 
-Metadata (batch_size, device) is stored in a `_metadata` attribute on
-the returned OrderedDict, following the same convention as
-[`torch.nn.Module.state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict). In flat mode, metadata for each
-nesting level is stored under its dot-separated prefix (`""` for root,
-`"sub"` for a nested tensordict at key `"sub"`, etc.). In nested
-mode, each nested OrderedDict carries its own `_metadata`.
+The batch size and device of each level are stored in a
+`_metadata` attribute of the result, as in
+[`torch.nn.Module.state_dict()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict). In a flat state dict, they are
+stored under the `"."`-joined key of the level (`""` for the root,
+`"n"` for the nested tensordict `"n"`). In a nested state dict,
+each nested `OrderedDict` has its own `_metadata`.
 
 Parameters:
 
-- **destination** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,**optional*) - If provided, the state of tensordict will
-be updated into the dict and the same object is returned.
-Otherwise, an `OrderedDict` will be created and returned.
-Default: `None`.
-- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - a prefix added to tensor
-names to compose the keys in state_dict. Default: `''`.
-- **keep_vars** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - by default the [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) items
-returned in the state dict are detached from autograd. If it's
-set to `True`, detaching will not be performed.
-Default: `False`.
-- **flatten** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether the structure should be flattened
-with the `"."` character or not.
-Defaults to `True`.
+- **destination** (*OrderedDict**,**optional*) - an `OrderedDict` to write the
+entries into, and to return. A plain `dict` raises an
+`AttributeError`. Defaults to `None`, which creates a new
+`OrderedDict`.
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - a string prepended to every key. Defaults
+to `""`.
+- **keep_vars** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `False`, the tensors are detached
+from autograd. If `True`, the tensors of the tensordict are
+returned unchanged. Defaults to `False`.
+- **flatten** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, nested keys are joined with
+`"."`. If `False`, nested tensordicts become nested
+`OrderedDict` instances. Defaults to `True`.
+
+Returns:
+
+`destination`, or a new `OrderedDict`.
 
 Examples
 

@@ -1642,14 +1642,39 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.rename_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">rename_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">names</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">rename_map</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.rename_" title="Link to this definition">#</a></dt>
-<dd><p>Same as <a class="reference internal" href="tensordict.TensorDictBase.rename.html#tensordict.TensorDictBase.rename" title="tensordict.TensorDictBase.rename"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rename()</span></code></a>, but executes the renaming in-place.</p>
+<dd><p>Renames the batch dimensions of the tensordict in place and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
+<p>Pass either the new names, one per batch dimension, or keyword
+arguments that map old names to new ones. The nested tensordicts get
+the new names for the batch dimensions they share with the tensordict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>*names</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>None</em>) – the new names, one per batch dimension, or
+a single <code class="docutils literal notranslate"><span class="pre">None</span></code> to clear every name. Exclusive with
+<code class="docutils literal notranslate"><span class="pre">**rename_map</span></code>.</p></li>
+<li><p><strong>**rename_map</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>None</em>) – new names by old name, as in
+<code class="docutils literal notranslate"><span class="pre">rename_(old=&quot;new&quot;)</span></code>. Exclusive with <code class="docutils literal notranslate"><span class="pre">*names</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if both <code class="docutils literal notranslate"><span class="pre">names</span></code> and <code class="docutils literal notranslate"><span class="pre">rename_map</span></code> are passed, or
+    neither (except on a tensordict with no batch dimension), or if
+    a key of <code class="docutils literal notranslate"><span class="pre">rename_map</span></code> is not a name of the tensordict.</p>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.rename.html#tensordict.TensorDictBase.rename" title="tensordict.TensorDictBase.rename"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rename()</span></code></a>, which returns a renamed copy.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="p">,</span><span class="mi">4</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="s2">"abcd"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td_renamed</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">rename_</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="s2">"g"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td_renamed</span> <span class="ow">is</span> <span class="n">td</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">td</span><span class="o">.</span><span class="n">names</span> <span class="o">==</span> <span class="nb">list</span><span class="p">(</span><span class="s2">"abgd"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span> <span class="n">names</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="s2">"abcd"</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">rename_</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="s2">"g"</span><span class="p">)</span> <span class="ow">is</span> <span class="n">td</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">names</span>
+<span class="go">['a', 'b', 'g', 'd']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">rename_</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span><span class="o">.</span><span class="n">names</span>
+<span class="go">[None, None, None, None]</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2012,7 +2037,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.rename",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.rename",
        "url": "/reference/generated/tensordict.TensorDictBase.rename_.html",
-       "articleBody": "TensorDictBase.rename# TensorDictBase.rename_(*names, **rename_map)# Same as rename(), but executes the renaming in-place. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({}, batch_size=[1, 2, 3 ,4]) \u003e\u003e\u003e td.names = list(\"abcd\") \u003e\u003e\u003e td_renamed = td.rename_(c=\"g\") \u003e\u003e\u003e assert td_renamed is td \u003e\u003e\u003e assert td.names == list(\"abgd\") Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.rename# TensorDictBase.rename_(*names, **rename_map)# Renames the batch dimensions of the tensordict in place and returns self. Pass either the new names, one per batch dimension, or keyword arguments that map old names to new ones. The nested tensordicts get the new names for the batch dimensions they share with the tensordict. Parameters: *names (str or None) \u2013 the new names, one per batch dimension, or a single None to clear every name. Exclusive with **rename_map. **rename_map (str or None) \u2013 new names by old name, as in rename_(old=\"new\"). Exclusive with *names. Raises: ValueError \u2013 if both names and rename_map are passed, or neither (except on a tensordict with no batch dimension), or if a key of rename_map is not a name of the tensordict. See also rename(), which returns a renamed copy. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[1, 2, 3, 4], names=list(\"abcd\")) \u003e\u003e\u003e td.rename_(c=\"g\") is td True \u003e\u003e\u003e td.names [\u0027a\u0027, \u0027b\u0027, \u0027g\u0027, \u0027d\u0027] \u003e\u003e\u003e td.rename_(None).names [None, None, None, None] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

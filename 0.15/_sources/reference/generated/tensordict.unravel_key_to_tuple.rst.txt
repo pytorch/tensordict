@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+unravel_key_to_tuple
+====================
+
+.. autofunction:: unravel_key_to_tuple
+
+.. minigallery:: tensordict.unravel_key_to_tuple
+    :add-heading: Tutorials that use ``unravel_key_to_tuple``

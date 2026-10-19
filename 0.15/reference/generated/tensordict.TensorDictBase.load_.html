@@ -1642,11 +1642,21 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.load_">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">load_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.load_" title="Link to this definition">#</a></dt>
-<dd><p>Loads a tensordict from disk within the current tensordict.</p>
-<p>This method is a proxy to <a class="reference internal" href="tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a>.</p>
+<dd><p>Loads a saved tensordict into the tensordict.</p>
+<p>Calls <a class="reference internal" href="tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a> with the same arguments.</p>
 <div class="deprecated">
-<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <a class="reference internal" href="tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a> instead.</p>
+<p><span class="versionmodified deprecated">Deprecated since version 0.15: </span>Use <a class="reference internal" href="tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a> instead. It will be removed in
+TensorDict 0.17.</p>
 </div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the directory, or the archive file, to read.</p></li>
+<li><p><strong>*args</strong> – passed to <a class="reference internal" href="tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a>.</p></li>
+<li><p><strong>**kwargs</strong> – passed to <a class="reference internal" href="tensordict.TensorDictBase.load_memmap_.html#tensordict.TensorDictBase.load_memmap_" title="tensordict.TensorDictBase.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a>.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2007,7 +2017,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.load",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.load",
        "url": "/reference/generated/tensordict.TensorDictBase.load_.html",
-       "articleBody": "TensorDictBase.load# TensorDictBase.load_(prefix: str | Path, *args, **kwargs)# Loads a tensordict from disk within the current tensordict. This method is a proxy to load_memmap_(). Deprecated since version 0.15: Use load_memmap_() instead. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.load# TensorDictBase.load_(prefix: str | Path, *args, **kwargs)# Loads a saved tensordict into the tensordict. Calls load_memmap_() with the same arguments. Deprecated since version 0.15: Use load_memmap_() instead. It will be removed in TensorDict 0.17. Parameters: prefix (str or Path) \u2013 the directory, or the archive file, to read. *args \u2013 passed to load_memmap_(). **kwargs \u2013 passed to load_memmap_(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -2,7 +2,7 @@
 
 TensorDictBase.erf() → Self
 
-Computes the [`erf()`](https://docs.pytorch.org/docs/stable/generated/torch.erf.html#torch.erf) value of each element of the TensorDict.
+Returns a new tensordict with [`torch.erf()`](https://docs.pytorch.org/docs/stable/generated/torch.erf.html#torch.erf) applied to every leaf.
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).

@@ -1,111 +1,90 @@
 # TensorDictBase.map
 
-TensorDictBase.map(*fn: Callable[[TensorCollection], TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *num_workers: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *out: TensorCollection | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *chunksize: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_chunks: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pool: mp.Pool | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *max_tasks_per_child: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *worker_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *index_with_generator: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *pbar: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *mp_start_method: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.map(*fn: Callable[[[TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)], [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *num_workers: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *out: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *chunksize: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *num_chunks: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *pool: mp.Pool | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *max_tasks_per_child: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *worker_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 1*, *index_with_generator: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *pbar: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *mp_start_method: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Maps a function to splits of the tensordict across one dimension.
+Applies a function to chunks of the tensordict in worker processes, and gathers the results.
 
-This method will apply a function to a tensordict instance by chunking
-it in tensordicts of equal size and dispatching the operations over the
-desired number of workers.
+The tensordict is split along `dim` into chunks, `fn` is called on
+each chunk in a pool of worker processes, and the results are joined
+along `dim`: concatenated with [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat), or stacked when
+`chunksize=0`. For an iterator over the results, see
+[`map_iter()`](tensordict.TensorDictBase.map_iter.html#tensordict.TensorDictBase.map_iter).
 
-The function signature must be `Callable[[TensorDict], TensorDict | Tensor]`.
-The output must support the [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) operation. The function
-must be serializable.
-
-Note
-
-This method is particularly useful when working with large
-datasets stored on disk (for example, memory-mapped tensordicts).
-The chunks are slices of the original data that are not copied,
-and the processes receive them without a data transfer. This way,
-you can process datasets larger than the memory (for example,
-over 1 TB).
+The chunks are slices of the tensordict, not copies. On a memory-mapped
+tensordict (see [`memmap_()`](tensordict.TensorDictBase.memmap_.html#tensordict.TensorDictBase.memmap_)), the workers read them from the
+files without a copy, which makes it possible to process data that is
+larger than memory.
 
 Parameters:
 
-- **fn** (*callable*) - function to apply to the tensordict.
-Signatures similar to `Callable[[TensorDict], TensorDict | Tensor]`
-are supported.
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dim along which the tensordict will be chunked.
-- **num_workers** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of workers. Exclusive with `pool`.
-If none is provided, the number of workers will be set to the
-number of cpus available.
+- **fn** (*Callable*) - the function called on each chunk, a tensordict
+that holds a slice of the tensordict along `dim`. It returns
+a tensordict, a tensor, or `None`. It must be picklable: define
+it at the top level of a module or script, not as a lambda.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dimension along which the tensordict is
+split into chunks. Defaults to `0`.
+- **num_workers** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of worker processes.
+Ignored when `pool` is given. Defaults to `None`, which uses
+one worker per CPU.
 
 Keyword Arguments:
 
-- **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - an optional container for the output.
-Its batch-size along the `dim` provided must match `self.ndim`.
-If it is shared or memmap ([`is_shared()`](tensordict.TensorDictBase.is_shared.html#tensordict.TensorDictBase.is_shared) or [`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap)
-returns `True`) it will be populated within the remote processes,
-avoiding data inward transfers. Otherwise, the data from the `self`
-slice will be sent to the process, collected on the current process
-and written inplace into `out`.
-- **chunksize** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - The size of each chunk of data.
-A `chunksize` of 0 will unbind the tensordict along the
-desired dimension and restack it after the function is applied,
-whereas `chunksize>0` will split the tensordict and call
-[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) on the resulting list of tensordicts.
-If none is provided, the number of chunks will equate the number
-of workers. For very large tensordicts, such large chunks
-may not fit in memory for the operation to be done and
-more chunks may be needed to make the operation practically
-doable. This argument is exclusive with `num_chunks`.
-- **num_chunks** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of chunks to split the tensordict
-into. If none is provided, the number of chunks will equate the number
-of workers. For very large tensordicts, such large chunks
-may not fit in memory for the operation to be done and
-more chunks may be needed to make the operation practically
-doable. This argument is exclusive with `chunksize`.
-- **pool** (*mp.Pool**,**optional*) - a multiprocess Pool instance to use
-to execute the job. If none is provided, a pool will be created
-within the `map` method.
-- **generator** ([*Generator*](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator)*,**optional*) - 
+- **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the results
+into, with the batch size of the result. If it is in shared
+memory or memory-mapped ([`is_shared()`](tensordict.TensorDictBase.is_shared.html#tensordict.TensorDictBase.is_shared) or
+[`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap) is `True`), the workers write into it
+directly; otherwise the results are sent back and written into
+it in the main process. Defaults to `None`.
+- **chunksize** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the size of each chunk along `dim`.
+`0` passes the elements one by one, unbound along `dim`.
+Exclusive with `num_chunks`. Defaults to `None`.
+- **num_chunks** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of chunks. Exclusive with
+`chunksize`. Defaults to `None`: if neither is given, the
+tensordict is split into one chunk per worker. Use more chunks
+when a chunk per worker does not fit in memory.
+- **pool** (*multiprocessing.Pool**,**optional*) - a pool of processes to run
+the job. When it is given, `num_workers`, `generator`,
+`max_tasks_per_child`, `worker_threads` and
+`mp_start_method` are ignored. Defaults to `None`, which
+creates a pool for the call and closes it afterwards.
+- **generator** ([*Generator*](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator)*,**optional*) - the generator that draws the
+base seed of the workers. Worker `i` seeds torch with the
+base seed plus `i`, and NumPy with a seed derived from both,
+so that the workers draw different random numbers. This makes the workers independent,
+not the results reproducible: which worker gets which chunk
+changes from call to call. Defaults to `None`, which uses a
+new [`torch.Generator`](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator), so the base seed is the same on
+every call, and emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with
+TensorDict 0.17, the default will change to drawing the base
+seed from the global torch RNG, as
+[`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) does, which also advances
+it by one draw. Pass `generator=torch.default_generator` for
+that behaviour now, or `generator=torch.Generator()` to keep
+the current seeds. To leave the workers unseeded, pass a
+`pool`.
+- **max_tasks_per_child** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of chunks a worker
+process handles before it is replaced by a new one. Defaults to
+`None`, which keeps the workers for the whole call.
+- **worker_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of torch threads in each
+worker. Defaults to `1`.
+- **index_with_generator** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, each chunk is
+indexed when a worker asks for it, instead of all at once
+before the job starts. This starts faster, but indexing is
+slower than [`split()`](tensordict.TensorDictBase.split.html#tensordict.TensorDictBase.split) and [`chunk()`](tensordict.TensorDictBase.chunk.html#tensordict.TensorDictBase.chunk), so the whole
+call may take longer. Defaults to `False`.
+- **pbar** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, shows a progress bar. Needs
+`tqdm`; without it, no bar is shown. Defaults to `False`.
+- **mp_start_method** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the start method of the worker
+processes, for example `"fork"` or `"spawn"`. CUDA tensors
+cannot be shared with processes started with `"fork"`.
+Defaults to `None`, which uses the default start method of
+[`torch.multiprocessing`](https://docs.pytorch.org/docs/stable/multiprocessing.html#module-torch.multiprocessing).
 
-a generator to use for seeding.
-A base seed will be generated from it, and each worker
-of the pool will be seeded with the provided seed incremented
-by a unique integer from `0` to `num_workers`. If no generator
-is provided, a random integer will be used as seed.
-To work with unseeded workers, a pool should be created separately
-and passed to `map()` directly.
+Returns:
 
-Note
-
-Caution should be taken when providing a low-valued seed as
-this can cause autocorrelation between experiments, example:
-if 8 workers are asked and the seed is 4, the workers seed will
-range from 4 to 11. If the seed is 5, the workers seed will range
-from 5 to 12. These two experiments will have an overlap of 7
-seeds, which can have unexpected effects on the results.
-
-Note
-
-The goal of seeding the workers is to have independent seed on
-each worker, and NOT to have reproducible results across calls
-of the map method. In other words, two experiments may and
-probably will return different results as it is impossible to
-know which worker will pick which job. However, we can make sure
-that each worker has a different seed and that the pseudo-random
-operations on each will be uncorrelated.
-- **max_tasks_per_child** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the maximum number of jobs picked
-by every child process. Defaults to `None`, i.e., no restriction
-on the number of jobs.
-- **worker_threads** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the number of threads for the workers.
-Defaults to `1`.
-- **index_with_generator** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the splitting / chunking
-of the tensordict will be done during the query, sparing init time.
-Note that [`chunk()`](tensordict.TensorDictBase.chunk.html#tensordict.TensorDictBase.chunk) and [`split()`](tensordict.TensorDictBase.split.html#tensordict.TensorDictBase.split) are much more
-efficient than indexing (which is used within the generator)
-so a gain of processing time at init time may have a negative
-impact on the total runtime. Defaults to `False`.
-- **pbar** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, a progress bar will be displayed.
-Requires tqdm to be available. Defaults to `False`.
-- **mp_start_method** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the start method for multiprocessing.
-If not provided, the default start method will be used.
-Accepted strings are `"fork"` and `"spawn"`. Keep in mind that
-`"cuda"` tensors cannot be shared between processes with the
-`"fork"` start method. This is without effect if the `pool`
-is passed to the `map` method.
+The results joined along `dim`, a tensordict or a tensor
+depending on what `fn` returns. When `out` is given, `out`.
+Otherwise, `None` if `fn` returns `None` for every chunk.
 
 Examples
 
@@ -124,7 +103,11 @@ def process_data(data):
 
 if __name__ == "__main__":
  data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
- data = data.map(process_data, dim=1, num_workers=2)
+ # generator=torch.default_generator seeds the workers from
+ # the global RNG, the default from TensorDict 0.17.
+ data = data.map(
+ process_data, dim=1, num_workers=2, generator=torch.default_generator
+ )
  print(data["y"][:, :10])
  # tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
 ```

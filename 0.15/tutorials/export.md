@@ -170,17 +170,17 @@ class GraphModule(torch.nn.Module):
  # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/torch/nn/modules/linear.py:134 in forward, code: return F.linear(input, self.weight, self.bias)
  linear_1: "f32[1, 4]" = torch.ops.aten.linear.default(relu, p_module_2_module_weight, p_module_2_module_bias); p_module_2_module_weight = p_module_2_module_bias = None
 
- # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/tensordict/nn/distributions/continuous.py:71 in forward, code: loc, scale = tensor.chunk(2, -1)
+ # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/tensordict/nn/distributions/continuous.py:80 in forward, code: loc, scale = tensor.chunk(2, -1)
  chunk = torch.ops.aten.chunk.default(linear_1, 2, -1)
  getitem: "f32[1, 2]" = chunk[0]
  getitem_1: "f32[1, 2]" = chunk[1]; chunk = None
 
- # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/tensordict/nn/utils.py:82 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
+ # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/tensordict/nn/utils.py:96 in forward, code: return torch.nn.functional.softplus(x + self.bias) + self.min_val
  add: "f32[1, 2]" = torch.ops.aten.add.Tensor(getitem_1, 0.5254586935043335); getitem_1 = None
  softplus: "f32[1, 2]" = torch.ops.aten.softplus.default(add); add = None
  add_1: "f32[1, 2]" = torch.ops.aten.add.Tensor(softplus, 0.01); softplus = None
 
- # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/tensordict/nn/distributions/continuous.py:72 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
+ # File: /__w/tensordict/tensordict/env/lib/python3.12/site-packages/tensordict/nn/distributions/continuous.py:81 in forward, code: scale = self.scale_mapping(scale).clamp_min(self.scale_lb)
  clamp_min: "f32[1, 2]" = torch.ops.aten.clamp_min.default(add_1, 0.0001); add_1 = None
  return (relu, linear_1, getitem, clamp_min)
 ```
@@ -345,7 +345,7 @@ built on `torch.export`.
 [AOTInductor](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html)
 documentation.
 
-**Total running time of the script:** (0 minutes 0.127 seconds)
+**Total running time of the script:** (0 minutes 0.129 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 

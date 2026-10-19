@@ -2,64 +2,56 @@
 
 TensorDictBase.separates(**keys: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *filter_empty: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → Self
 
-Separates the specified keys from the tensordict in-place.
+Removes the entries of `keys` from the tensordict in place, and returns them in a new tensordict.
 
-See also
-
-This method is equivalent to calling [`split_keys()`](tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys) with
-`inplace=True` on a single split.
-
-See also
-
-This method is equivalent to calling [`exclude()`](tensordict.TensorDictBase.exclude.html#tensordict.TensorDictBase.exclude) except that it
-returns the other split of the data.
+The values are not copied. The result keeps the nested tensordicts
+that hold the removed entries, with the batch size of the tensordict.
+This is [`split_keys()`](tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys) with `inplace=True` and one key set,
+except that only the separated part is returned: the tensordict holds
+the rest.
 
 Parameters:
 
-- **keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the keys to separate from the tensordict.
-- **default** (*Any**,**optional*) - the value to be returned when a key is missing.
-If not specified and `strict=True`, an exception is raised. Otherwise, the default of any missing key
-will be `None` unless specified otherwise.
-- **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, an exception is raised when a key
-is missing. Defaults to `True`.
-- **filter_empty** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, empty tensordicts within `self` will be removed.
-Defaults to `True`.
+***keys** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the keys to remove.
+
+Keyword Arguments:
+
+- **default** (*Any**,**optional*) - if given, a missing key does not raise,
+and the result holds `default` under it, as
+[`split_keys()`](tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys) does. A `default` of `None` gives a
+`None` entry. A `default` that does not fit the batch size
+(for example `0` with a batch size of `[3]`) also gives a
+`None` entry, with a `FutureWarning`: starting with
+TensorDict 0.17, the default will change to raising the error
+of [`split_keys()`](tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys).
+- **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a missing key raises a
+`KeyError`. If `False`, the result holds `default` under
+it, or a `None` entry if no `default` is given. Defaults to
+`True`.
+- **filter_empty** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the nested tensordicts
+of the tensordict that the removal leaves empty are removed
+too. Defaults to `True`.
 
 Returns:
 
-the separated tensordict.
-
-Return type:
-
-T
+A new tensordict with the removed entries.
 
 Examples
 
 ```
+>>> import torch
 >>> from tensordict import TensorDict
 >>> td = TensorDict(
-... a=0,
-... b=0,
-... c=0,
-... d=0,
+... a=torch.zeros(3),
+... b=torch.zeros(3),
+... nested=TensorDict(c=torch.zeros(3), batch_size=[3]),
+... batch_size=[3],
 ... )
->>> td_a_c = td.separates("a", "c")
->>> print(td_a_c)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
->>> print(td)
-TensorDict(
- fields={
- b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+>>> out = td.separates("a", ("nested", "c"))
+>>> sorted(out.keys(include_nested=True, leaves_only=True), key=str)
+[('nested', 'c'), 'a']
+>>> list(td.keys())
+['b']
 ```
 
 Every tensordict class and every tensorclass has this method. For the

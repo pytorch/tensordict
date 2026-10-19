@@ -1642,30 +1642,26 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.numpy">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">numpy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.numpy" title="Link to this definition">#</a></dt>
-<dd><p>Converts a tensordict to a (possibly nested) dictionary of numpy arrays.</p>
-<p>Non-tensor data is exposed as such.</p>
+<dd><p>Returns a nested dict of NumPy arrays with the entries of the tensordict.</p>
+<p>Each tensor becomes a NumPy array with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numpy.html#torch.Tensor.numpy" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.numpy()</span></code></a>,
+so the arrays share memory with the tensors, and a tensor that
+requires gradients or is not on the CPU raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> or
+<code class="docutils literal notranslate"><span class="pre">TypeError</span></code>: call <a class="reference internal" href="tensordict.TensorDictBase.detach.html#tensordict.TensorDictBase.detach" title="tensordict.TensorDictBase.detach"><code class="xref py py-meth docutils literal notranslate"><span class="pre">detach()</span></code></a> or <a class="reference internal" href="tensordict.TensorDictBase.cpu.html#tensordict.TensorDictBase.cpu" title="tensordict.TensorDictBase.cpu"><code class="xref py py-meth docutils literal notranslate"><span class="pre">cpu()</span></code></a> first. A nested
+tensor becomes a tuple of arrays. Non-tensor data is returned as its
+Python value. The <code class="docutils literal notranslate"><span class="pre">None</span></code> fields of tensorclasses are dropped.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.to_struct_array.html#tensordict.TensorDictBase.to_struct_array" title="tensordict.TensorDictBase.to_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_struct_array()</span></code></a> to convert to a NumPy
+structured array, and <a class="reference internal" href="tensordict.TensorDictBase.to_dict.html#tensordict.TensorDictBase.to_dict" title="tensordict.TensorDictBase.to_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_dict()</span></code></a>.</p>
+</div>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">"c"</span><span class="p">:</span> <span class="s2">"a string!"</span><span class="p">}})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
 <span class="go">{'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}</span>
 </pre></div>
 </div>
-<p>seealso: <a class="reference internal" href="tensordict.TensorDictBase.to_struct_array.html#tensordict.TensorDictBase.to_struct_array" title="tensordict.TensorDictBase.to_struct_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_struct_array()</span></code></a> to convert to a struct array.</p>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2026,7 +2022,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.numpy",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.numpy",
        "url": "/reference/generated/tensordict.TensorDictBase.numpy.html",
-       "articleBody": "TensorDictBase.numpy# TensorDictBase.numpy() \u2192 ndarray | dict[str, Any]# Converts a tensordict to a (possibly nested) dictionary of numpy arrays. Non-tensor data is exposed as such. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e data = TensorDict({\"a\": {\"b\": torch.zeros(()), \"c\": \"a string!\"}}) \u003e\u003e\u003e print(data) TensorDict( fields={ a: TensorDict( fields={ b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e print(data.numpy()) {\u0027a\u0027: {\u0027b\u0027: array(0., dtype=float32), \u0027c\u0027: \u0027a string!\u0027}} seealso: to_struct_array() to convert to a struct array. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.numpy# TensorDictBase.numpy() \u2192 ndarray | dict[str, Any]# Returns a nested dict of NumPy arrays with the entries of the tensordict. Each tensor becomes a NumPy array with torch.Tensor.numpy(), so the arrays share memory with the tensors, and a tensor that requires gradients or is not on the CPU raises a RuntimeError or TypeError: call detach() or cpu() first. A nested tensor becomes a tuple of arrays. Non-tensor data is returned as its Python value. The None fields of tensorclasses are dropped. See also to_struct_array() to convert to a NumPy structured array, and to_dict(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({\"a\": {\"b\": torch.zeros(()), \"c\": \"a string!\"}}) \u003e\u003e\u003e data.numpy() {\u0027a\u0027: {\u0027b\u0027: array(0., dtype=float32), \u0027c\u0027: \u0027a string!\u0027}} Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

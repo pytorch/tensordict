@@ -1642,22 +1642,33 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.all_gather">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">all_gather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'torch.distributed.ProcessGroup'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.all_gather" title="Link to this definition">#</a></dt>
-<dd><p>All-gathers tensordicts from every rank.</p>
-<p>Each rank consolidates its tensordict, then metadata is gathered via
-<code class="docutils literal notranslate"><span class="pre">all_gather_object</span></code> and storage via <code class="docutils literal notranslate"><span class="pre">dist.all_gather</span></code>. Returns a
-list of tensordicts, one per rank.</p>
+<dd><p>Returns a list with the tensordict of each rank of the group, on every rank.</p>
+<p>Every rank of the group must call it. The tensordicts can have different
+structures. Each rank consolidates its tensordict (see
+<a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>), the metadata is gathered with
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather_object" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_gather_object()</span></code></a>, which pickles it, and the
+storages with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_gather()</span></code></a>. Use it only with ranks
+you trust. See <a class="reference internal" href="../../distributed.html#distributed-collectives"><span class="std std-ref">Collectives</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – The process group
-to use. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (default group).</p>
+<dd class="field-odd"><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A list of tensordicts from all ranks.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a>[<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a>]</p>
+<dd class="field-even"><p>A list of new consolidated tensordicts, one per rank, in the order of
+the ranks.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<p>This example runs in two processes: add it to the
+<a class="reference internal" href="../../distributed.html#distributed"><span class="std std-ref">runner script of the distributed guide</span></a> and
+pass it to <code class="docutils literal notranslate"><span class="pre">run</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">all_gather</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">):</span>
+    <span class="n">local</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,),</span> <span class="nb">float</span><span class="p">(</span><span class="n">rank</span><span class="p">)),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">tds</span> <span class="o">=</span> <span class="n">local</span><span class="o">.</span><span class="n">all_gather</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="p">[</span><span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tds</span><span class="p">])</span>  <span class="c1"># [0.0, 1.0] on every rank</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2018,7 +2029,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.all_gather",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.all_gather",
        "url": "/reference/generated/tensordict.TensorDictBase.all_gather.html",
-       "articleBody": "TensorDictBase.all_gather# TensorDictBase.all_gather(*, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None) \u2192 list# All-gathers tensordicts from every rank. Each rank consolidates its tensordict, then metadata is gathered via all_gather_object and storage via dist.all_gather. Returns a list of tensordicts, one per rank. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 The process group to use. Defaults to None (default group). Returns: A list of tensordicts from all ranks. Return type: list[TensorDict] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.all_gather# TensorDictBase.all_gather(*, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None) \u2192 list# Returns a list with the tensordict of each rank of the group, on every rank. Every rank of the group must call it. The tensordicts can have different structures. Each rank consolidates its tensordict (see consolidate()), the metadata is gathered with torch.distributed.all_gather_object(), which pickles it, and the storages with torch.distributed.all_gather(). Use it only with ranks you trust. See Collectives. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. Returns: A list of new consolidated tensordicts, one per rank, in the order of the ranks. Examples This example runs in two processes: add it to the runner script of the distributed guide and pass it to run. def all_gather(rank, world_size): local = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3]) tds = local.all_gather() print(rank, [td[\"a\"][0].item() for td in tds]) # [0.0, 1.0] on every rank Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

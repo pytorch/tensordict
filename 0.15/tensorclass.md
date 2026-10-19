@@ -142,8 +142,9 @@ torch.Size([3, 4, 1])
 
 Assigning a name that is not a field, as an attribute or with `set()`,
 raises `AttributeError`. `set_non_tensor()`, `setdefault()`,
-`create_nested()`, `rename_key_()`, and `update()` with a
-`TensorDict` or another tensorclass still store such a key, and warn with a
+`create_nested()`, `rename_key_()`, `update()` with a `TensorDict`
+or another tensorclass, and an indexed assignment of a `TensorDict`
+(`data[idx] = td`) still store such a key, and warn with a
 `DeprecationWarning`. Starting with TensorDict 0.17, they raise
 `AttributeError` too.
 
@@ -626,7 +627,11 @@ tensorclass type or instance from it. You do not change the class definition:
 ```
 
 It accepts the flags of a tensorclass (`autocast`, `nocast`, `frozen`,
-`tensor_only`, `shadow`).
+`tensor_only`, `shadow`). When it applies them (not with `dest_cls`,
+and not to a type that is already a tensorclass), `autocast` with
+`nocast`, or `tensor_only` with either of them on a type, emits a
+`FutureWarning`. Starting with TensorDict 0.17, the default will change to
+raising the `TypeError` of the decorator.
 
 ## Saving and loading
 

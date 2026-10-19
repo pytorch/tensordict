@@ -1650,53 +1650,27 @@ list of tensordicts in one call, use <a class="reference internal" href="tensord
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a>) – The tensordict to pad</p></li>
-<li><p><strong>pad_size</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em>) – The padding size by which to pad some batch
-dimensions of the tensordict, starting from the first dimension and
-moving forward. [len(pad_size) / 2] dimensions of the batch size will
-be padded. For example to pad only the first dimension, pad has the form
-(padding_left, padding_right). To pad two dimensions,
-(padding_left, padding_right, padding_top, padding_bottom) and so on.
-pad_size must be even and less than or equal to twice the number of batch dimensions.</p></li>
-<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – The fill value to pad by, default 0.0.
-Non-tensor entries (<a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> /
-<a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>) keep their values at the
-valid positions and hold <code class="docutils literal notranslate"><span class="pre">None</span></code> in the pad slots instead of
-<code class="docutils literal notranslate"><span class="pre">value</span></code>.</p></li>
-<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – <p>If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the input tensordict’s identity
-and key set are preserved, and each leaf’s storage is replaced by
-its padded counterpart one at a time. This keeps peak memory close
-to the size of the tensordict itself rather than 2x (the case when
-a fresh tensordict is allocated alongside the original). The leaf
-tensors themselves are still freshly allocated (<code class="docutils literal notranslate"><span class="pre">pad</span></code> necessarily
-grows shapes), so this is not a same-storage operation. Defaults to
-<code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
-<p>On <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> pads
-each constituent tensordict along the non-stack dimensions in place
-and grows the stack along the stack dimension by appending or
-prepending zero-filled copies of the edge constituents; the lazy
-stack’s identity is preserved.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>If <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code> and the operation fails partway through
-(for example an out-of-memory error during a leaf’s padding),
-the tensordict is left in an inconsistent state: some leaves
-will have the new shape and others the old, and the
-<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> will not have been updated. Restoring the
-original state would require keeping every old leaf alive
-until the whole pass succeeded, which would defeat the 1x
-memory contract. Use <code class="docutils literal notranslate"><span class="pre">safe=True</span></code> (the default) to catch
-the realistic user-error class of failures before any
-mutation happens.</p>
-</div>
-</p></li>
-<li><p><strong>safe</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, validate that the operation
-would succeed for every leaf before any mutation occurs. This
-catches errors such as negative pad widths that exceed a leaf’s
-dimension size, leaves that are not paddable, etc., raising
-before any in-place rebind. Set to <code class="docutils literal notranslate"><span class="pre">False</span></code> to skip the
-pre-flight walk for a small speedup when the inputs are known
-to be valid. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>tensordict</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><em>tensorclass instance</em>) – the tensordict to
+pad.</p></li>
+<li><p><strong>pad_size</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the padding before and after each batch
+dimension, starting from the first one (unlike
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.pad.html#torch.nn.functional.pad" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nn.functional.pad()</span></code></a>, which starts from the last):
+<code class="docutils literal notranslate"><span class="pre">(dim0_before,</span> <span class="pre">dim0_after,</span> <span class="pre">dim1_before,</span> <span class="pre">dim1_after,</span> <span class="pre">...)</span></code>. Its
+length must be even and at most twice the number of batch
+dimensions, or a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> is raised.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – the value of the padded elements. Non-tensor
+entries hold <code class="docutils literal notranslate"><span class="pre">None</span></code> there instead. Defaults to <code class="docutils literal notranslate"><span class="pre">0.0</span></code>.</p></li>
+<li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict keeps its
+identity and keys, its leaves are replaced one by one with padded
+tensors, and the call returns it. A lazy stack pads each of its
+tensordicts in place and grows along the stack dimension with new
+tensordicts filled with <code class="docutils literal notranslate"><span class="pre">value</span></code>. See
+<a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>safe</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, checks that every leaf can be
+padded before anything is changed, so that a bad <code class="docutils literal notranslate"><span class="pre">pad_size</span></code>
+raises before an in-place pad changes some of the leaves. Set it
+to <code class="docutils literal notranslate"><span class="pre">False</span></code> to skip the check when the inputs are known to be
+valid. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -2087,7 +2061,7 @@ name, name the dimension of the result again with
        "headline": "pad",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - pad",
        "url": "/reference/generated/tensordict.pad.html",
-       "articleBody": "pad# tensordict.pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0, inplace: bool = False, safe: bool = True) \u2192 T# Pads all tensors in a tensordict along the batch dimensions with a constant value. Use it to grow the batch dimensions of one tensordict, for example to bring samples to a common size before you stack them. To pad and stack a list of tensordicts in one call, use pad_sequence() (see Stacking and variable-size data). Parameters: tensordict (TensorDict) \u2013 The tensordict to pad pad_size (Sequence[int]) \u2013 The padding size by which to pad some batch dimensions of the tensordict, starting from the first dimension and moving forward. [len(pad_size) / 2] dimensions of the batch size will be padded. For example to pad only the first dimension, pad has the form (padding_left, padding_right). To pad two dimensions, (padding_left, padding_right, padding_top, padding_bottom) and so on. pad_size must be even and less than or equal to twice the number of batch dimensions. value (float, optional) \u2013 The fill value to pad by, default 0.0. Non-tensor entries (NonTensorData / NonTensorStack) keep their values at the valid positions and hold None in the pad slots instead of value. inplace (bool, optional) \u2013 If True, the input tensordict\u2019s identity and key set are preserved, and each leaf\u2019s storage is replaced by its padded counterpart one at a time. This keeps peak memory close to the size of the tensordict itself rather than 2x (the case when a fresh tensordict is allocated alongside the original). The leaf tensors themselves are still freshly allocated (pad necessarily grows shapes), so this is not a same-storage operation. Defaults to False. On LazyStackedTensorDict, inplace=True pads each constituent tensordict along the non-stack dimensions in place and grows the stack along the stack dimension by appending or prepending zero-filled copies of the edge constituents; the lazy stack\u2019s identity is preserved. Warning If inplace=True and the operation fails partway through (for example an out-of-memory error during a leaf\u2019s padding), the tensordict is left in an inconsistent state: some leaves will have the new shape and others the old, and the batch_size will not have been updated. Restoring the original state would require keeping every old leaf alive until the whole pass succeeded, which would defeat the 1x memory contract. Use safe=True (the default) to catch the realistic user-error class of failures before any mutation happens. safe (bool, optional) \u2013 If True, validate that the operation would succeed for every leaf before any mutation occurs. This catches errors such as negative pad widths that exceed a leaf\u2019s dimension size, leaves that are not paddable, etc., raising before any in-place rebind. Set to False to skip the pre-flight walk for a small speedup when the inputs are known to be valid. Defaults to True. Returns: The padded tensordict. When inplace=True this is the same object as the input; otherwise a new tensordict, or a new tensorclass of the same type for a tensorclass input. Note With inplace=False, a lazy stack gives a TensorDict. If the stacked tensordicts have no names, it has no names either, even when the stack dimension has a name (from stack_dim_name or the names setter). To keep that name, name the dimension of the result again with refine_names(). Examples \u003e\u003e\u003e from tensordict import TensorDict, pad \u003e\u003e\u003e import torch \u003e\u003e\u003e td = TensorDict({\u0027a\u0027: torch.ones(3, 4, 1), ... \u0027b\u0027: torch.ones(3, 4, 1, 1)}, batch_size=[3, 4]) \u003e\u003e\u003e dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2] \u003e\u003e\u003e padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0) \u003e\u003e\u003e print(padded_td.batch_size) torch.Size([4, 6]) \u003e\u003e\u003e print(padded_td.get(\"a\").shape) torch.Size([4, 6, 1]) \u003e\u003e\u003e print(padded_td.get(\"b\").shape) torch.Size([4, 6, 1, 1])",
+       "articleBody": "pad# tensordict.pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0, inplace: bool = False, safe: bool = True) \u2192 T# Pads all tensors in a tensordict along the batch dimensions with a constant value. Use it to grow the batch dimensions of one tensordict, for example to bring samples to a common size before you stack them. To pad and stack a list of tensordicts in one call, use pad_sequence() (see Stacking and variable-size data). Parameters: tensordict (TensorDictBase or tensorclass instance) \u2013 the tensordict to pad. pad_size (sequence of int) \u2013 the padding before and after each batch dimension, starting from the first one (unlike torch.nn.functional.pad(), which starts from the last): (dim0_before, dim0_after, dim1_before, dim1_after, ...). Its length must be even and at most twice the number of batch dimensions, or a RuntimeError is raised. value (float, optional) \u2013 the value of the padded elements. Non-tensor entries hold None there instead. Defaults to 0.0. inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one with padded tensors, and the call returns it. A lazy stack pads each of its tensordicts in place and grows along the stack dimension with new tensordicts filled with value. See In-place operations. Defaults to False. safe (bool, optional) \u2013 if True, checks that every leaf can be padded before anything is changed, so that a bad pad_size raises before an in-place pad changes some of the leaves. Set it to False to skip the check when the inputs are known to be valid. Defaults to True. Returns: The padded tensordict. When inplace=True this is the same object as the input; otherwise a new tensordict, or a new tensorclass of the same type for a tensorclass input. Note With inplace=False, a lazy stack gives a TensorDict. If the stacked tensordicts have no names, it has no names either, even when the stack dimension has a name (from stack_dim_name or the names setter). To keep that name, name the dimension of the result again with refine_names(). Examples \u003e\u003e\u003e from tensordict import TensorDict, pad \u003e\u003e\u003e import torch \u003e\u003e\u003e td = TensorDict({\u0027a\u0027: torch.ones(3, 4, 1), ... \u0027b\u0027: torch.ones(3, 4, 1, 1)}, batch_size=[3, 4]) \u003e\u003e\u003e dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2] \u003e\u003e\u003e padded_td = pad(td, [dim0_left, dim0_right, dim1_left, dim1_right], value=0.0) \u003e\u003e\u003e print(padded_td.batch_size) torch.Size([4, 6]) \u003e\u003e\u003e print(padded_td.get(\"a\").shape) torch.Size([4, 6, 1]) \u003e\u003e\u003e print(padded_td.get(\"b\").shape) torch.Size([4, 6, 1, 1])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

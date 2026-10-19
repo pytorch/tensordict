@@ -2,29 +2,55 @@
 
 *classmethod*TensorDictBase.from_pytree(*pytree*, ***, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
-Converts a pytree to a TensorDict instance.
+Converts a pytree to a tensordict that [`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree) converts back.
 
-This method is designed to keep the pytree nested structure as much as possible.
+Each list, tuple, named tuple and dict of the pytree becomes a nested
+tensordict, and its type is stored in a `"_pytree_type"` entry so
+that [`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree) can rebuild the pytree. The elements of a list
+or tuple get the keys `"0"`, `"1"`, ... The subclasses of these
+types, such as [`collections.OrderedDict`](https://docs.python.org/3/library/collections.html#collections.OrderedDict),
+[`collections.defaultdict`](https://docs.python.org/3/library/collections.html#collections.defaultdict) and the `torch.return_types`
+results of `torch.max` and the like, are accepted too. A
+`defaultdict` is rebuilt without its `default_factory`.
 
-Additional non-tensor keys are added to keep track of each level's identity, providing
-a built-in pytree-to-tensordict bijective transform API.
+A tensor or a tensor collection is returned as it is. Python ints and
+floats and NumPy arrays become tensors, so [`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree) returns
+them as tensors. A dict key that is not a [`NestedKey`](tensordict.NestedKey.html#tensordict.NestedKey) (such as an
+int or an object) is stored in a [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData)
+entry next to its value. Other types raise a `NotImplementedError`.
 
-Accepted classes currently include lists, tuples, named tuples and dict,
-and subclasses of these such as [`collections.OrderedDict`](https://docs.python.org/3/library/collections.html#collections.OrderedDict),
-[`collections.defaultdict`](https://docs.python.org/3/library/collections.html#collections.defaultdict) and the results of `torch.max` and
-the other `torch.return_types`. A `defaultdict` is rebuilt without
-its `default_factory`.
+Parameters:
+
+**pytree** - the pytree to convert: a list, tuple, named tuple or dict,
+nested to any depth, whose leaves are tensors, tensor
+collections, Python numbers or NumPy arrays.
+
+Keyword Arguments:
+
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+the result: the leading dimensions that all its entries share.
+Defaults to `None`, which gives an empty batch size unless
+`auto_batch_size=True`.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+to the largest leading shape that all the entries share.
+Defaults to `False`.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions. Ignored without
+`auto_batch_size`, with a `FutureWarning` when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on `auto_batch_size` when
+`batch_dims` is given, as `from_dict` does. Defaults to
+`None`.
 
 Note
 
-For dictionaries, non-NestedKey keys are registered separately as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData)
-instances.
-
-Note
-
-Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
-Note that this transformation is surjective: transforming back the tensordict to a pytree will not
-recover the original types.
+A module `state_dict()` round-trips through `from_pytree`, and its
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) output loads with `load_memmap(path, allow_pickle=False)`.
+The state dicts of an optimizer and of a learning-rate scheduler hold
+`None`, `str` values and Python numbers, which `from_pytree` rejects
+(`None` and `str`) or returns as tensors (numbers): save them with
+`torch.save(sd, path)` and load them with `torch.load(path, weights_only=True)`,
+which round-trips them exactly without unpickling arbitrary objects.
 
 Note
 
@@ -33,52 +59,50 @@ fields, are converted with [`from_any()`](tensordict.TensorDictBase.from_any.htm
 round-trip through [`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree):
 
 - a list of numbers comes back as a tensor;
-- a dict holding a str, list or tuple, and an empty dict or named
-tuple (or a dict or named tuple holding one), come back as a
-`GenericDict` named tuple;
-- a tuple subclass, such as a `torch.return_types` result, and
-a plain tuple holding anything but tensors, Python ints and
-floats, dicts and named tuples (such as a str, a list or a NumPy
-number), or holding one of the dicts or named tuples above, make
-[`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree) raise a `ValueError`, and an empty tuple
-comes back as an empty `GenericDict`.
+- an empty tuple, an empty dict or named tuple, and a dict that
+holds a str or a list come back as a `GenericDict` named
+tuple;
+- a dict that holds a tuple, a tuple subclass (such as a
+`torch.return_types` result), and a tuple that holds anything
+other than tensors, Python numbers, dicts and named tuples make
+[`to_pytree()`](tensordict.TensorDictBase.to_pytree.html#tensordict.TensorDictBase.to_pytree) raise a `ValueError`.
 
-The other dict, named tuple and plain tuple fields come back with
-their own type.
+The other dict, named tuple and tuple fields come back with their
+own type.
 
 Examples
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
->>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
->>> class WeirdLookingClass:
+>>> pytree = {"obs": torch.zeros(3, 4), "pair": (torch.zeros(3), torch.ones(3))}
+>>> td = TensorDict.from_pytree(pytree, auto_batch_size=True)
+>>> td.batch_size
+torch.Size([3])
+>>> sorted(td.keys()), sorted(td["pair"].keys())
+(['_pytree_type', 'obs', 'pair'], ['0', '1', '_pytree_type'])
+>>> type(td.to_pytree()["pair"]).__name__
+'tuple'
+```
+
+A pytree with lists, dicts, a named tuple and a dict key that is
+not a string round-trips:
+
+```
+>>> class Key:
 ... pass
-...
->>> weird_key = WeirdLookingClass()
->>> # Make a pytree with tuple, lists, dict and namedtuple
+>>> key = Key()
 >>> pytree = (
-... [torch.randint(10, (3,)), torch.zeros(2)],
-... {
-... "tensor": torch.randn(
-... 2,
-... ),
-... "td": TensorDict({"one": 1}),
-... weird_key: torch.randint(10, (2,)),
-... "list": [1, 2, 3],
-... },
-... {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+... [torch.arange(3), torch.zeros(2)],
+... {"tensor": torch.ones(2), key: torch.arange(2), "list": [1, 2, 3]},
+... {"named_tuple": TensorDict(two=torch.ones(1)).to_namedtuple()},
 ... )
->>> # Build a TensorDict from that pytree
->>> td = TensorDict.from_pytree(pytree)
->>> # Recover the pytree
->>> pytree_recon = td.to_pytree()
->>> # Check that the leaves match
+>>> pytree_recon = TensorDict.from_pytree(pytree).to_pytree()
 >>> def check(v1, v2):
 ... assert (v1 == v2).all()
-...
 >>> _ = torch.utils._pytree.tree_map(check, pytree, pytree_recon)
->>> assert weird_key in pytree_recon[1]
+>>> key in pytree_recon[1]
+True
 ```
 
 Every tensordict class and every tensorclass has this method. For the

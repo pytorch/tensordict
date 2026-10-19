@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_consolidated.html" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="TensorDictBase.add" href="tensordict.TensorDictBase.add.html" />
+    <link rel="next" title="is_inexact" href="tensordict.is_inexact.html" />
     <link rel="prev" title="TensorDictBase.quint4x2" href="tensordict.TensorDictBase.quint4x2.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1642,7 +1642,7 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="tensordict.from_consolidated">
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">from_consolidated</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.from_consolidated" title="Link to this definition">#</a></dt>
-<dd><p>Reconstructs a tensordict from a consolidated file.</p>
+<dd><p>Reconstructs a tensordict from a file written by <code class="docutils literal notranslate"><span class="pre">consolidate(filename=...)</span></code>.</p>
 <p>A consolidated file is the single file that
 <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> writes when you pass it a
 <code class="docutils literal notranslate"><span class="pre">filename</span></code>. Same as <a class="reference internal" href="tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated" title="tensordict.TensorDict.from_consolidated"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tensordict.TensorDict.from_consolidated()</span></code></a>.</p>
@@ -1654,7 +1654,7 @@ To write later changes into the file, call
 <dd class="field-odd"><p><strong>filename</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the path of the file.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. Its entries are views into one
+<dd class="field-even"><p>A <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. Its entries are views into one
 storage that is read from the file.</p>
 </dd>
 </dl>
@@ -1727,11 +1727,11 @@ storage that is read from the file.</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.TensorDictBase.add.html"
+       href="tensordict.is_inexact.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">TensorDictBase.add</p>
+        <p class="prev-next-title">is_inexact</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1766,11 +1766,11 @@ storage that is read from the file.</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.TensorDictBase.add.html"
+       href="tensordict.is_inexact.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">TensorDictBase.add</p>
+        <p class="prev-next-title">is_inexact</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2029,7 +2029,7 @@ storage that is read from the file.</p>
        "headline": "from_consolidated",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - from_consolidated",
        "url": "/reference/generated/tensordict.from_consolidated.html",
-       "articleBody": "from_consolidated# tensordict.from_consolidated(filename)# Reconstructs a tensordict from a consolidated file. A consolidated file is the single file that consolidate() writes when you pass it a filename. Same as tensordict.TensorDict.from_consolidated(). The batch sizes and names are as they were when the file was written. To write later changes into the file, call consolidate(filename=filename) again on the consolidated tensordict. Parameters: filename (str or Path) \u2013 the path of the file. Returns: a TensorDict. Its entries are views into one storage that is read from the file. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b={\"c\": torch.ones(3)}, batch_size=[3]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... _ = td.consolidate(filename=f\"{tmpdir}/td.bin\") ... loaded = tensordict.from_consolidated(f\"{tmpdir}/td.bin\") ... print(loaded[\"b\", \"c\"]) tensor([1., 1., 1.])",
+       "articleBody": "from_consolidated# tensordict.from_consolidated(filename)# Reconstructs a tensordict from a file written by consolidate(filename=...). A consolidated file is the single file that consolidate() writes when you pass it a filename. Same as tensordict.TensorDict.from_consolidated(). The batch sizes and names are as they were when the file was written. To write later changes into the file, call consolidate(filename=filename) again on the consolidated tensordict. Parameters: filename (str or Path) \u2013 the path of the file. Returns: A TensorDict. Its entries are views into one storage that is read from the file. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b={\"c\": torch.ones(3)}, batch_size=[3]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... _ = td.consolidate(filename=f\"{tmpdir}/td.bin\") ... loaded = tensordict.from_consolidated(f\"{tmpdir}/td.bin\") ... print(loaded[\"b\", \"c\"]) tensor([1., 1., 1.])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

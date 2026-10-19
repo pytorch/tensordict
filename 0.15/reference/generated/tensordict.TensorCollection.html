@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>interaction_type &#8212; tensordict 0.15 documentation</title>
+    <title>TensorCollection &#8212; tensordict 0.15 documentation</title>
   
   
   
@@ -49,7 +49,7 @@
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=ccdb6887"></script>
     <script src="../../_static/js/search-tuning.js?v=87be1517"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/tensordict.nn.probabilistic.interaction_type';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'reference/generated/tensordict.TensorCollection';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.15.4';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pytorch.org/tensordict/_static/versions.json';
@@ -57,11 +57,11 @@
         DOCUMENTATION_OPTIONS.show_version_warning_banner = true;
         </script>
     <script src="../../_static/js/tutorial_links.js?v=d30eabb1"></script>
-    <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.probabilistic.interaction_type.html" />
+    <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorCollection.html" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="EnsembleModule" href="tensordict.nn.EnsembleModule.html" />
-    <link rel="prev" title="composite_lp_aggregate" href="tensordict.nn.composite_lp_aggregate.html" />
+    <link rel="next" title="TensorDictBase.from_any" href="tensordict.TensorDictBase.from_any.html" />
+    <link rel="prev" title="MemoryMappedTensor" href="tensordict.MemoryMappedTensor.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -71,7 +71,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - interaction_type">
+<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - TensorCollection">
 
 
 
@@ -1493,10 +1493,10 @@ document.write(`
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="../td.html">tensordict: containers and functions</a></li>
+<li class="toctree-l2 current active"><a class="reference internal" href="../td.html">tensordict: containers and functions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tc.html">tensorclass and non-tensor data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../ttd.html">TypedTensorDict</a></li>
-<li class="toctree-l2 current active"><a class="reference internal" href="../nn.html">tensordict.nn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nn.html">tensordict.nn</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../storage.html">Key-value stores and UCXX</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../utils.html">Utilities</a></li>
 </ul>
@@ -1542,9 +1542,9 @@ document.write(`
     <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API reference</a></li>
     
     
-    <li class="breadcrumb-item"><a href="../nn.html" class="nav-link">tensordict.nn</a></li>
+    <li class="breadcrumb-item"><a href="../td.html" class="nav-link">tensordict: containers and functions</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">interaction_type</li>
+    <li class="breadcrumb-item active" aria-current="page">TensorCollection</li>
   </ul>
 </nav>
 </div>
@@ -1592,13 +1592,13 @@ document.write(`
     </div>
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <link itemprop="item" href="../nn.html">
-      <meta itemprop="name" content="tensordict.nn">
+      <link itemprop="item" href="../td.html">
+      <meta itemprop="name" content="tensordict: containers and functions">
       <meta itemprop="position" content="2">
     </div>
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="interaction_type">
+      <meta itemprop="name" content="TensorCollection">
       <meta itemprop="position" content="3">
     </div>
   </div>
@@ -1606,7 +1606,7 @@ document.write(`
   
   
   <div class="pytorch-call-to-action-links">
-    <div id="tutorial-type">reference/generated/tensordict.nn.probabilistic.interaction_type</div>
+    <div id="tutorial-type">reference/generated/tensordict.TensorCollection</div>
     <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
       <div id="google-colab-link">
         <img class="call-to-action-img" src="../../_static/img/pytorch-colab.svg" />
@@ -1637,16 +1637,77 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="interaction-type">
-<h1>interaction_type<a class="headerlink" href="#interaction-type" title="Link to this heading">#</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="tensordict.nn.probabilistic.interaction_type">
-<span class="sig-prename descclassname"><span class="pre">tensordict.nn.probabilistic.</span></span><span class="sig-name descname"><span class="pre">interaction_type</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="tensordict.nn.probabilistic.InteractionType"><span class="pre">InteractionType</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.nn.probabilistic.interaction_type" title="Link to this definition">#</a></dt>
-<dd><p>Returns the interaction type set by <a class="reference internal" href="tensordict.nn.set_interaction_type.html#tensordict.nn.set_interaction_type" title="tensordict.nn.probabilistic.set_interaction_type"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_interaction_type</span></code></a>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> outside of it.</p>
-<p>When it returns <code class="docutils literal notranslate"><span class="pre">None</span></code>, each <a class="reference internal" href="tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.probabilistic.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a>
-uses its <code class="docutils literal notranslate"><span class="pre">default_interaction_type</span></code>.</p>
+  <section id="tensorcollection">
+<h1>TensorCollection<a class="headerlink" href="#tensorcollection" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="tensordict.TensorCollection">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">TensorCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorCollection" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>The abstract base class of tensordicts and tensorclasses.</p>
+<p><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> and <a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a>
+inherit from it. It cannot be instantiated.</p>
+<p>Use it in type hints and <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> checks for “a tensordict or a
+tensorclass”. Classes decorated with <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> do not inherit from
+it, only subclasses of <a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> do; to check both,
+use <a class="reference internal" href="tensordict.is_tensor_collection.html#tensordict.is_tensor_collection" title="tensordict.is_tensor_collection"><code class="xref py py-func docutils literal notranslate"><span class="pre">is_tensor_collection()</span></code></a>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span><span class="p">,</span> <span class="n">TensorCollection</span><span class="p">,</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Data</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">td</span><span class="p">,</span> <span class="n">TensorCollection</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">Data</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span> <span class="n">TensorCollection</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">TensorCollection</span><span class="p">)</span>
+<span class="go">False</span>
+</pre></div>
+</div>
 </dd></dl>
 
+<section id="tutorials-that-use-tensorcollection">
+<h2>Tutorials that use <code class="docutils literal notranslate"><span class="pre">TensorCollection</span></code><a class="headerlink" href="#tutorials-that-use-tensorcollection" title="Link to this heading">#</a></h2>
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="A torchvision dataset applies its transform to each image again at every epoch. The DataLoader reads the samples one by one to build a batch. A TensorDict of memory-mapped tensors stores the converted images once, and the DataLoader reads each batch from it with one index. This tutorial does this for FashionMNIST, with the model and the training loop of the PyTorch Quickstart Tutorial. It is for readers who train a model from a map-style dataset."><img alt="" src="../../_images/sphx_glr_data_fashion_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/data_fashion.html"><span class="doc">Using TensorDict for datasets</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Using TensorDict for datasets</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="The parameters of a Module form a tree of named tensors, which a TensorDict holds with the same structure. With the parameters in a tensordict, one call replaces all the parameters of a module, stacks the parameters of several models, or passes them to torch.func. This tutorial is for readers who train ensembles of models, or who swap the parameters of a model at run time."><img alt="" src="../../_images/sphx_glr_functional_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/functional.html"><span class="doc">Functional calls and ensembles with TensorDict</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Functional calls and ensembles with TensorDict</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens"><img alt="" src="../../_images/sphx_glr_serialization_speed_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/serialization_speed.html"><span class="doc">Benchmarking TensorDict serialization speed</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Benchmarking TensorDict serialization speed</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens"><img alt="" src="../../_images/sphx_glr_streamed_tensordict_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/streamed_tensordict.html"><span class="doc">Building tensordicts from streams</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Building tensordicts from streams</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A TensorClass is the class form of a tensordict. You declare its fields with types, and you write methods that run on one sample or on a batch. This tutorial stores FashionMNIST in a tensorclass with an images field, a targets field, and a method that loads a dataset into memory-mapped tensors. Then it trains the model of the PyTorch Quickstart Tutorial from it. It is for readers who want named, typed fields and methods for their data."><img alt="" src="../../_images/sphx_glr_tensorclass_fashion_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensorclass_fashion.html"><span class="doc">Using tensorclasses for datasets</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Using tensorclasses for datasets</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A torchvision image pipeline opens, decodes, and transforms each image file again at every epoch, one image at a time. This tutorial stores the images once in the memory-mapped fields of a TensorClass, then reads and transforms whole batches. A memory-mapped tensor is a tensor whose values are stored in a file and read through the page cache of the operating system. This tutorial is for readers who train from a folder of image files."><img alt="" src="../../_images/sphx_glr_tensorclass_imagenet_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html"><span class="doc">Batched data loading with tensorclasses</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Batched data loading with tensorclasses</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A TensorDict stores tensors under string keys, as a Python dict does, and a value can be another TensorDict. If you know dict, most of this tutorial is familiar. It shows where a TensorDict is different: what a missing key returns, what a for loop gives, and how tuples of strings address nested entries."><img alt="" src="../../_images/sphx_glr_tensordict_keys_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensordict_keys.html"><span class="doc">Getting, setting, and nesting keys</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Getting, setting, and nesting keys</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="One call moves all the tensors of a TensorDict to a device, and one call stores them in memory-mapped files. This tutorial is for readers who move groups of tensors between the CPU and a GPU, or whose datasets do not fit in RAM."><img alt="" src="../../_images/sphx_glr_tensordict_memory_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensordict_memory.html"><span class="doc">Devices and memory-mapped tensors</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Devices and memory-mapped tensors</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Author: Nicolas Dufour, Vincent Moens"><img alt="" src="../../_images/sphx_glr_tensordict_module_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensordict_module.html"><span class="doc">Building models with TensorDictModule</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Building models with TensorDictModule</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A simulation loop often stores results at each step, such as the positions and the velocities of its particles. To collect them, you usually allocate one tensor per quantity in advance, then write each step into it. A TensorDict does the allocation for you: the first write with an index creates every tensor at its full size. This tutorial is for readers who fill a buffer one step at a time."><img alt="" src="../../_images/sphx_glr_tensordict_preallocation_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensordict_preallocation.html"><span class="doc">Filling a TensorDict row by row</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Filling a TensorDict row by row</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A TensorDict has the shape operations of a tensor, such as reshape, split, stack, and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor."><img alt="" src="../../_images/sphx_glr_tensordict_shapes_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensordict_shapes.html"><span class="doc">Changing the shape of a TensorDict</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Changing the shape of a TensorDict</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="One index on a TensorDict indexes every tensor in it in the same way. If you now index the images, the labels, and the weights of a batch one by one, one index replaces these lines. This tutorial is for readers who know how to index a torch.Tensor."><img alt="" src="../../_images/sphx_glr_tensordict_slicing_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensordict_slicing.html"><span class="doc">Slicing, indexing, and masking</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Slicing, indexing, and masking</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens"><img alt="" src="../../_images/sphx_glr_zarr_storage_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/zarr_storage.html"><span class="doc">Storing TensorDicts in zarr</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Storing TensorDicts in zarr</div>
+</div></div></section>
 </section>
 
 
@@ -1692,20 +1753,20 @@ uses its <code class="docutils literal notranslate"><span class="pre">default_in
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="tensordict.nn.composite_lp_aggregate.html"
+       href="tensordict.MemoryMappedTensor.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">composite_lp_aggregate</p>
+        <p class="prev-next-title">MemoryMappedTensor</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.nn.EnsembleModule.html"
+       href="tensordict.TensorDictBase.from_any.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">EnsembleModule</p>
+        <p class="prev-next-title">TensorDictBase.from_any</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1731,20 +1792,20 @@ uses its <code class="docutils literal notranslate"><span class="pre">default_in
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="tensordict.nn.composite_lp_aggregate.html"
+       href="tensordict.MemoryMappedTensor.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">composite_lp_aggregate</p>
+        <p class="prev-next-title">MemoryMappedTensor</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.nn.EnsembleModule.html"
+       href="tensordict.TensorDictBase.from_any.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">EnsembleModule</p>
+        <p class="prev-next-title">TensorDictBase.from_any</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1766,13 +1827,14 @@ uses its <code class="docutils literal notranslate"><span class="pre">default_in
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.nn.probabilistic.interaction_type"><code class="docutils literal notranslate"><span class="pre">interaction_type()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.TensorCollection"><code class="docutils literal notranslate"><span class="pre">TensorCollection</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tutorials-that-use-tensorcollection">Tutorials that use <code class="docutils literal notranslate"><span class="pre">TensorCollection</span></code></a></li>
 </ul>
   </nav></div>
     
        <div class="sidebar-secondary-item">
     <div class="tocsection sourcelink">
-      <a href="../../_sources/reference/generated/tensordict.nn.probabilistic.interaction_type.rst.txt">
+      <a href="../../_sources/reference/generated/tensordict.TensorCollection.rst.txt">
         <i class="fa-solid fa-file-lines"></i> Show Source
       </a>
     </div>
@@ -1999,11 +2061,11 @@ uses its <code class="docutils literal notranslate"><span class="pre">default_in
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "interaction_type",
-       "headline": "interaction_type",
-       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - interaction_type",
-       "url": "/reference/generated/tensordict.nn.probabilistic.interaction_type.html",
-       "articleBody": "interaction_type# tensordict.nn.probabilistic.interaction_type() \u2192 InteractionType | None# Returns the interaction type set by set_interaction_type, or None outside of it. When it returns None, each ProbabilisticTensorDictModule uses its default_interaction_type.",
+       "name": "TensorCollection",
+       "headline": "TensorCollection",
+       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorCollection",
+       "url": "/reference/generated/tensordict.TensorCollection.html",
+       "articleBody": "TensorCollection# class tensordict.TensorCollection(*args, **kwargs)# Bases: object The abstract base class of tensordicts and tensorclasses. TensorDictBase and TensorClass inherit from it. It cannot be instantiated. Use it in type hints and isinstance checks for \u201ca tensordict or a tensorclass\u201d. Classes decorated with @tensorclass do not inherit from it, only subclasses of TensorClass do; to check both, use is_tensor_collection(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass, TensorCollection, TensorDict \u003e\u003e\u003e class Data(TensorClass): ... x: torch.Tensor \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e isinstance(td, TensorCollection) True \u003e\u003e\u003e isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection) True \u003e\u003e\u003e isinstance(torch.zeros(3), TensorCollection) False Tutorials that use TensorCollection# Using TensorDict for datasets Using TensorDict for datasets Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Building tensordicts from streams Building tensordicts from streams Using tensorclasses for datasets Using tensorclasses for datasets Batched data loading with tensorclasses Batched data loading with tensorclasses Getting, setting, and nesting keys Getting, setting, and nesting keys Devices and memory-mapped tensors Devices and memory-mapped tensors Building models with TensorDictModule Building models with TensorDictModule Filling a TensorDict row by row Filling a TensorDict row by row Changing the shape of a TensorDict Changing the shape of a TensorDict Slicing, indexing, and masking Slicing, indexing, and masking Storing TensorDicts in zarr Storing TensorDicts in zarr",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
@@ -2012,7 +2074,7 @@ uses its <code class="docutils literal notranslate"><span class="pre">default_in
        "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
        "mainEntityOfPage": {
          "@type": "WebPage",
-         "@id": "/reference/generated/tensordict.nn.probabilistic.interaction_type.html"
+         "@id": "/reference/generated/tensordict.TensorCollection.html"
        },
        "datePublished": "2023-01-01T00:00:00Z",
        "dateModified": "2023-01-01T00:00:00Z"

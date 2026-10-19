@@ -1642,15 +1642,21 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.__or__">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">__or__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.__or__" title="Link to this definition">#</a></dt>
-<dd><p>OR operation over two tensordicts, for evey key.</p>
-<p>The two tensordicts must have the same key set.</p>
+<dd><p>Computes <code class="docutils literal notranslate"><span class="pre">self</span> <span class="pre">|</span> <span class="pre">other</span></code> leaf by leaf and returns a new tensordict.</p>
+<p>The operation is a logical OR for boolean leaves and a bitwise OR for
+integer leaves. <code class="docutils literal notranslate"><span class="pre">other</span></code> is paired as in <a class="reference internal" href="tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__" title="tensordict.TensorDictBase.__eq__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__eq__()</span></code></a>: a
+tensordict or <code class="docutils literal notranslate"><span class="pre">dict</span></code> must have the same keys, or a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> is
+raised. An <code class="docutils literal notranslate"><span class="pre">other</span></code> of another type, such as <code class="docutils literal notranslate"><span class="pre">None</span></code> or a string,
+gives <code class="docutils literal notranslate"><span class="pre">False</span></code> and a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>. Starting with TensorDict 0.17,
+the default will change to returning <code class="docutils literal notranslate"><span class="pre">NotImplemented</span></code>, so that
+Python raises a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>, as it does for tensors and for <code class="docutils literal notranslate"><span class="pre">&amp;</span></code>.</p>
+<p>The result is a new tensordict that is not locked and, except with
+a tensor <code class="docutils literal notranslate"><span class="pre">other</span></code> of one or more dims, has no dim names. <code class="docutils literal notranslate"><span class="pre">&amp;</span></code>, <code class="docutils literal notranslate"><span class="pre">~</span></code>
+and the arithmetic operators keep the dim names and the lock.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – the value to compare against.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a new TensorDict instance with all tensors are boolean
-tensors of the same shape as the original tensors.</p>
+<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>Number</em>) – the other
+operand.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2013,7 +2019,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__or__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__or__",
        "url": "/reference/generated/tensordict.TensorDictBase.__or__.html",
-       "articleBody": "TensorDictBase.__or__# TensorDictBase.__or__(other: Any) \u2192 Self | bool# OR operation over two tensordicts, for evey key. The two tensordicts must have the same key set. Parameters: other (TensorDictBase, dict, or float) \u2013 the value to compare against. Returns: a new TensorDict instance with all tensors are boolean tensors of the same shape as the original tensors. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__or__# TensorDictBase.__or__(other: Any) \u2192 Self | bool# Computes self | other leaf by leaf and returns a new tensordict. The operation is a logical OR for boolean leaves and a bitwise OR for integer leaves. other is paired as in __eq__(): a tensordict or dict must have the same keys, or a KeyError is raised. An other of another type, such as None or a string, gives False and a FutureWarning. Starting with TensorDict 0.17, the default will change to returning NotImplemented, so that Python raises a TypeError, as it does for tensors and for \u0026. The result is a new tensordict that is not locked and, except with a tensor other of one or more dims, has no dim names. \u0026, ~ and the arithmetic operators keep the dim names and the lock. Parameters: other (TensorDictBase, dict, Tensor or Number) \u2013 the other operand. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

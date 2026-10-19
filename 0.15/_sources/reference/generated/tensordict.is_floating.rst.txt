@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+is_floating
+===========
+
+.. autofunction:: is_floating
+
+.. minigallery:: tensordict.is_floating
+    :add-heading: Tutorials that use ``is_floating``

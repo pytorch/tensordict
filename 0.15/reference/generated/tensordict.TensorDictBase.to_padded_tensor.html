@@ -1642,20 +1642,45 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_padded_tensor">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_padded_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">padding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><span class="pre">NestedKey</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.to_padded_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Converts all nested tensors to a padded version and adapts the batch-size accordingly.</p>
+<dd><p>Returns a tensordict whose nested-tensor leaves are converted to padded tensors.</p>
+<p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.to_padded_tensor" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.to_padded_tensor()</span></code></a> on every leaf that is a
+nested tensor, and keeps the other leaves. If the batch size has a
+<code class="docutils literal notranslate"><span class="pre">-1</span></code> (a ragged dimension, as in a dense version of a lazy stack
+of tensordicts with different batch sizes), the batch size of the
+result is computed from the padded leaves.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>padding</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – the padding value for the tensors in the tensordict.
-Defaults to <code class="docutils literal notranslate"><span class="pre">0.0</span></code>.</p></li>
-<li><p><strong>mask_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – if provided, the key where a
-mask for valid values will be written.
-Will result in an error if the heterogeneous dimension
-isn’t part of the tensordict batch-size.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+<li><p><strong>padding</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – the value of the padding. Defaults to
+<code class="docutils literal notranslate"><span class="pre">0.0</span></code>.</p></li>
+<li><p><strong>mask_key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – a key where a boolean mask of the
+valid (not padded) elements is written. It needs a ragged batch
+dimension, or a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> is raised. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, which writes no mask.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stack</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">lazy_stack</span><span class="p">([</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
+<span class="gp">... </span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">densify</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, -1])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">padded</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_padded_tensor</span><span class="p">(</span><span class="n">padding</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">mask_key</span><span class="o">=</span><span class="s2">"mask"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">padded</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, 4])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">padded</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span>
+<span class="go">tensor([[ 0.,  0.,  0., -1.],</span>
+<span class="go">        [ 1.,  1.,  1.,  1.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">padded</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span>
+<span class="go">tensor([[ True,  True,  True, False],</span>
+<span class="go">        [ True,  True,  True,  True]])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2016,7 +2041,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_padded_tensor",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_padded_tensor",
        "url": "/reference/generated/tensordict.TensorDictBase.to_padded_tensor.html",
-       "articleBody": "TensorDictBase.to_padded_tensor# TensorDictBase.to_padded_tensor(padding=0.0, mask_key: NestedKey | None = None) \u2192 Self# Converts all nested tensors to a padded version and adapts the batch-size accordingly. Parameters: padding (float) \u2013 the padding value for the tensors in the tensordict. Defaults to 0.0. mask_key (NestedKey, optional) \u2013 if provided, the key where a mask for valid values will be written. Will result in an error if the heterogeneous dimension isn\u2019t part of the tensordict batch-size. Defaults to None Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_padded_tensor# TensorDictBase.to_padded_tensor(padding=0.0, mask_key: NestedKey | None = None) \u2192 Self# Returns a tensordict whose nested-tensor leaves are converted to padded tensors. Calls torch.nested.to_padded_tensor() on every leaf that is a nested tensor, and keeps the other leaves. If the batch size has a -1 (a ragged dimension, as in a dense version of a lazy stack of tensordicts with different batch sizes), the batch size of the result is computed from the padded leaves. Parameters: padding (float, optional) \u2013 the value of the padding. Defaults to 0.0. mask_key (NestedKey, optional) \u2013 a key where a boolean mask of the valid (not padded) elements is written. It needs a ragged batch dimension, or a RuntimeError is raised. Defaults to None, which writes no mask. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e stack = TensorDict.lazy_stack([ ... TensorDict(a=torch.zeros(3), batch_size=[3]), ... TensorDict(a=torch.ones(4), batch_size=[4]), ... ]) \u003e\u003e\u003e td = stack.densify(layout=torch.jagged) \u003e\u003e\u003e td.batch_size torch.Size([2, -1]) \u003e\u003e\u003e padded = td.to_padded_tensor(padding=-1.0, mask_key=\"mask\") \u003e\u003e\u003e padded.batch_size torch.Size([2, 4]) \u003e\u003e\u003e padded[\"a\"] tensor([[ 0., 0., 0., -1.], [ 1., 1., 1., 1.]]) \u003e\u003e\u003e padded[\"mask\"] tensor([[ True, True, True, False], [ True, True, True, True]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

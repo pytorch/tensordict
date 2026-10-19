@@ -1642,91 +1642,60 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.min">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">min</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">NO_DEFAULT</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">NO_DEFAULT</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keepdim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reduce</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.min" title="Link to this definition">#</a></dt>
-<dd><p>Returns the minimum values of all elements in the input tensordict.</p>
+<dd><p>Returns the minimum of every leaf, over all its elements or along a batch dimension.</p>
+<p>Without <code class="docutils literal notranslate"><span class="pre">dim</span></code>, the result is a tensordict of scalar leaves. With <code class="docutils literal notranslate"><span class="pre">dim</span></code>,
+as with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.min.html#torch.min" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.min()</span></code></a>, the result is a named tuple of two tensordicts of
+the same structure, <code class="docutils literal notranslate"><span class="pre">values</span></code> and <code class="docutils literal notranslate"><span class="pre">indices</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">None</span></code>, returns a dimensionless
-tensordict containing the min value of all leaves (if this can be computed).
-If integer, <cite>min</cite> is called upon the dimension specified if
-and only if this dimension is compatible with the tensordict
-shape.
-A tuple reduces only its first dim; passing one is deprecated
-and will be removed in TensorDict 0.17.</p></li>
-<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – whether the output tensor has dim retained or not.</p></li>
+<li><p><strong>dim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch dimension to reduce. A negative <code class="docutils literal notranslate"><span class="pre">dim</span></code>
+counts from the end of the batch dimensions. A tuple reduces only
+its first dimension; passing one is deprecated and will be removed
+in TensorDict 0.17. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which reduces every
+element of each leaf, and the result has an empty batch size.</p></li>
+<li><p><strong>keepdim</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduced batch dimension is
+kept with size 1. Needs an int <code class="docutils literal notranslate"><span class="pre">dim</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>reduce</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reduction will occur across all TensorDict values
-and a single reduced tensor will be returned.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>. With feature dims, a negative <code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of
-each leaf. Starting with TensorDict 0.17, the default will change to counting it from
-the end of the batch dims, as with <code class="docutils literal notranslate"><span class="pre">reduce=False</span></code>.</p></li>
-<li><p><strong>return_indices</strong> (<a class="reference internal" href="tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDictBase.bool"><em>bool</em></a><em>, </em><em>optional</em>) – <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.min.html#torch.min" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">min()</span></code></a> returns a named tuple with values and indices
-when the <code class="docutils literal notranslate"><span class="pre">dim</span></code> argument is passed. The <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> equivalent of this is to return a named tuple
-with <code class="docutils literal notranslate"><span class="pre">values</span></code> and <code class="docutils literal notranslate"><span class="pre">indices</span></code> tensordicts of identical structure. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, only the values
-are returned. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>reduce</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, reduces all the leaves together
+and returns a single tensor. Without <code class="docutils literal notranslate"><span class="pre">dim</span></code>, the result is a
+scalar. With <code class="docutils literal notranslate"><span class="pre">dim</span></code>, the leaves are concatenated along <code class="docutils literal notranslate"><span class="pre">dim</span></code>
+first, so they must have the same number of dimensions. With feature
+dimensions, a negative <code class="docutils literal notranslate"><span class="pre">dim</span></code> counts from the end of each leaf.
+Starting with TensorDict 0.17, the default will change to counting
+it from the end of the batch dimensions, as with <code class="docutils literal notranslate"><span class="pre">reduce=False</span></code>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>return_indices</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code> and <code class="docutils literal notranslate"><span class="pre">dim</span></code> is given,
+returns only the values tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new tensordict, or a named tuple <code class="docutils literal notranslate"><span class="pre">(values,</span> <span class="pre">indices)</span></code> of
+tensordicts when <code class="docutils literal notranslate"><span class="pre">dim</span></code> is given and <code class="docutils literal notranslate"><span class="pre">return_indices=True</span></code>. With
+<code class="docutils literal notranslate"><span class="pre">reduce=True</span></code>, a tensor, or what <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.min.html#torch.min" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.min()</span></code></a> returns when
+<code class="docutils literal notranslate"><span class="pre">dim</span></code> is given.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span>
-<span class="gp">... </span>        <span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">d</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>        <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
-<span class="gp">... </span>    <span class="p">),</span>
-<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">b</span><span class="o">=</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<span class="go">torch.return_types.min(</span>
-<span class="go">values=TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([4]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False),</span>
-<span class="go">indices=TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">                d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([4]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        b: TensorDict(</span>
-<span class="go">            fields={</span>
-<span class="go">                c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">                d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">            batch_size=torch.Size([]),</span>
-<span class="go">            device=None,</span>
-<span class="go">            is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([4])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+<span class="go">torch.int64</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">min</span><span class="p">()[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">reduce</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="go">tensor(-3.1537)</span>
+<span class="go">tensor(-2.8891)</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2089,7 +2058,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.min",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.min",
        "url": "/reference/generated/tensordict.TensorDictBase.min.html",
-       "articleBody": "TensorDictBase.min# TensorDictBase.min(dim: int | NO_DEFAULT = NO_DEFAULT, keepdim: bool = False, *, reduce: bool | None = None, return_indices: bool = True) \u2192 Self | Tensor# Returns the minimum values of all elements in the input tensordict. Parameters: dim (int, optional) \u2013 if None, returns a dimensionless tensordict containing the min value of all leaves (if this can be computed). If integer, min is called upon the dimension specified if and only if this dimension is compatible with the tensordict shape. A tuple reduces only its first dim; passing one is deprecated and will be removed in TensorDict 0.17. keepdim (bool) \u2013 whether the output tensor has dim retained or not. Keyword Arguments: reduce (bool, optional) \u2013 if True, the reduction will occur across all TensorDict values and a single reduced tensor will be returned. Defaults to False. With feature dims, a negative dim counts from the end of each leaf. Starting with TensorDict 0.17, the default will change to counting it from the end of the batch dims, as with reduce=False. return_indices (bool, optional) \u2013 min() returns a named tuple with values and indices when the dim argument is passed. The TensorDict equivalent of this is to return a named tuple with values and indices tensordicts of identical structure. If False, only the values are returned. Defaults to True. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e td = TensorDict( ... a=torch.randn(3, 4, 5), ... b=TensorDict( ... c=torch.randn(3, 4, 5, 6), ... d=torch.randn(3, 4, 5), ... batch_size=(3, 4, 5), ... ), ... batch_size=(3, 4) ... ) \u003e\u003e\u003e td.min(dim=0) torch.return_types.min( values=TensorDict( fields={ a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.float32, is_shared=False), d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([4]), device=None, is_shared=False)}, batch_size=torch.Size([4]), device=None, is_shared=False), indices=TensorDict( fields={ a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([4, 5, 6]), device=cpu, dtype=torch.int64, is_shared=False), d: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([4]), device=None, is_shared=False)}, batch_size=torch.Size([4]), device=None, is_shared=False)) \u003e\u003e\u003e td.min() TensorDict( fields={ a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), b: TensorDict( fields={ c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) \u003e\u003e\u003e td.min(reduce=True) tensor(-3.1537) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.min# TensorDictBase.min(dim: int | NO_DEFAULT = NO_DEFAULT, keepdim: bool = False, *, reduce: bool | None = None, return_indices: bool = True) \u2192 Self | Tensor# Returns the minimum of every leaf, over all its elements or along a batch dimension. Without dim, the result is a tensordict of scalar leaves. With dim, as with torch.min(), the result is a named tuple of two tensordicts of the same structure, values and indices. Parameters: dim (int, optional) \u2013 the batch dimension to reduce. A negative dim counts from the end of the batch dimensions. A tuple reduces only its first dimension; passing one is deprecated and will be removed in TensorDict 0.17. Defaults to None, which reduces every element of each leaf, and the result has an empty batch size. keepdim (bool, optional) \u2013 if True, the reduced batch dimension is kept with size 1. Needs an int dim. Defaults to False. Keyword Arguments: reduce (bool, optional) \u2013 if True, reduces all the leaves together and returns a single tensor. Without dim, the result is a scalar. With dim, the leaves are concatenated along dim first, so they must have the same number of dimensions. With feature dimensions, a negative dim counts from the end of each leaf. Starting with TensorDict 0.17, the default will change to counting it from the end of the batch dimensions, as with reduce=False. Defaults to False. return_indices (bool, optional) \u2013 if False and dim is given, returns only the values tensordict. Defaults to True. Returns: A new tensordict, or a named tuple (values, indices) of tensordicts when dim is given and return_indices=True. With reduce=True, a tensor, or what torch.min() returns when dim is given. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e td = TensorDict( ... a=torch.randn(3, 4, 5), ... b=TensorDict(c=torch.randn(3, 4, 5, 6), batch_size=(3, 4, 5)), ... batch_size=(3, 4), ... ) \u003e\u003e\u003e td.min(dim=0).values.batch_size torch.Size([4]) \u003e\u003e\u003e td.min(dim=0).indices[\"b\", \"c\"].dtype torch.int64 \u003e\u003e\u003e td.min()[\"a\"].shape torch.Size([]) \u003e\u003e\u003e td.min(reduce=True) tensor(-2.8891) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

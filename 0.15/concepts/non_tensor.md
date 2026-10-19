@@ -196,6 +196,25 @@ If you write a different value into one element, the entry becomes a
 'NonTensorStack'
 ```
 
+When `td[index] = src` brings a non-tensor key that a dense `td` does not
+have, a [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData) in `src` (one value for the whole
+batch) fills every row of `td`, written or not, while a
+[`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) (one value for each row) leaves `None` in
+the rows that `index` does not select:
+
+```
+>>> td = TensorDict({"score": torch.zeros(4)}, batch_size=[4])
+>>> td[1:3] = TensorDict({"score": torch.ones(2), "genome": "hg38"}, batch_size=[2])
+>>> td["genome"]
+'hg38'
+>>> td = TensorDict({"score": torch.zeros(4)}, batch_size=[4])
+>>> td[1:3] = TensorDict(
+... {"score": torch.ones(2), "seq": NonTensorStack("ACGT", "GGCC")}, batch_size=[2]
+... )
+>>> td.get("seq").tolist()
+[None, 'ACGT', 'GGCC', None]
+```
+
 To give each element of the batch its own value, use a
 [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack):
 

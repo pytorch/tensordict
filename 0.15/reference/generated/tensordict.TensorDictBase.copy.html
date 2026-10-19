@@ -1642,8 +1642,19 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.copy">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.copy" title="Link to this definition">#</a></dt>
-<dd><p>Return a shallow copy of the tensordict (ie, copies the structure but not the data).</p>
-<p>Equivalent to <cite>TensorDictBase.clone(recurse=False)</cite></p>
+<dd><p>Returns a shallow copy of the tensordict: a new structure that holds the same leaves.</p>
+<p>The same as <code class="docutils literal notranslate"><span class="pre">td.clone(recurse=False)</span></code>. The nested tensordicts are new
+objects, but the leaves are the same tensors: an in-place change to a
+leaf shows in both.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">c</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"a"</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">td</span><span class="p">[</span><span class="s2">"b"</span><span class="p">]</span>
+<span class="go">(True, False)</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2004,7 +2015,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.copy",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.copy",
        "url": "/reference/generated/tensordict.TensorDictBase.copy.html",
-       "articleBody": "TensorDictBase.copy# TensorDictBase.copy() \u2192 Self# Return a shallow copy of the tensordict (ie, copies the structure but not the data). Equivalent to TensorDictBase.clone(recurse=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.copy# TensorDictBase.copy() \u2192 Self# Returns a shallow copy of the tensordict: a new structure that holds the same leaves. The same as td.clone(recurse=False). The nested tensordicts are new objects, but the leaves are the same tensors: an in-place change to a leaf shows in both. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b={\"c\": torch.zeros(3)}, batch_size=[3]) \u003e\u003e\u003e c = td.copy() \u003e\u003e\u003e c[\"a\"] is td[\"a\"], c[\"b\"] is td[\"b\"] (True, False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

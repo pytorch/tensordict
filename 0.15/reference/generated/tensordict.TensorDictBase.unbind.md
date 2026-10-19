@@ -2,14 +2,15 @@
 
 TensorDictBase.unbind(*dim: [int](https://docs.python.org/3/builtins/functions.html#int)*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase), ...]
 
-Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
+Returns a tuple of the tensordicts along a batch dimension, as [`torch.Tensor.unbind()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind) does.
 
-The tensordicts of the result hold views of the original tensors.
+The tensordicts of the result hold views of the original tensors. They
+are locked if the tensordict is shared or memory-mapped.
 
 Parameters:
 
 **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the batch dimension to remove. The result has
-`self.batch_size[dim]` tensordicts.
+`batch_size[dim]` tensordicts.
 
 Examples
 

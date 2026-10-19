@@ -66,38 +66,38 @@ Parameters:
 
 Keyword Arguments:
 
-- **stack_dim** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)) - the dimension of the batch size along which the
+- **stack_dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dimension of the batch size along which the
 tensordicts are stacked. It must be between `-td.ndim - 1` and
 `td.ndim`, where `td` is one of the inputs. Defaults to `0`.
-- **hook_out** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - 
+- **hook_out** (*Callable**,**optional*) - 
 
 a callable to execute after [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get).
 
 Deprecated since version 0.15: `hook_out` belongs to the [`vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) support of lazy
 stacks and has no replacement.
-- **hook_in** ([*callable*](https://docs.python.org/3/builtins/functions.html#callable)*,**optional*) - 
+- **hook_in** (*Callable**,**optional*) - 
 
 a callable to execute before [`set()`](tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set).
 
 Deprecated since version 0.15: `hook_in` belongs to the [`vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) support of lazy
 stacks and has no replacement.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - if no tensordict is
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - if no tensordict is
 given, the batch size of the stacked tensordicts: the empty stack
 has a `batch_size` with `0` at `stack_dim`. If tensordicts
 are given, it must equal the stacked batch size, or the
 constructor raises a `RuntimeError`.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of an empty stack. If
 tensordicts are given, the stack takes the device of the first
-one and ignores this argument.
+one and ignores this argument. Defaults to `None`.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the dimension names of an empty stack.
 If tensordicts are given, the names come from them, and this
-argument is ignored with a `FutureWarning`. To name the dims of
-such a stack, pass `stack_dim_name`, or set `names` on the
+argument is ignored with a `FutureWarning`. To name the dimensions
+of such a stack, pass `stack_dim_name`, or set `names` on the
 stack. Starting with TensorDict 0.17, the default will change to
 applying these names to the stack.
 - **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the name of the stack dimension.
 Defaults to `None`.
-- **strict_shape** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch sizes of the
+- **strict_shape** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the batch sizes of the
 inputs must be equal, or the constructor raises a
 `RuntimeError`. Defaults to `False`.
 
@@ -106,14 +106,13 @@ Examples
 ```
 >>> import torch
 >>> from tensordict import LazyStackedTensorDict, TensorDict
->>> tds = [TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
-... for _ in range(10)]
+>>> tds = [TensorDict(a=torch.zeros(3, 4), batch_size=[3]) for _ in range(10)]
 >>> td_stack = LazyStackedTensorDict.lazy_stack(tds, -1)
->>> print(td_stack.shape)
+>>> td_stack.shape
 torch.Size([3, 10])
->>> print(td_stack.get("a").shape)
+>>> td_stack.get("a").shape
 torch.Size([3, 10, 4])
->>> print(td_stack[:, 0] is tds[0])
+>>> td_stack[:, 0] is tds[0]
 True
 ```
 
@@ -157,18 +156,26 @@ whether or not it is the stack dimension.
 
 append(*tensordict: T*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Append a TensorDict onto the stack.
+Appends a tensordict to the lazy stack, like [`list.append()`](https://docs.python.org/3/builtins/stdtypes.html#list.append).
 
-Analogous to list.append. The appended TensorDict must have compatible
-batch_size and device. The append operation is in-place, nothing is returned.
+Same as `insert()` at the end of the stack.
 
 Parameters:
 
-**tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The TensorDict to be appended onto the stack.
+**tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict to append. It must have
+the device of the other members and as many batch dimensions.
+Its sizes must match theirs, except where the batch size of
+the lazy stack is `-1`.
 
 extend(*tensordict: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[T] | T*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Extends the lazy stack with new tensordicts.
+Appends several tensordicts to the lazy stack, like [`list.extend()`](https://docs.python.org/3/builtins/stdtypes.html#list.extend).
+
+Parameters:
+
+**tensordict** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the
+tensordicts to append. A tensordict is unbound along the stack
+dimension and its parts are appended.
 
 *classmethod*from_dict(*input_dict: [Dict](https://docs.python.org/3/library/typing.html#typing.Dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [Dict](https://docs.python.org/3/library/typing.html#typing.Dict)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]] | [List](https://docs.python.org/3/library/typing.html#typing.List)[[Dict](https://docs.python.org/3/library/typing.html#typing.Dict)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [Any](https://docs.python.org/3/library/typing.html#typing.Any)]]*, **other*, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *batch_size=None*, *device=None*, *batch_dims=None*, *stack_dim_name=None*, *stack_dim=0*, *names: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*)
 
@@ -181,23 +188,28 @@ that list.
 
 Parameters:
 
-- **input_dict** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of**dicts**, or*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*of**dicts*) - the data of each
+- **input_dict** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*, or*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*of*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the data of each
 stacked tensordict.
 - ***other** - passed to [`tensordict.TensorDict.from_dict()`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict).
 
 Keyword Arguments:
 
-- **auto_batch_size** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch size of
-each tensordict is computed from its data. Defaults to
-`False`.
-- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the batch size of each stacked
-tensordict.
-- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - the device of each stacked
-tensordict.
-- **batch_dims** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - with `auto_batch_size`, the number of
-batch dimensions to keep.
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+of each tensordict to the largest leading shape that all its
+entries share. Defaults to `False`.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+each stacked tensordict, without the stack dimension. Defaults
+to `None`, which gives each tensordict the batch size `[]`
+unless its batch size is set automatically.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of each
+stacked tensordict. Defaults to `None`, which keeps each leaf
+where it is.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `auto_batch_size`, the maximum
+number of batch dimensions of each tensordict. Defaults to
+`None`.
 - **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the name of the stack dimension.
-- **stack_dim** ([*int*](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)*,**optional*) - the stack dimension. Defaults to `0`.
+Defaults to `None`.
+- **stack_dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the stack dimension. Defaults to `0`.
 - **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the dimensions of the
 result, stack dimension included. Exclusive with
 `stack_dim_name`. Without a `batch_size`, only
@@ -212,7 +224,7 @@ use `stack_dim_name` instead.
 
 Returns:
 
-a `LazyStackedTensorDict`.
+A `LazyStackedTensorDict`.
 
 Examples
 
@@ -230,11 +242,36 @@ torch.Size([4])
 
 *classmethod*from_list(*input: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[Mapping](https://docs.python.org/3/library/typing.html#typing.Mapping)]*, ***, *auto_batch_size: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *batch_dims: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *names: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *lazy: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
-Builds a lazy stack from a list of dicts.
+Builds a lazy stack from a list of dicts, one tensordict per dict.
 
-Same as [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict) with a list. `lazy` is ignored: the result
-is always a lazy stack. See
-[`tensordict.TensorDictBase.from_list()`](tensordict.TensorDictBase.from_list.html#tensordict.TensorDictBase.from_list) for the other arguments.
+Same as [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict) with a list, stacked along dimension `0`.
+The dicts can have different keys and entry shapes.
+
+Parameters:
+
+**input** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the data of each stacked tensordict.
+
+Keyword Arguments:
+
+- **auto_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, sets the batch size
+of each tensordict to the largest leading shape that all its
+entries share. Defaults to `None`, which turns it on when
+`batch_dims` is given.
+- **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
+each stacked tensordict, without the stack dimension. Defaults
+to `None`, which gives each tensordict the batch size `[]`
+unless its batch size is set automatically.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of each
+stacked tensordict. Defaults to `None`, which keeps each leaf
+where it is.
+- **batch_dims** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the maximum number of batch dimensions
+of each tensordict when the batch size is set automatically.
+Defaults to `None`.
+- **names** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the names of the dimensions of the
+result, stack dimension first. See [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict). Defaults
+to `None`.
+- **lazy** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - ignored: the result is always a lazy stack.
+Defaults to `None`.
 
 Examples
 
@@ -250,16 +287,35 @@ torch.Size([2, -1])
 
 get_item_shape(*key*)
 
-Gets the shape of an item in the lazy stack.
+Returns the shape of an entry of the lazy stack, with `-1` where the members differ.
 
-Heterogeneous dimensions are returned as -1.
+The shape of a tensor entry is read from the members without stacking
+them. Other entries are read with [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get), which stacks them.
 
-The shape of a tensor entry is read from the members. Other entries
-are read with [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get), which stacks them.
+Parameters:
 
-get_nestedtensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, ***, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | TensorCollection
+**key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the entry.
 
-Returns a nested tensor when stacking cannot be achieved.
+Raises:
+
+[**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the stack has no entry at `key`, or only some of
+ its members have one.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import LazyStackedTensorDict, TensorDict
+>>> td = LazyStackedTensorDict(
+... TensorDict(a=torch.zeros(3)), TensorDict(a=torch.zeros(4))
+... )
+>>> td.get_item_shape("a")
+torch.Size([2, -1])
+```
+
+get_nestedtensor(*key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey)*, *default: [Any](https://docs.python.org/3/library/typing.html#typing.Any) = NO_DEFAULT*, ***, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
+
+Returns an entry of the lazy stack as a nested tensor.
 
 Deprecated since version 0.15: Use `get(key, as_nested_tensor=True)` instead. It differs in three
 ways: it builds a `torch.jagged` nested tensor unless you pass
@@ -274,20 +330,15 @@ whereas this method raises.
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the entry to nest.
-- **default** (*Any**,**optional*) - 
-
-the default value to return in case the key
-isn't in all sub-tensordicts.
-
-Note
-
-In case the default is a tensor, this method will attempt
-the construction of a nestedtensor with it. Otherwise, the default
-value will be returned.
+- **default** (*Any**,**optional*) - the value for the tensordicts that lack
+`key`. If it is a tensor, it is nested with the entries of
+the other tensordicts. Otherwise, it is returned as is.
+Without a default, a missing key raises a `KeyError`.
 
 Keyword Arguments:
 
-**layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout for the nested tensor.
+**layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor.
+Defaults to `None`, which builds a `torch.strided` one.
 
 Examples
 
@@ -322,19 +373,44 @@ stacks and has no replacement.
 
 insert(*index: [int](https://docs.python.org/3/builtins/functions.html#int)*, *tensordict: T*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
-Insert a TensorDict into the stack at the specified index.
+Inserts a tensordict into the lazy stack at `index`, like [`list.insert()`](https://docs.python.org/3/builtins/stdtypes.html#list.insert).
 
-Analogous to list.insert. The inserted TensorDict must have compatible
-batch_size and device. Insertion is in-place, nothing is returned.
+The lazy stack is changed in place and its batch size grows by one
+along the stack dimension. The new tensordict is stored as is, not
+copied.
 
 Parameters:
 
-- **index** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - The index at which the new TensorDict should be inserted.
-- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - The TensorDict to be inserted into the stack.
+- **index** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the position of the new tensordict along the stack
+dimension.
+- **tensordict** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict to insert. It must have
+the device of the other members and as many batch dimensions.
+Its sizes must match theirs, except where the batch size of
+the lazy stack is `-1`.
+
+Raises:
+
+- [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `tensordict` is not a tensordict.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if the device of `tensordict` differs from that of
+ the members, or if its batch size does not fit the lazy stack.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the lazy stack is locked.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import LazyStackedTensorDict, TensorDict
+>>> td = LazyStackedTensorDict(TensorDict(a=torch.zeros(3)))
+>>> td.insert(0, TensorDict(a=torch.ones(3)))
+>>> td.batch_size
+torch.Size([2])
+>>> td[0]["a"]
+tensor([1., 1., 1.])
+```
 
 *classmethod*lazy_stack(*items: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *stack_dim_name: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *strict_shape: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_list: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_padded_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *as_nested_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *padding_side: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'right'*, *layout: [layout](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) | [int](https://docs.python.org/3/builtins/functions.html#int) | [bool](https://docs.python.org/3/builtins/functions.html#bool) = 0.0*) → Self
 
-Stacks tensordicts in a LazyStackedTensorDict.
+Stacks tensordicts into a lazy stack.
 
 The result keeps each input as a separate tensordict, so the inputs
 can have different keys, entry shapes and batch sizes. See
@@ -346,48 +422,45 @@ If `items` holds tensorclass instances of one class, the result is
 an instance of that class that holds a lazy stack. If `items` holds
 tensors, they are stacked with [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack), unless one of
 `as_list`, `as_padded_tensor` or `as_nested_tensor` is set.
+These arguments, `layout`, `padding_side` and `padding_value`
+apply only to a list of tensors. To read padded or nested entries from
+a lazy stack of tensordicts, pass them to [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) instead.
 
 Parameters:
 
-- **items** (*Sequence**of**TensorDictBase instances*) - the tensordicts to
-stack. It must not be empty, or a `RuntimeError` is raised.
-- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dim along which to perform the lazy stack.
-Defaults to 0. A `dim` below `-batch_dims - 1` warns and
-wraps around once more (and raises if it is still out of
-range). Starting with TensorDict 0.17, the default will change
-to raising an `IndexError`, as for a tensor.
+- **items** (*Sequence**of*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordicts to stack. It
+must not be empty, or a `RuntimeError` is raised.
+- **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the dimension along which to stack. Defaults
+to `0`. A `dim` below `-batch_dims - 1` warns and wraps
+around once more (and raises if it is still out of range).
+Starting with TensorDict 0.17, the default will change to
+raising an `IndexError`, as for a tensor.
 
 Keyword Arguments:
 
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - not used: the stack takes the
 device of the first item.
-- **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a LazyStackedTensorDict where to write the data.
-Its batch size must be the stacked batch size.
-- **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - a name for the stacked dimension.
-- **strict_shape** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the batch sizes of the
+- **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a lazy stack to write the data
+into. Its batch size must be the stacked batch size. Defaults
+to `None`.
+- **stack_dim_name** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the name of the stack dimension.
+Defaults to `None`.
+- **strict_shape** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the batch sizes of the
 items must be equal, or a `RuntimeError` is raised.
 Defaults to `False`.
-
-The following keyword arguments apply only when `items` is a list of
-tensors. With tensordicts, they have no effect. To read padded or
-nested entries from a lazy stack of tensordicts, pass them to
-[`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) instead.
-
-Keyword Arguments:
-
-- **as_list** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensors are returned
-as a list.
+- **as_list** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - tensors only. If `True`, the tensors
+are returned as a list.
 Exclusive with `as_padded_tensor` and `as_nested_tensor`.
 Defaults to `False`.
-- **as_padded_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensors are
-padded to the largest shape and stacked into one tensor: each
+- **as_padded_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - tensors only. If `True`, the
+tensors are padded to the largest shape and stacked into one tensor: each
 dim is padded to its largest size. `padding_value` sets the
 padding value and `padding_side` sets the side of every
 padded dim.
 Exclusive with `as_list` and `as_nested_tensor`.
 Defaults to `False`.
-- **as_nested_tensor** ([*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - if `True`, the tensors are
-returned as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
+- **as_nested_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - tensors only. If `True`, the
+tensors are returned as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). `layout`
 sets its layout. Tensors that are nested tensors themselves
 raise a `ValueError`, as a nested tensor has a single nested
 level.
@@ -396,12 +469,15 @@ Defaults to `False`.
 - **layout** ([*layout*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout)*,**optional*) - the layout of the nested tensor
 when `as_nested_tensor=True`: `torch.jagged` or
 `torch.strided`. Defaults to `torch.jagged`.
-- **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - The side of padding. Must be "left" or "right". Defaults to "right".
-- **padding_value** (*scalar**or*[*bool*](tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool)*,**optional*) - The padding value. Defaults to 0.0.
+- **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the side to pad with
+`as_padded_tensor`: `"left"` or `"right"`. Defaults to
+`"right"`.
+- **padding_value** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,*[*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the padding value
+with `as_padded_tensor`. Defaults to `0.0`.
 
 Returns:
 
-a `LazyStackedTensorDict`, or a tensorclass
+A `LazyStackedTensorDict`, or a tensorclass
 instance if `items` holds tensorclass instances.
 
 Examples
@@ -420,7 +496,7 @@ Examples
 
 *classmethod*maybe_dense_stack(*items: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[[TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]*, *dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *strict: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
-Stacks tensordicts densely if possible, or onto a LazyStackedTensorDict otherwise.
+Stacks tensordicts densely if possible, or into a lazy stack otherwise.
 
 Use this function when the inputs usually match, but can differ. If
 every item has the same keys and the same entry shapes, the result is
@@ -437,14 +513,14 @@ is used on the dims of the leaves. Starting with TensorDict
 0.17, the default will change to raising an `IndexError`,
 as for a tensor.
 - **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
-into.
+into. Defaults to `None`.
 - **strict** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - used only with `out`. If `True`,
 `out` must have the same keys as the items, or a
 `RuntimeError` is raised. Defaults to `False`.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) (or the tensorclass of the
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) (or the tensorclass of the
 items) if the items can be stacked densely, a
 `LazyStackedTensorDict` otherwise.
 
@@ -460,11 +536,20 @@ Examples
 >>> assert isinstance(out, LazyStackedTensorDict) and out.shape == (2,)
 ```
 
+non_tensor_items(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*)
+
+Returns the non-tensor leaves as `(key, value)` pairs, each stacked across the members.
+
+Only the keys that every member holds are listed. If
+`include_nested` is `True`, the nested tensordicts are searched as
+well.
+
 valid_keys(*include_nested: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *leaves_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *sort: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → _LazyStackedTensorDictKeysView
 
 Returns the keys of the lazy stack, like [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys).
 
-Deprecated since version 0.15: Use [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys) instead.
+Deprecated since version 0.15: Use [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys) instead, which takes the same arguments. Will be
+removed in TensorDict 0.17.
 
 ## Tutorials that use `LazyStackedTensorDict`
 

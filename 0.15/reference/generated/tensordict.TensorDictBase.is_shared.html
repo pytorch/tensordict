@@ -1642,15 +1642,25 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.is_shared">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">is_shared</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.is_shared" title="Link to this definition">#</a></dt>
-<dd><p>Checks if tensordict is in shared memory.</p>
-<p>If a TensorDict instance is in shared memory, it is locked (entries cannot
-be renamed, removed or added). If a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> is created with
-tensors that are all in shared memory, this does __not__ mean that <code class="docutils literal notranslate"><span class="pre">is_shared</span></code>
-will return <code class="docutils literal notranslate"><span class="pre">True</span></code> (as a new tensor may or may not be in shared memory).
-Only if one calls <cite>tensordict.share_memory_()</cite> or places the tensordict
-on a device where the content is shared by default (eg, <code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code>)
-will the tensordict be considered in shared memory.</p>
-<p>This is always <code class="docutils literal notranslate"><span class="pre">True</span></code> for tensordicts on a CUDA device.</p>
+<dd><p>Whether the tensordict is in shared memory.</p>
+<p>It is <code class="docutils literal notranslate"><span class="pre">True</span></code> after <a class="reference internal" href="tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDictBase.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a>, and always for a
+tensordict on a CUDA device. A tensordict built from tensors that are
+in shared memory is not marked as shared: only
+<a class="reference internal" href="tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDictBase.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a> marks it. A tensordict in shared memory is
+locked: entries cannot be added, renamed or removed. See
+<a class="reference internal" href="../../concepts/keys.html#keys-locking"><span class="std std-ref">Locking and temporary changes</span></a>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span><span class="o">.</span><span class="n">is_shared</span><span class="p">()</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">is_locked</span>
+<span class="go">True</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p>Every tensordict class and every tensorclass has this method. For the
@@ -2011,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.is_shared",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.is_shared",
        "url": "/reference/generated/tensordict.TensorDictBase.is_shared.html",
-       "articleBody": "TensorDictBase.is_shared# TensorDictBase.is_shared() \u2192 bool# Checks if tensordict is in shared memory. If a TensorDict instance is in shared memory, it is locked (entries cannot be renamed, removed or added). If a TensorDict is created with tensors that are all in shared memory, this does __not__ mean that is_shared will return True (as a new tensor may or may not be in shared memory). Only if one calls tensordict.share_memory_() or places the tensordict on a device where the content is shared by default (eg, \"cuda\") will the tensordict be considered in shared memory. This is always True for tensordicts on a CUDA device. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.is_shared# TensorDictBase.is_shared() \u2192 bool# Whether the tensordict is in shared memory. It is True after share_memory_(), and always for a tensordict on a CUDA device. A tensordict built from tensors that are in shared memory is not marked as shared: only share_memory_() marks it. A tensordict in shared memory is locked: entries cannot be added, renamed or removed. See Locking and temporary changes. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e td.is_shared() False \u003e\u003e\u003e td.share_memory_().is_shared() True \u003e\u003e\u003e td.is_locked True Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

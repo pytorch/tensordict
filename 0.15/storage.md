@@ -136,9 +136,11 @@ tensor(12288)
 
 For memory-mapped files, [`memmap_like()`](reference/generated/tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like) is
 another way to preallocate. It takes a tensordict with the shapes and dtypes
-of the dataset, and creates zero-filled files with the same structure,
-without copying the values. Make one sample, and expand it, which does not
-allocate memory:
+of the dataset, and creates files with the same structure, without copying
+the values. New files are filled with zeros. A file that already exists at
+the path of a leaf is mapped as it is and keeps its content, so calling
+`memmap_like` again on the same directory reopens the buffer. Make one
+sample, and expand it, which does not allocate memory:
 
 ```
 >>> datum = TensorDict({"image": torch.zeros(3, 64, 64, dtype=torch.uint8), "label": 0})
@@ -400,6 +402,21 @@ zarr), `from_zarr` infers the batch size:
 >>> TensorDict.from_zarr(root / "data.zarr").batch_size
 torch.Size([500])
 ```
+
+Non-tensor values use JSON where possible and pickle otherwise. Pass
+`allow_pickle=False` to `from_zarr` (or to `PersistentTensorDict`) to
+reject pickled values before decoding them, or `allow_pickle=True` only
+for data you trust. The current default, `None`, still reads pickle but
+emits a `FutureWarning` when a pickled field is read, not when the store
+is opened. Starting with TensorDict 0.17, the default will change to
+`allow_pickle=False`. Tensor and JSON entries are unaffected, as is HDF5.
+Unknown non-tensor encodings raise `ValueError`.
+
+`to_zarr` and `PersistentTensorDict.from_dict(..., backend="zarr")`
+create a new store and return a handle that trusts the values they just
+wrote, unless you pass `allow_pickle=False`. This policy is not stored in
+the zarr store: reopening with `from_zarr` uses that call's policy.
+Opening an existing store in append mode does not opt into pickle.
 
 By default, `to_zarr` writes each tensor as one chunk without compression.
 To read a few rows without reading the whole array, pass `chunks`, and read
