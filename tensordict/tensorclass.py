@@ -5438,6 +5438,9 @@ def _ne(self, other: object) -> bool:
 def _or(self, other: object) -> bool:
     """Computes the element-wise logical OR of the tensorclass and another object.
 
+    As for a tensordict, the result is not locked and, except with a tensor
+    ``other`` of one or more dims, has no dim names.
+
     Args:
         other: object to compare to this object. Can be a tensorclass, a
             tensordict or any compatible type (int, float or tensor), in
@@ -5471,6 +5474,9 @@ def _or(self, other: object) -> bool:
 
 def _xor(self, other: object) -> bool:
     """Computes the element-wise exclusive OR of the tensorclass and another object.
+
+    As for a tensordict, the result is not locked and, except with a tensor
+    ``other`` of one or more dims, has no dim names.
 
     Args:
         other: object to compare to this object. Can be a tensorclass, a
