@@ -248,6 +248,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_contiguous_inplace(canonical)` | `contiguous(inplace=True)` | make the leaves contiguous; the default raises | `TensorDict` |
 | `_to(device, dtype, ...)` | `to`, after it parses the arguments | return the cast tensordict, or `self` | sub, lazy, file |
 | `_write_back_to(result)` | the exit of `with td.to(...)`, with `_to_writes_back_in_place` | write the copy back into the storage | file (no default) |
+| `_reduce(dst, op, async_op, return_premature, _future_list, group)` | `reduce` | issue one `dist.reduce` per leaf, in `sorted_keys` order, as a dense tensordict of the same keys and shapes does; the root waits for every entry with `_finish_reduce`, then raises the first error | lazy (reduces each stacked leaf and writes the result back into the members on rank `dst`) |
 | `_to_tensordict(*, retain_none)` | `to_tensordict` | return the dense copy | store, element, NTS (returns `self`) |
 | `_repr_parts()` | `__repr__` | return the lines inside `ClassName(...)`, without reading data | lazy, NTS, store, lazy store, element |
 | `_new_unsafe(source, *, batch_size, ...)` | `split`, `contiguous`, `empty`, `_unbind`, `_index_tensordict` | build an instance without validation; accept every keyword of `TensorDict._new_unsafe` | `TensorDict`, params, typed |

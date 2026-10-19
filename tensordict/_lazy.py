@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import bisect
+import functools
 import numbers
 import operator
 import os
@@ -4179,6 +4180,66 @@ class LazyStackedTensorDict(TensorDictBase):
             for future in _future_list:
                 future.wait()
             return
+
+    # Override: issues the collectives of a dense tensordict with the same
+    # keys and shapes, one per key on the stacked leaf. That leaf is a copy, so
+    # rank dst, the only rank where the result is defined, writes it back into
+    # the members: with async_op, in a callback once that reduction completes;
+    # in sync mode, at the root after the last collective, so that a failing
+    # write-back cannot stop the collectives of rank dst.
+    def _reduce(
+        self,
+        dst,
+        op=None,
+        async_op=False,
+        return_premature=False,
+        _future_list=None,
+        group=None,
+    ):
+        from torch import distributed as dist
+
+        if op is None:
+            op = dist.ReduceOp.SUM
+        root = False
+        if _future_list is None:
+            _future_list = []
+            root = True
+        is_dst = dist.get_rank() == dst
+
+        def write_back(key, value):
+            # Like dist.reduce into a dense leaf that requires grad. no_grad is
+            # per thread, and the callback can run on a thread of the backend.
+            with torch.no_grad():
+                self._set_str(
+                    key, value, inplace=True, validated=True, ignore_lock=True
+                )
+
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                _future_list = value._reduce(
+                    dst=dst,
+                    op=op,
+                    async_op=async_op,
+                    _future_list=_future_list,
+                    group=group,
+                )
+                continue
+            elif not isinstance(value, Tensor):
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            work = dist.reduce(value, dst=dst, op=op, async_op=async_op, group=group)
+            if is_dst and async_op:
+                work = work.get_future().then(
+                    lambda _, key=key, value=value: write_back(key, value)
+                )
+            elif is_dst:
+                work = functools.partial(write_back, key, value)
+            _future_list.append(work)
+        if not root:
+            return _future_list
+        elif async_op and return_premature:
+            return _future_list
+        self._finish_reduce(_future_list, async_op)
 
     # Override: deletes the entry of each member that has it.
     def _del(self, key: tuple[str, ...]) -> None:
