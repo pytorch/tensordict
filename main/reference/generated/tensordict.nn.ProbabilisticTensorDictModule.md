@@ -89,8 +89,17 @@ unless [`skip_existing()`](tensordict.nn.skip_existing.html#tensordict.nn.skip_e
 to `None`: for a
 [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution), the
 values of the `name_map` of `distribution_kwargs` if it has
-one, and the keys of its `distribution_map` otherwise. For
-another distribution, `None` gives the key `"_"`.
+one, and the keys of its `distribution_map` otherwise. A
+component that `name_map` leaves out is written under its own
+name but is not in `out_keys`, and the module warns. Starting
+with TensorDict 0.17, the default will change to `out_keys` that
+include these components. For another distribution, `None`
+gives the key `"_"`: the module writes the sample there, and
+warns the first time it does.
+Starting with TensorDict 0.17, the default will change to not
+writing the sample at `"_"`, which marks an output that is not
+written, as in [`TensorDictModule`](tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule). Pass
+`out_keys` to keep the current keys.
 
 Keyword Arguments:
 
