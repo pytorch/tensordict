@@ -14,6 +14,7 @@ import weakref
 from pathlib import Path
 from typing import Any, Callable
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import is_npu_available, legacy_lazy_mode
@@ -3659,6 +3660,42 @@ class TestCudaGraphs:
             result = graphed(make(h))
             torch.testing.assert_close(result["y"], expected["y"])
             torch.testing.assert_close(result["h"], expected["h"])
+
+    @pytest.mark.parametrize(
+        "in_keys,out_keys,warns",
+        [
+            (["z"], ["w"], ["in_keys", "out_keys"]),
+            (["z"], None, ["in_keys"]),
+            ([], [("w",), "v"], ["out_keys"]),
+            ([], [], []),
+            (None, None, []),
+            ([("x",)], ["y"], []),
+            ("z", "y", ["in_keys"]),
+            (("z", "x"), {"y"}, ["in_keys"]),
+            ({"x"}, {"w"}, ["out_keys"]),
+            (np.array(["z", "w"]), torch.tensor([1, 2]), []),
+            (torch.tensor([0, 1]), np.array(["v"]), []),
+        ],
+    )
+    def test_cudagraphs_ignored_keys_warn(self, compiled, in_keys, out_keys, warns):
+        # pytorch/tensordict#2973: the module's own in_keys/out_keys win over the
+        # arguments. Non-empty arguments that differ from them warn; empty
+        # lists (TorchRL's collector passes them) and equal keys stay silent.
+        # Arguments that are not a str, list, tuple or set (an array, a tensor)
+        # are ignored silently, as on main.
+        module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        if compiled:
+            module = torch.compile(module)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            graphed = CudaGraphModule(module, in_keys=in_keys, out_keys=out_keys)
+        ignored = [w for w in record if "ignores" in str(w.message)]
+        assert len(ignored) == len(warns)
+        for name, w in zip(warns, ignored):
+            assert str(w.message).startswith(f"CudaGraphModule ignores {name}=")
+            assert w.filename == __file__
+        assert graphed.in_keys == ["x"]
+        assert graphed.out_keys == ["y"]
 
     @staticmethod
     def _make_cudagraph(
