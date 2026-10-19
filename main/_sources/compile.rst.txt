@@ -62,7 +62,8 @@ Another key set
   An operation that goes over all the entries (arithmetic, ``apply``,
   ``clone``, reductions) is compiled for the keys it saw. An input with another
   key set compiles a new graph. Reading one entry (``td["obs"]``) does not
-  depend on the other keys.
+  depend on the other keys. A ``td.get(key, default)`` that returned
+  ``default`` compiles again once the input has ``key``.
 
 Writing into an input tensordict
   ``td["y"] = ...``, ``td.set``, ``td.update``, and a
