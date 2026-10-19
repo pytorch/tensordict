@@ -939,6 +939,19 @@ class TestNonTensorData:
         result.extend(["baz", "qux"])
         assert result._td() is None
 
+    @pytest.mark.parametrize("value", ["b", NonTensorData("b")])
+    def test_linked_list_nontensordata_write_raises(self, value):
+        # Regression test for #2978: a NonTensorData holds one value, so the
+        # write raises with a message that says why, and the list does not
+        # change before the write fails.
+        data = NonTensorData("a", batch_size=[2])
+        values = data.tolist(as_linked_list=True)
+        assert isinstance(values, LinkedList)
+        with pytest.raises(ValueError, match="holds one value"):
+            values[0] = value
+        assert values == ["a", "a"]
+        assert data.tolist() == ["a", "a"]
+
     @set_list_to_stack(True)
     @pytest.mark.parametrize(
         "rows,batch_size",

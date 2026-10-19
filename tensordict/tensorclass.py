@@ -186,6 +186,12 @@ _TensorTypes = (
 _TENSOR_ONLY_TYPE_ERR = TypeError(
     "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
 )
+# raised when an indexed write gives a NonTensorData another value
+_NON_TENSOR_ONE_VALUE_MSG = (
+    "A NonTensorData holds one value for all its elements, so it "
+    "cannot take another value at an index. Call maybe_to_stack() "
+    "to get a NonTensorStack, which holds a value per element."
+)
 # flags accepted by the bracket form TensorClass["autocast", ...]
 _TENSORCLASS_FLAGS = (
     "autocast",
@@ -4199,15 +4205,15 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         and is_non_tensor(value)
         and _non_tensor_value_differs(self, value)
     ):
-        raise ValueError(
-            "A NonTensorData holds one value for all its elements, so it "
-            "cannot take another value at an index. Call maybe_to_stack() "
-            "to get a NonTensorStack, which holds a value per element."
-        )
+        raise ValueError(_NON_TENSOR_ONE_VALUE_MSG)
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor)
     ):
+        if isinstance(self, NonTensorData):
+            # A raw value, such as a string written through the list of
+            # NonTensorData.tolist(as_linked_list=True).
+            raise ValueError(_NON_TENSOR_ONE_VALUE_MSG)
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
             f" numeric scalars and tensors. Got {type(value)}"
@@ -6548,7 +6554,12 @@ class NonTensorDataBase(TensorClass):
                 Defaults to ``False``.
             as_linked_list (bool, optional): if ``True``, returns a
                 ``tensordict.utils.LinkedList`` bound to the entry instead of a
-                list. Defaults to ``False``.
+                list. A :class:`NonTensorData` holds one value, so setting an
+                item of the list to a non-tensor value, such as a string,
+                raises a ``ValueError`` and leaves the list unchanged. Call
+                :meth:`~tensordict.NonTensorData.maybe_to_stack` first to get a
+                :class:`~tensordict.NonTensorStack`, whose list writes back.
+                Defaults to ``False``.
 
         Examples:
             >>> from tensordict import NonTensorData
