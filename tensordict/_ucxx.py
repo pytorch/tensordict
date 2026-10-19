@@ -327,7 +327,7 @@ async def _send_tensordict_uncollated(endpoint, td: TensorDictBase) -> None:
         if t_contig.is_cuda:
             await endpoint.send(t_contig)
         else:
-            await endpoint.send(_tensor_to_numpy(t_contig.view(torch.uint8)))
+            await endpoint.send(_tensor_to_numpy(t_contig.view(-1).view(torch.uint8)))
 
 
 def _compute_total_bytes(metadata: dict) -> int:

@@ -473,7 +473,10 @@ class TestRoundtrip:
         # https://github.com/pytorch/tensordict/issues/2966
         td = TensorDict(
             a=torch.ones(2),
-            nested=TensorDict(b=torch.zeros(3), c=TensorDict(d=torch.arange(4))),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                c=TensorDict(d=torch.arange(4), e=torch.tensor(1.0)),
+            ),
         )
         ep = _FakeEndpoint()
         if sender == "pipe":
