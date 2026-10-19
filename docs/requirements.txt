@@ -2,17 +2,19 @@ matplotlib
 numpy
 safetensors
 zarr>=3.0; python_version >= "3.11"
-sphinx-copybutton
-sphinx-gallery
+# The Sphinx packages are pinned: the docs job fails on any Sphinx warning, and
+# a new release of one can add warnings. Update them together, on purpose.
+sphinx-copybutton==0.5.2
+sphinx-gallery==0.22.1
 # The PyTorch theme supports Sphinx 5.3 to 7.2.6. PyTorch core pins the same two versions.
 sphinx==7.2.6
 pytorch-sphinx-theme2==0.4.13
 Jinja2==3.1.6
-sphinx-autodoc-typehints
-sphinx-serve
+sphinx-autodoc-typehints==2.0.1
+sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
-sphinxcontrib-htmlhelp
-myst-parser
-docutils
+sphinxcontrib-htmlhelp==2.1.0
+myst-parser==4.0.1
+docutils==0.20.1
 
 tqdm

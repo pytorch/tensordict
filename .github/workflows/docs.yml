@@ -120,7 +120,9 @@ jobs:
 
           # Build documentation
           cd ./docs
-          make docs
+          # Fail on any Sphinx warning, such as a broken cross-reference, but
+          # report them all before failing.
+          make docs SPHINXOPTS="-W --keep-going"
           cd ..
 
           # Copy artifacts
