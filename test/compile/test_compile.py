@@ -2569,6 +2569,23 @@ class TestTC:
         finally:
             _set_get_defaults_to_none(set_back)
 
+    def test_tc_get_through_tensor_field(self, mode):
+        # eager get warns that this raises from 0.17 (#2979); compiled, it
+        # returns None as on main, since dynamo cannot trace the warning
+        def get(td):
+            return td.get(("b", "y"))
+
+        get_c = torch.compile(get, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(3))
+        set_back = _get_defaults_to_none()
+        try:
+            _set_get_defaults_to_none(True)
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                assert get(data) is None
+            assert get_c(data) is None
+        finally:
+            _set_get_defaults_to_none(set_back)
+
     def test_tc_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)

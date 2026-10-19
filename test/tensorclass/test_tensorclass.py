@@ -1048,6 +1048,53 @@ class TestTensorClass:
         assert data.get_at(("td", "missing"), 0, "else") == "else"
         assert data.get_at(("td", "missing"), 0) is None
 
+    def test_get_through_tensor_field_warns(self):
+        # get without a default returns None for a key that runs through a
+        # tensor field, where TensorDict.get raises; it raises from 0.17 (#2979)
+        @tensorclass
+        class Inner:
+            a: torch.Tensor
+
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+            name: str
+            opt: torch.Tensor | None = None
+            inner: Inner = None
+            td: TensorDict = None
+
+        data = Data(
+            x=torch.zeros(3),
+            name="a",
+            inner=Inner(a=torch.zeros(3), batch_size=[3]),
+            td=TensorDict(t=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        for key in [("x", "y"), ("x", "y", "z"), ("inner", "a", "y")]:
+            with pytest.warns(
+                FutureWarning, match="is a Tensor, not a tensordict.*TensorDict 0.17"
+            ):
+                assert data.get(key) is None
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                assert data.get(key, as_list=True) is None
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            # an explicit default is returned, as TensorDict.get does
+            assert data.get(("x", "y"), None) is None
+            assert data.get(("x", "y"), default="D") == "D"
+            assert data.get(("inner", "a", "y"), "D") == "D"
+            # TensorDict.get returns None for these too
+            assert data.get(("name", "y")) is None
+            assert data.get(("opt", "y")) is None
+            assert data.get(("z", "y")) is None
+            assert data.get(("inner", "q")) is None
+            assert data.get(("td", "q")) is None
+            assert data.get("x") is data.x
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        # a TensorDict field raises already
+        with pytest.raises(ValueError, match="'t' is a Tensor, not a tensordict"):
+            data.get(("td", "t", "y"))
+
     @pytest.mark.parametrize("defaults_to_none", [True, False])
     def test_get_default_set_get_defaults_to_none(self, defaults_to_none):
         @tensorclass

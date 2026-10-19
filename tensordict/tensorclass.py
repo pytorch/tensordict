@@ -63,6 +63,7 @@ from tensordict.base import (
     _is_accepted_class,
     _is_leaf_nontensor,
     _is_tensor_collection,
+    _key_through_leaf_error,
     _register_tensor_class,
     _rename_keys_pairs,
     _TENSORDICTBASE_MIXINS,
@@ -89,6 +90,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _TENSORCLASS_MEMO,
     _unravel_key_to_tuple,
     _UPDATE_IGNORE_LOCK_WARNED,
+    _user_stacklevel,
     _warn_update_ignore_lock,
     _zip_strict,
     capture_non_tensor_stack,
@@ -4978,6 +4980,18 @@ def _set_at_(
     return self
 
 
+def _warn_get_through_tensor(self, key: tuple, entry: Tensor) -> None:
+    """Warns that ``get`` returned ``None`` for a key that runs through a tensor, which raises from 0.17."""
+    warnings.warn(
+        f"{_key_through_leaf_error(key, 1, entry)} {type(self).__name__}.get "
+        "returns None for this key. Starting with TensorDict 0.17, the "
+        "default will change to raising this ValueError, as TensorDict.get "
+        "does. Pass a default, as in get(key, None), to keep getting None.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _get(self, key: NestedKey, *args, **kwargs):
     """Returns the value of a field, or ``default`` if the key is missing.
 
@@ -4986,6 +5000,13 @@ def _get(self, key: NestedKey, *args, **kwargs):
     arguments of :meth:`~tensordict.TensorDictBase.get` (``as_list``,
     ``as_padded_tensor``, ...) are passed to the tensordict that holds the
     fields.
+
+    A nested key that runs through a tensor field, such as
+    ``tc.get(("x", "y"))`` for a tensor ``x``, returns ``None`` and warns.
+    Starting with TensorDict 0.17, the default will change to raising the
+    ``ValueError`` that :meth:`~tensordict.TensorDictBase.get` raises. A
+    default passed explicitly, as in ``tc.get(("x", "y"), None)``, is
+    returned without a warning.
 
     Args:
         key (NestedKey): the key to read. A tuple reads an entry of a nested
@@ -5033,6 +5054,12 @@ def _get(self, key: NestedKey, *args, **kwargs):
                 # the entry's get returns its own default, and keeps raising
                 # for a key that runs through a leaf, as get does without one
                 return entry.get(key[1:], **kwargs)
+            if not passed_default and isinstance(entry, Tensor):
+                # TensorDict.get raises here; a tensorclass will from 0.17.
+                # Dynamo cannot trace the warning's sys._getframe
+                if not is_dynamo_compiling():
+                    _warn_get_through_tensor(self, key, entry)
+                return default
             return entry.get(key[1:], default=default, **kwargs)
         if kwargs:
             result = _getattr(self, key[0], **kwargs)
