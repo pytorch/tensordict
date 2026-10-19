@@ -157,6 +157,11 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
+    # On free-threaded Python, urllib3 imports brotli inside the streaming tests,
+    # and brotli enables the GIL. Other modules that enable it still fail.
+    pytest.mark.filterwarnings(
+        r"ignore:The global interpreter lock \(GIL\) has been enabled to load module '_brotli':RuntimeWarning"
+    ),
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
