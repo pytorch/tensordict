@@ -339,6 +339,13 @@ arguments of [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictB
 `as_padded_tensor`, ...) are passed to the tensordict that holds the
 fields.
 
+A nested key that runs through a tensor field, such as
+`tc.get(("x", "y"))` for a tensor `x`, returns `None` and warns.
+Starting with TensorDict 0.17, the default will change to raising the
+`ValueError` that [`get()`](tensordict.TensorDictBase.get.html#tensordict.TensorDictBase.get) raises. A
+default passed explicitly, as in `tc.get(("x", "y"), None)`, is
+returned without a warning.
+
 Parameters:
 
 - **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key to read. A tuple reads an entry of a nested
