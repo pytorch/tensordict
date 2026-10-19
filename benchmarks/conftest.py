@@ -67,7 +67,6 @@ def pytest_collection_modifyitems(config, items):
 
 
 def pytest_addoption(parser):
-    parser.addoption("--rank", action="store")
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
