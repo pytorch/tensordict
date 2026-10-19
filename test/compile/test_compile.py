@@ -4571,6 +4571,41 @@ class TestGuardCount:
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
+    @pytest.mark.parametrize("variant", ["flat", "nested", "tensorclass"])
+    def test_get_missing_key_guards(self, variant):
+        # gh-2980: a get that misses guards on the key being absent, so the
+        # compiled function does not keep the default once the key appears
+        @tensorclass
+        class TC:
+            cache: TensorDict
+
+        def fn(td):
+            if variant == "flat":
+                v = td["cache"].get("c", None)
+            elif variant == "nested":
+                v = td.get(("cache", "c"), None)
+            else:
+                v = td.cache.get("c", None)
+            if v is None:
+                return torch.full((), -1.0)
+            return v.sum()
+
+        def make(keys):
+            cache = TensorDict({k: torch.ones(3) for k in keys})
+            if variant == "nested":
+                # the first level is missing whenever "c" is
+                return TensorDict({"cache" if "c" in keys else "other": cache})
+            if variant == "tensorclass":
+                return TC(cache=cache)
+            return TensorDict(cache=cache)
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for keys in [[], ["c"], ["a"], ["c", "a"]]:
+            td = make(keys)
+            torch.testing.assert_close(compiled(td), fn(td))
+        assert counter.frame_count == 2, f"{counter.frame_count} frames"
+
     @pytest.mark.parametrize("kind", ["memmap", "shared"])
     def test_slice_dynamic_memmap_shared_no_recompile(self, kind, tmpdir):
         # gh-2899: a memory-mapped or shared tensordict also compiles a slice

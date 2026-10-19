@@ -2036,7 +2036,11 @@ class TensorDict(TensorDictBase):
         try:
             return self._tensordict[key]
         except KeyError:
-            return self._default_get(key, default)
+            # `in` makes Dynamo guard on the key being absent: it adds no guard
+            # for a KeyError caught from a dict read (gh-2980)
+            if key not in self._tensordict:
+                return self._default_get(key, default)
+            raise
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -2057,7 +2061,10 @@ class TensorDict(TensorDictBase):
         try:
             value = self._tensordict[key[0]]
         except KeyError:
-            return self._default_get(key[0], default)
+            # see _get_str
+            if key[0] not in self._tensordict:
+                return self._default_get(key[0], default)
+            raise
         if len(key) == 1:
             return value
         for i in range(1, len(key)):
