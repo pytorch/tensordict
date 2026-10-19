@@ -196,9 +196,9 @@ async def send_tensordict(
         consolidated (bool, optional): if ``True``, consolidates the tensordict
             (see :meth:`~tensordict.TensorDictBase.consolidate`) unless it is
             already, and sends its storage as one buffer. If ``False``, sends the
-            tensor leaves at the root of the tensordict one by one, in the format
-            of a pipe with ``consolidated=False``, which :func:`recv_tensordict`
-            does not read. Defaults to ``True``.
+            tensor leaves of the tensordict, nested ones included, one by one, in
+            the format of a pipe with ``consolidated=False``, which
+            :func:`recv_tensordict` does not read. Defaults to ``True``.
 
     Raises:
         ImportError: if ``ucxx`` is not installed.
@@ -310,12 +310,9 @@ async def _send_tensordict_uncollated(endpoint, td: TensorDictBase) -> None:
         "shapes": [],
     }
     tensors = []
-    for key in td.sorted_keys:
-        value = td._get_str(key, None)
-        if value is None:
-            continue
+    for key, value in td.items(include_nested=True, leaves_only=True, sort=True):
         if isinstance(value, torch.Tensor):
-            header["keys"].append(key)
+            header["keys"].append(list(key) if isinstance(key, tuple) else key)
             header["dtypes"].append(str(value.dtype))
             header["shapes"].append(list(value.shape))
             tensors.append(value)
@@ -370,9 +367,9 @@ class TensorDictPipe:
       the buffer of the first message, without allocating memory or parsing
       metadata.
 
-    With ``consolidated=False``, each message carries the tensor leaves at
-    the root of the tensordict, one by one, and the receiver builds a new
-    tensordict with an empty batch size each time.
+    With ``consolidated=False``, each message carries the tensor leaves of
+    the tensordict, nested ones included, one by one, and the receiver builds
+    a new tensordict with an empty batch size each time.
 
     A pipe is a context manager and an async context manager, which close
     it at the end of the block, and an async iterator: ``async for td in
