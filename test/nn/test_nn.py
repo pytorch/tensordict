@@ -7916,6 +7916,16 @@ class TestTensorClassModuleForward:
         assert td_output["added"] == 25
         assert td_output["substracted"] == 0
 
+    @pytest.mark.parametrize("training", [True, False])
+    def test_wrapper_training_mode(self, training: bool) -> None:
+        """Test that the wrapper starts in the training mode of the module."""
+        module = TestTensorClassModule().train(training)
+        td_module = module.as_td_module()
+        assert td_module.training is training
+        assert module.training is training
+        td_module = td_module.select_out_keys(("result", "added"))
+        assert td_module.training is training
+
     def test_wrapper_keys(self) -> None:
         """Test that wrapper correctly extracts in_keys and out_keys."""
         module = TestTensorClassModule()
