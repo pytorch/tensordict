@@ -136,9 +136,11 @@ tensor(12288)
 
 For memory-mapped files, [`memmap_like()`](reference/generated/tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like) is
 another way to preallocate. It takes a tensordict with the shapes and dtypes
-of the dataset, and creates zero-filled files with the same structure,
-without copying the values. Make one sample, and expand it, which does not
-allocate memory:
+of the dataset, and creates files with the same structure, without copying
+the values. New files are filled with zeros. A file that already exists at
+the path of a leaf is mapped as it is and keeps its content, so calling
+`memmap_like` again on the same directory reopens the buffer. Make one
+sample, and expand it, which does not allocate memory:
 
 ```
 >>> datum = TensorDict({"image": torch.zeros(3, 64, 64, dtype=torch.uint8), "label": 0})

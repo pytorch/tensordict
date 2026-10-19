@@ -7,8 +7,16 @@ Creates a memory-mapped tensordict with the same keys, shapes and dtypes, withou
 Use it to preallocate a large buffer on disk, then fill it with
 [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) or by indexing: [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) would write every
 value first. New files are filled with zeros. A file that already
-exists at the path of a leaf (with `existsok=True`) keeps its
-content. The tensordict is not changed. See [Save and load tensordicts](../../saving.html#saving).
+exists at the path of a leaf (with `existsok=True`) is mapped as it
+is and keeps its content, which lets you reopen a buffer, or its
+start with a smaller leaf. If the file is smaller than the leaf, it
+is grown with zeros and a `FutureWarning` is emitted. Starting with
+TensorDict 0.17, the default will change to raising a
+`RuntimeError` in that case. A file written with another dtype or
+shape is not detected otherwise, and its bytes are read as the new
+dtype. An archive (`".tdz"`) is always
+rebuilt with zeros. The tensordict is not changed. See
+[Save and load tensordicts](../../saving.html#saving).
 
 The result is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)): you can write into its
 leaves in place, but you cannot add, remove or replace an entry. Once
