@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6146+gf82a56a75.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6148+gd9a8bca16.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6146+gf82a56a75.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6148+gd9a8bca16.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1654,8 +1654,12 @@ document.write(`
 the largest leading shape that all the entries share. Exclusive
 with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, the maximum
-number of batch dimensions. Ignored without <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+number of batch dimensions. Ignored without
+<code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code> when
+<code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> is given, as <code class="docutils literal notranslate"><span class="pre">from_dict</span></code> does. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the
 result. Leaves on another device are moved to it. <code class="docutils literal notranslate"><span class="pre">None</span></code> leaves
 each leaf where it is, and the result has no device. Defaults to
@@ -2035,7 +2039,7 @@ boolean columns to it. Defaults to <code class="docutils literal notranslate"><s
        "headline": "from_csv",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - from_csv",
        "url": "/reference/generated/tensordict.from_csv.html",
-       "articleBody": "from_csv# tensordict.from_csv(path, *, auto_batch_size: bool = False, batch_dims: int | None = None, device: device | None = None, batch_size: Size | None = None, separator: str | None = None, dtype: dtype | None = None, **kwargs) \u2192 TensorDictBase# Reads a CSV file into a tensordict, with one entry per column. Requires pandas or pyarrow. See TensorDictBase.from_csv. Parameters: path (str or Path) \u2013 the path of the CSV file. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Exclusive with batch_size. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size. Defaults to None. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Exclusive with auto_batch_size. Defaults to None, which gives [num_rows]. separator (str, optional) \u2013 if given, splits the column names on it to build nested entries: with separator=\".\", the column \"obs.x\" becomes the entry (\"obs\", \"x\"). Defaults to None. dtype (dtype, optional) \u2013 if given, casts the numeric and boolean columns to it. Defaults to None. **kwargs \u2013 passed to the CSV reader. Returns: A TensorDict.",
+       "articleBody": "from_csv# tensordict.from_csv(path, *, auto_batch_size: bool = False, batch_dims: int | None = None, device: device | None = None, batch_size: Size | None = None, separator: str | None = None, dtype: dtype | None = None, **kwargs) \u2192 TensorDictBase# Reads a CSV file into a tensordict, with one entry per column. Requires pandas or pyarrow. See TensorDictBase.from_csv. Parameters: path (str or Path) \u2013 the path of the CSV file. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Exclusive with batch_size. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size, with a FutureWarning when it would change the result. Starting with TensorDict 0.17, the default will change to turning on auto_batch_size when batch_dims is given, as from_dict does. Defaults to None. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Exclusive with auto_batch_size. Defaults to None, which gives [num_rows]. separator (str, optional) \u2013 if given, splits the column names on it to build nested entries: with separator=\".\", the column \"obs.x\" becomes the entry (\"obs\", \"x\"). Defaults to None. dtype (dtype, optional) \u2013 if given, casts the numeric and boolean columns to it. Defaults to None. **kwargs \u2013 passed to the CSV reader. Returns: A TensorDict.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

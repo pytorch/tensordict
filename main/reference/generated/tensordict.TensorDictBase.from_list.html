@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6146+gf82a56a75.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6148+gd9a8bca16.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6146+gf82a56a75.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6148+gd9a8bca16.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1646,7 +1646,10 @@ document.write(`
 <p>Each dict is converted with <a class="reference internal" href="tensordict.from_dict.html#tensordict.from_dict" title="tensordict.from_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_dict()</span></code></a> and the results are
 stacked along a new leading dimension. A tensordict or tensorclass in
 the list is stacked as it is: the keyword arguments do not apply to
-it.</p>
+it. When the result does not get the <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> or <code class="docutils literal notranslate"><span class="pre">device</span></code>
+asked for, a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> is emitted: starting with TensorDict
+0.17, the default will change to applying them to the result, which
+raises if the batch size does not fit, as for a list of dicts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a>) – the dicts or tensor collections to stack.</p>
@@ -2055,7 +2058,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_list",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_list",
        "url": "/reference/generated/tensordict.TensorDictBase.from_list.html",
-       "articleBody": "TensorDictBase.from_list# classmethod TensorDictBase.from_list(input, *, auto_batch_size: bool | None = None, batch_size: Size | None = None, device: device | None = None, batch_dims: int | None = None, names: list[str] | None = None, lazy: bool | None = None) \u2192 Self# Builds a tensordict by stacking a list of dicts or tensor collections. Each dict is converted with from_dict() and the results are stacked along a new leading dimension. A tensordict or tensorclass in the list is stacked as it is: the keyword arguments do not apply to it. Parameters: input (list) \u2013 the dicts or tensor collections to stack. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size of each element to the largest leading shape that all its entries share. Defaults to None, which behaves like False unless batch_dims is given. batch_size (Size or list of int, optional) \u2013 the batch size of the result, with the length of the list first. Each element gets batch_size[1:]. Defaults to None. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_dims (int, optional) \u2013 the maximum number of batch dimensions of the result, the list dimension included. Turns on auto_batch_size when that is None. Exclusive with batch_size. Defaults to None. names (list of str, optional) \u2013 the names of the batch dimensions of the result, one per dimension, with the name of the list dimension first. Defaults to None. lazy (bool, optional) \u2013 if True, the result is a lazy stack; if False, a dense stack. Defaults to None, which builds a dense stack when the elements have the same shape and a lazy stack otherwise. See Stacking and variable-size data. Raises: ValueError \u2013 if batch_size[0] is not the length of the list. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict.from_list( ... [{\"a\": torch.zeros(3)}, {\"a\": torch.zeros(3)}], ... batch_size=[2, 3], ... names=[\"x\", \"y\"], ... ) \u003e\u003e\u003e td.batch_size torch.Size([2, 3]) \u003e\u003e\u003e td.names [\u0027x\u0027, \u0027y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.from_list# classmethod TensorDictBase.from_list(input, *, auto_batch_size: bool | None = None, batch_size: Size | None = None, device: device | None = None, batch_dims: int | None = None, names: list[str] | None = None, lazy: bool | None = None) \u2192 Self# Builds a tensordict by stacking a list of dicts or tensor collections. Each dict is converted with from_dict() and the results are stacked along a new leading dimension. A tensordict or tensorclass in the list is stacked as it is: the keyword arguments do not apply to it. When the result does not get the batch_size or device asked for, a FutureWarning is emitted: starting with TensorDict 0.17, the default will change to applying them to the result, which raises if the batch size does not fit, as for a list of dicts. Parameters: input (list) \u2013 the dicts or tensor collections to stack. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size of each element to the largest leading shape that all its entries share. Defaults to None, which behaves like False unless batch_dims is given. batch_size (Size or list of int, optional) \u2013 the batch size of the result, with the length of the list first. Each element gets batch_size[1:]. Defaults to None. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_dims (int, optional) \u2013 the maximum number of batch dimensions of the result, the list dimension included. Turns on auto_batch_size when that is None. Exclusive with batch_size. Defaults to None. names (list of str, optional) \u2013 the names of the batch dimensions of the result, one per dimension, with the name of the list dimension first. Defaults to None. lazy (bool, optional) \u2013 if True, the result is a lazy stack; if False, a dense stack. Defaults to None, which builds a dense stack when the elements have the same shape and a lazy stack otherwise. See Stacking and variable-size data. Raises: ValueError \u2013 if batch_size[0] is not the length of the list. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict.from_list( ... [{\"a\": torch.zeros(3)}, {\"a\": torch.zeros(3)}], ... batch_size=[2, 3], ... names=[\"x\", \"y\"], ... ) \u003e\u003e\u003e td.batch_size torch.Size([2, 3]) \u003e\u003e\u003e td.names [\u0027x\u0027, \u0027y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

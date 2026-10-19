@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6146+gf82a56a75.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6148+gd9a8bca16.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6146+gf82a56a75.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6148+gd9a8bca16.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1654,17 +1654,26 @@ the list. A tensor or a tensor collection is returned as it is.</p>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>auto_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, sets the batch size to
 the largest leading shape that all the entries share. Exclusive
-with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>, except for a dict, where <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>
+wins, and for an <code class="xref py py-class docutils literal notranslate"><span class="pre">h5py.File</span></code>, where <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>
+wins. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, the maximum
-number of batch dimensions. Ignored without <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+number of batch dimensions. Ignored without
+<code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code> when
+<code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> is given, as <code class="docutils literal notranslate"><span class="pre">from_dict</span></code> does. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.14)"><em>device</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the device of the
 result. Leaves on another device are moved to it. <code class="docutils literal notranslate"><span class="pre">None</span></code> leaves
 each leaf where it is, and the result has no device. Defaults to
 <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size of
 the result: the leading dimensions that all its entries share.
-Exclusive with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+Exclusive with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, except for a dict, where
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> wins and no batch size is computed, and for an
+<code class="xref py py-class docutils literal notranslate"><span class="pre">h5py.File</span></code>, where <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code> wins and
+<code class="docutils literal notranslate"><span class="pre">batch_size</span></code> is ignored. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2039,7 +2048,7 @@ or <code class="docutils literal notranslate"><span class="pre">obj</span></code
        "headline": "from_any",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - from_any",
        "url": "/reference/generated/tensordict.from_any.html",
-       "articleBody": "from_any# tensordict.from_any(obj, *, auto_batch_size: bool = False, batch_dims: int | None = None, device: device | None = None, batch_size: Size | None = None)# Converts a dict, tuple, dataclass, array or file to a tensordict, recursively. The conversion depends on the type of obj: see TensorDictBase.from_any for the list. A tensor or a tensor collection is returned as it is. Parameters: obj \u2013 the object to convert. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Exclusive with batch_size. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size. Defaults to None. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Exclusive with auto_batch_size. Defaults to None. Returns: A tensordict (a PersistentTensorDict for an HDF5 file), a tensor or a NonTensorStack for a list, or obj itself for the other types. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import from_any \u003e\u003e\u003e td = from_any({\"obs\": torch.zeros(3, 4), \"pair\": (torch.zeros(3), 1)}) \u003e\u003e\u003e sorted(td.keys(include_nested=True, leaves_only=True), key=str) [(\u0027pair\u0027, \u00270\u0027), (\u0027pair\u0027, \u00271\u0027), \u0027obs\u0027]",
+       "articleBody": "from_any# tensordict.from_any(obj, *, auto_batch_size: bool = False, batch_dims: int | None = None, device: device | None = None, batch_size: Size | None = None)# Converts a dict, tuple, dataclass, array or file to a tensordict, recursively. The conversion depends on the type of obj: see TensorDictBase.from_any for the list. A tensor or a tensor collection is returned as it is. Parameters: obj \u2013 the object to convert. Keyword Arguments: auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Exclusive with batch_size, except for a dict, where batch_size wins, and for an h5py.File, where auto_batch_size wins. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size, with a FutureWarning when it would change the result. Starting with TensorDict 0.17, the default will change to turning on auto_batch_size when batch_dims is given, as from_dict does. Defaults to None. device (device, str or int, optional) \u2013 the device of the result. Leaves on another device are moved to it. None leaves each leaf where it is, and the result has no device. Defaults to None. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Exclusive with auto_batch_size, except for a dict, where batch_size wins and no batch size is computed, and for an h5py.File, where auto_batch_size wins and batch_size is ignored. Defaults to None. Returns: A tensordict (a PersistentTensorDict for an HDF5 file), a tensor or a NonTensorStack for a list, or obj itself for the other types. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import from_any \u003e\u003e\u003e td = from_any({\"obs\": torch.zeros(3, 4), \"pair\": (torch.zeros(3), 1)}) \u003e\u003e\u003e sorted(td.keys(include_nested=True, leaves_only=True), key=str) [(\u0027pair\u0027, \u00270\u0027), (\u0027pair\u0027, \u00271\u0027), \u0027obs\u0027]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6146+gf82a56a75.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6148+gd9a8bca16.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6146+gf82a56a75.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6148+gd9a8bca16.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1658,8 +1658,12 @@ directory), or a <code class="docutils literal notranslate"><span class="pre">za
 the largest leading shape that all the entries share. Exclusive
 with <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, the maximum
-number of batch dimensions. Ignored without <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+number of batch dimensions. Ignored without
+<code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code> when
+<code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> is given, as <code class="docutils literal notranslate"><span class="pre">from_dict</span></code> does. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size of
 the result: the leading dimensions that all its entries share.
 Exclusive with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which
@@ -2038,7 +2042,7 @@ Starting with TensorDict 0.17, the default will change to
        "headline": "from_zarr",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - from_zarr",
        "url": "/reference/generated/tensordict.from_zarr.html",
-       "articleBody": "from_zarr# tensordict.from_zarr(zarr_file, *, mode: str = \u0027r\u0027, auto_batch_size: bool = False, batch_dims: int | None = None, batch_size: Size | None = None, non_tensor_as_stack: bool = False, allow_pickle: bool | None = None) \u2192 TensorDictBase# Opens a zarr store as a PersistentTensorDict. Requires zarr\u003e=3.0. See TensorDictBase.from_zarr. Parameters: zarr_file (str, path or zarr store) \u2013 the path to the zarr store (a directory), or a zarr.abc.store.Store instance. Keyword Arguments: mode (str, optional) \u2013 how the store is opened: \"r\" (read only), \"r+\" (read and write), and so on. Defaults to \"r\". auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Exclusive with batch_size. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size. Defaults to None. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Exclusive with auto_batch_size. Defaults to None, which reads the batch size that to_zarr() stored, or computes it for a store written by another tool. non_tensor_as_stack (bool, optional) \u2013 if True, a non-tensor array that tensordict did not write reads as a NonTensorStack of its rows when its leading dimensions equal the batch size. Defaults to False. allow_pickle (bool, optional) \u2013 whether to decode pickled non-tensor values. False rejects them. True permits them, only for data you trust. None permits them with a FutureWarning. Starting with TensorDict 0.17, the default will change to allow_pickle=False. Defaults to None. Returns: A PersistentTensorDict backed by the store.",
+       "articleBody": "from_zarr# tensordict.from_zarr(zarr_file, *, mode: str = \u0027r\u0027, auto_batch_size: bool = False, batch_dims: int | None = None, batch_size: Size | None = None, non_tensor_as_stack: bool = False, allow_pickle: bool | None = None) \u2192 TensorDictBase# Opens a zarr store as a PersistentTensorDict. Requires zarr\u003e=3.0. See TensorDictBase.from_zarr. Parameters: zarr_file (str, path or zarr store) \u2013 the path to the zarr store (a directory), or a zarr.abc.store.Store instance. Keyword Arguments: mode (str, optional) \u2013 how the store is opened: \"r\" (read only), \"r+\" (read and write), and so on. Defaults to \"r\". auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the entries share. Exclusive with batch_size. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size, with a FutureWarning when it would change the result. Starting with TensorDict 0.17, the default will change to turning on auto_batch_size when batch_dims is given, as from_dict does. Defaults to None. batch_size (Size or list of int, optional) \u2013 the batch size of the result: the leading dimensions that all its entries share. Exclusive with auto_batch_size. Defaults to None, which reads the batch size that to_zarr() stored, or computes it for a store written by another tool. non_tensor_as_stack (bool, optional) \u2013 if True, a non-tensor array that tensordict did not write reads as a NonTensorStack of its rows when its leading dimensions equal the batch size. Defaults to False. allow_pickle (bool, optional) \u2013 whether to decode pickled non-tensor values. False rejects them. True permits them, only for data you trust. None permits them with a FutureWarning. Starting with TensorDict 0.17, the default will change to allow_pickle=False. Defaults to None. Returns: A PersistentTensorDict backed by the store.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

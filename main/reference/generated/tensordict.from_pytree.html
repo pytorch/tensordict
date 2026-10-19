@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6146+gf82a56a75.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6148+gd9a8bca16.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6146+gf82a56a75.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6148+gd9a8bca16.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1661,7 +1661,12 @@ the result. Defaults to <code class="docutils literal notranslate"><span class="
 the largest leading shape that all the leaves share. Defaults to
 <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>batch_dims</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, the maximum
-number of batch dimensions. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+number of batch dimensions. Ignored without
+<code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code>, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> when it would
+change the result. Starting with TensorDict 0.17, the default
+will change to turning on <code class="docutils literal notranslate"><span class="pre">auto_batch_size</span></code> when
+<code class="docutils literal notranslate"><span class="pre">batch_dims</span></code> is given, as <code class="docutils literal notranslate"><span class="pre">from_dict</span></code> does. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2041,7 +2046,7 @@ number of batch dimensions. Defaults to <code class="docutils literal notranslat
        "headline": "from_pytree",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - from_pytree",
        "url": "/reference/generated/tensordict.from_pytree.html",
-       "articleBody": "from_pytree# tensordict.from_pytree(pytree, *, batch_size: Size | None = None, auto_batch_size: bool = False, batch_dims: int | None = None)# Converts a pytree (nested lists, tuples and dicts of tensors) to a tensordict. Lists, tuples, named tuples and dicts become nested tensordicts, and non-tensor entries record their types, so to_pytree() can rebuild the pytree. Same as tensordict.TensorDict.from_pytree(): see that page for the details. Parameters: pytree (Any) \u2013 the pytree to convert. Keyword Arguments: batch_size (Size or list of int, optional) \u2013 the batch size of the result. Defaults to None, which gives [] unless auto_batch_size is True. auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the leaves share. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Defaults to None. Returns: A TensorDict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e td = tensordict.from_pytree( ... {\"a\": torch.zeros(3), \"b\": (torch.ones(3), torch.ones(3, 2))}, ... auto_batch_size=True, ... ) \u003e\u003e\u003e td.batch_size torch.Size([3]) \u003e\u003e\u003e td[\"b\", \"1\"].shape torch.Size([3, 2]) \u003e\u003e\u003e type(td.to_pytree()[\"b\"]).__name__ \u0027tuple\u0027",
+       "articleBody": "from_pytree# tensordict.from_pytree(pytree, *, batch_size: Size | None = None, auto_batch_size: bool = False, batch_dims: int | None = None)# Converts a pytree (nested lists, tuples and dicts of tensors) to a tensordict. Lists, tuples, named tuples and dicts become nested tensordicts, and non-tensor entries record their types, so to_pytree() can rebuild the pytree. Same as tensordict.TensorDict.from_pytree(): see that page for the details. Parameters: pytree (Any) \u2013 the pytree to convert. Keyword Arguments: batch_size (Size or list of int, optional) \u2013 the batch size of the result. Defaults to None, which gives [] unless auto_batch_size is True. auto_batch_size (bool, optional) \u2013 if True, sets the batch size to the largest leading shape that all the leaves share. Defaults to False. batch_dims (int, optional) \u2013 with auto_batch_size, the maximum number of batch dimensions. Ignored without auto_batch_size, with a FutureWarning when it would change the result. Starting with TensorDict 0.17, the default will change to turning on auto_batch_size when batch_dims is given, as from_dict does. Defaults to None. Returns: A TensorDict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e import tensordict \u003e\u003e\u003e td = tensordict.from_pytree( ... {\"a\": torch.zeros(3), \"b\": (torch.ones(3), torch.ones(3, 2))}, ... auto_batch_size=True, ... ) \u003e\u003e\u003e td.batch_size torch.Size([3]) \u003e\u003e\u003e td[\"b\", \"1\"].shape torch.Size([3, 2]) \u003e\u003e\u003e type(td.to_pytree()[\"b\"]).__name__ \u0027tuple\u0027",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -7,7 +7,10 @@ Builds a tensordict by stacking a list of dicts or tensor collections.
 Each dict is converted with [`from_dict()`](tensordict.from_dict.html#tensordict.from_dict) and the results are
 stacked along a new leading dimension. A tensordict or tensorclass in
 the list is stacked as it is: the keyword arguments do not apply to
-it.
+it. When the result does not get the `batch_size` or `device`
+asked for, a `FutureWarning` is emitted: starting with TensorDict
+0.17, the default will change to applying them to the result, which
+raises if the batch size does not fit, as for a list of dicts.
 
 Parameters:
 
