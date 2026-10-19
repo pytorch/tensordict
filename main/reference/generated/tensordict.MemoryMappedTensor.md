@@ -44,25 +44,33 @@ Existing symbolic links are rejected, but path-based memory mapping
 cannot prevent another process with directory write access from
 replacing a path after it has been validated.
 
-The `index` and `handler` arguments are internal.
+The `handler` argument is internal.
 
 Parameters:
 
-**source** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*TypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.TypedStorage)*or*[*UntypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.UntypedStorage)) - the data. With `filename`, the tensor is copied to that file, as
-`from_tensor()` does. A storage is passed to
+**source** ([*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,*[*TypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.TypedStorage)*,*[*UntypedStorage*](https://docs.pytorch.org/docs/stable/storage.html#torch.UntypedStorage)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - the data. A str is the name of an existing file, mapped as
+`from_filename()` does with `dtype`, `shape` and
+`index`. With `filename`, the tensor is copied to that file,
+as `from_tensor()` does. A storage is passed to
 `from_storage()` with the other arguments. A tensor without
 `filename` is wrapped as it is: the result shares its memory but
 has no file or shared-memory handle, so it cannot be pickled.
 
 Keyword Arguments:
 
-- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - with a storage, the dtype of the
-tensor, as in `from_storage()`. Not accepted with `filename`.
-Defaults to `None`.
+- **dtype** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - with a str `source`, the dtype of
+the data in the file (required). With a storage, the dtype of the
+tensor, as in `from_storage()`. Not accepted with the
+`filename` keyword. Defaults to `None`.
 - **shape** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - the shape of the result, as in
-`from_tensor()` or `from_storage()`. Ignored for a tensor
-without `filename`. Defaults to `None`, which keeps the shape
-of `source`.
+`from_filename()`, `from_tensor()` or `from_storage()`;
+required with a str `source`. Ignored for a tensor without
+`filename`. Defaults to `None`, which keeps the shape of
+`source`.
+- **index** (*index**,**optional*) - an index applied to the result, as in
+`tensor[index]`. With a str or storage `source`, `shape` is
+the shape of the data before `index` is applied. Defaults to
+`None`.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - `None` or `"cpu"`;
 another device raises a `ValueError`. Defaults to `None`.
 - **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the file to copy `source` to.
