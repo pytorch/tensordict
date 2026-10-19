@@ -13,9 +13,10 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
-import contextlib
 import numbers
 import operator
+from collections.abc import Callable
+from functools import wraps
 from typing import Any, TYPE_CHECKING
 
 import tensordict.base as _td_base
@@ -56,6 +57,41 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
         # same keys in the same order, the common case: no reordering
         return values
     return other._values_list(True, True, sorting_keys=keys)
+
+
+def _clamp_into_out(clamp: Callable) -> Callable:
+    """Makes ``clamp(..., out=out)`` copy the result of ``clamp(...)`` into the leaves of ``out``.
+
+    The bounds go on as they come: ``_maybe_broadcast_other`` broadcasts only
+    the positional ones.
+    """
+
+    @wraps(clamp)
+    def wrapper(self, *args, out=None, **kwargs):
+        if out is None:
+            return clamp(self, *args, **kwargs)
+        if all(bound is None for bound in (*args, *kwargs.values())):
+            raise ValueError(
+                "clamp() with min/max=None isn't implemented with specified output."
+            )
+        result = clamp(self, *args, **kwargs)
+        keys = set(result.keys(True, True))
+        out_keys = set(out.keys(True, True))
+        if keys != out_keys:
+            raise KeyError(
+                f"out must have the keys of the result: it lacks {keys - out_keys or '{}'} "
+                f"and has the extra keys {out_keys - keys or '{}'}."
+            )
+        for key, value in result.items(True, True):
+            out_dtype = out.get(key).dtype
+            if out_dtype != value.dtype:
+                # torch.clamp(..., out=) does not cast either
+                raise RuntimeError(
+                    f"Found dtype {out_dtype} but expected {value.dtype} for key {key!r}."
+                )
+        return out.update_(result)
+
+    return wrapper
 
 
 class _PointwiseOps:
@@ -1581,10 +1617,14 @@ class _PointwiseOps:
             \text{out}_i = \text{start}_i + \text{weight}_i \times (\text{end}_i - \text{start}_i)
 
         Args:
-            end (TensorDictBase): the end points, paired with the tensordict
-                key by key. It must have every key of the tensordict.
-            weight (TensorDictBase or float): the interpolation weight: a
-                number for all the leaves, or a tensordict paired key by key.
+            end (TensorDictBase or torch.Tensor): the end points. A tensordict
+                is paired with the tensordict key by key and must have all its
+                keys. A tensor is aligned with the batch dimensions of each
+                leaf and expanded over its feature dimensions.
+            weight (TensorDictBase, torch.Tensor or float): the interpolation
+                weight: a number for all the leaves, or a tensordict or a
+                tensor paired like ``end``. One of ``end`` and ``weight`` can
+                be a tensordict and the other a tensor.
 
         Examples:
             >>> import torch
@@ -1631,7 +1671,7 @@ class _PointwiseOps:
     @_write_back_inplace
     def lerp_(
         self,
-        end: TensorDictBase | torch.Tensor | float,
+        end: TensorDictBase | torch.Tensor,
         weight: TensorDictBase | torch.Tensor | float,
     ):
         """Interpolates linearly from every leaf to ``end`` in place and returns ``self``.
@@ -1639,10 +1679,14 @@ class _PointwiseOps:
         The in-place version of :meth:`~.lerp`.
 
         Args:
-            end (TensorDictBase): the end points, paired with the tensordict
-                key by key. It must have every key of the tensordict.
-            weight (TensorDictBase or float): the interpolation weight: a
-                number for all the leaves, or a tensordict paired key by key.
+            end (TensorDictBase or torch.Tensor): the end points. A tensordict
+                is paired with the tensordict key by key and must have all its
+                keys. A tensor is aligned with the batch dimensions of each
+                leaf and expanded over its feature dimensions.
+            weight (TensorDictBase, torch.Tensor or float): the interpolation
+                weight: a number for all the leaves, or a tensordict or a
+                tensor paired like ``end``. One of ``end`` and ``weight`` can
+                be a tensordict and the other a tensor.
         """
         if (isinstance(end, Tensor) and end.ndim) or (
             isinstance(weight, Tensor) and weight.ndim
@@ -1689,7 +1733,8 @@ class _PointwiseOps:
                 keys. A tensor is aligned with the batch dimensions of each leaf
                 and expanded over its feature dimensions.
             other2 (TensorDictBase or torch.Tensor): the denominator, paired
-                like ``other1``.
+                like ``other1``. One of ``other1`` and ``other2`` can be a
+                tensordict and the other a tensor.
             value (Number, optional): the multiplier for
                 :math:`\text{other1} / \text{other2}`. Defaults to ``1``.
 
@@ -1782,7 +1827,8 @@ class _PointwiseOps:
                 have all its keys. A tensor is aligned with the batch dimensions
                 of each leaf and expanded over its feature dimensions.
             other2 (TensorDictBase or torch.Tensor): the second factor, paired
-                like ``other1``.
+                like ``other1``. One of ``other1`` and ``other2`` can be a
+                tensordict and the other a tensor.
 
         Keyword Args:
             value (Number, optional): the multiplier for
@@ -2202,8 +2248,12 @@ class _PointwiseOps:
         other keys are ignored.
 
         Args:
-            other (TensorDictBase or Number): the other operand, paired with
-                the leaves as in :meth:`~.maximum`.
+            other (TensorDictBase, torch.Tensor or Number): the other operand,
+                paired with the leaves as in :meth:`~.maximum`. A tensor is
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor` or inside a
+                :mod:`torch.func` transform such as :func:`torch.vmap`: then
+                every leaf broadcasts with it from the right, as in torch.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(
@@ -2224,6 +2274,16 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_min_(other))
             return self
+        if (
+            isinstance(other, Tensor)
+            and other.ndim
+            # under torch.func, _foreach runs one op per leaf and broadcasts
+            # the tensor from the right, which vmap code relies on
+            and not torch._C._are_functorch_transforms_active()
+        ):
+            # broadcast the tensor to the batch dims, as maximum does
+            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
+            return clamp_min_(self, other)
         _foreach("maximum_", vals, other_val)
         return self
 
@@ -2299,8 +2359,12 @@ class _PointwiseOps:
         other keys are ignored.
 
         Args:
-            other (TensorDictBase or Number): the other operand, paired with
-                the leaves as in :meth:`~.minimum`.
+            other (TensorDictBase, torch.Tensor or Number): the other operand,
+                paired with the leaves as in :meth:`~.minimum`. A tensor is
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor` or inside a
+                :mod:`torch.func` transform such as :func:`torch.vmap`: then
+                every leaf broadcasts with it from the right, as in torch.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(
@@ -2321,6 +2385,16 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_max_(other))
             return self
+        if (
+            isinstance(other, Tensor)
+            and other.ndim
+            # under torch.func, _foreach runs one op per leaf and broadcasts
+            # the tensor from the right, which vmap code relies on
+            and not torch._C._are_functorch_transforms_active()
+        ):
+            # broadcast the tensor to the batch dims, as minimum does
+            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
+            return clamp_max_(self, other)
         _foreach("minimum_", vals, other_val)
         return self
 
@@ -2396,8 +2470,12 @@ class _PointwiseOps:
         other keys are ignored.
 
         Args:
-            other (TensorDictBase or Number): the upper bound, paired with
-                the leaves as in :meth:`~.clamp_max`.
+            other (TensorDictBase, torch.Tensor or Number): the upper bound,
+                paired with the leaves as in :meth:`~.clamp_max`. A tensor is
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor` or inside a
+                :mod:`torch.func` transform such as :func:`torch.vmap`: then
+                every leaf broadcasts with it from the right, as in torch.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(self, Tensor.clamp_max_, (other,), inplace=True)
@@ -2416,6 +2494,16 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_max_(other))
             return self
+        if (
+            isinstance(other, Tensor)
+            and other.ndim
+            # under torch.func, _foreach runs one op per leaf and broadcasts
+            # the tensor from the right, which vmap code relies on
+            and not torch._C._are_functorch_transforms_active()
+        ):
+            # broadcast the tensor to the batch dims, as clamp_max does
+            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
+            return clamp_max_(self, other)
         try:
             _foreach("clamp_max_", vals, other_val)
         except RuntimeError as err:
@@ -2507,8 +2595,12 @@ class _PointwiseOps:
         other keys are ignored.
 
         Args:
-            other (TensorDictBase or Number): the lower bound, paired with
-                the leaves as in :meth:`~.clamp_min`.
+            other (TensorDictBase, torch.Tensor or Number): the lower bound,
+                paired with the leaves as in :meth:`~.clamp_min`. A tensor is
+                aligned with the batch dimensions of each leaf, except when
+                a leaf is an :class:`~tensordict.UnbatchedTensor` or inside a
+                :mod:`torch.func` transform such as :func:`torch.vmap`: then
+                every leaf broadcasts with it from the right, as in torch.
         """
         if _mixes_lazy_stacks(self, (other,)):
             return _apply_pointwise(self, Tensor.clamp_min_, (other,), inplace=True)
@@ -2527,6 +2619,16 @@ class _PointwiseOps:
             else:
                 self.apply_(lambda x: x.clamp_min_(other))
             return self
+        if (
+            isinstance(other, Tensor)
+            and other.ndim
+            # under torch.func, _foreach runs one op per leaf and broadcasts
+            # the tensor from the right, which vmap code relies on
+            and not torch._C._are_functorch_transforms_active()
+        ):
+            # broadcast the tensor to the batch dims, as clamp_min does
+            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
+            return clamp_min_(self, other)
         try:
             _foreach("clamp_min_", vals, other_val)
         except RuntimeError as err:
@@ -2608,6 +2710,7 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    @_clamp_into_out
     @_maybe_broadcast_other("clamp", 2)
     def clamp(
         self,
@@ -2637,13 +2740,17 @@ class _PointwiseOps:
 
         Keyword Args:
             out (TensorDictBase, optional): the tensordict to write the result
-                into. Passing it currently raises an error: a ``ValueError``
-                when ``min`` or ``max`` is ``None``, a ``TypeError`` otherwise.
-                Defaults to ``None``.
+                into, and the one returned. The result is copied into its
+                leaves, so ``out`` must have the keys, shapes and dtypes of
+                the result. Defaults to ``None``.
 
         Raises:
             ValueError: if one of ``min`` and ``max`` is a tensordict and the
-                other is not.
+                other is not, or if ``out`` is given and both ``min`` and
+                ``max`` are ``None``.
+            KeyError: if ``out`` does not have the keys of the result.
+            RuntimeError: if a leaf of ``out`` does not have the dtype of the
+                result, as with :func:`torch.clamp`.
 
         Examples:
             >>> import torch
@@ -2654,17 +2761,10 @@ class _PointwiseOps:
             >>> td.clamp(max=0.0)["x"]
             tensor([-2.,  0.,  0.])
         """
+        # _clamp_into_out takes out: it never reaches this point
         if min is None:
-            if out is not None:
-                raise ValueError(
-                    "clamp() with min/max=None isn't implemented with specified output."
-                )
             return self.clamp_max(max)
         if max is None:
-            if out is not None:
-                raise ValueError(
-                    "clamp() with min/max=None isn't implemented with specified output."
-                )
             return self.clamp_min(min)
 
         is_tc_min = is_tensor_collection(min)
@@ -2675,26 +2775,11 @@ class _PointwiseOps:
                 "Mixed tensordict and non-tensordict min/max values are not authorized."
             )
 
-        if out is None:
-            if is_tc_min and is_tc_max:
-                return self._fast_apply(
-                    lambda x, low, high: x.clamp(low, high), min, max, default=None
-                )
-            return self._fast_apply(lambda x: x.clamp(min, max))
         if is_tc_min and is_tc_max:
-            result = self._fast_apply(
-                lambda x, y, low, high: x.clamp(low, high, out=y),
-                out,
-                min,
-                max,
-                default=None,
+            return self._fast_apply(
+                lambda x, low, high: x.clamp(low, high), min, max, default=None
             )
-        else:
-            result = self._fast_apply(
-                lambda x, y: x.clamp(min, max, out=y), out, default=None
-            )
-        with out.unlock_() if out.is_locked else contextlib.nullcontext():
-            return out.update(result)
+        return self._fast_apply(lambda x: x.clamp(min, max))
 
     @_write_back_inplace
     @_maybe_broadcast_other("pow_")

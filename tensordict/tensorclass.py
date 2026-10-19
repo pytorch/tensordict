@@ -1377,10 +1377,14 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
         if isinstance(tensorclass_instance, (tuple, list)):
             tensorclass_instance = tensorclass_instance[0]
+        # torch.clamp(..., out=out) returns out itself, as TensorDict.clamp does
+        clamp_out = kwargs.get("out") if func is torch.clamp else None
         args = tuple(_arg_to_tensordict(arg) for arg in args)
         kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
 
         result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        if clamp_out is not None and result is kwargs["out"]:
+            return clamp_out
         if isinstance(result, (list, tuple)):
             return type(result)(
                 _from_tensordict_with_copy(tensorclass_instance, tensordict_result)

@@ -780,6 +780,40 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         stack_dim=stack_dim,
                         stack_dim_name=self_expand._td_dim_name,
                     )
+                if (
+                    n_other > 1
+                    and any(_is_tensor_collection(type(o)) for o in others_map)
+                    # an empty tensordict returns an empty result, as before
+                    and not self_expand.is_empty()
+                    # the leaves of a nested lazy stack lack the stack dim, so
+                    # expand_as_right would misalign the tensors: raise as before
+                    and not any(
+                        _has_nested_lazy_stack(o)
+                        for o in (self_expand, *others_map)
+                        if _is_tensor_collection(type(o))
+                    )
+                ):
+                    if op == "clamp":
+                        # clamp rejects a tensordict bound next to a tensor one
+                        return func(self, *others, *args, **kwargs)
+                    # pair the tensordict operands by key, expand the tensors
+                    is_tensor = [
+                        isinstance(other, torch.Tensor) for other in others_map
+                    ]
+                    return _apply_pointwise(
+                        self_expand,
+                        lambda x, *xs: leaf_op(
+                            x,
+                            *[
+                                expand_as_right(other, x) if flag else other
+                                for other, flag in zip(xs, is_tensor)
+                            ],
+                            *args,
+                            **kwargs,
+                        ),
+                        others_map,
+                        inplace,
+                    )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,
@@ -1825,6 +1859,22 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     td = _unwrap(td)
     if isinstance(td, LazyStackedTensorDict):
         return True
+    if td._reads_return_copies:
+        return False
+    return any(
+        _has_lazy_stack(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
+def _has_nested_lazy_stack(td: TensorDictBase) -> bool:
+    """Whether a tensordict below the root of ``td``, or below the members of a lazy stack ``td``, is a lazy stack."""
+    from tensordict._lazy import LazyStackedTensorDict
+
+    td = _unwrap(td)
+    if isinstance(td, LazyStackedTensorDict):
+        return any(_has_lazy_stack(member) for member in td.tensordicts)
     if td._reads_return_copies:
         return False
     return any(
