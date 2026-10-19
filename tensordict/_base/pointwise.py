@@ -74,7 +74,22 @@ def _clamp_into_out(clamp: Callable) -> Callable:
             raise ValueError(
                 "clamp() with min/max=None isn't implemented with specified output."
             )
-        return out.update_(clamp(self, *args, **kwargs))
+        result = clamp(self, *args, **kwargs)
+        keys = set(result.keys(True, True))
+        out_keys = set(out.keys(True, True))
+        if keys != out_keys:
+            raise KeyError(
+                f"out must have the keys of the result: it lacks {keys - out_keys or '{}'} "
+                f"and has the extra keys {out_keys - keys or '{}'}."
+            )
+        for key, value in result.items(True, True):
+            out_dtype = out.get(key).dtype
+            if out_dtype != value.dtype:
+                # torch.clamp(..., out=) does not cast either
+                raise RuntimeError(
+                    f"Found dtype {out_dtype} but expected {value.dtype} for key {key!r}."
+                )
+        return out.update_(result)
 
     return wrapper
 
@@ -2698,13 +2713,16 @@ class _PointwiseOps:
         Keyword Args:
             out (TensorDictBase, optional): the tensordict to write the result
                 into, and the one returned. The result is copied into its
-                leaves, so ``out`` must have the keys and shapes of the
-                result. Defaults to ``None``.
+                leaves, so ``out`` must have the keys, shapes and dtypes of
+                the result. Defaults to ``None``.
 
         Raises:
             ValueError: if one of ``min`` and ``max`` is a tensordict and the
                 other is not, or if ``out`` is given and both ``min`` and
                 ``max`` are ``None``.
+            KeyError: if ``out`` does not have the keys of the result.
+            RuntimeError: if a leaf of ``out`` does not have the dtype of the
+                result, as with :func:`torch.clamp`.
 
         Examples:
             >>> import torch

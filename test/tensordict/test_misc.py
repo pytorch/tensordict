@@ -749,6 +749,41 @@ class TestPointwiseOps:
             with pytest.raises(ValueError, match="Mixed tensordict"):
                 td.clamp(bound, td, out=td.clone())
 
+    def test_clamp_out_checks_out(self):
+        # out must have the keys and dtypes of the result: nothing is dropped
+        # or cast (#2961)
+        td = TensorDict(x=torch.arange(3.0), z=torch.arange(3.0), batch_size=[3])
+        with pytest.raises(KeyError, match="lacks {'z'}"):
+            td.clamp(0.5, 1.5, out=TensorDict(x=torch.zeros(3), batch_size=[3]))
+        with pytest.raises(KeyError, match="extra keys {'y'}"):
+            td.clamp(0.5, 1.5, out=td.clone().set("y", torch.zeros(3)))
+        td = TensorDict(x=torch.tensor([1, 2, 3]), batch_size=[3])
+        with pytest.raises(RuntimeError, match="Found dtype torch.int64"):
+            td.clamp(0.4, 2.5, out=td.clone())
+        # torch.clamp raises for the same leaves
+        with pytest.raises(RuntimeError, match="Found dtype Long"):
+            torch.clamp(td["x"], 0.4, 2.5, out=td["x"].clone())
+        out = td.clone()
+        assert td.clamp(1, 2, out=out) is out
+        assert (out["x"] == torch.tensor([1, 2, 2])).all()
+
+    def test_clamp_out_empty(self):
+        # an empty tensordict returns out, also with a tensor bound (#2961)
+        td = TensorDict(batch_size=[2])
+        out = TensorDict(batch_size=[2])
+        assert td.clamp(torch.tensor([0.0, 1.0]), None, out=out) is out
+        assert td.clamp(0.0, 1.0, out=out) is out
+
+    def test_torch_clamp_out_tensorclass(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        tc = TC(x=torch.arange(3.0), batch_size=[3])
+        out = tc.clone()
+        assert torch.clamp(tc, 0.5, 2.0, out=out) is out
+        assert (out.x == torch.tensor([0.5, 1.0, 2.0])).all()
+
     @pytest.mark.parametrize("op", ["maximum", "minimum"])
     @pytest.mark.parametrize("other_type", ["tensordict", "float", "tensor"])
     def test_maximum_minimum_unbatched(self, op, other_type):
