@@ -791,8 +791,10 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not [x for x in w if "type() returns an unlocked" in str(x.message)]
         try:
             td.lock_()
-        except Exception:
-            return
+        except RuntimeError as err:
+            if "Cannot lock" not in str(err):
+                raise
+            pytest.skip(str(err))
         with pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked"):
             tdint = td.type(torch.int, cast_filter=cast_filter)
         assert not tdint.is_locked
