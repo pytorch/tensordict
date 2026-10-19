@@ -1,7 +1,8 @@
 # Builds the tensordict-nightly wheel, smoke-tests it on each platform and
 # uploads it to PyPI. tensordict is pure Python, so one py3-none-any wheel serves
 # every platform and Python version. As before, failed smoke tests don't block
-# the upload.
+# the upload. The scheduled and manual runs also run the core unit tests on
+# Windows and Linux ARM (test-subset), which don't block the upload either.
 
 name: Push Binary Nightly
 
@@ -107,6 +108,66 @@ jobs:
           python -c "import tensordict; print(tensordict.__version__)"
           python -m torch.utils.collect_env
           python -m pytest test/smoke_test.py -v --durations 200
+
+  # The other workflows run only the smoke test on Windows and Linux ARM. This
+  # job runs the tensordict, tensorclass, nn and memmap tests there, against
+  # the wheel and stable torch, in the scheduled and manual runs only. Like test-wheel, it never fails the
+  # workflow or blocks the upload. It skips the distributed, store and
+  # multiprocessing tests.
+  test-subset:
+    # Don't run on forked repos.
+    if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+    needs: build-wheel
+    continue-on-error: true
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    env:
+      # As in .github/unittest/linux/scripts/run_test.sh
+      TD_GET_DEFAULTS_TO_NONE: 1
+      LIST_TO_STACK: 1
+      TD_CHECK_INVARIANTS: 1
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Checkout tensordict
+        uses: actions/checkout@v4
+      - name: Install PyTorch
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Download the wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: tensordict-nightly-wheel
+          path: wheels
+      - name: Install the wheel and the test dependencies
+        shell: bash
+        run: |
+          python -m pip install wheels/*.whl pytest pytest-xdist pytest-timeout \
+              pytest-instafail h5py zarr orjson pandas pyarrow
+      - name: Run the tests
+        shell: bash
+        run: |
+          # Avoid ambiguity of "import tensordict" by deleting the source files.
+          rm -rf tensordict/
+          python -m torch.utils.collect_env
+          python -m pytest test/tensordict test/tensorclass test/nn test/memmap \
+              --ignore test/tensordict/test_mp.py \
+              --deselect test/memmap/test_h5.py::TestH5Serialization::test_h5_serialization \
+              --deselect test/memmap/test_memmap.py::TestIndexing::test_copy_onto \
+              --deselect test/memmap/test_memmap.py::TestIndexing::test_send_across_procs \
+              --deselect test/memmap/test_memmap.py::TestIndexing::test_send_across_procs_chunk \
+              --deselect test/memmap/test_memmap.py::TestIndexing::test_send_across_procs_index \
+              --deselect test/memmap/test_memmap.py::TestIndexing::test_send_across_procs_split \
+              --deselect test/memmap/test_zarr.py::TestZarrSerialization::test_zarr_multiprocessing \
+              -n auto --dist worksteal --timeout 120 --instafail --durations 20
 
   upload-wheel:
     # Don't run on forked repos.
