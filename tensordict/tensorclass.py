@@ -5025,8 +5025,10 @@ def _get(self, key: NestedKey, *args, **kwargs):
                 # for a key that runs through a leaf, as get does without one
                 return entry.get(key[1:], **kwargs)
             if not passed_default and isinstance(entry, Tensor):
-                # TensorDict.get raises here; a tensorclass will from 0.17
-                _warn_get_through_tensor(self, key, entry)
+                # TensorDict.get raises here; a tensorclass will from 0.17.
+                # Dynamo cannot trace the warning's sys._getframe
+                if not is_dynamo_compiling():
+                    _warn_get_through_tensor(self, key, entry)
                 return default
             return entry.get(key[1:], default=default, **kwargs)
         if kwargs:
