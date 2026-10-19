@@ -61,6 +61,9 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CUDA_ARCH_VERSION: ${{ matrix.cuda_arch_version }}
           TORCH_VERSION: nightly
+          # run_test.sh skips test_distributed.py: its CUDA tests need 2 GPUs,
+          # and test-cpu (3.12) runs the rest on the same Python and torch.
+          TD_SKIP_DISTRIBUTED_TESTS: "1"
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |
@@ -182,6 +185,10 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CUDA_ARCH_VERSION: ${{ matrix.cuda_arch_version }}
           TORCH_VERSION: stable
+          # run_test.sh skips test_distributed.py: its CUDA tests need 2 GPUs,
+          # and test-stable-cpu (3.10) runs the rest on the same Python and
+          # torch.
+          TD_SKIP_DISTRIBUTED_TESTS: "1"
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |
