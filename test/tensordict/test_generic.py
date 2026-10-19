@@ -12222,6 +12222,64 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="keys_to_update"):
             td0.update(td1, update_batch_size=True, keys_to_update=[("a",)])
 
+    def test_update_batch_size_prefix_deprecated(self):
+        # #2957: a destination batch size that is a prefix of the source's is
+        # kept with a FutureWarning, until 0.17. More batch dims than the
+        # source stays silent: TorchRL's Minari loader relies on it.
+        def source():
+            return TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+
+        match = (
+            r"^update\(update_batch_size=True\) got a source with batch size "
+            r"torch\.Size\(\[2\]\) for a destination with batch size "
+            r"torch\.Size\(\[\]\), a prefix of it, .*Starting with TensorDict "
+            r"0\.17, the default will change"
+        )
+        td = TensorDict(x=torch.ones(2, 3), y=torch.ones(5))
+        with pytest.warns(FutureWarning, match=match) as record:
+            td.update(source(), update_batch_size=True)
+        assert record[0].filename == __file__
+        assert td.batch_size == ()
+        assert (td["x"] == 0).all()
+        assert set(td.keys()) == {"x", "y"}
+        nested = TensorDict(n=TensorDict(x=torch.ones(2, 3)))
+        with pytest.warns(FutureWarning, match=match):
+            nested.update(TensorDict(n=source()), update_batch_size=True)
+        assert nested["n"].batch_size == ()
+        out = TensorDict(x=torch.ones(2, 3))
+        with pytest.warns(FutureWarning, match=match):
+            source().where(
+                torch.tensor([True, False]), 0.0, out=out, update_batch_size=True
+            )
+        assert out.batch_size == ()
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td = TensorDict(x=torch.ones(2, 3))
+            td.update(source())
+            assert td.batch_size == ()
+            td = TensorDict(x=torch.ones(2, 3), batch_size=[2, 3])
+            td.update(source(), update_batch_size=True)
+            assert td.batch_size == (2, 3)
+            td = TensorDict(x=torch.ones(2, 3), batch_size=[2])
+            td.update(source(), update_batch_size=True)
+            assert td.batch_size == (2,)
+            td = TensorDict(x=torch.ones(4, 3), batch_size=[4])
+            td.update(source(), update_batch_size=True)
+            assert td.batch_size == (2,)
+            td = TensorDict(a=torch.zeros(5), batch_size=[5])
+            td.update(TensorDict(b=torch.ones(5, 2)), update_batch_size=True)
+            assert td.batch_size == (5,)
+            assert set(td.keys()) == {"a", "b"}
+            td = TensorDict(x=torch.ones(2, 3))
+            td.update({"x": torch.zeros(2, 3)}, update_batch_size=True)
+            assert td.batch_size == ()
+            out = TensorDict(x=torch.ones(2, 3))
+            source().where(
+                torch.tensor([True, False]), source(), out=out, update_batch_size=True
+            )
+            assert out.batch_size == ()
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+
     @set_list_to_stack(True)
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
