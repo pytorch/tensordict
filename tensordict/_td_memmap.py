@@ -60,7 +60,7 @@ def _populate_memmap(
     """Populates ``dest`` with a memory-mapped copy of ``value``.
 
     With ``like=True`` and ``warn_existing_size=True`` (as in ``memmap_like``),
-    an existing file whose size is not that of the leaf is mapped with a
+    an existing file smaller than the leaf is grown and mapped with a
     FutureWarning (#2968).
     """
     from .utils import (
@@ -106,14 +106,15 @@ def _populate_memmap(
     )
     if file_size is not None:
         nbytes = memmap_tensor.untyped_storage().nbytes()
-        if file_size != nbytes:
+        if file_size < nbytes:
             warnings.warn(
-                f"memmap_like mapped the existing file {filename} ({file_size} "
-                f"bytes) as it is, for the leaf {key!r} of dtype {value.dtype} "
-                f"({nbytes} bytes). Starting with TensorDict 0.17, the default "
-                "will change to raising a RuntimeError when an existing file "
-                "does not have the size of the leaf. Remove the file, or use "
-                "a new prefix, to get a file filled with zeros.",
+                f"memmap_like grew the existing file {filename} from "
+                f"{file_size} to {nbytes} bytes for the leaf {key!r} of dtype "
+                f"{value.dtype}, so the leaf mixes the old values and zeros. "
+                "Starting with TensorDict 0.17, the default will change to "
+                "raising a RuntimeError when an existing file is smaller than "
+                "the leaf. Remove the file, or use a new prefix, to get a "
+                "file filled with zeros.",
                 FutureWarning,
                 stacklevel=_user_stacklevel(),
             )

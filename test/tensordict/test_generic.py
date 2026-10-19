@@ -8930,13 +8930,18 @@ class TestGeneric:
         out, messages = memmap_like(prefix, a=torch.zeros(3, dtype=torch.int32))
         assert out["a"].tolist() == [1065353216, 1073741824, 1077936128]
         assert messages == []
-        # a larger leaf grows the file, a smaller one maps its start
-        out, messages = memmap_like(prefix, a=torch.zeros(5), b=torch.zeros(1))
-        assert out["a"].tolist() == [1.0, 2.0, 3.0, 0.0, 0.0]
+        # a smaller leaf maps the start of the file, silently
+        out, messages = memmap_like(prefix, a=torch.zeros(2), b=torch.zeros(1))
+        assert out["a"].tolist() == [1.0, 2.0]
         assert out["b"].tolist() == [1.0]
-        assert len(messages) == 2
-        assert all("TensorDict 0.17" in message for message in messages)
-        assert any("a.memmap (12 bytes)" in message for message in messages)
+        assert messages == []
+        # a larger leaf grows the file with zeros, and warns
+        out, messages = memmap_like(prefix, a=torch.zeros(5), b=torch.zeros(2))
+        assert out["a"].tolist() == [1.0, 2.0, 3.0, 0.0, 0.0]
+        assert out["b"].tolist() == [1.0, 1.0]
+        assert len(messages) == 1
+        assert "TensorDict 0.17" in messages[0]
+        assert "a.memmap from 12 to 20 bytes" in messages[0]
         # new files are zero-filled, silently
         out, messages = memmap_like(Path(tmpdir) / "new", a=torch.ones(3))
         assert out["a"].tolist() == [0.0, 0.0, 0.0]

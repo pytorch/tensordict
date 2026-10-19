@@ -1469,13 +1469,13 @@ class _Serialization:
         :meth:`~.update_` or by indexing: :meth:`~.memmap` would write every
         value first. New files are filled with zeros. A file that already
         exists at the path of a leaf (with ``existsok=True``) is mapped as it
-        is and keeps its content, which lets you reopen a buffer. If its size
-        is not the byte size of the leaf, a ``FutureWarning`` is emitted: a
-        larger leaf grows the file with zeros, and a smaller one maps its
-        start. Starting with TensorDict 0.17, the default will change to
-        raising a ``RuntimeError`` in that case. A file of the same size but
-        written with another dtype or shape is not detected, and its bytes
-        are read as the new dtype. An archive (``".tdz"``) is always
+        is and keeps its content, which lets you reopen a buffer, or its
+        start with a smaller leaf. If the file is smaller than the leaf, it
+        is grown with zeros and a ``FutureWarning`` is emitted. Starting with
+        TensorDict 0.17, the default will change to raising a
+        ``RuntimeError`` in that case. A file written with another dtype or
+        shape is not detected otherwise, and its bytes are read as the new
+        dtype. An archive (``".tdz"``) is always
         rebuilt with zeros. The tensordict is not changed. See
         :ref:`saving`.
 
