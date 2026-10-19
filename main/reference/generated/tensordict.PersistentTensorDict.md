@@ -107,8 +107,9 @@ close()
 Closes the file or store of the tensordict.
 
 The file is not closed when the tensordict goes out of scope. After
-`close()`, reading an entry raises a `KeyError`, and writing one
-has no effect.
+`close()`, reading an entry raises a `KeyError`. Writing one to
+an HDF5 file raises; whether a zarr store still accepts writes depends
+on the store (a local directory store does).
 
 flatten_keys(*separator: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = '.'*, *inplace: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *is_leaf: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable)[[[Type](https://docs.python.org/3/library/typing.html#typing.Type)], [bool](https://docs.python.org/3/builtins/functions.html#bool)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → T
 
