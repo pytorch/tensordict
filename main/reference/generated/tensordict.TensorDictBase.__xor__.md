@@ -7,7 +7,14 @@ Computes `self ^ other` leaf by leaf and returns a new tensordict.
 The operation is a logical XOR for boolean leaves and a bitwise XOR for
 integer leaves. `other` is paired as in [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__): a
 tensordict or `dict` must have the same keys, or a `KeyError` is
-raised.
+raised. An `other` of another type, such as `None` or a string,
+gives `True` and a `FutureWarning`. Starting with TensorDict 0.17,
+the default will change to returning `NotImplemented`, so that
+Python raises a `TypeError`, as it does for tensors and for `&`.
+
+The result is a new tensordict that is not locked and, except with
+a tensor `other` of one or more dims, has no dim names. `&`, `~`
+and the arithmetic operators keep the dim names and the lock.
 
 Parameters:
 

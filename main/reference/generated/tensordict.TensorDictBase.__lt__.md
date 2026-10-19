@@ -4,7 +4,11 @@ TensorDictBase.__lt__(*other: [Any](https://docs.python.org/3/library/typing.htm
 
 Compares the tensordict with `other` leaf by leaf with `<`.
 
-Works as [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__).
+Works as [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__), except that an `other` of another type,
+such as `None`, gives `False` and a `FutureWarning`. Starting
+with TensorDict 0.17, the default will change to returning
+`NotImplemented`, so that Python raises a `TypeError`, as it does
+for tensors and for `&`.
 
 Parameters:
 

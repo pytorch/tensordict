@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6148+gd9a8bca16.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6149+gc428eeacc.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6148+gd9a8bca16.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6149+gc428eeacc.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1645,6 +1645,9 @@ document.write(`
 <dd><p>Compares the tensordict with <code class="docutils literal notranslate"><span class="pre">other</span></code> leaf by leaf with <code class="docutils literal notranslate"><span class="pre">!=</span></code>.</p>
 <p>Works as <a class="reference internal" href="tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__" title="tensordict.TensorDictBase.__eq__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__eq__()</span></code></a>, except that an <code class="docutils literal notranslate"><span class="pre">other</span></code> of another type
 gives <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<p>The result is a new tensordict that is not locked and, except with
+a tensor <code class="docutils literal notranslate"><span class="pre">other</span></code> of one or more dims, has no dim names. <code class="docutils literal notranslate"><span class="pre">&amp;</span></code>, <code class="docutils literal notranslate"><span class="pre">~</span></code>
+and the arithmetic operators keep the dim names and the lock.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>Number</em>) – the value to
@@ -2014,7 +2017,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__ne__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__ne__",
        "url": "/reference/generated/tensordict.TensorDictBase.__ne__.html",
-       "articleBody": "TensorDictBase.__ne__# TensorDictBase.__ne__(other: Any) \u2192 Self | bool# Compares the tensordict with other leaf by leaf with !=. Works as __eq__(), except that an other of another type gives True. Parameters: other (TensorDictBase, dict, Tensor or Number) \u2013 the value to compare with. Returns: A new tensordict of boolean leaves, or True. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__ne__# TensorDictBase.__ne__(other: Any) \u2192 Self | bool# Compares the tensordict with other leaf by leaf with !=. Works as __eq__(), except that an other of another type gives True. The result is a new tensordict that is not locked and, except with a tensor other of one or more dims, has no dim names. \u0026, ~ and the arithmetic operators keep the dim names and the lock. Parameters: other (TensorDictBase, dict, Tensor or Number) \u2013 the value to compare with. Returns: A new tensordict of boolean leaves, or True. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

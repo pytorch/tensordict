@@ -10,7 +10,15 @@ differ); a tensor, which is aligned with the batch dimensions of each
 leaf; or a number. A batch size that differs from the tensordict's is
 broadcast with it. An `other` of another type, such as `None`,
 gives `False`. The other comparisons (`!=`, `<`, `<=`, `>`,
-`>=`) work the same way.
+`>=`) work the same way, except for such an `other`: `!=` gives
+`True`, and `<`, `<=`, `>` and `>=` give `False` and a
+`FutureWarning`. Starting with TensorDict 0.17, the default will
+change to returning `NotImplemented`, so that Python raises a
+`TypeError`, as it does for tensors and for `&`.
+
+The result is a new tensordict that is not locked and, except with
+a tensor `other` of one or more dims, has no dim names. `&`, `~`
+and the arithmetic operators keep the dim names and the lock.
 
 Parameters:
 

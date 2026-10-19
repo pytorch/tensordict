@@ -7,6 +7,10 @@ Compares the tensordict with `other` leaf by leaf with `!=`.
 Works as [`__eq__()`](tensordict.TensorDictBase.__eq__.html#tensordict.TensorDictBase.__eq__), except that an `other` of another type
 gives `True`.
 
+The result is a new tensordict that is not locked and, except with
+a tensor `other` of one or more dims, has no dim names. `&`, `~`
+and the arithmetic operators keep the dim names and the lock.
+
 Parameters:
 
 **other** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or**Number*) - the value to
