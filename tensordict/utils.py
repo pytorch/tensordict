@@ -1757,7 +1757,8 @@ def assert_close(
             tensorclass.
         KeyError: if the keys differ and ``intersection=False``.
         AssertionError: if two values are not close. The message names the
-            key and the root mean squared error.
+            key and the root mean squared error, followed by
+            :func:`torch.testing.assert_close`'s description of the mismatch.
         RuntimeError: if the shapes of two tensors cannot be broadcast
             together.
 
@@ -1770,10 +1771,12 @@ def assert_close(
         >>> b = TensorDict(x=torch.full((3,), 0.01), y=torch.ones(3))
         >>> assert_close(a, b, atol=0.1, rtol=0)
         True
-        >>> assert_close(a, b)
+        >>> assert_close(a, b)  # doctest: +ELLIPSIS
         Traceback (most recent call last):
             ...
         AssertionError: key ('x',) does not match, got mse = 0.0100
+        Tensor-likes are not close!
+        ...
 
     """
     from tensordict.base import _is_tensor_collection
@@ -1881,7 +1884,7 @@ def assert_close(
                 rtol=rtol,
                 atol=atol,
                 equal_nan=equal_nan,
-                msg=new_msg,
+                msg=lambda torch_msg, _msg=new_msg: f"{_msg}\n{torch_msg}",
             )
         else:
             torch.testing.assert_close(
@@ -1890,7 +1893,7 @@ def assert_close(
                 rtol=rtol,
                 atol=atol,
                 equal_nan=equal_nan,
-                msg=new_msg,
+                msg=lambda torch_msg, _msg=new_msg: f"{_msg}\n{torch_msg}",
             )
         local_msg = f"key {prefix + (key,)} matches"
         msg = "\t".join([local_msg, msg]) if len(msg) else local_msg

@@ -30,6 +30,7 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import (
     _deprecation,
+    assert_close,
     KEY_SEPARATOR,
     lazy_stack,
     set_printoptions,
@@ -1304,6 +1305,22 @@ def test_parse_tensor_dict_string_lazy_exclusive_keys(exclusive):
     out = parse_tensor_dict_string(repr(lazy))
     assert set(out.keys()) == {"a"}
     assert out.batch_size == torch.Size([2])
+
+
+def test_assert_close_keeps_torch_message():
+    # The key line comes first, and torch's description of the mismatch follows
+    a = TensorDict(x=torch.zeros(3))
+    b = TensorDict(x=torch.zeros(3, dtype=torch.float64))
+    with pytest.raises(AssertionError, match="key \\('x',\\) does not match") as err:
+        assert_close(a, b)
+    assert "'dtype' do not match" in str(err.value)
+    b = TensorDict(x=torch.full((3,), 0.01))
+    with pytest.raises(AssertionError) as err:
+        assert_close(a, b, msg="extra")
+    assert str(err.value).startswith(
+        "key ('x',) does not match, got mse = 0.0100,\textra\n"
+    )
+    assert "Tensor-likes are not close!" in str(err.value)
 
 
 def test_get_shared_executor():
