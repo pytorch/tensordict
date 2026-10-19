@@ -24,14 +24,18 @@ neither. Defaults to `None`, which sets no upper bound.
 Keyword Arguments:
 
 **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - the tensordict to write the result
-into. Passing it currently raises an error: a `ValueError`
-when `min` or `max` is `None`, a `TypeError` otherwise.
-Defaults to `None`.
+into, and the one returned. The result is copied into its
+leaves, so `out` must have the keys, shapes and dtypes of
+the result. Defaults to `None`.
 
 Raises:
 
-[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if one of `min` and `max` is a tensordict and the
- other is not.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if one of `min` and `max` is a tensordict and the
+ other is not, or if `out` is given and both `min` and
+ `max` are `None`.
+- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if `out` does not have the keys of the result.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf of `out` does not have the dtype of the
+ result, as with [`torch.clamp()`](https://docs.pytorch.org/docs/stable/generated/torch.clamp.html#torch.clamp).
 
 Examples
 

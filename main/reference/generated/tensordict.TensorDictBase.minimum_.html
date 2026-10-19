@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6109+gc34604a29.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6111+gb9c87d2a4.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6109+gc34604a29.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6111+gb9c87d2a4.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1648,8 +1648,12 @@ tensordict <code class="docutils literal notranslate"><span class="pre">other</s
 other keys are ignored.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em> or </em><em>Number</em>) – the other operand, paired with
-the leaves as in <a class="reference internal" href="tensordict.TensorDictBase.minimum.html#tensordict.TensorDictBase.minimum" title="tensordict.TensorDictBase.minimum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">minimum()</span></code></a>.</p>
+<dd class="field-odd"><p><strong>other</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>Number</em>) – the other operand,
+paired with the leaves as in <a class="reference internal" href="tensordict.TensorDictBase.minimum.html#tensordict.TensorDictBase.minimum" title="tensordict.TensorDictBase.minimum"><code class="xref py py-meth docutils literal notranslate"><span class="pre">minimum()</span></code></a>. A tensor is
+aligned with the batch dimensions of each leaf, except when
+a leaf is an <a class="reference internal" href="tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> or inside a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a> transform such as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>: then
+every leaf broadcasts with it from the right, as in torch.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2012,7 +2016,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.minimum",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.minimum",
        "url": "/reference/generated/tensordict.TensorDictBase.minimum_.html",
-       "articleBody": "TensorDictBase.minimum# TensorDictBase.minimum_(other: TensorCollection | Tensor) \u2192 Self# Replaces every leaf with its element-wise minimum with other in place and returns self. The in-place version of minimum(). It has no default: a tensordict other must have every key of the tensordict, and its other keys are ignored. Parameters: other (TensorDictBase or Number) \u2013 the other operand, paired with the leaves as in minimum(). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.minimum# TensorDictBase.minimum_(other: TensorCollection | Tensor) \u2192 Self# Replaces every leaf with its element-wise minimum with other in place and returns self. The in-place version of minimum(). It has no default: a tensordict other must have every key of the tensordict, and its other keys are ignored. Parameters: other (TensorDictBase, Tensor or Number) \u2013 the other operand, paired with the leaves as in minimum(). A tensor is aligned with the batch dimensions of each leaf, except when a leaf is an UnbatchedTensor or inside a torch.func transform such as torch.vmap(): then every leaf broadcasts with it from the right, as in torch. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

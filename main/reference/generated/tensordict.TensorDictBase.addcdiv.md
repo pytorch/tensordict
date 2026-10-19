@@ -13,7 +13,8 @@ is paired with the tensordict key by key and must have all its
 keys. A tensor is aligned with the batch dimensions of each leaf
 and expanded over its feature dimensions.
 - **other2** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the denominator, paired
-like `other1`.
+like `other1`. One of `other1` and `other2` can be a
+tensordict and the other a tensor.
 - **value** (*Number**,**optional*) - the multiplier for
 \(\text{other1} / \text{other2}\). Defaults to `1`.
 

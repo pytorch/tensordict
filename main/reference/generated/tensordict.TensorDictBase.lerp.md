@@ -8,10 +8,14 @@ Returns a new tensordict that interpolates linearly from every leaf (the start) 
 
 Parameters:
 
-- **end** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the end points, paired with the tensordict
-key by key. It must have every key of the tensordict.
-- **weight** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*float*](https://docs.python.org/3/builtins/functions.html#float)) - the interpolation weight: a
-number for all the leaves, or a tensordict paired key by key.
+- **end** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - the end points. A tensordict
+is paired with the tensordict key by key and must have all its
+keys. A tensor is aligned with the batch dimensions of each
+leaf and expanded over its feature dimensions.
+- **weight** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,*[*Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*or*[*float*](https://docs.python.org/3/builtins/functions.html#float)) - the interpolation
+weight: a number for all the leaves, or a tensordict or a
+tensor paired like `end`. One of `end` and `weight` can
+be a tensordict and the other a tensor.
 
 Examples
 

@@ -80,7 +80,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6109+gc34604a29.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6111+gb9c87d2a4.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -186,7 +186,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6109+gc34604a29.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6111+gb9c87d2a4.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1664,13 +1664,19 @@ neither. Defaults to <code class="docutils literal notranslate"><span class="pre
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – the tensordict to write the result
-into. Passing it currently raises an error: a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>
-when <code class="docutils literal notranslate"><span class="pre">min</span></code> or <code class="docutils literal notranslate"><span class="pre">max</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> otherwise.
-Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+into, and the one returned. The result is copied into its
+leaves, so <code class="docutils literal notranslate"><span class="pre">out</span></code> must have the keys, shapes and dtypes of
+the result. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if one of <code class="docutils literal notranslate"><span class="pre">min</span></code> and <code class="docutils literal notranslate"><span class="pre">max</span></code> is a tensordict and the
-    other is not.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if one of <code class="docutils literal notranslate"><span class="pre">min</span></code> and <code class="docutils literal notranslate"><span class="pre">max</span></code> is a tensordict and the
+    other is not, or if <code class="docutils literal notranslate"><span class="pre">out</span></code> is given and both <code class="docutils literal notranslate"><span class="pre">min</span></code> and
+    <code class="docutils literal notranslate"><span class="pre">max</span></code> are <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">out</span></code> does not have the keys of the result.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a leaf of <code class="docutils literal notranslate"><span class="pre">out</span></code> does not have the dtype of the
+    result, as with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.clamp.html#torch.clamp" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.clamp()</span></code></a>.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2043,7 +2049,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.clamp",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.clamp",
        "url": "/reference/generated/tensordict.TensorDictBase.clamp.html",
-       "articleBody": "TensorDictBase.clamp# TensorDictBase.clamp(min: TensorDictBase | Tensor | float | None = None, max: TensorDictBase | Tensor | float | None = None, *, out=None) \u2192 Self# Returns a new tensordict with every leaf clamped into the range [min, max]. \\[y_i = \\min(\\max(x_i, \\text{min}_i), \\text{max}_i)\\] Where min is greater than max, the result is max, as with torch.clamp(). At least one of min and max must be given; with only one bound, clamp calls clamp_min() or clamp_max(). Parameters: min (TensorDictBase, Tensor, Number or None, optional) \u2013 the lower bound. A tensordict is paired with the tensordict key by key. min and max must both be tensordicts, or neither. Defaults to None, which sets no lower bound. max (TensorDictBase, Tensor, Number or None, optional) \u2013 the upper bound. min and max must both be tensordicts, or neither. Defaults to None, which sets no upper bound. Keyword Arguments: out (TensorDictBase, optional) \u2013 the tensordict to write the result into. Passing it currently raises an error: a ValueError when min or max is None, a TypeError otherwise. Defaults to None. Raises: ValueError \u2013 if one of min and max is a tensordict and the other is not. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.tensor([-2.0, 0.5, 3.0]), batch_size=[3]) \u003e\u003e\u003e td.clamp(0.0, 1.0)[\"x\"] tensor([0.0000, 0.5000, 1.0000]) \u003e\u003e\u003e td.clamp(max=0.0)[\"x\"] tensor([-2., 0., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.clamp# TensorDictBase.clamp(min: TensorDictBase | Tensor | float | None = None, max: TensorDictBase | Tensor | float | None = None, *, out=None) \u2192 Self# Returns a new tensordict with every leaf clamped into the range [min, max]. \\[y_i = \\min(\\max(x_i, \\text{min}_i), \\text{max}_i)\\] Where min is greater than max, the result is max, as with torch.clamp(). At least one of min and max must be given; with only one bound, clamp calls clamp_min() or clamp_max(). Parameters: min (TensorDictBase, Tensor, Number or None, optional) \u2013 the lower bound. A tensordict is paired with the tensordict key by key. min and max must both be tensordicts, or neither. Defaults to None, which sets no lower bound. max (TensorDictBase, Tensor, Number or None, optional) \u2013 the upper bound. min and max must both be tensordicts, or neither. Defaults to None, which sets no upper bound. Keyword Arguments: out (TensorDictBase, optional) \u2013 the tensordict to write the result into, and the one returned. The result is copied into its leaves, so out must have the keys, shapes and dtypes of the result. Defaults to None. Raises: ValueError \u2013 if one of min and max is a tensordict and the other is not, or if out is given and both min and max are None. KeyError \u2013 if out does not have the keys of the result. RuntimeError \u2013 if a leaf of out does not have the dtype of the result, as with torch.clamp(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.tensor([-2.0, 0.5, 3.0]), batch_size=[3]) \u003e\u003e\u003e td.clamp(0.0, 1.0)[\"x\"] tensor([0.0000, 0.5000, 1.0000]) \u003e\u003e\u003e td.clamp(max=0.0)[\"x\"] tensor([-2., 0., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
