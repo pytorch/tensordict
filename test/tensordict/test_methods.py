@@ -3184,6 +3184,12 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip("UnbatchedTensor incompatible with reduction ops")
         td = getattr(self, td_name)(device)
         td = _to_float(td, td_name, tmpdir)
+        if red == "prod":
+            # Keep the product of all the elements of a leaf finite: 60 values
+            # up to 9 overflow float32, and torch.prod then gives nan or 0.0
+            # depending on the order in which it multiplies.
+            with torch.no_grad():
+                td.apply_(lambda x: x.mul_(0.01).add_(1))
         leaves = dict(td.items(True, True))
         # torch.prod does not take dim=(); prod(dim=()) gives prod()
         kwargs = {} if red == "prod" else {"dim": ()}
