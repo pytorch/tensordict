@@ -1915,6 +1915,56 @@ class TestGeneric:
             ("a", "b", "c"),
         }
 
+    @pytest.mark.parametrize("member", ["tensor", "locked"])
+    @pytest.mark.parametrize("view", ["sub", "sub_slice", "typed"])
+    def test_create_nested_view_of_lazy_stack(self, member, view):
+        # A view over a lazy stack replaces each level of the path.
+        class Typed(TypedTensorDict):
+            a: TensorDictBase
+
+        other = torch.zeros(2)
+        if member == "locked":
+            other = TensorDict(x=torch.zeros(2), batch_size=[2]).lock_()
+        td = lazy_stack(
+            [
+                TensorDict(
+                    a=TensorDict(x=torch.zeros(2), batch_size=[2]), batch_size=[2]
+                ),
+                TensorDict(a=other, batch_size=[2]),
+            ]
+        )
+        if view == "sub":
+            td = td._get_sub_tensordict(0)
+        elif view == "sub_slice":
+            td = td._get_sub_tensordict((slice(None), 0))
+        else:
+            td = Typed.from_tensordict(td)
+        assert td.create_nested(("a", "b")) is td
+        assert set(td.keys(True)) == {"a", ("a", "b")}
+
+    def test_create_nested_partly_locked_lazy_parent(self):
+        # A lazy stack on the path is replaced, even when some members are
+        # unlocked.
+        def parent():
+            return lazy_stack(
+                [TensorDict(x=torch.zeros(())).lock_(), TensorDict(y=torch.zeros(()))]
+            )
+
+        td = TensorDict(a=parent(), batch_size=[2])
+        td.create_nested(("a", "b"))
+        assert type(td.get("a")) is TensorDict
+        assert set(td.keys(True)) == {"a", ("a", "b")}
+        td = lazy_stack([TensorDict(a=parent()) for _ in range(2)])
+        td.create_nested(("a", "b"))
+        for member in td.tensordicts:
+            assert type(member.get("a")) is TensorDict
+            assert set(member.keys(True)) == {"a", ("a", "b")}
+
+    def test_create_nested_non_tensor_stack(self):
+        td = NonTensorStack(NonTensorData("a"), NonTensorData("b"))
+        with pytest.raises(KeyError, match="only 'data' keys"):
+            td.create_nested(("a", "b"))
+
     @pytest.mark.skipif(
         not torch.cuda.device_count() and not npu_device_count, reason="no cuda or npu"
     )

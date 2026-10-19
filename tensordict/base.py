@@ -6575,10 +6575,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         The new tensordict has the batch size, device and names of the
         tensordict it is added to. An existing entry at ``key`` is replaced.
-        For a tuple key, the tensordicts already on the path keep their
-        entries: ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. A
-        missing level, an entry on the path that is not a tensordict, or a
-        locked tensordict on the path is replaced by a new empty tensordict.
+        For a tuple key, a plain :class:`~tensordict.TensorDict` keeps a
+        plain, unlocked ``TensorDict`` already on the path with its entries:
+        ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. A lazy stack of
+        plain ``TensorDict`` instances does this in each member, and a
+        tensorclass or a :class:`~tensordict.nn.TensorDictParams` follows the
+        rule of the tensordict it wraps. Any other entry on the path, such as a
+        tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
+        tensordict, is replaced by a new empty tensordict, and so is every
+        level of the path when the tensordict is of any other type, such as a
+        view, a typed tensordict or a file.
 
         Args:
             key (NestedKey): the key of the new tensordict.
@@ -6611,16 +6617,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Adds an empty nested tensordict at the tuple ``key``.
 
         ``create_nested`` calls it with the key unravelled to a non-empty tuple.
-        The hook must put a new empty tensordict at the last level, keep each
-        unlocked tensordict already on the path with its entries, and replace
-        a missing level, an entry that is not a tensordict, or a locked
-        tensordict on the path with a new empty tensordict. It returns nothing.
+        The hook puts a new empty tensordict at the last level, and returns
+        nothing. A plain ``TensorDict`` goes down into a plain, unlocked
+        ``TensorDict`` already on the path, so it keeps its entries, and
+        replaces any other entry with a new empty tensordict. Every other
+        class replaces each level of the path. ``LazyStackedTensorDict``
+        overrides it: a stack of plain ``TensorDict`` instances hands the key
+        to each member.
         """
+        from tensordict._td import TensorDict
+
         if len(key) > 1:
-            # Keep an existing tensordict on the path with its entries. Any
-            # other entry, or a locked tensordict, is replaced.
-            td = self._get_str(key[0], None)
-            if not isinstance(td, TensorDictBase) or is_non_tensor(td) or td.is_locked:
+            # Only a plain TensorDict keeps a plain, unlocked TensorDict on
+            # the path. Anything else is replaced, level by level.
+            td = self._get_str(key[0], None) if type(self) is TensorDict else None
+            if type(td) is not TensorDict or td.is_locked:
                 td = self._create_nested_str(key[0])
             td._create_nested_tuple(key[1:])
         else:

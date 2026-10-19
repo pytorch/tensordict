@@ -1750,10 +1750,11 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: each member keeps or replaces its own entry on the path.
     def _create_nested_tuple(self, key):
-        if len(key) == 1:
+        # A stack of plain TensorDicts hands the key to each member, which
+        # keeps or replaces its own entry at key[0]. Any other stack, such as
+        # a NonTensorStack or a stack of files, replaces each level.
+        if len(key) == 1 or not all(type(td) is TensorDict for td in self.tensordicts):
             return super()._create_nested_tuple(key)
-        # Each member keeps or replaces its own entry at key[0]: reading it
-        # from the stack would stack entries of different types or locks.
         for td in self.tensordicts:
             td._create_nested_tuple(key)
 

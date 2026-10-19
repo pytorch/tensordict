@@ -933,18 +933,29 @@ class TestTensorDicts(TestTensorDictsBase):
             _ = nested.get("key")
             assert td.get(("some", "nested", "key")).shape == td.shape
             assert is_tensor_collection(td.get(("some", "nested", "key")))
-            # The tensordicts already on the path keep their entries.
-            leaf = torch.ones(td.shape)
-            td.set(("some", "leaf"), leaf)
-            td.create_nested(("some", "other"))
-            td.create_nested(("some", "nested", "key2"))
-            keys = set(td.keys(include_nested=True))
-            assert {
-                ("some", "nested", "key"),
-                ("some", "nested", "key2"),
-                ("some", "other"),
-            } <= keys
-            assert (td.get(("some", "leaf")) == 1).all()
+            # The plain TensorDicts already on the path keep their entries.
+            # Views, typed tensordicts and files replace each level.
+            if td_name not in (
+                "sub_td",
+                "sub_td2",
+                "permute_td",
+                "unsqueezed_td",
+                "squeezed_td",
+                "td_h5",
+                "typed_td",
+                "nested_typed_td",
+            ):
+                leaf = torch.ones(td.shape)
+                td.set(("some", "leaf"), leaf)
+                td.create_nested(("some", "other"))
+                td.create_nested(("some", "nested", "key2"))
+                keys = set(td.keys(include_nested=True))
+                assert {
+                    ("some", "nested", "key"),
+                    ("some", "nested", "key2"),
+                    ("some", "other"),
+                } <= keys
+                assert (td.get(("some", "leaf")) == 1).all()
             del td["root"]
         if td_name in ("sub_td", "sub_td2"):
             return
