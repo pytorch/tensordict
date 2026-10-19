@@ -45,6 +45,7 @@ from tensordict.base import (
     _has_lazy_stack,
     _holds_its_tensors,
     _in_dense_is_empty,
+    _InplaceWriteError,
     _is_accepted_class,
     _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
@@ -1616,7 +1617,7 @@ class TensorDict(TensorDictBase):
             except KeyError as err:
                 raise err
             except Exception as err:
-                raise ValueError(
+                raise _InplaceWriteError(
                     f"Failed to update '{key}' in tensordict {self}"
                 ) from err
         return self
