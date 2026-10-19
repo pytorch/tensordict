@@ -640,7 +640,8 @@ class TestMap:
 
         with pytest.warns(FutureWarning, match="TensorDict 0.17") as record:
             run()
-        assert record[0].filename == __file__
+        (seed_warning,) = [w for w in record if "got no generator" in str(w.message)]
+        assert seed_warning.filename == __file__
         with warnings.catch_warnings(record=True) as record:
             warnings.simplefilter("always")
             run(generator=torch.default_generator)

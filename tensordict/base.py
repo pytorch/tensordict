@@ -8964,7 +8964,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 if __name__ == "__main__":
                     data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
-                    data = data.map(process_data, dim=1, num_workers=2)
+                    # generator=torch.default_generator seeds the workers from
+                    # the global RNG, the default from TensorDict 0.17.
+                    data = data.map(
+                        process_data, dim=1, num_workers=2, generator=torch.default_generator
+                    )
                     print(data["y"][:, :10])
                     # tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
         """
@@ -9133,7 +9137,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 if __name__ == "__main__":
                     data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
-                    for sample in data.map_iter(process_data, dim=1, num_workers=2, chunksize=5):
+                    # generator=torch.default_generator seeds the workers from
+                    # the global RNG, the default from TensorDict 0.17.
+                    for sample in data.map_iter(
+                        process_data,
+                        dim=1,
+                        num_workers=2,
+                        chunksize=5,
+                        generator=torch.default_generator,
+                    ):
                         print(sample["y"])
                         # tensor([[1., 1., 1., 1., 1.]])
                         break
