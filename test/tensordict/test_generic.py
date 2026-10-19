@@ -10440,6 +10440,16 @@ class TestGeneric:
         torch.testing.assert_close(
             result["a"], getattr(td["a"], reduction)(*args, dim=None, keepdim=True)
         )
+        # An omitted dim gives the same result, on dense and lazy tensordicts
+        lazy = lazy_stack(list(td.unbind(0)))
+        for t in (td, lazy):
+            omitted = getattr(t, reduction)(*args, keepdim=True)
+            assert omitted.batch_size == torch.Size([1, 1])
+            torch.testing.assert_close(omitted["a"], result["a"])
+            torch.testing.assert_close(
+                omitted["a"],
+                getattr(t, reduction)(*args)["a"].reshape(1, 1, 1),
+            )
 
     @pytest.mark.parametrize(
         "reduction", ["sum", "nansum", "mean", "nanmean", "std", "var", "quantile"]
