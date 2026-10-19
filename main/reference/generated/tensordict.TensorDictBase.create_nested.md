@@ -5,9 +5,17 @@ TensorDictBase.create_nested(*key*)
 Adds an empty nested tensordict at `key`, and returns `self`.
 
 The new tensordict has the batch size, device and names of the
-tensordict. An existing entry at `key` is replaced. For a tuple key,
-every level is created new, so an existing entry on the path, such as
-`td["a"]` for `("a", "b")`, is replaced too.
+tensordict it is added to. An existing entry at `key` is replaced.
+For a tuple key, a plain [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) keeps a
+plain, unlocked `TensorDict` already on the path with its entries:
+`("a", "b")` adds `"b"` to an existing `td["a"]`. A lazy stack of
+plain `TensorDict` instances does this in each member, and a
+tensorclass or a `TensorDictParams` follows the
+rule of the tensordict it wraps. Any other entry on the path, such as a
+tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
+tensordict, is replaced by a new empty tensordict, and so is every
+level of the path when the tensordict is of any other type, such as a
+view, a typed tensordict or a file.
 
 Parameters:
 
@@ -27,6 +35,9 @@ Examples
 torch.Size([3, 4, 5])
 >>> list(data.keys(include_nested=True))
 [('some', 'nested', 'value'), ('some', 'nested'), 'some']
+>>> _ = data.create_nested(("some", "other"))
+>>> list(data.keys(include_nested=True))
+[('some', 'nested', 'value'), ('some', 'nested'), ('some', 'other'), 'some']
 ```
 
 Every tensordict class and every tensorclass has this method. For the
