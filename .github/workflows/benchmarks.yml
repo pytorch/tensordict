@@ -166,8 +166,15 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
+      # The full history of gh-pages is about 850 MiB: fetch its last commit
+      # only. github-action-benchmark then runs its own `git fetch` and
+      # `git pull` of gh-pages, which fetch only the commits that are newer,
+      # and pulls again before it retries a rejected push. Leave
+      # skip-fetch-gh-pages at false: it would also skip that pull, and the
+      # retries would fail when another workflow pushed to gh-pages first.
+      - name: Fetch the last commit of gh-pages
+        run: git fetch --depth=1 origin gh-pages:gh-pages
 
       - name: Download CPU benchmark results
         uses: actions/download-artifact@v4
