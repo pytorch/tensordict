@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6068+geb2174cd7.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6070+g4c11bc0c3.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6068+geb2174cd7.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6070+g4c11bc0c3.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1641,7 +1641,7 @@ document.write(`
 <h1>TensorDictBase.float64<a class="headerlink" href="#tensordictbase-float64" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.float64">
-<span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">float64</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.float64" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">float64</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cast_filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.float64" title="Link to this definition">#</a></dt>
 <dd><p>Returns a tensordict whose tensor leaves are cast to <code class="docutils literal notranslate"><span class="pre">torch.float64</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
@@ -2012,7 +2012,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.float64",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.float64",
        "url": "/reference/generated/tensordict.TensorDictBase.float64.html",
-       "articleBody": "TensorDictBase.float64# TensorDictBase.float64() \u2192 Self# Returns a tensordict whose tensor leaves are cast to torch.float64. Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.float64# TensorDictBase.float64(*, cast_filter: Callable | None = None) \u2192 Self# Returns a tensordict whose tensor leaves are cast to torch.float64. Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

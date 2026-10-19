@@ -1,6 +1,6 @@
 # composite_lp_aggregate
 
-tensordict.nn.composite_lp_aggregate(*nowarn: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None)
+tensordict.nn.composite_lp_aggregate(*nowarn: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [bool](https://docs.python.org/3/builtins/functions.html#bool)
 
 Returns whether a [`CompositeDistribution`](tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution) sums its log-probabilities in one tensor.
 
@@ -13,7 +13,8 @@ changes.
 
 Parameters:
 
-**nowarn** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - has no effect. Defaults to `False`.
+**nowarn** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - has no effect. It is kept so that calls
+that pass it keep working. Defaults to `False`.
 
 See also
 

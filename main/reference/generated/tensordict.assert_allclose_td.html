@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6068+geb2174cd7.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6070+g4c11bc0c3.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6068+geb2174cd7.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6070+g4c11bc0c3.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1680,7 +1680,8 @@ messages. Defaults to <code class="docutils literal notranslate"><span class="pr
     tensorclass.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the keys differ and <code class="docutils literal notranslate"><span class="pre">intersection=False</span></code>.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#AssertionError" title="(in Python v3.15)"><strong>AssertionError</strong></a> – if two values are not close. The message names the
-    key and the root mean squared error.</p></li>
+    key and the root mean squared error, followed by
+    <a class="reference external" href="https://docs.pytorch.org/docs/stable/testing.html#torch.testing.assert_close" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.testing.assert_close()</span></code></a>’s description of the mismatch.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the shapes of two tensors cannot be broadcast
     together.</p></li>
 </ul>
@@ -1695,10 +1696,12 @@ messages. Defaults to <code class="docutils literal notranslate"><span class="pr
 <span class="gp">&gt;&gt;&gt; </span><span class="n">b</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">3</span><span class="p">,),</span> <span class="mf">0.01</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">assert_close</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 <span class="go">True</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">assert_close</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">assert_close</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>  
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">    </span><span class="o">...</span>
 <span class="gr">AssertionError</span>: <span class="n">key ('x',) does not match, got mse = 0.0100</span>
+<span class="x">Tensor-likes are not close!</span>
+<span class="x">...</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2059,7 +2062,7 @@ messages. Defaults to <code class="docutils literal notranslate"><span class="pr
        "headline": "assert_allclose_td",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - assert_allclose_td",
        "url": "/reference/generated/tensordict.assert_allclose_td.html",
-       "articleBody": "assert_allclose_td# tensordict.assert_allclose_td(actual: T, expected: T, rtol: float | None = None, atol: float | None = None, equal_nan: bool = True, intersection: bool = False, msg: str = \u0027\u0027, prefix: NestedKey = ()) \u2192 bool# Asserts that two tensordicts have the same keys and close values. Each pair of tensors is compared with torch.testing.assert_close(), which also checks that the dtypes, shapes and devices match. Nested tensordicts are compared entry by entry, and two lazy stacks are compared stack by stack. Non-tensor data is not compared. Tensorclasses are accepted. assert_allclose_td is another name for this function. Parameters: actual (TensorDictBase) \u2013 the tensordict to check. expected (TensorDictBase) \u2013 the tensordict with the expected values. rtol (float, optional) \u2013 the relative tolerance. Defaults to None, which uses the default of torch.testing.assert_close() for the dtype. atol (float, optional) \u2013 the absolute tolerance. Defaults to None, which uses the default of torch.testing.assert_close() for the dtype. equal_nan (bool, optional) \u2013 if True, two NaN values are equal. Defaults to True. intersection (bool, optional) \u2013 if True, compares only the keys that both tensordicts have. If False, different key sets raise a KeyError. Defaults to False. msg (str, optional) \u2013 a message appended to the error message. Defaults to \"\". prefix (NestedKey, optional) \u2013 a key prepended to the keys in the error messages. Defaults to (). Returns: True if the check passes. Raises: TypeError \u2013 if actual or expected is not a tensordict or a tensorclass. KeyError \u2013 if the keys differ and intersection=False. AssertionError \u2013 if two values are not close. The message names the key and the root mean squared error. RuntimeError \u2013 if the shapes of two tensors cannot be broadcast together. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, assert_close \u003e\u003e\u003e a = TensorDict(x=torch.zeros(3), y=torch.ones(3)) \u003e\u003e\u003e assert_close(a, a.clone()) True \u003e\u003e\u003e b = TensorDict(x=torch.full((3,), 0.01), y=torch.ones(3)) \u003e\u003e\u003e assert_close(a, b, atol=0.1, rtol=0) True \u003e\u003e\u003e assert_close(a, b) Traceback (most recent call last): ... AssertionError: key (\u0027x\u0027,) does not match, got mse = 0.0100",
+       "articleBody": "assert_allclose_td# tensordict.assert_allclose_td(actual: T, expected: T, rtol: float | None = None, atol: float | None = None, equal_nan: bool = True, intersection: bool = False, msg: str = \u0027\u0027, prefix: NestedKey = ()) \u2192 bool# Asserts that two tensordicts have the same keys and close values. Each pair of tensors is compared with torch.testing.assert_close(), which also checks that the dtypes, shapes and devices match. Nested tensordicts are compared entry by entry, and two lazy stacks are compared stack by stack. Non-tensor data is not compared. Tensorclasses are accepted. assert_allclose_td is another name for this function. Parameters: actual (TensorDictBase) \u2013 the tensordict to check. expected (TensorDictBase) \u2013 the tensordict with the expected values. rtol (float, optional) \u2013 the relative tolerance. Defaults to None, which uses the default of torch.testing.assert_close() for the dtype. atol (float, optional) \u2013 the absolute tolerance. Defaults to None, which uses the default of torch.testing.assert_close() for the dtype. equal_nan (bool, optional) \u2013 if True, two NaN values are equal. Defaults to True. intersection (bool, optional) \u2013 if True, compares only the keys that both tensordicts have. If False, different key sets raise a KeyError. Defaults to False. msg (str, optional) \u2013 a message appended to the error message. Defaults to \"\". prefix (NestedKey, optional) \u2013 a key prepended to the keys in the error messages. Defaults to (). Returns: True if the check passes. Raises: TypeError \u2013 if actual or expected is not a tensordict or a tensorclass. KeyError \u2013 if the keys differ and intersection=False. AssertionError \u2013 if two values are not close. The message names the key and the root mean squared error, followed by torch.testing.assert_close()\u2019s description of the mismatch. RuntimeError \u2013 if the shapes of two tensors cannot be broadcast together. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, assert_close \u003e\u003e\u003e a = TensorDict(x=torch.zeros(3), y=torch.ones(3)) \u003e\u003e\u003e assert_close(a, a.clone()) True \u003e\u003e\u003e b = TensorDict(x=torch.full((3,), 0.01), y=torch.ones(3)) \u003e\u003e\u003e assert_close(a, b, atol=0.1, rtol=0) True \u003e\u003e\u003e assert_close(a, b) Traceback (most recent call last): ... AssertionError: key (\u0027x\u0027,) does not match, got mse = 0.0100 Tensor-likes are not close! ...",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

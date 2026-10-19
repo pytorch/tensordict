@@ -1,6 +1,6 @@
 # TensorDictBase.uint8
 
-TensorDictBase.uint8() → Self
+TensorDictBase.uint8(***, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Returns a tensordict whose tensor leaves are cast to `torch.uint8`.
 

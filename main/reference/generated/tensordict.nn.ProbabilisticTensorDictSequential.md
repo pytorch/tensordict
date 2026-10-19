@@ -316,7 +316,7 @@ Raises:
 
 [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the sequence has no probabilistic module.
 
-get_dist_params(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution), [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)]
+get_dist_params(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *tensordict_out: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Runs every module except the last one, and returns the tensordict with the distribution parameters.
 

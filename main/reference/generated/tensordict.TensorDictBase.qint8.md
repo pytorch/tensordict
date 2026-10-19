@@ -1,6 +1,6 @@
 # TensorDictBase.qint8
 
-TensorDictBase.qint8() → Self
+TensorDictBase.qint8(***, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Returns a tensordict whose tensor leaves are cast to `torch.qint8`.
 

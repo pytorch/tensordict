@@ -1,6 +1,6 @@
 # TensorDictBase.quint8
 
-TensorDictBase.quint8() → Self
+TensorDictBase.quint8(***, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Returns a tensordict whose tensor leaves are cast to `torch.quint8`.
 

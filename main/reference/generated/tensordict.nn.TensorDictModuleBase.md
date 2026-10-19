@@ -185,10 +185,8 @@ Returns:
 
 Raises:
 
-- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if a single key is given and it is not in
- `out_keys`.
-- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if several keys are given and one of them is not in
- `out_keys`.
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if a key is not in `out_keys`. The error names the
+ missing keys, and is also a `RuntimeError`.
 
 Examples
 

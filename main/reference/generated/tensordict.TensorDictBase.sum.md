@@ -13,8 +13,8 @@ leaf instead, and the result keeps the batch size. Defaults to
 `None`, which reduces every element of each leaf, and the result
 has an empty batch size.
 - **keepdim** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the reduced batch dimensions are
-kept with size 1. Not allowed with `dim="feature"`. Without a
-`dim`, pass `dim=None` to use it. Defaults to `False`.
+kept with size 1. Not allowed with `dim="feature"`. Defaults to
+`False`.
 
 Keyword Arguments:
 

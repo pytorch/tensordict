@@ -1,6 +1,6 @@
 # TensorDictBase.float64
 
-TensorDictBase.float64() → Self
+TensorDictBase.float64(***, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Returns a tensordict whose tensor leaves are cast to `torch.float64`.
 

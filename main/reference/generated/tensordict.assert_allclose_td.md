@@ -42,7 +42,8 @@ Raises:
  tensorclass.
 - [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the keys differ and `intersection=False`.
 - [**AssertionError**](https://docs.python.org/3/builtins/exceptions.html#AssertionError) - if two values are not close. The message names the
- key and the root mean squared error.
+ key and the root mean squared error, followed by
+ [`torch.testing.assert_close()`](https://docs.pytorch.org/docs/stable/testing.html#torch.testing.assert_close)'s description of the mismatch.
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the shapes of two tensors cannot be broadcast
  together.
 
@@ -57,8 +58,10 @@ True
 >>> b = TensorDict(x=torch.full((3,), 0.01), y=torch.ones(3))
 >>> assert_close(a, b, atol=0.1, rtol=0)
 True
->>> assert_close(a, b)
+>>> assert_close(a, b) 
 Traceback (most recent call last):
  ...
 AssertionError: key ('x',) does not match, got mse = 0.0100
+Tensor-likes are not close!
+...
 ```

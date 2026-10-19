@@ -316,25 +316,25 @@ Dtype
 | [`TensorDictBase.float`](generated/tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.float32` (`torch.float`). |
 | [`TensorDictBase.double`](generated/tensordict.TensorDictBase.double.html#tensordict.TensorDictBase.double)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.float64` (`torch.double`). |
 | [`TensorDictBase.int`](generated/tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.int32` (`torch.int`). |
-| [`TensorDictBase.bfloat16`](generated/tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16)() | Returns a tensordict whose tensor leaves are cast to `torch.bfloat16`. |
-| [`TensorDictBase.float16`](generated/tensordict.TensorDictBase.float16.html#tensordict.TensorDictBase.float16)() | Returns a tensordict whose tensor leaves are cast to `torch.float16`. |
-| [`TensorDictBase.float32`](generated/tensordict.TensorDictBase.float32.html#tensordict.TensorDictBase.float32)() | Returns a tensordict whose tensor leaves are cast to `torch.float32`. |
-| [`TensorDictBase.float64`](generated/tensordict.TensorDictBase.float64.html#tensordict.TensorDictBase.float64)() | Returns a tensordict whose tensor leaves are cast to `torch.float64`. |
-| [`TensorDictBase.int8`](generated/tensordict.TensorDictBase.int8.html#tensordict.TensorDictBase.int8)() | Returns a tensordict whose tensor leaves are cast to `torch.int8`. |
-| [`TensorDictBase.int16`](generated/tensordict.TensorDictBase.int16.html#tensordict.TensorDictBase.int16)() | Returns a tensordict whose tensor leaves are cast to `torch.int16`. |
-| [`TensorDictBase.int32`](generated/tensordict.TensorDictBase.int32.html#tensordict.TensorDictBase.int32)() | Returns a tensordict whose tensor leaves are cast to `torch.int32`. |
-| [`TensorDictBase.int64`](generated/tensordict.TensorDictBase.int64.html#tensordict.TensorDictBase.int64)() | Returns a tensordict whose tensor leaves are cast to `torch.int64`. |
-| [`TensorDictBase.uint8`](generated/tensordict.TensorDictBase.uint8.html#tensordict.TensorDictBase.uint8)() | Returns a tensordict whose tensor leaves are cast to `torch.uint8`. |
-| [`TensorDictBase.uint16`](generated/tensordict.TensorDictBase.uint16.html#tensordict.TensorDictBase.uint16)() | Returns a tensordict whose tensor leaves are cast to `torch.uint16`. |
-| [`TensorDictBase.uint32`](generated/tensordict.TensorDictBase.uint32.html#tensordict.TensorDictBase.uint32)() | Returns a tensordict whose tensor leaves are cast to `torch.uint32`. |
-| [`TensorDictBase.uint64`](generated/tensordict.TensorDictBase.uint64.html#tensordict.TensorDictBase.uint64)() | Returns a tensordict whose tensor leaves are cast to `torch.uint64`. |
-| [`TensorDictBase.complex32`](generated/tensordict.TensorDictBase.complex32.html#tensordict.TensorDictBase.complex32)() | Returns a tensordict whose tensor leaves are cast to `torch.complex32`. |
-| [`TensorDictBase.complex64`](generated/tensordict.TensorDictBase.complex64.html#tensordict.TensorDictBase.complex64)() | Returns a tensordict whose tensor leaves are cast to `torch.complex64`. |
-| [`TensorDictBase.complex128`](generated/tensordict.TensorDictBase.complex128.html#tensordict.TensorDictBase.complex128)() | Returns a tensordict whose tensor leaves are cast to `torch.complex128`. |
-| [`TensorDictBase.qint8`](generated/tensordict.TensorDictBase.qint8.html#tensordict.TensorDictBase.qint8)() | Returns a tensordict whose tensor leaves are cast to `torch.qint8`. |
-| [`TensorDictBase.qint32`](generated/tensordict.TensorDictBase.qint32.html#tensordict.TensorDictBase.qint32)() | Returns a tensordict whose tensor leaves are cast to `torch.qint32`. |
-| [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)() | Returns a tensordict whose tensor leaves are cast to `torch.quint8`. |
-| [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)() | Returns a tensordict whose tensor leaves are cast to `torch.quint4x2`. |
+| [`TensorDictBase.bfloat16`](generated/tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.bfloat16`. |
+| [`TensorDictBase.float16`](generated/tensordict.TensorDictBase.float16.html#tensordict.TensorDictBase.float16)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.float16`. |
+| [`TensorDictBase.float32`](generated/tensordict.TensorDictBase.float32.html#tensordict.TensorDictBase.float32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.float32`. |
+| [`TensorDictBase.float64`](generated/tensordict.TensorDictBase.float64.html#tensordict.TensorDictBase.float64)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.float64`. |
+| [`TensorDictBase.int8`](generated/tensordict.TensorDictBase.int8.html#tensordict.TensorDictBase.int8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.int8`. |
+| [`TensorDictBase.int16`](generated/tensordict.TensorDictBase.int16.html#tensordict.TensorDictBase.int16)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.int16`. |
+| [`TensorDictBase.int32`](generated/tensordict.TensorDictBase.int32.html#tensordict.TensorDictBase.int32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.int32`. |
+| [`TensorDictBase.int64`](generated/tensordict.TensorDictBase.int64.html#tensordict.TensorDictBase.int64)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.int64`. |
+| [`TensorDictBase.uint8`](generated/tensordict.TensorDictBase.uint8.html#tensordict.TensorDictBase.uint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.uint8`. |
+| [`TensorDictBase.uint16`](generated/tensordict.TensorDictBase.uint16.html#tensordict.TensorDictBase.uint16)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.uint16`. |
+| [`TensorDictBase.uint32`](generated/tensordict.TensorDictBase.uint32.html#tensordict.TensorDictBase.uint32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.uint32`. |
+| [`TensorDictBase.uint64`](generated/tensordict.TensorDictBase.uint64.html#tensordict.TensorDictBase.uint64)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.uint64`. |
+| [`TensorDictBase.complex32`](generated/tensordict.TensorDictBase.complex32.html#tensordict.TensorDictBase.complex32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex32`. |
+| [`TensorDictBase.complex64`](generated/tensordict.TensorDictBase.complex64.html#tensordict.TensorDictBase.complex64)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex64`. |
+| [`TensorDictBase.complex128`](generated/tensordict.TensorDictBase.complex128.html#tensordict.TensorDictBase.complex128)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex128`. |
+| [`TensorDictBase.qint8`](generated/tensordict.TensorDictBase.qint8.html#tensordict.TensorDictBase.qint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint8`. |
+| [`TensorDictBase.qint32`](generated/tensordict.TensorDictBase.qint32.html#tensordict.TensorDictBase.qint32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint32`. |
+| [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint8`. |
+| [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint4x2`. |
 
 `to` and the dtype shorthands take a `cast_filter` predicate
 `fn(key, value) -> bool` that selects the leaves to cast. The predicates
