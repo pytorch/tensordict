@@ -1789,7 +1789,32 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             lpks.extend(getattr(m, "log_prob_keys", []))
         return lpks
 
-    log_prob_key = ProbabilisticTensorDictModule.log_prob_key
+    @property
+    def log_prob_key(self):
+        """The log-probability key of the sequence, when :attr:`log_prob_keys` has exactly one element.
+
+        See the :ref:`log-probability key table <log-prob-keys>`.
+
+        Raises:
+            AttributeError: if :attr:`log_prob_keys` does not have exactly one
+                element (use :attr:`log_prob_keys`), or if
+                :func:`~tensordict.nn.composite_lp_aggregate` changed since a
+                module was built. The error message names the inner
+                ``ModuleList``.
+        """
+        # An AttributeError keeps getattr() with a default, hasattr() and
+        # inspect.getmembers() working. Python then calls
+        # TensorDictModule.__getattr__, which raises its own error.
+        try:
+            log_prob_keys = self.log_prob_keys
+        except RuntimeError as err:
+            raise AttributeError("log_prob_key") from err
+        if len(log_prob_keys) == 1:
+            return log_prob_keys[0]
+        raise AttributeError(
+            f"log_prob_key needs exactly one log-probability key, got {log_prob_keys}. "
+            f"Use log_prob_keys instead."
+        )
 
     @property
     def dist_params_keys(self) -> List[NestedKey]:

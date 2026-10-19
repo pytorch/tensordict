@@ -8,6 +8,7 @@ import contextlib
 import copy
 import functools
 import importlib
+import inspect
 import os
 import pathlib
 import pickle
@@ -2538,6 +2539,75 @@ class TestTDSequence:
             assert set(lp.keys()) == expected
             for key in expected:
                 torch.testing.assert_close(lp[key], td[key])
+
+    @pytest.mark.parametrize("aggregate", [True, False])
+    def test_probtdseq_log_prob_key(self, aggregate):
+        # The sequence gives its one log-probability key. With several, the
+        # lookup fails with an AttributeError, as on main, so getattr() with a
+        # default, hasattr() and inspect.getmembers() keep working.
+        with set_composite_lp_aggregate(aggregate):
+            prob_a = ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+            )
+            prob_b = ProbabilisticTensorDictModule(
+                in_keys={"loc": "a"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+                log_prob_key="lp_b",
+            )
+            seq = ProbabilisticTensorDictSequential(prob_a)
+            assert seq.log_prob_key == prob_a.log_prob_key
+            nested = ProbabilisticTensorDictSequential(
+                TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["loc"]),
+                seq,
+            )
+            assert nested.log_prob_key == prob_a.log_prob_key
+            assert hasattr(nested, "log_prob_key")
+            seq2 = ProbabilisticTensorDictSequential(prob_a, prob_b)
+            with pytest.raises(AttributeError):
+                seq2.log_prob_key
+            assert getattr(seq2, "log_prob_key", None) is None
+            assert not hasattr(seq2, "log_prob_key")
+            # getmembers() reads every attribute, the deprecated ones too.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                assert isinstance(inspect.getmembers(seq2), list)
+
+    @pytest.mark.parametrize("aggregate_changed", [False, True])
+    def test_probtdseq_log_prob_key_composite(self, aggregate_changed):
+        # A composite distribution with composite_lp_aggregate() False has
+        # several log-probability keys, and a change of the setting after the
+        # build makes log_prob_keys raise: log_prob_key is then missing.
+        with set_composite_lp_aggregate(aggregate_changed):
+            seq = ProbabilisticTensorDictSequential(
+                ProbabilisticTensorDictModule(
+                    in_keys=["params"],
+                    out_keys=["a", "b"],
+                    distribution_class=CompositeDistribution,
+                    distribution_kwargs={
+                        "distribution_map": {"a": Normal, "b": Normal}
+                    },
+                    return_log_prob=True,
+                )
+            )
+        with set_composite_lp_aggregate(False):
+            with pytest.raises(AttributeError):
+                seq.log_prob_key
+            assert getattr(seq, "log_prob_key", None) is None
+            assert not hasattr(seq, "log_prob_key")
+            if aggregate_changed:
+                # getmembers() also reads log_prob_keys, which raises here.
+                return
+            # getmembers() reads every attribute, the deprecated ones too.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                assert isinstance(inspect.getmembers(seq), list)
 
     def test_probtdseq_log_prob_aggregate_changed_after_init(self):
         # Modules built while composite_lp_aggregate() was True keep the
