@@ -1468,8 +1468,16 @@ class _Serialization:
         Use it to preallocate a large buffer on disk, then fill it with
         :meth:`~.update_` or by indexing: :meth:`~.memmap` would write every
         value first. New files are filled with zeros. A file that already
-        exists at the path of a leaf (with ``existsok=True``) keeps its
-        content. The tensordict is not changed. See :ref:`saving`.
+        exists at the path of a leaf (with ``existsok=True``) is mapped as it
+        is and keeps its content, which lets you reopen a buffer. If its size
+        is not the byte size of the leaf, a ``FutureWarning`` is emitted: a
+        larger leaf grows the file with zeros, and a smaller one maps its
+        start. Starting with TensorDict 0.17, the default will change to
+        raising a ``RuntimeError`` in that case. A file of the same size but
+        written with another dtype or shape is not detected, and its bytes
+        are read as the new dtype. An archive (``".tdz"``) is always
+        rebuilt with zeros. The tensordict is not changed. See
+        :ref:`saving`.
 
         The result is locked (see :ref:`keys-locking`): you can write into its
         leaves in place, but you cannot add, remove or replace an entry. Once

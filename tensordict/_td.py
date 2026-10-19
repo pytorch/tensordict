@@ -2603,6 +2603,7 @@ class TensorDict(TensorDictBase):
                 like=not copy_data,
                 existsok=existsok,
                 robust_key=robust_key,
+                warn_existing_size=False,
             )
             _update_metadata(
                 metadata=metadata,

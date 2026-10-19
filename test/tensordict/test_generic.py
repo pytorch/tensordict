@@ -8908,6 +8908,46 @@ class TestGeneric:
         assert (td == 1).all()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like_existing_file_size(self, tmpdir, num_threads):
+        # https://github.com/pytorch/tensordict/issues/2968
+        # memmap_like maps an existing file as it is, and warns when its size
+        # is not that of the new leaf, which raises from TensorDict 0.17.
+        def memmap_like(prefix, **kwargs):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                out = TensorDict(**kwargs).memmap_like(prefix, num_threads=num_threads)
+            record = [w for w in record if issubclass(w.category, FutureWarning)]
+            return out, [str(w.message) for w in record]
+
+        prefix = Path(tmpdir) / "data"
+        TensorDict(a=torch.arange(1.0, 4.0), b=torch.ones(2)).memmap(prefix)
+        # same dtype and shape: the old values, silently
+        out, messages = memmap_like(prefix, a=torch.zeros(3), b=torch.zeros(2))
+        assert out["a"].tolist() == [1.0, 2.0, 3.0]
+        assert messages == []
+        # same size in bytes: not seen, silent
+        out, messages = memmap_like(prefix, a=torch.zeros(3, dtype=torch.int32))
+        assert out["a"].tolist() == [1065353216, 1073741824, 1077936128]
+        assert messages == []
+        # a larger leaf grows the file, a smaller one maps its start
+        out, messages = memmap_like(prefix, a=torch.zeros(5), b=torch.zeros(1))
+        assert out["a"].tolist() == [1.0, 2.0, 3.0, 0.0, 0.0]
+        assert out["b"].tolist() == [1.0]
+        assert len(messages) == 2
+        assert all("TensorDict 0.17" in message for message in messages)
+        assert any("a.memmap (12 bytes)" in message for message in messages)
+        # new files are zero-filled, silently
+        out, messages = memmap_like(Path(tmpdir) / "new", a=torch.ones(3))
+        assert out["a"].tolist() == [0.0, 0.0, 0.0]
+        assert messages == []
+        # an archive is rebuilt, silently
+        archive = Path(tmpdir) / "data.tdz"
+        TensorDict(a=torch.ones(3)).memmap(archive)
+        out, messages = memmap_like(archive, a=torch.ones(5))
+        assert out["a"].tolist() == [0.0] * 5
+        assert messages == []
+
     @pytest.mark.parametrize("method", ["memmap", "memmap_", "memmap_like"])
     @pytest.mark.parametrize("return_early", [False, True])
     def test_memmap_threads_raise_worker_error(

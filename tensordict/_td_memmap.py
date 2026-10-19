@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import os
+import warnings
 from pathlib import Path
 
 import torch
@@ -44,10 +46,28 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
 
 
 def _populate_memmap(
-    *, dest, value, key, copy_existing, prefix, like, existsok, robust_key
+    *,
+    dest,
+    value,
+    key,
+    copy_existing,
+    prefix,
+    like,
+    existsok,
+    robust_key,
+    warn_existing_size=True,
 ):
-    """Populates ``dest`` with a memory-mapped copy of ``value``."""
-    from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
+    """Populates ``dest`` with a memory-mapped copy of ``value``.
+
+    With ``like=True`` and ``warn_existing_size=True`` (as in ``memmap_like``),
+    an existing file whose size is not that of the leaf is mapped with a
+    FutureWarning (#2968).
+    """
+    from .utils import (
+        _encode_key_for_filesystem,
+        _get_robust_key_setting_with_warning,
+        _user_stacklevel,
+    )
 
     _raise_if_jagged(value, key)
     if prefix is None:
@@ -70,6 +90,12 @@ def _populate_memmap(
             )
     else:
         shape = None
+    file_size = None
+    if like and warn_existing_size and existsok and filename is not None:
+        try:
+            file_size = os.path.getsize(filename)
+        except OSError:
+            pass
     memmap_tensor = MemoryMappedTensor.from_tensor(
         value.data if value.requires_grad else value,
         filename=filename,
@@ -78,6 +104,19 @@ def _populate_memmap(
         shape=shape,
         existsok=existsok,
     )
+    if file_size is not None:
+        nbytes = memmap_tensor.untyped_storage().nbytes()
+        if file_size != nbytes:
+            warnings.warn(
+                f"memmap_like mapped the existing file {filename} ({file_size} "
+                f"bytes) as it is, for the leaf {key!r} of dtype {value.dtype} "
+                f"({nbytes} bytes). Starting with TensorDict 0.17, the default "
+                "will change to raising a RuntimeError when an existing file "
+                "does not have the size of the leaf. Remove the file, or use "
+                "a new prefix, to get a file filled with zeros.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
     dest._tensordict[key] = memmap_tensor
     return memmap_tensor
 
