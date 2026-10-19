@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from tensordict._unbatched import UnbatchedTensor
 from tensordict.base import _is_leaf_nontensor
-from tensordict.tensorclass import NonTensorData
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -124,6 +124,30 @@ def _is_json_value(value) -> bool:
     return False
 
 
+def _decode_non_tensor_stack(
+    values, stack_batch_size, stack_dim, batch_size: list[int]
+) -> NonTensorStack:
+    """Rebuild a NonTensorStack from its ``tolist()`` values, batch size and stack dim."""
+    if not (
+        isinstance(values, list)
+        and isinstance(stack_batch_size, list)
+        and all(type(dim) is int and dim >= 0 for dim in stack_batch_size)
+        and stack_batch_size[: len(batch_size)] == batch_size
+        and type(stack_dim) is int
+        and 0 <= stack_dim < len(stack_batch_size)
+    ):
+        raise ValueError("Invalid uncollated header: invalid non-tensor stack.")
+    stack = NonTensorStack._from_list(values, device=None, ndim=len(stack_batch_size))
+    if stack_dim:
+        stack = torch.stack(list(stack.unbind(stack_dim)), stack_dim)
+    if list(stack.batch_size) != stack_batch_size:
+        raise ValueError(
+            "Invalid uncollated header: the values of a non-tensor stack do not "
+            "match its batch size."
+        )
+    return stack
+
+
 def _tensor_to_numpy(tensor: torch.Tensor) -> np.ndarray:
     """View a CPU tensor as a numpy array without copying."""
     return tensor.detach().numpy()
@@ -220,10 +244,10 @@ async def send_tensordict(
     Raises:
         ImportError: if ``ucxx`` is not installed.
         ValueError: with ``consolidated=False``, if the tensordict holds a
-            non-tensor entry other than a :class:`~tensordict.NonTensorData`
-            whose value is a ``str``, ``int``, ``float``, ``bool``, ``None``,
-            or a list or dict (with ``str`` keys) of them. Send it with
-            ``consolidated=True``.
+            non-tensor entry other than a :class:`~tensordict.NonTensorData` or
+            :class:`~tensordict.NonTensorStack` whose values are ``str``,
+            ``int``, ``float``, ``bool``, ``None``, or lists or dicts (with
+            ``str`` keys) of them. Send it with ``consolidated=True``.
     """
     if consolidated:
         if td.is_consolidated():
@@ -277,14 +301,16 @@ async def recv_tensordict(
     Keyword Args:
         device (torch.device, str or int, optional): the device to receive on.
             Defaults to ``None``, which uses the device of the storage of ``td``
-            if it is consolidated, and the CPU otherwise.
+            if it is consolidated, and the CPU otherwise. With
+            ``consolidated=False``, the default is the CPU.
         consolidated (bool, optional): the ``consolidated`` argument of the
             sender's :func:`send_tensordict`. With ``False``, reads the
             leaves one by one, as a pipe with ``consolidated=False`` does, and
             returns a new tensordict: ``td`` is not used. Defaults to ``True``.
 
     Returns:
-        The received tensordict, ``td`` or a new consolidated tensordict.
+        The received tensordict: ``td`` or a new consolidated tensordict, or
+        with ``consolidated=False``, a new tensordict that is not consolidated.
 
     Raises:
         ImportError: if ``ucxx`` is not installed.
@@ -356,11 +382,16 @@ async def _send_tensordict_uncollated(endpoint, td: TensorDictBase) -> None:
             tensors.append(value)
         elif type(value) is NonTensorData and _is_json_value(value.data):
             header["non_tensors"].append([wire_key, value.data])
+        elif type(value) is NonTensorStack and _is_json_value(values := value.tolist()):
+            header["non_tensors"].append(
+                [wire_key, values, list(value.batch_size), value.stack_dim]
+            )
         else:
             raise ValueError(
                 f"consolidated=False cannot send the {type(value).__name__} entry "
-                f"{key!r}: it sends only NonTensorData whose value is a str, int, "
-                "float, bool, None, or a list or dict (with str keys) of them. "
+                f"{key!r}: it sends only NonTensorData and NonTensorStack entries "
+                "whose values are str, int, float, bool, None, or lists or dicts "
+                "(with str keys) of them. "
                 "Send it with consolidated=True."
             )
 
@@ -412,13 +443,15 @@ async def _recv_tensordict_uncollated(
         )
     if not isinstance(unbatched, list) or not (
         isinstance(non_tensors, list)
-        and all(isinstance(entry, list) and len(entry) == 2 for entry in non_tensors)
+        and all(
+            isinstance(entry, list) and len(entry) in (2, 4) for entry in non_tensors
+        )
     ):
         raise ValueError(
             "Invalid uncollated header: expected unbatched and non_tensors lists."
         )
     keys = [_decode_uncollated_key(key) for key in keys]
-    non_tensor_keys = [_decode_uncollated_key(key) for key, _ in non_tensors]
+    non_tensor_keys = [_decode_uncollated_key(entry[0]) for entry in non_tensors]
     unbatched = {_decode_uncollated_key(key) for key in unbatched}
     key_set = set(keys) | set(non_tensor_keys)
     if len(key_set) != len(keys) + len(non_tensor_keys):
@@ -429,6 +462,10 @@ async def _recv_tensordict_uncollated(
         )
     if not unbatched.issubset(keys):
         raise ValueError("Invalid uncollated header: unknown unbatched key.")
+    stacks = [
+        _decode_non_tensor_stack(*entry[1:], batch_size) if len(entry) == 4 else None
+        for entry in non_tensors
+    ]
     dtypes = []
     for key, dtype_name, shape in zip(keys, dtype_names, shapes):
         if not isinstance(dtype_name, str) or dtype_name not in _WIRE_DTYPES:
@@ -464,8 +501,11 @@ async def _recv_tensordict_uncollated(
         result[key] = UnbatchedTensor(tensor) if key in unbatched else tensor
 
     result = TensorDict(result, batch_size=batch_size)
-    for key, (_, value) in zip(non_tensor_keys, non_tensors):
-        result.set_non_tensor(key, value)
+    for key, entry, stack in zip(non_tensor_keys, non_tensors, stacks):
+        if stack is None:
+            result.set_non_tensor(key, entry[1])
+        else:
+            result.set(key, stack)
     return result
 
 
@@ -511,9 +551,11 @@ class TensorDictPipe:
     tensordict, nested ones included, one by one. The receiver builds a new
     tensordict each time, with the batch size of the sent one; its nested
     tensordicts get the same batch size. A non-tensor entry must be a
-    :class:`~tensordict.NonTensorData` whose value is a ``str``, ``int``,
-    ``float``, ``bool``, ``None``, or a list or dict (with ``str`` keys) of
-    them: a send of any other non-tensor entry raises a ``ValueError``.
+    :class:`~tensordict.NonTensorData` or :class:`~tensordict.NonTensorStack`
+    whose values are ``str``, ``int``, ``float``, ``bool``, ``None``, or lists
+    or dicts (with ``str`` keys) of them: a send of any other non-tensor entry
+    raises a ``ValueError``. A stack comes back with the same batch size and
+    stack dimension.
 
     A pipe is a context manager and an async context manager, which close
     it at the end of the block, and an async iterator: ``async for td in

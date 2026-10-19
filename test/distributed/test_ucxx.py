@@ -448,6 +448,14 @@ class TestRoundtrip:
                 {"non_tensors": [["x", 1]]},
                 {"non_tensors": [[["x", "y"], 1]]},
                 {"non_tensors": [["y", 1], ["y", 2]]},
+                {"non_tensors": [["y", ["a"], [1]]]},
+                {"non_tensors": [["y", "a", [1], 0]]},
+                {"non_tensors": [["y", ["a"], [], 0]]},
+                {"non_tensors": [["y", ["a"], [1], 1]]},
+                {"non_tensors": [["y", ["a"], [1], True]]},
+                {"non_tensors": [["y", ["a", "b"], [3], 0]]},
+                {"non_tensors": [["y", ["a", "b", "c"], [3], 0]], "batch_size": [2]},
+                {"non_tensors": [["y", [["a"], ["b", "c"]], [2, 1], 0]]},
             )
         ],
     )
@@ -547,6 +555,34 @@ class TestRoundtrip:
             assert isinstance(result.get(key), NonTensorData)
             assert result[key] == td[key]
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("receiver", ["pipe", "recv_tensordict"])
+    def test_uncollated_non_tensor_stack(self, stack_dim, receiver):
+        # https://github.com/pytorch/tensordict/issues/2966
+        tds = [
+            TensorDict(
+                x=torch.zeros(3),
+                text=f"t{i}",
+                nested=TensorDict(v=NonTensorData([i, {"k": None}]), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        td = torch.stack(tds, stack_dim)
+        ep = _FakeEndpoint()
+        asyncio.run(TensorDictPipe(ep, consolidated=False).asend(td))
+        if receiver == "pipe":
+            result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        else:
+            result = asyncio.run(recv_tensordict.__wrapped__(ep, consolidated=False))
+        assert result.batch_size == td.batch_size
+        for key in ("text", ("nested", "v")):
+            sent, received = td.get(key), result.get(key)
+            assert type(received) is NonTensorStack
+            assert received.batch_size == sent.batch_size
+            assert received.stack_dim == sent.stack_dim == stack_dim
+            assert received.tolist() == sent.tolist()
+
     def test_uncollated_old_sender(self):
         # A sender without batch_size and non_tensors in its header.
         header = {"keys": ["x"], "dtypes": ["torch.float32"], "shapes": [[2]]}
@@ -568,7 +604,7 @@ class TestRoundtrip:
             NonTensorData((1, 2)),
             NonTensorData({1: "a"}),
             NonTensorData([1, {"k": object()}]),
-            NonTensorStack(NonTensorData("a"), NonTensorData("b")),
+            NonTensorStack(NonTensorData((1,)), NonTensorData((2,))),
         ],
     )
     @pytest.mark.parametrize("sender", ["pipe", "send_tensordict"])
