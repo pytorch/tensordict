@@ -355,6 +355,15 @@ class _KeyThroughLeafError(ValueError):
     """
 
 
+class _InplaceWriteError(ValueError, RuntimeError):
+    """The error raised when an in-place write of an entry fails.
+
+    Subclasses ValueError, the type that :meth:`~TensorDictBase.set_` raised
+    before, and RuntimeError, which torch raises for the same write in
+    :meth:`~TensorDictBase.update_` and :meth:`~TensorDictBase.copy_`.
+    """
+
+
 def _key_through_leaf_error(key: tuple, i: int, value: Any) -> _KeyThroughLeafError:
     """The error for reading ``key[i:]`` in ``value``, the leaf at ``key[i - 1]``."""
     rest = key[i] if len(key) == i + 1 else key[i:]
@@ -4862,7 +4871,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 and the call adds or replaces an entry, or if the leading
                 dimensions of the value do not match the batch size.
             ValueError: if ``inplace=True`` and the value does not fit the
-                shape of the existing entry.
+                shape of the existing entry. The error is also a
+                ``RuntimeError``, the type that :meth:`~.update_` raises.
 
         Examples:
             >>> import torch
@@ -5235,6 +5245,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             RuntimeError: if the leading dimensions of the value do not match
                 the batch size.
             ValueError: if the value does not fit the shape of the entry.
+                The error is also a ``RuntimeError``, the type that
+                :meth:`~.update_` raises.
 
         Examples:
             >>> import torch
