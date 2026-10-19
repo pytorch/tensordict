@@ -1798,6 +1798,27 @@ def _warn_lazy_is_empty() -> None:
     )
 
 
+# Keywords that apply() and named_apply() take through **constructor_kwargs
+# and do not warn about: _apply_nest honours the first four, and checked (like
+# named in named_apply) collides with the value they pass themselves, so the
+# call raises a TypeError.
+_APPLY_NEST_KWARGS = frozenset(
+    {"named", "nested_keys", "prefix", "call_on_unbatched", "checked"}
+)
+
+
+def _warn_ignored_kwargs(method: str, kwargs: Iterable[str]) -> None:
+    """Warns that ``method`` ignores the keyword arguments ``kwargs``, which raise a TypeError from 0.17 (#2979)."""
+    names = ", ".join(repr(name) for name in kwargs)
+    warnings.warn(
+        f"{method}() ignores the keyword argument(s) {names}. Starting with "
+        "TensorDict 0.17, the default will change to raising a TypeError for "
+        "unknown keyword arguments.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_as_tensor_memmap() -> None:
     """Warns that ``as_tensor()`` keeps :class:`~tensordict.MemoryMappedTensor` leaves, until 0.17 (#2979)."""
     if is_compiling():
@@ -4890,6 +4911,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             non_blocking (bool, optional): if ``True``, copies between devices
                 can run asynchronously with respect to the host. Defaults to
                 ``False``.
+            **kwargs: ignored, with a :class:`FutureWarning`. Starting with
+                TensorDict 0.17, the default will change to raising a
+                ``TypeError`` for them, as :meth:`~.set_` does.
 
         Returns:
             ``self``.
@@ -4925,6 +4949,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        if kwargs:
+            _warn_ignored_kwargs("set", kwargs)
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
@@ -8029,7 +8055,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 given, ``out`` must have it. For a lazy stack, ``out`` must be a
                 lazy stack too, stacked along any dimension. See the warning
                 below about ``out=self``. Defaults to ``None``.
-            **constructor_kwargs: accepted and ignored.
+            **constructor_kwargs: ignored, with a :class:`FutureWarning`.
+                Starting with TensorDict 0.17, the default will change to
+                raising a ``TypeError`` for them.
 
         Returns:
             A new tensordict, ``out`` if it is given, or ``self`` if
@@ -8089,6 +8117,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> seen
             ['Tensor', 'NonTensorData']
         """
+        if constructor_kwargs:
+            ignored = [k for k in constructor_kwargs if k not in _APPLY_NEST_KWARGS]
+            if ignored:
+                _warn_ignored_kwargs("apply", ignored)
         result = self._apply_nest(
             fn,
             *others,
@@ -8191,7 +8223,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 given, ``out`` must have it. For a lazy stack, ``out`` must be a
                 lazy stack too, stacked along any dimension. See the warning
                 below about ``out=self``. Defaults to ``None``.
-            **constructor_kwargs: accepted and ignored.
+            **constructor_kwargs: ignored, with a :class:`FutureWarning`.
+                Starting with TensorDict 0.17, the default will change to
+                raising a ``TypeError`` for them.
 
         Returns:
             A new tensordict, ``out`` if it is given, or ``self`` if
@@ -8234,6 +8268,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.named_apply(lambda key, x, y: x + y, td)["nested", "a"]
             tensor([2., 2., 2.])
         """
+        if constructor_kwargs:
+            ignored = [k for k in constructor_kwargs if k not in _APPLY_NEST_KWARGS]
+            if ignored:
+                _warn_ignored_kwargs("named_apply", ignored)
         result = self._apply_nest(
             fn,
             *others,
