@@ -68,6 +68,7 @@ from tensordict.nn.probabilistic import (
     InteractionType,
     set_interaction_type,
 )
+from tensordict.nn.tensorclass_module import InputClass, OutputClass
 from tensordict.nn.utils import (
     _dispatch_td_nn_modules,
     _set_dispatch_td_nn_modules,
@@ -8061,6 +8062,22 @@ class TestEdgeCases:
             ValueError,
             match="Only TensorClassModuleBase implementations with both input and output type as TensorClass",
         ):
+            module.as_td_module()
+
+    @pytest.mark.parametrize("subscript", ["none", "typevars"])
+    def test_missing_type_arguments_conversion_error(self, subscript) -> None:
+        """Test that conversion fails with a ValueError when the types are not set."""
+        if subscript == "none":
+            base = TensorClassModuleBase
+        else:
+            base = TensorClassModuleBase[InputClass, OutputClass]
+
+        class UnsetModule(base):
+            def forward(self, x):
+                return x
+
+        module = UnsetModule()
+        with pytest.raises(ValueError, match="input/output types not set"):
             module.as_td_module()
 
     def test_field_named_fields(self) -> None:

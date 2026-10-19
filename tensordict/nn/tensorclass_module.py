@@ -132,7 +132,8 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
     :class:`torch.Tensor`, and implement :meth:`forward`. A type checker
     then knows the type of the input and output, and can report a wrong
     field name. The class reads both types from the subscript: a subclass
-    without it has no ``input_type`` and ``output_type``.
+    without it has no ``input_type`` and ``output_type``, and its
+    :meth:`as_td_module` raises a ``ValueError``.
 
     When both types are tensorclasses, :meth:`as_td_module` returns a
     module that takes and returns a tensordict, for example to put the
@@ -213,7 +214,8 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
 
         Raises:
             ValueError: if ``input_type`` or ``output_type`` is not a
-                tensorclass.
+                tensorclass, or if the subclass did not set each of them to a
+                class with the subscript.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -238,9 +240,17 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
             tensor([2., 2., 2.])
 
         """
+        input_type = getattr(self, "input_type", None)
+        output_type = getattr(self, "output_type", None)
+        if not (isinstance(input_type, type) and isinstance(output_type, type)):
+            raise ValueError(
+                "Generic input/output types not set in TensorClassModuleBase. To "
+                f"convert {type(self).__name__} to TensorDictModule, subclass "
+                "TensorClassModuleBase[InputClass, OutputClass] directly, with a "
+                "class for each type."
+            )
         if not (
-            issubclass(self.input_type, TensorClass)
-            and issubclass(self.output_type, TensorClass)
+            issubclass(input_type, TensorClass) and issubclass(output_type, TensorClass)
         ):
             raise ValueError(
                 "Only TensorClassModuleBase implementations with both input and "
