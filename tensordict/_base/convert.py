@@ -3051,11 +3051,13 @@ class _Conversion:
     def to_parquet(self, path, *, separator: str | None = None, **kwargs):
         """Writes the tensordict to a Parquet file, with one column per leaf.
 
-        The tensordict is converted with :meth:`~.to_pandas`, so the same
-        rules apply. Requires pandas. The file is written with
-        ``pyarrow.parquet.write_table`` when pyarrow is installed, and with
-        :meth:`pandas.DataFrame.to_parquet` otherwise. :meth:`~.from_parquet`
-        reads the file back.
+        The columns are built as in :meth:`~.to_pandas`, so the same rules
+        apply. Requires pyarrow or pandas. When pyarrow is installed, the
+        file is written with ``pyarrow.parquet.write_table``, from a pandas
+        DataFrame if pandas is installed and from the columns directly
+        otherwise. With pandas alone, the file is written with
+        :meth:`pandas.DataFrame.to_parquet`, which then needs fastparquet.
+        :meth:`~.from_parquet` reads the file back.
 
         Args:
             path (str or Path): the path of the Parquet file.
