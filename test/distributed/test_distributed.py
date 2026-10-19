@@ -571,6 +571,92 @@ class TestReduce:
                     w.terminate()
         assert out == ([3.0], [3.0], [3.0])
 
+    @staticmethod
+    def write_back_worker(queue, rank, mode, expanded):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29533"
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=2, timeout=timedelta(seconds=30)
+        )
+        v = float(rank + 1)
+        if expanded:
+            # Rank 0 cannot write the result back into expanded leaves.
+            members = [
+                TensorDict(a=torch.full((1,), v).expand(3), b=torch.full((3,), v))
+                for _ in range(2)
+            ]
+        else:
+            # Parameters, as from TensorDict.from_modules(..., lazy_stack=True).
+            members = [
+                TensorDict(
+                    a=nn.Parameter(torch.full((3,), v)),
+                    b=nn.Parameter(torch.full((3,), v)),
+                )
+                for _ in range(2)
+            ]
+        td = TensorDict(
+            s=LazyStackedTensorDict(*members), z=torch.full((2,), v), batch_size=[2]
+        )
+        error = None
+        try:
+            works = td.reduce(
+                0, async_op=mode != "sync", return_premature=mode == "premature"
+            )
+            for work in works or ():
+                work.wait()
+        except Exception as err:
+            error = type(err).__name__
+        result = (
+            error,
+            td["s", "b"].unique().tolist(),
+            td["s", "b"].requires_grad,
+            td["z"].unique().tolist(),
+        )
+        if rank == 0:
+            queue.put(result)
+        else:
+            # The other rank issues and finishes every collective.
+            assert error is None, error
+        dist.barrier()
+        dist.destroy_process_group()
+
+    @pytest.mark.parametrize("mode", ["sync", "async", "premature"])
+    def test_reduce_lazy_stack_requires_grad(self, set_context, mode):
+        assert self._run_write_back(mode, expanded=False) == (
+            None,
+            [3.0],
+            True,
+            [3.0],
+        )
+
+    @pytest.mark.parametrize("mode", ["sync", "async", "premature"])
+    def test_reduce_lazy_stack_write_back_error(self, set_context, mode):
+        error, _, _, z = self._run_write_back(mode, expanded=True)
+        # Rank 0 raises after every collective is issued, so the dense leaf
+        # is reduced and the other rank does not hang.
+        assert error is not None
+        assert z == [3.0]
+
+    @classmethod
+    def _run_write_back(cls, mode, expanded):
+        queue = mp.Queue(1)
+        workers = [
+            mp.Process(target=cls.write_back_worker, args=(queue, rank, mode, expanded))
+            for rank in range(2)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+                if w.is_alive():
+                    w.terminate()
+        assert all(w.exitcode == 0 for w in workers)
+        return out
+
 
 # =========================================
 # Test td.send

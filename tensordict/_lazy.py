@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import bisect
+import functools
 import numbers
 import operator
 import os
@@ -4179,7 +4180,9 @@ class LazyStackedTensorDict(TensorDictBase):
     # Override: issues the collectives of a dense tensordict with the same
     # keys and shapes, one per key on the stacked leaf. That leaf is a copy, so
     # rank dst, the only rank where the result is defined, writes it back into
-    # the members.
+    # the members once every collective is issued: in a callback with async_op,
+    # and at the root in sync mode, so that a failing write-back cannot stop
+    # the collectives of rank dst.
     def _reduce(
         self,
         dst,
@@ -4200,7 +4203,12 @@ class LazyStackedTensorDict(TensorDictBase):
         is_dst = dist.get_rank() == dst
 
         def write_back(key, value):
-            self._set_str(key, value, inplace=True, validated=True, ignore_lock=True)
+            # Like dist.reduce into a dense leaf that requires grad. no_grad is
+            # per thread, and the callback can run on a thread of the backend.
+            with torch.no_grad():
+                self._set_str(
+                    key, value, inplace=True, validated=True, ignore_lock=True
+                )
 
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
@@ -4221,7 +4229,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     lambda _, key=key, value=value: write_back(key, value)
                 )
             elif is_dst:
-                write_back(key, value)
+                work = functools.partial(write_back, key, value)
             _future_list.append(work)
         if not root:
             return _future_list
@@ -4231,6 +4239,9 @@ class LazyStackedTensorDict(TensorDictBase):
             for future in _future_list:
                 future.wait()
             return
+        for pending in _future_list:
+            if pending is not None:
+                pending()
 
     # Override: deletes the entry of each member that has it.
     def _del(self, key: tuple[str, ...]) -> None:

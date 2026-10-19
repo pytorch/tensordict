@@ -836,8 +836,9 @@ class _Distributed:
         (with ``gloo``, they can hold partial results): clone the tensordict
         before the call if you need them. A lazy stack reduces each stacked
         leaf, like a dense tensordict of the same keys and shapes, and rank
-        ``dst`` writes the result back into its members. See
-        :ref:`distributed-collectives`.
+        ``dst`` writes the result back into its members once every reduction is
+        issued. That write raises if a member leaf cannot be written in place,
+        such as an expanded tensor. See :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the result.
@@ -921,6 +922,11 @@ class _Distributed:
             for future in _future_list:
                 future.wait()
             return
+        # In sync mode, the lazy stacks of rank dst leave their write-backs in
+        # the list, so that a failing one cannot stop the collectives.
+        for pending in _future_list:
+            if pending is not None:
+                pending()
 
     def broadcast(
         self,
