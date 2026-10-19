@@ -1252,6 +1252,63 @@ class TestGeneric:
         assert result["nested", "c"] is td["nested", "c"]
 
     @pytest.mark.parametrize(
+        "args,kwargs,leaf_non_blocking,synced",
+        [
+            (("meta", torch.float64, False), {}, False, False),
+            ((torch.float64, False), {}, False, False),
+            ((torch.zeros((), dtype=torch.float64), False), {}, False, False),
+            (("meta", torch.float64), {"non_blocking": False}, False, False),
+            (("meta", torch.float64), {}, True, True),
+            (("meta", torch.float64), {"non_blocking": True}, True, False),
+            # A positional True is ignored (the 0.17 FutureWarning)
+            (("meta", torch.float64, True), {}, True, True),
+        ],
+    )
+    @pytest.mark.parametrize("kind", ["td", "sub", "view"])
+    def test_to_positional_non_blocking(
+        self, monkeypatch, args, kwargs, leaf_non_blocking, synced, kind
+    ):
+        # td.to("meta", torch.float64, False) copies the leaves as
+        # non_blocking=False does (#2958)
+        td = TensorDict(
+            a=torch.zeros(2),
+            nested=TensorDict(c=torch.zeros(2, 3), batch_size=[2]),
+            batch_size=[2],
+        )
+        if kind == "sub":
+            td = td._get_sub_tensordict(slice(None))
+        elif kind == "view":
+            with legacy_lazy_mode():
+                td = td.unsqueeze(0)
+            assert isinstance(td, _CustomOpTensorDict)
+        calls = []
+        tensor_to = torch.Tensor.to
+
+        def spy_to(tensor, *args, **kwargs):
+            calls.append(kwargs.get("non_blocking"))
+            return tensor_to(tensor, *args, **kwargs)
+
+        syncs = []
+        monkeypatch.setattr(torch.Tensor, "to", spy_to)
+        monkeypatch.setattr(
+            TensorDictBase, "_sync_all", lambda self: syncs.append(True)
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = td.to(*args, **kwargs)
+        future = [x for x in w if issubclass(x.category, FutureWarning)]
+        if args[-1] is True:
+            assert len(future) == 1
+            assert "positional non_blocking=True" in str(future[0].message)
+            assert future[0].filename == __file__
+        else:
+            assert future == []
+        assert calls and set(calls) == {leaf_non_blocking}
+        assert bool(syncs) is synced
+        assert result["a"].dtype == torch.float64
+        assert result["nested", "c"].dtype == torch.float64
+
+    @pytest.mark.parametrize(
         "kind",
         [
             "flat",
@@ -11100,7 +11157,12 @@ class TestGeneric:
             return tensordict.is_inexact(value)
 
         name, args, kwargs = call
-        out = getattr(td, name)(*args, cast_filter=cast_filter, **kwargs)
+        with (
+            pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked")
+            if name == "type" and td_type == "locked"
+            else contextlib.nullcontext()
+        ):
+            out = getattr(td, name)(*args, cast_filter=cast_filter, **kwargs)
         assert set(seen) == {
             ("x",),
             ("cells",),
@@ -11119,7 +11181,8 @@ class TestGeneric:
             assert out["cells"] is td["cells"]
             assert out.get_non_tensor("info") == "info"
         if td_type == "locked" and name != "type":
-            # type() does not propagate the lock, with or without cast_filter
+            # type() does not propagate the lock until 0.17 (#2959), with or
+            # without cast_filter
             assert out.is_locked
         elif td_type == "lazy":
             assert isinstance(out, LazyStackedTensorDict)

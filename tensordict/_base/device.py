@@ -43,6 +43,8 @@ from tensordict.utils import (
     _parse_to,
     _pin_mem,
     _PIN_MEM_TIMEOUT,
+    _positional_non_blocking,
+    _user_stacklevel,
     _zip_strict,
     DeviceType,
     is_non_tensor,
@@ -755,7 +757,12 @@ class _DeviceOps:
                 :func:`torch.compile`, these copies are blocking instead.
                 ``True`` copies without synchronizing: synchronize before you
                 read the results. ``False`` makes blocking copies. Defaults to
-                ``None``. Pass it by keyword: a positional value is ignored.
+                ``None``. It can also follow the device, dtype or tensor
+                positionally, as in ``to("cpu", torch.float64, False)``. A
+                positional ``True`` is ignored for now, with a
+                ``FutureWarning``: the copies synchronize as for ``None``.
+                Starting with TensorDict 0.17, the default will change to
+                honoring it as the keyword ``True`` is.
             memory_format (torch.memory_format, optional): the memory format of
                 the 4D and 5D tensors of the result, as in
                 :meth:`torch.nn.Module.to`. Defaults to ``None``, which keeps
@@ -892,6 +899,7 @@ class _DeviceOps:
             kwargs.pop("cast_filter", None)
             return self._to_per_leaf(attrs_td, **kwargs)
 
+        positional = "non_blocking" not in kwargs
         non_blocking = kwargs.pop("non_blocking", None)
 
         (
@@ -904,6 +912,8 @@ class _DeviceOps:
             num_threads,
             inplace,
         ) = _parse_to(*args, **kwargs)
+        if positional and len(args) > 1:
+            non_blocking = _positional_non_blocking(args)
         return self._to(
             device,
             dtype,
@@ -1273,6 +1283,11 @@ class _DeviceOps:
 
         Each leaf is cast with :meth:`torch.Tensor.type`.
 
+        Unlike :meth:`int`, :meth:`float` and ``to(dtype)``, it returns an
+        unlocked tensordict for a locked one, with a ``FutureWarning``.
+        Starting with TensorDict 0.17, the default will change to a locked
+        result, as these casts return.
+
         Args:
             dst_type (torch.dtype or str): the dtype, or the name of a tensor
                 type such as ``"torch.IntTensor"``.
@@ -1284,6 +1299,15 @@ class _DeviceOps:
                 tensor leaf (a tensorclass uses its own ``cast_filter``, if it
                 declares one).
         """
+        if self.is_locked and not is_compiling():
+            warnings.warn(
+                "type() returns an unlocked tensordict for a locked one. "
+                "Starting with TensorDict 0.17, the default will change to a "
+                "locked result, as int(), float() and to(dtype) return. Call "
+                "unlock_() on the result if you write into it.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
 
         def totype(x):
             return x.type(dst_type)

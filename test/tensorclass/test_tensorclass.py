@@ -5878,6 +5878,17 @@ class TestCastFilter:
             assert mesh64.cells.dtype == torch.long
         assert mesh.points.dtype == torch.float32
 
+    def test_type_locked(self):
+        # type() of a locked tensorclass is unlocked, unlike to(dtype): a
+        # FutureWarning says it stays locked from 0.17 (#2959)
+        mesh = self._mesh(self.Mesh).lock_()
+        with pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked") as w:
+            out = mesh.type(torch.float64)
+        assert w[0].filename == __file__
+        self._check_mesh(out, self.Mesh, torch.float64)
+        assert not out.is_locked
+        assert mesh.to(torch.float64).is_locked
+
     def test_cast_filter_attrs(self):
         # The class default does not stop to(attrs), whose attrs give each
         # leaf its dtype

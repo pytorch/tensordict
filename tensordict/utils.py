@@ -1221,6 +1221,30 @@ def _parse_to(*args, **kwargs):
     )
 
 
+def _positional_non_blocking(args):
+    # The non_blocking of to(device, dtype, non_blocking), to(dtype, non_blocking)
+    # and to(tensor, non_blocking), when it is not passed by keyword. A bool
+    # first is not non_blocking: torch.Tensor.to does not read it as one
+    for arg in args[1:]:
+        if type(arg) is bool:
+            if not arg:
+                return False
+            if not is_compiling():
+                warnings.warn(
+                    "to() ignores a positional non_blocking=True: it copies as "
+                    "for the default non_blocking=None, which synchronizes "
+                    "after a copy to a device other than CUDA. Starting with "
+                    "TensorDict 0.17, the default will change to honoring it "
+                    "as the keyword non_blocking=True is, without that "
+                    "synchronization. Pass non_blocking=True by keyword to get "
+                    "the new behaviour now, or drop it to keep the current one.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
+                )
+            return None
+    return None
+
+
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
 
