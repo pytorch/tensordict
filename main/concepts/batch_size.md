@@ -339,7 +339,7 @@ For example:
 >>> bool(td)
 Traceback (most recent call last):
 ...
-RuntimeError: Converting a tensordict to boolean value is not permitted
+RuntimeError: Converting a tensordict to boolean value is not permitted. Use len(td.keys()) ...
 >>> td.is_empty()
 False
 >>> "a" in td, ("nested", "b") in td, "b" in td

@@ -265,11 +265,11 @@ data-dependent control flow, and inputs that do not require gradients.
 >>> from tensordict.nn import CudaGraphModule, TensorDictModule
 >>> module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
 >>> graph_module = CudaGraphModule(module)
->>> results = [
+>>> results = [ 
 ... graph_module(TensorDict({"x": torch.full((3,), float(i), device="cuda")}, batch_size=[3]))
 ... for i in range(4)
 ... ]
->>> [result["y"][0].item() for result in results]
+>>> [result["y"][0].item() for result in results] 
 [1.0, 2.0, 3.0, 4.0]
 ```
 
@@ -319,16 +319,16 @@ CUDA graph (`Running eager function` with `TORCH_LOGS="cudagraphs"`).
 For example:
 
 ```
->>> policy = torch.compile(
+>>> policy = torch.compile( 
 ... TensorDictModule(nn.Linear(3, 4).cuda(), in_keys=["obs"], out_keys=["action"]),
 ... mode="reduce-overhead",
 ... )
->>> with torch.no_grad():
+>>> with torch.no_grad(): 
 ... outputs = [
 ... policy(TensorDict({"obs": torch.randn(8, 3, device="cuda")}, batch_size=[8])).clone()
 ... for _ in range(4)
 ... ]
->>> outputs[0]["action"].shape
+>>> outputs[0]["action"].shape 
 torch.Size([8, 4])
 ```
 
