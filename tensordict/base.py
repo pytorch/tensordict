@@ -767,6 +767,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                 others_map.append(other)
             if any(isinstance(other, torch.Tensor) for other in others_map):
                 from tensordict._lazy import LazyStackedTensorDict
+                from tensordict._td import _SubTensorDict
 
                 wrapped_attr = type(self_expand)._wrapped_attr
                 if wrapped_attr is not None:
@@ -839,6 +840,16 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         inplace,
                         is_leaf=is_leaf,
                     )
+                if (
+                    inplace
+                    and self_expand is self
+                    and isinstance(self, _SubTensorDict)
+                    and _has_lazy_stack(self._source)
+                ):
+                    # The leaves of a sub-tensordict over a lazy stack are
+                    # copies: call the op on that sub-tensordict, which writes
+                    # them back (#3043).
+                    is_leaf = _is_leaf_or_sub_tensordict
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
                         x,
@@ -1280,6 +1291,18 @@ def _is_leaf_or_lazy_stack(cls: Type) -> bool:
         or _is_tensorclass(cls)
         or getattr(cls, "_wrapped_attr", None) is not None
     )
+
+
+def _is_leaf_or_sub_tensordict(cls: Type) -> bool:
+    """Returns ``True`` for a leaf of ``_is_leaf_or_lazy_stack`` and a sub-tensordict.
+
+    The in-place pointwise ops of a sub-tensordict whose source holds a lazy
+    stack call themselves on the nested sub-tensordicts, whose leaves can be
+    copies that they write back (#3043).
+    """
+    from tensordict._td import _SubTensorDict
+
+    return issubclass(cls, _SubTensorDict) or _is_leaf_or_lazy_stack(cls)
 
 
 def _flatten_keys_leaves(

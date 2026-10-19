@@ -3720,6 +3720,36 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     def _del(self, key: tuple[str, ...]) -> None:
         self._source.del_(key)
 
+    # Override: as in TensorDict, the method runs on a copy of self in which
+    # each nested sub-tensordict that reads copies, such as one over a lazy
+    # stack, is replaced by a copy of its leaves, which it writes back (#3043).
+    _inplace_on_nested_copies = TensorDict._inplace_on_nested_copies
+
+    def _tree_of_copies(self, written: list) -> TensorDict:
+        """A ``TensorDict`` of the entries of ``self``, with each nested sub-tensordict that reads copies replaced by a copy of its leaves.
+
+        Called by ``_inplace_on_nested_copies``. Appends each such
+        sub-tensordict and its copy to ``written``, for it to write the copy
+        back.
+        """
+        source = {}
+        for key in self.keys():
+            value = self._get_str(key, NO_DEFAULT)
+            if isinstance(value, _SubTensorDict):
+                if not value._reads_return_copies:
+                    value = value._tree_of_copies(written)
+                elif not _is_non_tensor(type(value._source)):
+                    leaves = value._copy_of_leaves()
+                    written.append((value, leaves))
+                    value = leaves
+            source[key] = value
+        return TensorDict._new_unsafe(
+            source=source,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self._maybe_names(),
+        )
+
     def _clone(self, recurse: bool = True) -> _SubTensorDict:
         """Clones the _SubTensorDict.
 
