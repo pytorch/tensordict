@@ -214,8 +214,8 @@ class TensorClassModuleBase(Generic[InputClass, OutputClass], ABC, nn.Module):
 
         Raises:
             ValueError: if ``input_type`` or ``output_type`` is not a
-                tensorclass, or if the subclass did not set them with the
-                subscript.
+                tensorclass, or if the subclass did not set each of them to a
+                class with the subscript.
 
         Examples:
             >>> from tensordict import TensorDict
