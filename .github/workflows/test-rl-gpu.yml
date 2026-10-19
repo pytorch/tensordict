@@ -36,6 +36,8 @@ jobs:
         # torch nightlies have no Python 3.10 wheels since 2.15
         python_version: ["3.12"]
         cuda_arch_version: ["13.0"]
+        # Runs the suite in three parallel jobs; run_all.sh lists the files of each.
+        shard: [collectors, mp, rest]
       fail-fast: false
     runs-on: mt-l-x86aavx2-11-41-a10g
     container:
@@ -79,6 +81,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CUDA_ARCH_VERSION: ${{ matrix.cuda_arch_version }}
+          RL_TEST_SHARD: ${{ matrix.shard }}
           TORCH_VERSION: nightly
         run: |
           set -eux

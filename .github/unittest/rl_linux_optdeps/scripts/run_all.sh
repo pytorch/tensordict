@@ -151,6 +151,36 @@ python -c "import torchrl"
 
 python -m torch.utils.collect_env
 
+# RL_TEST_SHARD picks one of three parallel jobs, split as TorchRL splits its
+# own suite: test_collectors.py, the other process-spawning files, and the
+# rest. Together they run every test once.
+collector_paths=(test/test_collectors.py)
+mp_paths=(
+  test/envs/test_parallel.py
+  test/envs/test_special.py
+  test/envs/test_auto_reset.py
+  test/envs/test_env_base.py
+  test/envs/test_nested.py
+  test/envs/test_step_mdp.py
+  test/services
+  test/test_inference_server.py
+  test/test_loggers.py
+)
+case "${RL_TEST_SHARD:-}" in
+  collectors) shard_args=("${collector_paths[@]}") ;;
+  mp) shard_args=("${mp_paths[@]}") ;;
+  rest)
+    shard_args=(test)
+    for path in "${collector_paths[@]}" "${mp_paths[@]}"; do
+      shard_args+=(--ignore "${path}")
+    done
+    ;;
+  *)
+    echo "Unknown RL_TEST_SHARD='${RL_TEST_SHARD:-}'. Expected: collectors|mp|rest."
+    exit 1
+    ;;
+esac
+
 # TorchRL validates its standalone Triton GRU numerics in its own CI. Keep this
 # reverse-dependency job focused on TensorDict interoperability.
 # torchvision is not installed here (it would have to match the torch nightly),
@@ -180,7 +210,7 @@ python -m torch.utils.collect_env
 # the draw itself (rsample_and_log_prob), which differs from the re-scored one
 # when tanh saturates. The loss is unchanged. Run the test again once TorchRL
 # computes its expected value the way the loss does.
-MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
+MUJOCO_GL=egl python -m pytest "${shard_args[@]}" --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
   --ignore test/test_setup.py \
