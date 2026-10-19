@@ -446,8 +446,34 @@ the repository; leave it out for a release of an older line.
 gh release edit "v$VERSION" -R pytorch/tensordict --draft=false --latest
 ```
 
-Report the PyPI and GitHub links, whether "Update Stable Docs" succeeded, and
-the state of the conda-forge update.
+For a minor release, then open a PR on `main` that makes X.Y the stable
+version in `docs/source/_static/versions.json`. For 0.16.0, its first two
+entries after `main` become:
+
+```json
+  {
+    "name": "0.16 (stable)",
+    "version": "0.16",
+    "url": "https://docs.pytorch.org/tensordict/stable/",
+    "preferred": true
+  },
+  {
+    "name": "0.15",
+    "version": "0.15",
+    "url": "https://docs.pytorch.org/tensordict/0.15/"
+  },
+```
+
+The version menu and the version banner of the docs read this file from the
+root of `gh-pages`, where each docs build of `main` copies it. The "Update
+Stable Docs" job changes only `stable` and `versions.html`. Until the PR
+merges, the X.Y docs call themselves "an unstable development version", and
+their version menu shows "Choose version". A patch release needs no change,
+because its docs replace those of X.Y.
+
+Report the PyPI and GitHub links, whether "Update Stable Docs" succeeded, the
+state of the conda-forge update, and for a minor release the `versions.json`
+PR.
 
 ### conda-forge
 
