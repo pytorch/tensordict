@@ -449,6 +449,69 @@ class TestReduce:
                 w.join(timeout=TIMEOUT)
         assert out == ([2.0, 2.0], [2.0, 2.0])
 
+    @staticmethod
+    def lazy_worker(queue, rank, world_size, op, use_group):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29531"
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=world_size, timeout=timedelta(seconds=30)
+        )
+        # With use_group, rank 2 is outside the group and does not take part.
+        group = (
+            dist.new_group([0, 1], timeout=timedelta(seconds=30)) if use_group else None
+        )
+        if rank in (0, 1):
+            v = float(rank + 1)
+            root = LazyStackedTensorDict(
+                TensorDict(a=torch.full((3,), v)), TensorDict(a=torch.full((3,), v))
+            )
+            nested = TensorDict(
+                b=torch.full((2,), v),
+                s=LazyStackedTensorDict(
+                    TensorDict(a=torch.full((3,), v)),
+                    TensorDict(a=torch.full((3,), v)),
+                ),
+                batch_size=[2],
+            )
+            root.reduce(0, op=op, group=group)
+            nested.reduce(0, op=op, group=group)
+            if rank == 0:
+                queue.put(
+                    (
+                        root["a"].unique().tolist(),
+                        nested["b"].unique().tolist(),
+                        nested["s", "a"].unique().tolist(),
+                    )
+                )
+        dist.barrier()
+        dist.destroy_process_group()
+
+    @pytest.mark.parametrize("use_group", [False, True])
+    @pytest.mark.parametrize(
+        "op,expected", [[dist.ReduceOp.SUM, 3.0], [dist.ReduceOp.MAX, 2.0]]
+    )
+    def test_reduce_lazy_stack(self, set_context, op, expected, use_group):
+        world_size = 3 if use_group else 2
+        queue = mp.Queue(1)
+        workers = [
+            mp.Process(
+                target=type(self).lazy_worker,
+                args=(queue, rank, world_size, op, use_group),
+            )
+            for rank in range(world_size)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+                if w.is_alive():
+                    w.terminate()
+        assert out == ([expected], [expected], [expected])
+
 
 # =========================================
 # Test td.send

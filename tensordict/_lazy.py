@@ -4176,6 +4176,38 @@ class LazyStackedTensorDict(TensorDictBase):
                 future.wait()
             return
 
+    # Override: reduces the leaves of each member in place, in stack order;
+    # the stacked leaves that _get_str returns are copies.
+    def _reduce(
+        self,
+        dst,
+        op=None,
+        async_op=False,
+        return_premature=False,
+        _future_list=None,
+        group=None,
+    ):
+        root = False
+        if _future_list is None:
+            _future_list = []
+            root = True
+        for td in self.tensordicts:
+            _future_list = td._reduce(
+                dst=dst,
+                op=op,
+                async_op=async_op,
+                _future_list=_future_list,
+                group=group,
+            )
+        if not root:
+            return _future_list
+        elif async_op and return_premature:
+            return _future_list
+        elif async_op:
+            for future in _future_list:
+                future.wait()
+            return
+
     # Override: deletes the entry of each member that has it.
     def _del(self, key: tuple[str, ...]) -> None:
         if not key:
