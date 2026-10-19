@@ -23,10 +23,8 @@ leaves run at the same time, and the call waits for them unless
 `True`, returns the list of `Work` objects of the reductions
 without waiting for them: call `wait()` on each one before you use
 the tensordict. Defaults to `False`.
-- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group of
-the leaves at the root of the tensordict. Defaults to `None`, the
-default process group. The leaves of nested tensordicts are
-reduced on the default process group.
+- **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
+Defaults to `None`, the default process group.
 
 Returns:
 

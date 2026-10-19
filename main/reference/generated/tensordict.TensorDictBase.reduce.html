@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6060+gf3eb4437f.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6061+g0853d1ddd.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6060+gf3eb4437f.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6061+g0853d1ddd.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1662,10 +1662,8 @@ leaves run at the same time, and the call waits for them unless
 <code class="docutils literal notranslate"><span class="pre">True</span></code>, returns the list of <code class="docutils literal notranslate"><span class="pre">Work</span></code> objects of the reductions
 without waiting for them: call <code class="docutils literal notranslate"><span class="pre">wait()</span></code> on each one before you use
 the tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group of
-the leaves at the root of the tensordict. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the
-default process group. The leaves of nested tensordicts are
-reduced on the default process group.</p></li>
+<li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -2044,7 +2042,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.reduce",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.reduce",
        "url": "/reference/generated/tensordict.TensorDictBase.reduce.html",
-       "articleBody": "TensorDictBase.reduce# TensorDictBase.reduce(dst, op=None, async_op=False, return_premature=False, group=None) \u2192 None# Reduces each leaf over all the ranks of the group, into the tensordict of rank dst. Every rank of the group must call it, with a tensordict of the same structure. Each leaf is reduced in place with torch.distributed.reduce(). After the call, rank dst holds the result. On the other ranks, the values of the tensordict are not defined (with gloo, they can hold partial results): clone the tensordict before the call if you need them. See Collectives. Parameters: dst (int) \u2013 the rank that receives the result. op (ReduceOp, optional) \u2013 the reduction. Defaults to None, which is torch.distributed.ReduceOp.SUM. async_op (bool, optional) \u2013 if True, the reductions of all the leaves run at the same time, and the call waits for them unless return_premature=True. Defaults to False. return_premature (bool, optional) \u2013 with async_op=True, if True, returns the list of Work objects of the reductions without waiting for them: call wait() on each one before you use the tensordict. Defaults to False. group (torch.distributed.ProcessGroup, optional) \u2013 the process group of the leaves at the root of the tensordict. Defaults to None, the default process group. The leaves of nested tensordicts are reduced on the default process group. Returns: With async_op=True and return_premature=True, a list of Work objects. Otherwise, None. Examples This example runs in two processes: add it to the runner script of the distributed guide and pass it to run. def reduce(rank, world_size): td = TensorDict(a=torch.ones(3) * (rank + 1), batch_size=[3]) td.reduce(dst=0, op=dist.ReduceOp.SUM) if rank == 0: print(td[\"a\"]) # with 2 ranks: tensor([3., 3., 3.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.reduce# TensorDictBase.reduce(dst, op=None, async_op=False, return_premature=False, group=None) \u2192 None# Reduces each leaf over all the ranks of the group, into the tensordict of rank dst. Every rank of the group must call it, with a tensordict of the same structure. Each leaf is reduced in place with torch.distributed.reduce(). After the call, rank dst holds the result. On the other ranks, the values of the tensordict are not defined (with gloo, they can hold partial results): clone the tensordict before the call if you need them. See Collectives. Parameters: dst (int) \u2013 the rank that receives the result. op (ReduceOp, optional) \u2013 the reduction. Defaults to None, which is torch.distributed.ReduceOp.SUM. async_op (bool, optional) \u2013 if True, the reductions of all the leaves run at the same time, and the call waits for them unless return_premature=True. Defaults to False. return_premature (bool, optional) \u2013 with async_op=True, if True, returns the list of Work objects of the reductions without waiting for them: call wait() on each one before you use the tensordict. Defaults to False. group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. Returns: With async_op=True and return_premature=True, a list of Work objects. Otherwise, None. Examples This example runs in two processes: add it to the runner script of the distributed guide and pass it to run. def reduce(rank, world_size): td = TensorDict(a=torch.ones(3) * (rank + 1), batch_size=[3]) td.reduce(dst=0, op=dist.ReduceOp.SUM) if rank == 0: print(td[\"a\"]) # with 2 ranks: tensor([3., 3., 3.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
