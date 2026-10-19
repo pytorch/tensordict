@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import os
+import warnings
 from pathlib import Path
 
 import torch
@@ -12,11 +14,13 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 
 __all__ = [
+    "_memmap_filename",
     "_populate_empty",
     "_populate_memmap",
     "_populate_storage",
     "_save_metadata",
     "_update_metadata",
+    "_warn_if_existing_file_smaller",
 ]
 
 
@@ -43,19 +47,76 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
             json_metadata.write(json_str)
 
 
-def _populate_memmap(
-    *, dest, value, key, copy_existing, prefix, like, existsok, robust_key
-):
-    """Populates ``dest`` with a memory-mapped copy of ``value``."""
+def _memmap_filename(prefix, key, robust_key) -> str | None:
+    """Returns the path of the file that holds the leaf ``key`` under ``prefix``."""
     from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
 
-    _raise_if_jagged(value, key)
     if prefix is None:
-        filename = None
+        return None
+    effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
+    safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
+    return str(prefix / f"{safe_key}.memmap")
+
+
+def _warn_if_existing_file_smaller(value, key, filename) -> None:
+    """Warns that ``memmap_like`` will grow an existing file smaller than ``value``.
+
+    Call it on the thread of the user's call, before the file is mapped. A
+    warning emitted in an executor thread is not seen by the caller's
+    ``warnings.catch_warnings`` on free-threaded builds, and its stacklevel
+    would point at the thread pool (#2968).
+    """
+    from .utils import _user_stacklevel
+
+    if os.path.islink(filename):
+        # Mapping through a symlink raises anyway.
+        return
+    try:
+        file_size = os.path.getsize(filename)
+    except OSError:
+        return
+    # The size MemoryMappedTensor.from_tensor maps for this leaf.
+    if value.is_nested:
+        numel = int(value._nested_tensor_size().prod(-1).sum())
     else:
-        effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
-        safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
-        filename = str(prefix / f"{safe_key}.memmap")
+        numel = value.numel()
+    nbytes = value.dtype.itemsize * numel
+    if file_size < nbytes:
+        warnings.warn(
+            f"memmap_like grew the existing file {filename} from "
+            f"{file_size} to {nbytes} bytes for the leaf {key!r} of dtype "
+            f"{value.dtype}, so the leaf mixes the old values and zeros. "
+            "Starting with TensorDict 0.17, the default will change to "
+            "raising a RuntimeError when an existing file is smaller than "
+            "the leaf. Remove the file, or use a new prefix, to get a "
+            "file filled with zeros.",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
+
+
+def _populate_memmap(
+    *,
+    dest,
+    value,
+    key,
+    copy_existing,
+    prefix,
+    like,
+    existsok,
+    robust_key,
+    warn_existing_size=True,
+):
+    """Populates ``dest`` with a memory-mapped copy of ``value``.
+
+    With ``like=True`` and ``warn_existing_size=True`` (as in ``memmap_like``),
+    an existing file smaller than the leaf is grown and mapped with a
+    FutureWarning (#2968). A caller that runs this in an executor passes
+    ``warn_existing_size=False`` and calls
+    :func:`_warn_if_existing_file_smaller` itself first.
+    """
+    _raise_if_jagged(value, key)
+    filename = _memmap_filename(prefix, key, robust_key)
     if value.is_nested:
         shape = value._nested_tensor_size()
         if prefix is not None and filename is not None:
@@ -70,6 +131,8 @@ def _populate_memmap(
             )
     else:
         shape = None
+    if like and warn_existing_size and existsok and filename is not None:
+        _warn_if_existing_file_smaller(value, key, filename)
     memmap_tensor = MemoryMappedTensor.from_tensor(
         value.data if value.requires_grad else value,
         filename=filename,

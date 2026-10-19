@@ -1798,6 +1798,41 @@ def _warn_lazy_is_empty() -> None:
     )
 
 
+# Keywords that apply() and named_apply() take through **constructor_kwargs
+# and do not warn about: _apply_nest honours the first four, and checked (like
+# named in named_apply) collides with the value they pass themselves, so the
+# call raises a TypeError.
+_APPLY_NEST_KWARGS = frozenset(
+    {"named", "nested_keys", "prefix", "call_on_unbatched", "checked"}
+)
+
+
+def _warn_ignored_kwargs(method: str, kwargs: Iterable[str]) -> None:
+    """Warns that ``method`` ignores the keyword arguments ``kwargs``, which raise a TypeError from 0.17 (#2979)."""
+    names = ", ".join(repr(name) for name in kwargs)
+    warnings.warn(
+        f"{method}() ignores the keyword argument(s) {names}. Starting with "
+        "TensorDict 0.17, the default will change to raising a TypeError for "
+        "unknown keyword arguments.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _warn_as_tensor_memmap() -> None:
+    """Warns that ``as_tensor()`` keeps :class:`~tensordict.MemoryMappedTensor` leaves, until 0.17 (#2979)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        "as_tensor() keeps the MemoryMappedTensor leaves of the tensordict as "
+        "they are. Starting with TensorDict 0.17, the default will change to "
+        "returning them as plain torch.Tensor over the same storage, with "
+        "as_subclass(torch.Tensor).",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_split_keys_kept_in_last() -> None:
     """Warns that ``split_keys(strict=False)`` keeps a named entry that only some members of a lazy stack hold in the last part, until 0.17 (#2827)."""
     if is_compiling():
@@ -1823,6 +1858,20 @@ def _warn_map_seed(method: str) -> None:
         "advances that RNG by one draw. Pass generator=torch.default_generator "
         "for the new behaviour now, or generator=torch.Generator() to keep the "
         "current seeds.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _warn_separates_default(key: NestedKey) -> None:
+    """Warns that ``separates`` puts ``None`` under a missing key whose ``default`` does not fit the batch size, until 0.17 (#2948)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        f"separates() puts a None entry under the missing key {key!r}, "
+        "because its default does not fit the batch size. Starting with "
+        "TensorDict 0.17, the default will change to raising the error of "
+        "split_keys: pass a default that fits the batch size, or default=None.",
         FutureWarning,
         stacklevel=_user_stacklevel(),
     )
@@ -4877,6 +4926,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             non_blocking (bool, optional): if ``True``, copies between devices
                 can run asynchronously with respect to the host. Defaults to
                 ``False``.
+            **kwargs: ignored, with a :class:`FutureWarning`. Starting with
+                TensorDict 0.17, the default will change to raising a
+                ``TypeError`` for them, as :meth:`~.set_` does.
 
         Returns:
             ``self``.
@@ -4912,6 +4964,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
+        if kwargs:
+            _warn_ignored_kwargs("set", kwargs)
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
@@ -8016,7 +8070,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 given, ``out`` must have it. For a lazy stack, ``out`` must be a
                 lazy stack too, stacked along any dimension. See the warning
                 below about ``out=self``. Defaults to ``None``.
-            **constructor_kwargs: accepted and ignored.
+            **constructor_kwargs: ignored, with a :class:`FutureWarning`.
+                Starting with TensorDict 0.17, the default will change to
+                raising a ``TypeError`` for them.
 
         Returns:
             A new tensordict, ``out`` if it is given, or ``self`` if
@@ -8076,6 +8132,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> seen
             ['Tensor', 'NonTensorData']
         """
+        if constructor_kwargs:
+            ignored = [k for k in constructor_kwargs if k not in _APPLY_NEST_KWARGS]
+            if ignored:
+                _warn_ignored_kwargs("apply", ignored)
         result = self._apply_nest(
             fn,
             *others,
@@ -8178,7 +8238,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 given, ``out`` must have it. For a lazy stack, ``out`` must be a
                 lazy stack too, stacked along any dimension. See the warning
                 below about ``out=self``. Defaults to ``None``.
-            **constructor_kwargs: accepted and ignored.
+            **constructor_kwargs: ignored, with a :class:`FutureWarning`.
+                Starting with TensorDict 0.17, the default will change to
+                raising a ``TypeError`` for them.
 
         Returns:
             A new tensordict, ``out`` if it is given, or ``self`` if
@@ -8221,6 +8283,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.named_apply(lambda key, x, y: x + y, td)["nested", "a"]
             tensor([2., 2., 2.])
         """
+        if constructor_kwargs:
+            ignored = [k for k in constructor_kwargs if k not in _APPLY_NEST_KWARGS]
+            if ignored:
+                _warn_ignored_kwargs("named_apply", ignored)
         result = self._apply_nest(
             fn,
             *others,
@@ -10130,15 +10196,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         are. No tensordict leaf type defines ``as_tensor()``, so the result
         holds the same leaves as the tensordict. A locked tensordict gives a
         locked result.
+
+        A tensordict with :class:`~tensordict.MemoryMappedTensor` leaves also
+        emits a :class:`FutureWarning`. Starting with TensorDict 0.17, the
+        default will change to returning those leaves as plain
+        :class:`torch.Tensor` over the same storage, with
+        ``as_subclass(torch.Tensor)``, without a copy.
         """
+        return self._as_tensor(warn=True)
+
+    def _as_tensor(self, *, warn: bool) -> Self:
+        has_memmap = False
 
         def as_tensor(tensor):
+            nonlocal has_memmap
+            if type(tensor) is torch.Tensor:
+                # torch.Tensor has no as_tensor() method.
+                return tensor
+            if isinstance(tensor, MemoryMappedTensor):
+                has_memmap = True
             try:
                 return tensor.as_tensor()
             except AttributeError:
                 return tensor
 
-        return self._fast_apply(as_tensor, propagate_lock=True)
+        result = self._fast_apply(as_tensor, propagate_lock=True)
+        if warn and has_memmap:
+            _warn_as_tensor_memmap()
+        return result
 
     _CONFLICTING_BATCH_SIZES = "Conflicting batch sizes in {}: batch_size and auto_batch_size cannot be both specified."
 
@@ -10909,12 +10994,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             *keys (NestedKey): the keys to remove.
 
         Keyword Args:
-            default (Any, optional): if given, a missing key does not raise.
-                The value of ``default`` is not used: the result holds a
-                ``None`` entry under the missing key.
+            default (Any, optional): if given, a missing key does not raise,
+                and the result holds ``default`` under it, as
+                :meth:`~.split_keys` does. A ``default`` of ``None`` gives a
+                ``None`` entry. A ``default`` that does not fit the batch size
+                (for example ``0`` with a batch size of ``[3]``) also gives a
+                ``None`` entry, with a ``FutureWarning``: starting with
+                TensorDict 0.17, the default will change to raising the error
+                of :meth:`~.split_keys`.
             strict (bool, optional): if ``True``, a missing key raises a
-                ``KeyError``. If ``False``, the result holds a ``None`` entry
-                under it. Defaults to ``True``.
+                ``KeyError``. If ``False``, the result holds ``default`` under
+                it, or a ``None`` entry if no ``default`` is given. Defaults to
+                ``True``.
             filter_empty (bool, optional): if ``True``, the nested tensordicts
                 of the tensordict that the removal leaves empty are removed
                 too. Defaults to ``True``.
@@ -10946,14 +11037,24 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         strict = strict and default is NO_DEFAULT
         if strict:
             default = NO_DEFAULT
-        else:
+        elif default is NO_DEFAULT:
             default = None
         key_set = keys
 
         # We want to keep the metadata such as batch-size etc so we call with recurse=True
         out = self.empty(recurse=True)
+        # _UNSET tells a missing key apart: pop may convert the default
+        pop_default = default if default is None or default is NO_DEFAULT else _UNSET
         for key in key_set:
-            val = last_out.pop(key, default)
+            val = last_out.pop(key, pop_default)
+            if val is _UNSET:
+                try:
+                    out.set(key, default)
+                    continue
+                except Exception:
+                    # a default that does not fit the batch size (#2948)
+                    _warn_separates_default(key)
+                    val = None
             out.set(key, val)
         out.filter_empty_()
         if filter_empty:

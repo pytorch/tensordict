@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import bisect
+import functools
 import numbers
 import operator
 import os
@@ -2720,7 +2721,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = LazyStackedTensorDict.lazy_stack(
-                [td.cpu().as_tensor() for td in self.tensordicts], 0
+                [td.cpu()._as_tensor(warn=False) for td in self.tensordicts], 0
             )
         else:
             td = self
@@ -4179,6 +4180,66 @@ class LazyStackedTensorDict(TensorDictBase):
             for future in _future_list:
                 future.wait()
             return
+
+    # Override: issues the collectives of a dense tensordict with the same
+    # keys and shapes, one per key on the stacked leaf. That leaf is a copy, so
+    # rank dst, the only rank where the result is defined, writes it back into
+    # the members: with async_op, in a callback once that reduction completes;
+    # in sync mode, at the root after the last collective, so that a failing
+    # write-back cannot stop the collectives of rank dst.
+    def _reduce(
+        self,
+        dst,
+        op=None,
+        async_op=False,
+        return_premature=False,
+        _future_list=None,
+        group=None,
+    ):
+        from torch import distributed as dist
+
+        if op is None:
+            op = dist.ReduceOp.SUM
+        root = False
+        if _future_list is None:
+            _future_list = []
+            root = True
+        is_dst = dist.get_rank() == dst
+
+        def write_back(key, value):
+            # Like dist.reduce into a dense leaf that requires grad. no_grad is
+            # per thread, and the callback can run on a thread of the backend.
+            with torch.no_grad():
+                self._set_str(
+                    key, value, inplace=True, validated=True, ignore_lock=True
+                )
+
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                _future_list = value._reduce(
+                    dst=dst,
+                    op=op,
+                    async_op=async_op,
+                    _future_list=_future_list,
+                    group=group,
+                )
+                continue
+            elif not isinstance(value, Tensor):
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            work = dist.reduce(value, dst=dst, op=op, async_op=async_op, group=group)
+            if is_dst and async_op:
+                work = work.get_future().then(
+                    lambda _, key=key, value=value: write_back(key, value)
+                )
+            elif is_dst:
+                work = functools.partial(write_back, key, value)
+            _future_list.append(work)
+        if not root:
+            return _future_list
+        elif async_op and return_premature:
+            return _future_list
+        self._finish_reduce(_future_list, async_op)
 
     # Override: deletes the entry of each member that has it.
     def _del(self, key: tuple[str, ...]) -> None:
@@ -6161,18 +6222,19 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
 
     When calling `tensordict.unsqueeze(dim)`, a lazy view of this operation is
     returned such that the following code snippet works without raising an
-    exception:
+    exception::
 
-        >>> assert tensordict.unsqueeze(dim).squeeze(dim) is tensordict
+        assert tensordict.unsqueeze(dim).squeeze(dim) is tensordict
 
     Examples:
-        >>> from tensordict import TensorDict
+        >>> from tensordict import TensorDict, set_lazy_legacy
         >>> import torch
         >>> td = TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
-        >>> td_unsqueeze = td.unsqueeze(-1)
-        >>> print(td_unsqueeze.shape)
+        >>> with set_lazy_legacy(True):
+        ...     td_unsqueeze = td.unsqueeze(-1)
+        ...     print(td_unsqueeze.shape)
+        ...     print(td_unsqueeze.squeeze(-1) is td)
         torch.Size([3, 1])
-        >>> print(td_unsqueeze.squeeze(-1) is td)
         True
     """
 
@@ -6288,9 +6350,9 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
     returned such that the following code snippet works without raising an
-    exception:
+    exception::
 
-        >>> assert tensordict.transpose(dims_list, dim).transpose(dims_list, dim) is tensordict
+        assert tensordict.transpose(dims_list, dim).transpose(dims_list, dim) is tensordict
 
     """
 
@@ -6362,18 +6424,19 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
     returned such that the following code snippet works without raising an
-    exception:
+    exception::
 
-        >>> assert tensordict.permute(dims_list, dim).permute(dims_list, dim) is tensordict
+        assert tensordict.permute(dims_list, dim).permute(dims_list, dim) is tensordict
 
     Examples:
-        >>> from tensordict import TensorDict
+        >>> from tensordict import TensorDict, set_lazy_legacy
         >>> import torch
-        >>> td = TensorDict({'a': torch.randn(4, 5, 6, 9)}, batch_size=[3])
-        >>> td_permute = td.permute(dims=(2, 1, 0))
-        >>> print(td_permute.shape)
+        >>> td = TensorDict({'a': torch.randn(4, 5, 6, 9)}, batch_size=[4, 5, 6])
+        >>> with set_lazy_legacy(True):
+        ...     td_permute = td.permute(dims=(2, 1, 0))
+        ...     print(td_permute.shape)
+        ...     print(td_permute.permute(dims=(2, 1, 0)) is td)
         torch.Size([6, 5, 4])
-        >>> print(td_permute.permute(dims=(2, 1, 0)) is td)
         True
 
     """

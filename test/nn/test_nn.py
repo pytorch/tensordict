@@ -314,6 +314,18 @@ class TestInteractionType:
             assert tensordict.nn.utils.StrEnum is tensordict.nn.utils._StrEnum
         assert record[0].filename == __file__
 
+    def test_str_enum_str(self):
+        # str() and format() give the value, as with enum.StrEnum, on every
+        # Python version.
+        class Backported(tensordict.nn.utils._StrEnum):
+            MODE = "mode"
+
+        for member in (InteractionType.MODE, Backported.MODE):
+            assert str(member) == "mode"
+            assert "%s" % member == "mode"
+            assert f"{member}" == "mode"
+            assert format(member, ">5") == " mode"
+
     dist_partials = {
         "Bernoulli": functools.partial(
             distributions.Bernoulli, probs=torch.tensor([0.5, 0.5])
@@ -2815,6 +2827,105 @@ class TestTDSequence:
             out = seq(TensorDict(x=x, batch_size=[2]), shift=10.0)
         torch.testing.assert_close(out["i"], x + 10.0)
 
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_probtdseq_receives_kwargs_without_composite(self, nested):
+        # https://github.com/pytorch/tensordict/issues/2976
+        class Shift(nn.Module):
+            def forward(self, x, shift=0.0):
+                return x + shift
+
+        modules = [
+            TensorDictModule(Shift(), in_keys=["x"], out_keys=["loc"]),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+            ),
+        ]
+        if nested:
+            modules = [
+                ProbabilisticTensorDictSequential(*modules, return_composite=False),
+                TensorDictModule(Shift(), in_keys=["a"], out_keys=["loc_b"]),
+                ProbabilisticTensorDictModule(
+                    in_keys={"loc": "loc_b"},
+                    out_keys=["b"],
+                    distribution_class=Normal,
+                    distribution_kwargs={"scale": 1.0},
+                ),
+            ]
+        seq = ProbabilisticTensorDictSequential(*modules, return_composite=False)
+        x = torch.zeros(2)
+
+        def td():
+            return TensorDict(x=x, batch_size=[2])
+
+        with set_interaction_type("mode"):
+            params = seq.get_dist_params(td(), shift=10.0)
+            torch.testing.assert_close(params["loc"], x + 10.0)
+            out = TensorDict()
+            params = seq.get_dist_params(td(), out, shift=10.0)
+            assert params is out
+            assert "x" not in out
+            torch.testing.assert_close(out["loc"], x + 10.0)
+            dist = seq.get_dist(td(), shift=10.0)
+            out = seq(td(), shift=10.0)
+            lp = seq.log_prob(
+                td().update(out.select("a", "b", strict=False)), shift=10.0
+            )
+        if nested:
+            torch.testing.assert_close(params["loc_b"], x + 20.0)
+            torch.testing.assert_close(dist.loc, x + 20.0)
+            torch.testing.assert_close(out["b"], x + 20.0)
+            torch.testing.assert_close(lp, dist.log_prob(x + 20.0))
+        else:
+            torch.testing.assert_close(dist.loc, x + 10.0)
+            torch.testing.assert_close(out["a"], x + 10.0)
+            torch.testing.assert_close(lp, dist.log_prob(x + 10.0))
+        with pytest.raises(TypeError, match="shift"):
+            seq.log_prob(out, dist=dist, shift=10.0)
+
+    @pytest.mark.parametrize("custom", [True, False])
+    @pytest.mark.parametrize("nested_last", [True, False])
+    def test_probtdseq_log_prob_kwargs_last_module(self, custom, nested_last):
+        # https://github.com/pytorch/tensordict/issues/2976: a last module whose
+        # log_prob takes keyword arguments keeps getting them.
+        class Shift(nn.Module):
+            def forward(self, x, shift=0.0):
+                return x + shift
+
+        class ScaledLogProb(ProbabilisticTensorDictModule):
+            def log_prob(self, tensordict, *, dist=None, shift=1.0):
+                return super().log_prob(tensordict, dist=dist) * shift
+
+        cls = ScaledLogProb if custom else ProbabilisticTensorDictModule
+        last = cls(
+            in_keys=["loc"],
+            out_keys=["a"],
+            distribution_class=Normal,
+            distribution_kwargs={"scale": 1.0},
+        )
+        if nested_last:
+            last = ProbabilisticTensorDictSequential(
+                TensorDictModule(Shift(), in_keys=["x"], out_keys=["y"]),
+                last,
+                return_composite=False,
+            )
+        seq = ProbabilisticTensorDictSequential(
+            TensorDictModule(Shift(), in_keys=["x"], out_keys=["loc"]),
+            last,
+            return_composite=False,
+        )
+        x = torch.zeros(2)
+        td = TensorDict(x=x, a=x, batch_size=[2])
+        lp = seq.log_prob(td, shift=2.0)
+        if custom:
+            # As on main: the keyword goes to the last module's log_prob only.
+            expected = Normal(x, 1.0).log_prob(x) * 2.0
+        else:
+            expected = Normal(x + 2.0, 1.0).log_prob(x)
+        torch.testing.assert_close(lp, expected)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
         torch.manual_seed(0)
@@ -4744,6 +4855,33 @@ class TestProbabilisticTensorDictModule:
         s1 = seq1(td.copy())["sample"].clone()
         s2 = seq2(td.copy())["sample"].clone()
         assert torch.equal(s1, s2)
+
+    def test_default_out_key_warns(self):
+        # Without out_keys, the sample is written at "_"; from 0.17 it is not (#2971)
+        td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3))
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            module = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"], distribution_class=Normal
+            )
+            module.get_dist(td)
+            explicit = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"], out_keys=["_"], distribution_class=Normal
+            )
+            assert "_" in explicit(td.clone()).keys()
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        assert module.out_keys == ["_"]
+        with pytest.warns(
+            FutureWarning,
+            match=r'Starting with TensorDict 0\.17, the default will change to not writing the sample at "_"',
+        ) as record:
+            out = module(td.clone())
+        assert record[0].filename == __file__
+        assert "_" in out.keys()
+        # The module warns once
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert "_" in module(td.clone()).keys()
 
 
 class TestEnsembleModule:
@@ -7411,6 +7549,43 @@ class TestCompositeDist:
                     )
             assert (out["act"] == act).all()
 
+    def test_partial_name_map_default_out_keys_warns(self):
+        # Without out_keys, a component that name_map leaves out is written but
+        # is not in out_keys; from 0.17 it is (#2972)
+        def make(name_map, out_keys=None):
+            return ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=out_keys,
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={
+                    "distribution_map": {"a": Normal, "b": Normal},
+                    "name_map": name_map,
+                },
+                return_log_prob=True,
+            )
+
+        with set_composite_lp_aggregate(False):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                make({"a": "x", "b": "y"})
+                make({("a",): "x", "b": "y"})
+                make(None)
+                assert make({"a": "x"}, out_keys=["x", "b"]).out_keys == [
+                    "x",
+                    "b",
+                    "x_log_prob",
+                    "b_log_prob",
+                ]
+            assert not [w for w in record if issubclass(w.category, FutureWarning)]
+            with pytest.warns(
+                FutureWarning,
+                match=r"Starting with TensorDict 0\.17, the default will change to "
+                r"out_keys that include them",
+            ) as record:
+                module = make({"a": "x"})
+            assert record[0].filename == __file__
+            assert module.out_keys == ["x", "x_log_prob"]
+
 
 class TestAddStateIndependentNormalScale:
     def test_add_scale_basic(self, num_outputs=4):
@@ -8106,6 +8281,23 @@ class TestTensorClassModuleForward:
         assert td_output["result", "added"] == 15
         assert td_output["result", "substracted"] == 5
         assert set(td_output["input"].keys()) == {"a", "b"}
+
+    def test_td_forward_extra_args_warn(self) -> None:
+        """Test that the wrapper warns about the arguments it ignores (#2979)."""
+        td_module = TestTensorClassModule().as_td_module()
+        td = TensorDict(a=10, b=5)
+        out = TensorDict()
+        with pytest.warns(FutureWarning, match="'tensordict_out'.*TensorDict 0.17"):
+            td_output = td_module(td, tensordict_out=out)
+        assert td_output is not out
+        assert out.is_empty()
+        with pytest.warns(FutureWarning, match="1 positional argument\\(s\\), 'foo'"):
+            td_output = td_module(td, 1, foo=3)
+        assert td_output["result", "added"] == 15
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert td_module(td)["result", "added"] == 15
+            assert td_module(a=10, b=5)[0] == 10
 
     def test_td_forward_nested_input_extra_keys(self) -> None:
         """Test that the wrapper ignores the entries next to nested input fields."""

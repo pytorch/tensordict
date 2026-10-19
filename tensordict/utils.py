@@ -279,6 +279,8 @@ logger.addHandler(console_handler)
 def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
     """Allows indexing of tensors with nested tuples.
 
+     >>> tensor = torch.arange(24).reshape(2, 3, 4)
+     >>> tuple1, tuple2 = (0, slice(1, None)), (slice(None), 2)
      >>> sub_tensor1 = tensor[tuple1][tuple2]
      >>> sub_tensor2 = _sub_index(tensor, (tuple1, tuple2))
      >>> assert torch.allclose(sub_tensor1, sub_tensor2)
@@ -665,12 +667,13 @@ def _int_generator(seed):
     Examples:
         >>> for _ in range(2):
         ...     init_int = 10
+        ...     ints = []
         ...     for _ in range(10):
         ...        init_int = _int_generator(init_int)
-        ...        print(init_int, end=", ")
-        ...     print("")
-        6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
-        6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
+        ...        ints.append(init_int)
+        ...     print(ints)
+        [6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523]
+        [6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523]
     """
     max_seed_val = 10_000
     rng = np.random.default_rng(seed)
@@ -778,18 +781,17 @@ def _cache_while_locked(fun):
     point in time.
 
     Examples:
-        >>> import timeit
         >>> from tensordict import TensorDict
         >>> class SomeOtherTd(TensorDict):
         ...     @_cache_while_locked
         ...     def all_keys(self):
         ...         return set(self.keys(include_nested=True))
         >>> td = SomeOtherTd({("a", "b", "c", "d", "e", "f", "g"): 1.0}, [])
-        >>> td.lock_()
-        >>> print(timeit.timeit("set(td.keys(True))", globals={'td': td}))
-        11.057
-        >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
-        0.88
+        >>> td.all_keys() is td.all_keys()
+        False
+        >>> td = td.lock_()
+        >>> td.all_keys() is td.all_keys()
+        True
     """
 
     @wraps(fun)

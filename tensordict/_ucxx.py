@@ -15,6 +15,9 @@ from typing import Any, AsyncIterator, Awaitable, Callable, TYPE_CHECKING
 
 import numpy as np
 import torch
+from tensordict._unbatched import UnbatchedTensor
+from tensordict.base import _is_leaf_nontensor
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
@@ -108,6 +111,43 @@ def _decode_uncollated_key(key) -> tuple[str, ...]:
     )
 
 
+def _is_json_value(value) -> bool:
+    """Whether JSON gives ``value`` back with the same types."""
+    if type(value) in (str, int, float, bool, type(None)):
+        return True
+    if type(value) is list:
+        return all(_is_json_value(item) for item in value)
+    if type(value) is dict:
+        return all(
+            type(key) is str and _is_json_value(item) for key, item in value.items()
+        )
+    return False
+
+
+def _decode_non_tensor_stack(
+    values, stack_batch_size, stack_dim, batch_size: list[int]
+) -> NonTensorStack:
+    """Rebuild a NonTensorStack from its ``tolist()`` values, batch size and stack dim."""
+    if not (
+        isinstance(values, list)
+        and isinstance(stack_batch_size, list)
+        and all(type(dim) is int and dim >= 0 for dim in stack_batch_size)
+        and stack_batch_size[: len(batch_size)] == batch_size
+        and type(stack_dim) is int
+        and 0 <= stack_dim < len(stack_batch_size)
+    ):
+        raise ValueError("Invalid uncollated header: invalid non-tensor stack.")
+    stack = NonTensorStack._from_list(values, device=None, ndim=len(stack_batch_size))
+    if stack_dim:
+        stack = torch.stack(list(stack.unbind(stack_dim)), stack_dim)
+    if list(stack.batch_size) != stack_batch_size:
+        raise ValueError(
+            "Invalid uncollated header: the values of a non-tensor stack do not "
+            "match its batch size."
+        )
+    return stack
+
+
 def _tensor_to_numpy(tensor: torch.Tensor) -> np.ndarray:
     """View a CPU tensor as a numpy array without copying."""
     return tensor.detach().numpy()
@@ -197,11 +237,17 @@ async def send_tensordict(
             (see :meth:`~tensordict.TensorDictBase.consolidate`) unless it is
             already, and sends its storage as one buffer. If ``False``, sends the
             tensor leaves of the tensordict, nested ones included, one by one, in
-            the format of a pipe with ``consolidated=False``, which
-            :func:`recv_tensordict` does not read. Defaults to ``True``.
+            the format of a pipe with ``consolidated=False``: the receiver calls
+            :func:`recv_tensordict` with ``consolidated=False``. Defaults to
+            ``True``.
 
     Raises:
         ImportError: if ``ucxx`` is not installed.
+        ValueError: with ``consolidated=False``, if the tensordict holds a
+            non-tensor entry other than a :class:`~tensordict.NonTensorData` or
+            :class:`~tensordict.NonTensorStack` whose values are ``str``,
+            ``int``, ``float``, ``bool``, ``None``, or lists or dicts (with
+            ``str`` keys) of them. Send it with ``consolidated=True``.
     """
     if consolidated:
         if td.is_consolidated():
@@ -232,6 +278,7 @@ async def recv_tensordict(
     td: TensorDictBase | None = None,
     *,
     device: torch.device | str | None = None,
+    consolidated: bool = True,
 ) -> TensorDictBase:
     """Receives a tensordict that :func:`send_tensordict` sends over a UCXX endpoint.
 
@@ -254,15 +301,24 @@ async def recv_tensordict(
     Keyword Args:
         device (torch.device, str or int, optional): the device to receive on.
             Defaults to ``None``, which uses the device of the storage of ``td``
-            if it is consolidated, and the CPU otherwise.
+            if it is consolidated, and the CPU otherwise. With
+            ``consolidated=False``, the default is the CPU.
+        consolidated (bool, optional): the ``consolidated`` argument of the
+            sender's :func:`send_tensordict`. With ``False``, reads the
+            leaves one by one, as a pipe with ``consolidated=False`` does, and
+            returns a new tensordict: ``td`` is not used. Defaults to ``True``.
 
     Returns:
-        The received tensordict, ``td`` or a new consolidated tensordict.
+        The received tensordict: ``td`` or a new consolidated tensordict, or
+        with ``consolidated=False``, a new tensordict that is not consolidated.
 
     Raises:
         ImportError: if ``ucxx`` is not installed.
     """
     from tensordict._reductions import _rebuild_tensordict_files_consolidated
+
+    if not consolidated:
+        return await _recv_tensordict_uncollated(endpoint, device=device)
 
     meta_len_buf = np.empty(8, dtype=np.uint8)
     await endpoint.recv(meta_len_buf)
@@ -308,14 +364,36 @@ async def _send_tensordict_uncollated(endpoint, td: TensorDictBase) -> None:
         "keys": [],
         "dtypes": [],
         "shapes": [],
+        "batch_size": list(td.batch_size),
+        "unbatched": [],
+        "non_tensors": [],
     }
     tensors = []
-    for key, value in td.items(include_nested=True, leaves_only=True, sort=True):
+    for key, value in td.items(
+        include_nested=True, leaves_only=True, is_leaf=_is_leaf_nontensor, sort=True
+    ):
+        wire_key = list(key) if isinstance(key, tuple) else key
         if isinstance(value, torch.Tensor):
-            header["keys"].append(list(key) if isinstance(key, tuple) else key)
+            header["keys"].append(wire_key)
             header["dtypes"].append(str(value.dtype))
             header["shapes"].append(list(value.shape))
+            if isinstance(value, UnbatchedTensor):
+                header["unbatched"].append(wire_key)
             tensors.append(value)
+        elif type(value) is NonTensorData and _is_json_value(value.data):
+            header["non_tensors"].append([wire_key, value.data])
+        elif type(value) is NonTensorStack and _is_json_value(values := value.tolist()):
+            header["non_tensors"].append(
+                [wire_key, values, list(value.batch_size), value.stack_dim]
+            )
+        else:
+            raise ValueError(
+                f"consolidated=False cannot send the {type(value).__name__} entry "
+                f"{key!r}: it sends only NonTensorData and NonTensorStack entries "
+                "whose values are str, int, float, bool, None, or lists or dicts "
+                "(with str keys) of them. "
+                "Send it with consolidated=True."
+            )
 
     header_bytes = json.dumps(header).encode("utf-8")
     header_len = struct.pack("<Q", len(header_bytes))
@@ -328,6 +406,107 @@ async def _send_tensordict_uncollated(endpoint, td: TensorDictBase) -> None:
             await endpoint.send(t_contig)
         else:
             await endpoint.send(_tensor_to_numpy(t_contig.view(-1).view(torch.uint8)))
+
+
+async def _recv_tensordict_uncollated(
+    endpoint, *, device: torch.device | str | None = None
+) -> TensorDictBase:
+    """Receive a TensorDict that ``_send_tensordict_uncollated`` sends."""
+    from tensordict._td import TensorDict
+
+    header_len_buf = np.empty(8, dtype=np.uint8)
+    await endpoint.recv(header_len_buf)
+    header_len = struct.unpack("<Q", header_len_buf.tobytes())[0]
+
+    header_buf = np.empty(header_len, dtype=np.uint8)
+    await endpoint.recv(header_buf)
+    header = json.loads(bytes(header_buf))
+
+    if not isinstance(header, dict) or not all(
+        isinstance(header.get(field), list) for field in ("keys", "dtypes", "shapes")
+    ):
+        raise ValueError(
+            "Invalid uncollated header: expected keys, dtypes, and shapes lists."
+        )
+    keys, dtype_names, shapes = header["keys"], header["dtypes"], header["shapes"]
+    if not len(keys) == len(dtype_names) == len(shapes):
+        raise ValueError("Invalid uncollated header: list lengths must match.")
+    # Older senders send no batch size, unbatched keys or non-tensor entries.
+    batch_size = header.get("batch_size", [])
+    unbatched = header.get("unbatched", [])
+    non_tensors = header.get("non_tensors", [])
+    if not isinstance(batch_size, list) or any(
+        type(dim) is not int or dim < 0 for dim in batch_size
+    ):
+        raise ValueError(
+            "Invalid uncollated header: the batch size must be nonnegative integers."
+        )
+    if not isinstance(unbatched, list) or not (
+        isinstance(non_tensors, list)
+        and all(
+            isinstance(entry, list) and len(entry) in (2, 4) for entry in non_tensors
+        )
+    ):
+        raise ValueError(
+            "Invalid uncollated header: expected unbatched and non_tensors lists."
+        )
+    keys = [_decode_uncollated_key(key) for key in keys]
+    non_tensor_keys = [_decode_uncollated_key(entry[0]) for entry in non_tensors]
+    unbatched = {_decode_uncollated_key(key) for key in unbatched}
+    key_set = set(keys) | set(non_tensor_keys)
+    if len(key_set) != len(keys) + len(non_tensor_keys):
+        raise ValueError("Invalid uncollated header: keys must be unique.")
+    if any(key[:i] in key_set for key in key_set for i in range(1, len(key))):
+        raise ValueError(
+            "Invalid uncollated header: a leaf key cannot also have descendants."
+        )
+    if not unbatched.issubset(keys):
+        raise ValueError("Invalid uncollated header: unknown unbatched key.")
+    stacks = [
+        _decode_non_tensor_stack(*entry[1:], batch_size) if len(entry) == 4 else None
+        for entry in non_tensors
+    ]
+    dtypes = []
+    for key, dtype_name, shape in zip(keys, dtype_names, shapes):
+        if not isinstance(dtype_name, str) or dtype_name not in _WIRE_DTYPES:
+            raise ValueError("Invalid uncollated header: unknown torch dtype.")
+        if not isinstance(shape, list) or any(
+            type(dim) is not int or dim < 0 for dim in shape
+        ):
+            raise ValueError(
+                "Invalid uncollated header: dimensions must be nonnegative integers."
+            )
+        if key not in unbatched and shape[: len(batch_size)] != batch_size:
+            raise ValueError(
+                "Invalid uncollated header: a shape does not start with the batch size."
+            )
+        dtypes.append(_WIRE_DTYPES[dtype_name])
+
+    effective_device = (
+        torch.device(device) if device is not None else torch.device("cpu")
+    )
+    result = {}
+    for key, dtype, shape in zip(keys, dtypes, shapes):
+        numel = 1
+        for s in shape:
+            numel *= s
+        n_bytes = numel * torch.tensor([], dtype=dtype).element_size()
+        buf = torch.empty(n_bytes, dtype=torch.uint8, device=effective_device)
+        if buf.is_cuda:
+            await endpoint.recv(buf)
+        else:
+            buf_np = _tensor_to_numpy(buf)
+            await endpoint.recv(buf_np)
+        tensor = buf.view(dtype).view(shape)
+        result[key] = UnbatchedTensor(tensor) if key in unbatched else tensor
+
+    result = TensorDict(result, batch_size=batch_size)
+    for key, entry, stack in zip(non_tensor_keys, non_tensors, stacks):
+        if stack is None:
+            result.set_non_tensor(key, entry[1])
+        else:
+            result.set(key, stack)
+    return result
 
 
 def _compute_total_bytes(metadata: dict) -> int:
@@ -367,9 +546,16 @@ class TensorDictPipe:
       the buffer of the first message, without allocating memory or parsing
       metadata.
 
-    With ``consolidated=False``, each message carries the tensor leaves of
-    the tensordict, nested ones included, one by one, and the receiver builds
-    a new tensordict with an empty batch size each time.
+    With ``consolidated=False``, each message carries a JSON header, with the
+    batch size and the non-tensor entries, and then the tensor leaves of the
+    tensordict, nested ones included, one by one. The receiver builds a new
+    tensordict each time, with the batch size of the sent one; its nested
+    tensordicts get the same batch size. A non-tensor entry must be a
+    :class:`~tensordict.NonTensorData` or :class:`~tensordict.NonTensorStack`
+    whose values are ``str``, ``int``, ``float``, ``bool``, ``None``, or lists
+    or dicts (with ``str`` keys) of them: a send of any other non-tensor entry
+    raises a ``ValueError``. A stack comes back with the same batch size and
+    stack dimension.
 
     A pipe is a context manager and an async context manager, which close
     it at the end of the block, and an async iterator: ``async for td in
@@ -533,6 +719,8 @@ class TensorDictPipe:
 
         Raises:
             RuntimeError: if the pipe is closed.
+            ValueError: with ``consolidated=False``, if ``td`` holds a non-tensor
+                entry that the pipe cannot send (see the class description).
         """
         if self._closed:
             raise RuntimeError("Cannot send on a closed pipe.")
@@ -608,8 +796,8 @@ class TensorDictPipe:
         same tensordict, without allocating memory. So each receive can overwrite
         the values of the previous one: clone a tensordict to keep it.
 
-        With ``consolidated=False``, each call returns a new tensordict with an
-        empty batch size.
+        With ``consolidated=False``, each call returns a new tensordict with the
+        batch size of the sent one (an empty batch size from an older sender).
 
         Args:
             td (TensorDictBase, optional): a consolidated tensordict to receive
@@ -730,64 +918,7 @@ class TensorDictPipe:
         *,
         device: torch.device | str | None = None,
     ) -> TensorDictBase:
-        from tensordict._td import TensorDict
-
-        header_len_buf = np.empty(8, dtype=np.uint8)
-        await self._endpoint.recv(header_len_buf)
-        header_len = struct.unpack("<Q", header_len_buf.tobytes())[0]
-
-        header_buf = np.empty(header_len, dtype=np.uint8)
-        await self._endpoint.recv(header_buf)
-        header = json.loads(bytes(header_buf))
-
-        if not isinstance(header, dict) or not all(
-            isinstance(header.get(field), list)
-            for field in ("keys", "dtypes", "shapes")
-        ):
-            raise ValueError(
-                "Invalid uncollated header: expected keys, dtypes, and shapes lists."
-            )
-        keys, dtype_names, shapes = header["keys"], header["dtypes"], header["shapes"]
-        if not len(keys) == len(dtype_names) == len(shapes):
-            raise ValueError("Invalid uncollated header: list lengths must match.")
-        keys = [_decode_uncollated_key(key) for key in keys]
-        key_set = set(keys)
-        if len(key_set) != len(keys):
-            raise ValueError("Invalid uncollated header: keys must be unique.")
-        if any(key[:i] in key_set for key in keys for i in range(1, len(key))):
-            raise ValueError(
-                "Invalid uncollated header: a leaf key cannot also have descendants."
-            )
-        dtypes = []
-        for dtype_name, shape in zip(dtype_names, shapes):
-            if not isinstance(dtype_name, str) or dtype_name not in _WIRE_DTYPES:
-                raise ValueError("Invalid uncollated header: unknown torch dtype.")
-            if not isinstance(shape, list) or any(
-                type(dim) is not int or dim < 0 for dim in shape
-            ):
-                raise ValueError(
-                    "Invalid uncollated header: dimensions must be nonnegative integers."
-                )
-            dtypes.append(_WIRE_DTYPES[dtype_name])
-
-        effective_device = (
-            torch.device(device) if device is not None else torch.device("cpu")
-        )
-        result = {}
-        for key, dtype, shape in zip(keys, dtypes, shapes):
-            numel = 1
-            for s in shape:
-                numel *= s
-            n_bytes = numel * torch.tensor([], dtype=dtype).element_size()
-            buf = torch.empty(n_bytes, dtype=torch.uint8, device=effective_device)
-            if buf.is_cuda:
-                await self._endpoint.recv(buf)
-            else:
-                buf_np = _tensor_to_numpy(buf)
-                await self._endpoint.recv(buf_np)
-            result[key] = buf.view(dtype).view(shape)
-
-        return TensorDict(result, batch_size=[])
+        return await _recv_tensordict_uncollated(self._endpoint, device=device)
 
     def recv(
         self,

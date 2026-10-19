@@ -157,6 +157,11 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
+    # On free-threaded Python, urllib3 imports brotli inside the streaming tests,
+    # and brotli enables the GIL. Other modules that enable it still fail.
+    pytest.mark.filterwarnings(
+        r"ignore:The global interpreter lock \(GIL\) has been enabled to load module '_brotli':RuntimeWarning"
+    ),
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
@@ -3233,9 +3238,39 @@ class TestGeneric:
             with pytest.raises(TypeError, match="Pass an instance"):
                 TensorDict.from_dict({"c": cls})
             assert is_tensorclass(TensorDict.from_dataclass(cls, as_tensorclass=True))
-        # A type whose fields all have defaults gives a tensordict of them.
-        assert TensorDict.from_dataclass(Defaults)["n"] == 3
-        assert TensorDict.from_dict({"c": Defaults})["c", "n"] == 3
+
+    def test_from_dataclass_type_defaults_warns(self):
+        # https://github.com/pytorch/tensordict/issues/2960
+        @dataclass
+        class Defaults:
+            n: int = 3
+
+        @dataclass
+        class Holder:
+            cfg: type = Defaults
+
+        # A type whose fields all have defaults gives a tensordict of them,
+        # with a warning: from 0.17 from_dataclass raises and the others keep
+        # the type.
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_dataclass(Defaults)["n"] == 3
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_any(Defaults)["n"] == 3
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_dict({"c": Defaults})["c", "n"] == 3
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert TensorDict.from_dataclass(Holder())["cfg", "n"] == 3
+        # Instances, as_tensorclass=True and the constructor stay silent.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            assert TensorDict.from_dataclass(Defaults())["n"] == 3
+            assert TensorDict.from_any(Defaults())["n"] == 3
+            assert TensorDict.from_dict({"c": Defaults()})["c", "n"] == 3
+            assert is_tensorclass(
+                TensorDict.from_dataclass(Defaults, as_tensorclass=True)
+            )
+            assert TensorDict(c=Defaults)["c"] is Defaults
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
 
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])
     def test_from_any_dataclass_batch_dims(self, batch_dims):
@@ -9198,6 +9233,54 @@ class TestGeneric:
         assert (td == 1).all()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like_existing_file_size(self, tmpdir, num_threads):
+        # https://github.com/pytorch/tensordict/issues/2968
+        # memmap_like maps an existing file as it is, and warns when its size
+        # is not that of the new leaf, which raises from TensorDict 0.17.
+        def memmap_like(prefix, **kwargs):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                out = TensorDict(**kwargs).memmap_like(prefix, num_threads=num_threads)
+            record = [w for w in record if issubclass(w.category, FutureWarning)]
+            # Raised on the calling thread, so it points at this call, also
+            # with num_threads > 1.
+            assert all(w.filename == __file__ for w in record)
+            return out, [str(w.message) for w in record]
+
+        prefix = Path(tmpdir) / "data"
+        TensorDict(a=torch.arange(1.0, 4.0), b=torch.ones(2)).memmap(prefix)
+        # same dtype and shape: the old values, silently
+        out, messages = memmap_like(prefix, a=torch.zeros(3), b=torch.zeros(2))
+        assert out["a"].tolist() == [1.0, 2.0, 3.0]
+        assert messages == []
+        # same size in bytes: not seen, silent
+        out, messages = memmap_like(prefix, a=torch.zeros(3, dtype=torch.int32))
+        assert out["a"].tolist() == [1065353216, 1073741824, 1077936128]
+        assert messages == []
+        # a smaller leaf maps the start of the file, silently
+        out, messages = memmap_like(prefix, a=torch.zeros(2), b=torch.zeros(1))
+        assert out["a"].tolist() == [1.0, 2.0]
+        assert out["b"].tolist() == [1.0]
+        assert messages == []
+        # a larger leaf grows the file with zeros, and warns
+        out, messages = memmap_like(prefix, a=torch.zeros(5), b=torch.zeros(2))
+        assert out["a"].tolist() == [1.0, 2.0, 3.0, 0.0, 0.0]
+        assert out["b"].tolist() == [1.0, 1.0]
+        assert len(messages) == 1
+        assert "TensorDict 0.17" in messages[0]
+        assert "a.memmap from 12 to 20 bytes" in messages[0]
+        # new files are zero-filled, silently
+        out, messages = memmap_like(Path(tmpdir) / "new", a=torch.ones(3))
+        assert out["a"].tolist() == [0.0, 0.0, 0.0]
+        assert messages == []
+        # an archive is rebuilt, silently
+        archive = Path(tmpdir) / "data.tdz"
+        TensorDict(a=torch.ones(3)).memmap(archive)
+        out, messages = memmap_like(archive, a=torch.ones(5))
+        assert out["a"].tolist() == [0.0] * 5
+        assert messages == []
+
     @pytest.mark.parametrize("method", ["memmap", "memmap_", "memmap_like"])
     @pytest.mark.parametrize("return_early", [False, True])
     def test_memmap_threads_raise_worker_error(
@@ -9342,8 +9425,12 @@ class TestGeneric:
             # a tensorclass is indexed by batch index only
             reads.append(lambda: td[key])
         if container != "tensorclass" or key[0] != "x":
-            # a tensorclass returns None for a field that is a tensor
             reads.append(lambda: td.get(key))
+        else:
+            # a tensorclass returns None for a field that is a tensor, and
+            # raises from 0.17 (#2979)
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                assert td.get(key) is None
         match = f"'{'x' if 'x' in key else 'y'}' is a Tensor, not a tensordict"
         for read in reads:
             with pytest.raises(ValueError, match=match):
@@ -9396,6 +9483,38 @@ class TestGeneric:
         )
         assert "unique" in td
         assert "unique" in td_sep
+
+    def test_separates_default(self):
+        # A missing key gets the default, as with split_keys (#2948)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            out = td.separates("a", "zz", default=torch.ones(3))
+            assert (out["zz"] == 1).all()
+            assert "a" not in td
+            out = TensorDict(batch_size=[3]).separates(("n", "zz"), default="str")
+            assert out["n", "zz"] == "str"
+            out = TensorDict(batch_size=[3]).separates("zz", default=None)
+            assert out["zz"] is None
+            # a scalar fits an empty batch size
+            assert TensorDict().separates("zz", default=0)["zz"] == 0
+        # a default that does not fit the batch size gives a None entry until 0.17
+        for default in (0, torch.ones(2)):
+            td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                out = td.separates("a", "zz", default=default)
+            assert out["zz"] is None
+            assert (out["a"] == 0).all()
+            assert "a" not in td
+        # the same for a lazy stack and a TensorDictParams
+        td = lazy_stack([TensorDict(a=torch.zeros(2), batch_size=[2])] * 3)
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            out = td.separates("zz", default=[1, 2])
+        assert out.get("zz").tolist() == [[None, None]] * 3
+        td = TensorDictParams(TensorDict(a=torch.zeros(3), batch_size=[3]))
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            out = td.separates("zz", default=torch.ones(2))
+        assert out["zz"] is None
 
     @set_list_to_stack(True)
     def test_set_list_nontensor(self):
@@ -9468,6 +9587,22 @@ class TestGeneric:
                     f"0.16, the default will change to the tensor that "
                     f"torch.tensor(value) gives ({new})"
                 ) in str(w.message)
+
+    def test_set_unknown_kwargs_warn(self):
+        # set ignores unknown keywords with a FutureWarning, which raises a
+        # TypeError from 0.17, as set_ does (#2979)
+        x = torch.ones(3)
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        for td in (TensorDict(), lazy_stack([TensorDict(), TensorDict()]), params):
+            value = x if td.batch_dims == 0 else torch.ones(2, 3)
+            with pytest.warns(FutureWarning, match="'inplcae'"):
+                assert td.set("a", value, inplcae=True) is td
+            assert (td["a"] == 1).all()
+        td = TensorDict(a=torch.zeros(3))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td.set("a", x, inplace=True, non_blocking=False)
+            td.set("b", x)
 
     def test_set_tuple_no_warning(self):
         # Tuples that do not hold only Python numbers, and lists, do not warn (#2679)
@@ -13600,6 +13735,35 @@ class TestGeneric:
             else:
                 data.apply(lambda x: seen.append(type(x).__name__), is_leaf=is_leaf)
             assert seen == expected
+
+    def test_apply_unknown_kwargs_warn(self):
+        # apply, named_apply and apply_ ignore unknown keywords with a
+        # FutureWarning, which raises a TypeError from 0.17 (#2979)
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.zeros(3)}, batch_size=[3])
+        calls = [
+            lambda: td.apply(lambda x: x + 1, batch_sise=[]),
+            lambda: td.named_apply(lambda name, x: x + 1, foo=1),
+            lambda: td.apply_(lambda x: x + 1, foo=1),
+            lambda: lazy_stack([td, td]).apply(lambda x: x + 1, foo=1),
+        ]
+        for call in calls:
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                result = call()
+            assert result.batch_size[-1:] == torch.Size([3])
+        # keywords that apply passes to its implementation stay silent
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td.apply(lambda x: x + 1)
+            td.apply(lambda x: x + 1, call_on_unbatched=True)
+            out = td.apply(lambda name, x: x, named=True, nested_keys=True)
+            td.named_apply(lambda name, x: x, prefix=())
+            td.apply_(lambda x: x, default=0)
+            # keywords that apply passes itself raise, without a warning
+            with pytest.raises(TypeError, match="multiple values"):
+                td.apply(lambda x: x, checked=True)
+            with pytest.raises(TypeError, match="multiple values"):
+                td.named_apply(lambda name, x: x, named=True)
+        assert_allclose_td(out, td)
 
     def test_apply_out_batch_size_list_multithread(self):
         td = TensorDict(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])

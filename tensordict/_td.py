@@ -2213,6 +2213,13 @@ class TensorDict(TensorDictBase):
                         robust_key=robust_key,
                     )
                 else:
+                    if like and existsok and prefix is not None:
+                        # Warn on the calling thread: the executor's threads
+                        # do not see the caller's warning filters on
+                        # free-threaded builds.
+                        _warn_if_existing_file_smaller(
+                            value, key, _memmap_filename(prefix, key, robust_key)
+                        )
                     futures.append(
                         executor.submit(
                             _populate_memmap,
@@ -2224,6 +2231,7 @@ class TensorDict(TensorDictBase):
                             like=like,
                             existsok=existsok,
                             robust_key=robust_key,
+                            warn_existing_size=False,
                         )
                     )
                 if prefix is not None:
@@ -2640,6 +2648,7 @@ class TensorDict(TensorDictBase):
                 like=not copy_data,
                 existsok=existsok,
                 robust_key=robust_key,
+                warn_existing_size=False,
             )
             _update_metadata(
                 metadata=metadata,
@@ -3731,8 +3740,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 device=None,
                 is_shared=False)
             >>> # the data of both subtensordict is the same
-            >>> print(data.get("a").data_ptr(), sub_data.get("a").data_ptr())
-            140183705558208 140183705558208
+            >>> data.get("a").data_ptr() == sub_data.get("a").data_ptr()
+            True
             >>> sub_data_clone = sub_data.clone(recurse=True)
             >>> print(sub_data_clone)
             TensorDict(
@@ -3741,8 +3750,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 batch_size=torch.Size([2]),
                 device=None,
                 is_shared=False)
-            >>. print(sub_data.get("a").data_ptr())
-            140183705558208
+            >>> sub_data_clone.get("a").data_ptr() == sub_data.get("a").data_ptr()
+            False
             >>> sub_data_clone = sub_data.clone(recurse=False)
             >>> print(sub_data_clone)
             _SubTensorDict(
@@ -3751,8 +3760,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 batch_size=torch.Size([2]),
                 device=None,
                 is_shared=False)
-            >>> print(sub_data.get("a").data_ptr())
-            140183705558208
+            >>> sub_data_clone.get("a").data_ptr() == sub_data.get("a").data_ptr()
+            True
         """
         if not recurse:
             return _SubTensorDict(
@@ -4304,9 +4313,11 @@ from tensordict._td_functions import (  # noqa: F401
     stack,
 )
 from tensordict._td_memmap import (
+    _memmap_filename,
     _populate_empty,
     _populate_memmap,
     _populate_storage,
     _save_metadata,
     _update_metadata,
+    _warn_if_existing_file_smaller,
 )

@@ -834,7 +834,13 @@ class _Distributed:
         :func:`torch.distributed.reduce`. After the call, rank ``dst`` holds the
         result. On the other ranks, the values of the tensordict are not defined
         (with ``gloo``, they can hold partial results): clone the tensordict
-        before the call if you need them. See :ref:`distributed-collectives`.
+        before the call if you need them. A lazy stack reduces each stacked
+        leaf, like a dense tensordict of the same keys and shapes, and rank
+        ``dst`` writes the result back into its members: after the last
+        reduction, or with ``async_op=True``, after each reduction completes.
+        That write raises if a member leaf cannot be written in place, such as
+        an expanded tensor, and the call waits for every reduction before it
+        raises. See :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the result.
@@ -846,7 +852,10 @@ class _Distributed:
             return_premature (bool, optional): with ``async_op=True``, if
                 ``True``, returns the list of ``Work`` objects of the reductions
                 without waiting for them: call ``wait()`` on each one before you use
-                the tensordict. Defaults to ``False``.
+                the tensordict, even if an earlier one raises. On rank ``dst``,
+                the leaves of a lazy stack give a
+                :class:`torch.futures.Future` instead, which also writes the
+                result back. Defaults to ``False``.
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
 
@@ -882,6 +891,19 @@ class _Distributed:
         _future_list=None,
         group=None,
     ):
+        """Issues the reductions of :meth:`reduce`, one per leaf, in ``sorted_keys`` order.
+
+        The root call (``_future_list=None``) creates the list that nested calls
+        append to: the results of :func:`torch.distributed.reduce` (``Work``
+        objects with ``async_op=True``, ``None`` otherwise). Every rank must
+        issue the collectives of a dense tensordict of the same keys and shapes,
+        in the same order. An override whose leaves are copies writes the
+        result back on rank ``dst``: in a callback of the future of the ``Work``
+        with ``async_op=True``, and otherwise by appending a callable that the
+        root runs after the last collective. Returns the list for a nested call
+        or with ``return_premature=True``. Otherwise the root waits for every
+        entry with :meth:`_finish_reduce` and returns ``None``.
+        """
         from torch import distributed as dist
 
         if op is None:
@@ -912,10 +934,29 @@ class _Distributed:
             return _future_list
         elif async_op and return_premature:
             return _future_list
-        elif async_op:
-            for future in _future_list:
-                future.wait()
-            return
+        self._finish_reduce(_future_list, async_op)
+
+    @staticmethod
+    def _finish_reduce(future_list: list, async_op: bool) -> None:
+        """Waits for every reduction (``async_op``) or runs every pending write-back, then raises the first error.
+
+        A lazy stack on rank dst writes its results back in a callback of the
+        reduction (``async_op``), or leaves the write-back in the list (sync
+        mode). Stopping at the first error would leave reductions still writing
+        into the tensordict, or members not written back.
+        """
+        error = None
+        for item in future_list:
+            try:
+                if async_op:
+                    item.wait()
+                elif item is not None:
+                    item()
+            except Exception as err:
+                if error is None:
+                    error = err
+        if error is not None:
+            raise error
 
     def broadcast(
         self,

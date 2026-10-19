@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 
 # This script is for setting up environment in which unit test is ran.
-# To speed up the CI time, the resulting environment is cached.
-#
-# Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
 set -v
@@ -96,9 +93,37 @@ else
 fi
 
 # 3. Install dependencies
-printf "* Installing dependencies (except PyTorch)\n"
-
 pip install pip --upgrade
+
+# PyTorch first: mosaicml-streaming depends on torch, and without a torch
+# installed pip would download torch from PyPI with its CUDA libraries and
+# triton, which install.sh would then replace.
+printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      python -m pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+  else
+      python -m pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+  fi
+elif [[ "$TORCH_VERSION" == "stable" ]]; then
+    if [ "${CU_VERSION:-}" == cpu ] ; then
+      python -m pip install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/cpu
+  else
+      python -m pip install --upgrade torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+  fi
+elif [[ "$TORCH_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+  # a release series, such as 2.13, with the torchvision release built for it
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      python -m pip install "torch==${TORCH_VERSION}.*" torchvision --index-url https://download.pytorch.org/whl/cpu
+  else
+      python -m pip install "torch==${TORCH_VERSION}.*" torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
+  fi
+else
+  printf "Failed to install pytorch"
+  exit 1
+fi
+
+printf "* Installing the test dependencies\n"
 
 if ${pip_only}; then
     # Install test dependencies (mirrors environment.yml)
