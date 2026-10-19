@@ -89,6 +89,7 @@ def default_device():
     ],
 )
 class TestConsolidate:
+    @pytest.mark.gpu
     def test_consolidate(
         self, benchmark, td, compile_mode, num_threads, default_device
     ):
@@ -143,6 +144,7 @@ class TestConsolidate:
         [True, "default", None],
     ],
 )
+@pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device found")
 class TestTo:
     def test_to(

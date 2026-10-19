@@ -126,7 +126,9 @@ jobs:
           uv run --active python -c "import sys; actual_version = f'{sys.version_info.major}.{sys.version_info.minor}'; expected_version = '${{ matrix.python-version }}'; print(f'Expected: {expected_version}, Actual: {actual_version}'); exit(1) if actual_version != expected_version else None; exit(1) if sys.version_info >= (3, 13) else print(f'Python version check passed: {actual_version}')"
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          uv run --active pytest -vvv --benchmark-json output.json
+          # The GPU job runs only the benchmarks marked gpu, which run on CUDA
+          # (see benchmarks/conftest.py): the CPU job runs the others.
+          uv run --active pytest -vvv --benchmark-json output.json ${{ matrix.device == 'GPU' && '-m gpu' || '' }}
 
       # Upload benchmark results for main branch, manual dispatch, or PRs with 'benchmarks/upload' label
       - name: Upload benchmark results

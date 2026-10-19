@@ -116,6 +116,7 @@ def pause_when_exit():
     time.sleep(0.5)
 
 
+@pytest.mark.gpu
 def test_serialize_model(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors, including TD construction."""
     has_cuda = torch.cuda.device_count()
@@ -129,6 +130,7 @@ def test_serialize_model(benchmark, tmpdir, pause_when_exit):
     del t
 
 
+@pytest.mark.gpu
 def test_serialize_model_archive(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as a single-file memmap archive."""
     has_cuda = torch.cuda.device_count()
@@ -167,6 +169,7 @@ def test_load_archive(benchmark, tmpdir, pause_when_exit):
     del t
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 def test_serialize_model_zarr(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as a zarr store."""
@@ -203,6 +206,7 @@ def test_load_zarr(benchmark, tmpdir, pause_when_exit):
     del t
 
 
+@pytest.mark.gpu
 def test_serialize_model_pickle(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of pickling a model state-dict, including state-dict construction."""
     has_cuda = torch.cuda.device_count()
@@ -217,6 +221,7 @@ def test_serialize_model_pickle(benchmark, tmpdir, pause_when_exit):
     del t
 
 
+@pytest.mark.gpu
 def test_serialize_weights(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors."""
     has_cuda = torch.cuda.device_count()
@@ -232,6 +237,7 @@ def test_serialize_weights(benchmark, tmpdir, pause_when_exit):
     del t, weights
 
 
+@pytest.mark.gpu
 def test_serialize_weights_returnearly(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors, before writing is completed."""
     has_cuda = torch.cuda.device_count()
@@ -259,6 +265,7 @@ def test_serialize_weights_returnearly(benchmark, tmpdir, pause_when_exit):
     del t, weights
 
 
+@pytest.mark.gpu
 def test_serialize_weights_pickle(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of pickling a model state-dict."""
     has_cuda = torch.cuda.device_count()

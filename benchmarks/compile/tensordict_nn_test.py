@@ -20,6 +20,8 @@ from tensordict.nn import (
 sys.setrecursionlimit(10000)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# auto_device runs every benchmark of this file on DEVICE
+pytestmark = pytest.mark.gpu
 IS_MACOS_ARM64 = platform.system() == "Darwin" and platform.machine() == "arm64"
 
 
