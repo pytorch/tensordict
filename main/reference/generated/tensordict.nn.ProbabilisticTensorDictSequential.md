@@ -430,15 +430,17 @@ See the examples of `ProbabilisticTensorDictSequential`.
 
 *property*log_prob_key
 
-The key where the log-probability is written, when there is one such key.
+The log-probability key of the sequence, when `log_prob_keys` has exactly one element.
 
 See the [log-probability key table](tensordict.nn.ProbabilisticTensorDictModule.html#log-prob-keys).
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate)
- changed since the module was built, or if it is `False` and
- the module has several sampled keys (use `log_prob_keys`).
+[**AttributeError**](https://docs.python.org/3/builtins/exceptions.html#AttributeError) - if `log_prob_keys` does not have exactly one
+ element (use `log_prob_keys`), or if
+ [`composite_lp_aggregate()`](tensordict.nn.composite_lp_aggregate.html#tensordict.nn.composite_lp_aggregate) changed since a
+ module was built. The error message names the inner
+ `ModuleList`.
 
 *property*log_prob_keys
 
