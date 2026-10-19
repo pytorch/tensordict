@@ -417,11 +417,6 @@ class TestTensorDicts(TestTensorDictsBase):
         if "memmap" in td_name and device == torch.device("cpu"):
             tdt = td.as_tensor()
             assert (tdt == td).all()
-        elif "memmap" in td_name:
-            with pytest.raises(
-                RuntimeError, match="can only be called with MemoryMappedTensors stored"
-            ):
-                td.as_tensor()
         else:
             # checks that it runs
             td.as_tensor()
@@ -767,7 +762,39 @@ class TestTensorDicts(TestTensorDictsBase):
             value.dtype is torch.int
             for value in tdint.values(True, True, is_leaf=is_leaf)
         )
-        tdint = td.type(torch.int)
+        with (
+            pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked")
+            if td.is_locked
+            else contextlib.nullcontext()
+        ):
+            tdint = td.type(torch.int)
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
+
+    @pytest.mark.parametrize("cast_filter", [None, lambda key, value: True])
+    def test_type_locked(self, td_name, device, cast_filter):
+        # type() of a locked tensordict is unlocked, unlike int(): a
+        # FutureWarning says it stays locked from 0.17 (#2959)
+        td = getattr(self, td_name)(device)
+        if td.is_locked:
+            td.unlock_()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            td.type(torch.int, cast_filter=cast_filter)
+        assert not [x for x in w if "type() returns an unlocked" in str(x.message)]
+        try:
+            td.lock_()
+        except RuntimeError as err:
+            if "Cannot lock" not in str(err):
+                raise
+            pytest.skip(str(err))
+        with pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked"):
+            tdint = td.type(torch.int, cast_filter=cast_filter)
+        assert not tdint.is_locked
+        assert td.int().is_locked
+        is_leaf = lambda cls: issubclass(cls, torch.Tensor)
         assert all(
             value.dtype is torch.int
             for value in tdint.values(True, True, is_leaf=is_leaf)
@@ -933,6 +960,29 @@ class TestTensorDicts(TestTensorDictsBase):
             _ = nested.get("key")
             assert td.get(("some", "nested", "key")).shape == td.shape
             assert is_tensor_collection(td.get(("some", "nested", "key")))
+            # The plain TensorDicts already on the path keep their entries.
+            # Views, typed tensordicts and files replace each level.
+            if td_name not in (
+                "sub_td",
+                "sub_td2",
+                "permute_td",
+                "unsqueezed_td",
+                "squeezed_td",
+                "td_h5",
+                "typed_td",
+                "nested_typed_td",
+            ):
+                leaf = torch.ones(td.shape)
+                td.set(("some", "leaf"), leaf)
+                td.create_nested(("some", "other"))
+                td.create_nested(("some", "nested", "key2"))
+                keys = set(td.keys(include_nested=True))
+                assert {
+                    ("some", "nested", "key"),
+                    ("some", "nested", "key2"),
+                    ("some", "other"),
+                } <= keys
+                assert (td.get(("some", "leaf")) == 1).all()
             del td["root"]
         if td_name in ("sub_td", "sub_td2"):
             return
@@ -3367,6 +3417,29 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_replace is not td
         assert (td_replace == 0).all()
 
+    def test_replace_does_not_modify_arg(self, td_name, device):
+        # https://github.com/pytorch/tensordict/issues/2949
+        td = getattr(self, td_name)(device)
+        new_a = torch.zeros_like(td.get("a"))
+        new_b = torch.ones_like(td.get("a"))
+        arg = {"a": new_a}
+        td_replace = td.replace(arg, new_key=new_b)
+        assert list(arg) == ["a"]
+        assert (td_replace.get("a") == 0).all()
+        assert (td_replace.get("new_key") == 1).all()
+
+        arg = TensorDict(
+            a=new_a,
+            nested=TensorDict(x=new_a, batch_size=td.batch_size),
+            batch_size=td.batch_size,
+            device=td.device,
+        ).lock_()
+        td_replace = td.replace(arg, new_key=new_b, nested={"y": new_b})
+        assert set(arg.keys(True)) == {"a", "nested", ("nested", "x")}
+        assert (td_replace.get("new_key") == 1).all()
+        assert (td_replace.get(("nested", "x")) == 0).all()
+        assert (td_replace.get(("nested", "y")) == 1).all()
+
     def test_repr(self, td_name, device):
         td = getattr(self, td_name)(device)
         _ = str(td)
@@ -5354,6 +5427,37 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(TypeError, match="fast=None"):
             td.copy_at_(newdata, slice(1, None, 2), fast=None)
         assert td.get("val").tolist() == [0] * 10
+
+    def test_copy_at_fast_non_tensor_warns(self, td_name, device):
+        # #2951: fast=True skips the non-tensor entries of a source that also
+        # holds tensors, and warns that this raises from TensorDict 0.17.
+        td = TensorDict(
+            x=torch.zeros(3), a=TensorDict(y=torch.zeros(3)), batch_size=[3]
+        )
+        td.set_non_tensor("z", "a")
+        source = TensorDict(x=torch.ones(()), a=TensorDict(y=torch.ones(())))
+        nested = source.clone()
+        source.set_non_tensor("z", "b")
+        nested.set_non_tensor(("a", "z"), "b")
+        for src in (source, nested):
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                td.copy_at_(src, 0)
+            assert td["x"].tolist() == [1, 0, 0]
+            assert td["a", "y"].tolist() == [1, 0, 0]
+            assert td.get_non_tensor("z") == "a"
+            assert ("a", "z") not in td.keys(True)
+            td.zero_()
+
+        # the calls whose result stays the same in 0.17 do not warn
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td.copy_at_(source.filter_non_tensor_data(), 1)
+            with pytest.raises(RuntimeError, match="fast=True"):
+                td.copy_at_(source.select("z"), 1)
+            td.copy_at_(source, 2, fast=False)
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        assert td["x"].tolist() == [0, 1, 1]
+        assert td.get("z").tolist() == ["a", "a", "b"]
 
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator

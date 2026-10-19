@@ -186,6 +186,12 @@ _TensorTypes = (
 _TENSOR_ONLY_TYPE_ERR = TypeError(
     "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
 )
+# raised when an indexed write gives a NonTensorData another value
+_NON_TENSOR_ONE_VALUE_MSG = (
+    "A NonTensorData holds one value for all its elements, so it "
+    "cannot take another value at an index. Call maybe_to_stack() "
+    "to get a NonTensorStack, which holds a value per element."
+)
 # flags accepted by the bracket form TensorClass["autocast", ...]
 _TENSORCLASS_FLAGS = (
     "autocast",
@@ -869,7 +875,13 @@ def from_dataclass(
             where it is.
 
     The class flags are described in :class:`~tensordict.TensorClass`. Pass
-    at most one of ``autocast``, ``nocast`` and ``tensor_only``.
+    at most one of ``autocast``, ``nocast`` and ``tensor_only``, as for
+    :func:`~tensordict.tensorclass`. When the flags are applied (not with
+    ``dest_cls``, and not for a type that is already a tensorclass),
+    ``autocast`` with ``nocast``, or, for a type, ``tensor_only`` with either
+    of them, emits a ``FutureWarning`` today. Starting with TensorDict 0.17,
+    the default will change to raising the ``TypeError`` that
+    :func:`~tensordict.tensorclass` raises.
 
     Returns:
         A tensorclass type if ``obj`` is a type, a tensorclass instance
@@ -921,6 +933,18 @@ def from_dataclass(
             for field in source.__dataclass_fields__.values()
         ]
 
+    def _warn_exclusive_flags():
+        # Called only where the flags are applied to a class.
+        if (autocast and nocast) or (tensor_only and (autocast or nocast)):
+            warnings.warn(
+                f"from_dataclass() got autocast={autocast}, nocast={nocast} and "
+                f"tensor_only={tensor_only}, flags that @tensorclass rejects as "
+                "exclusive. Starting with TensorDict 0.17, the default will "
+                "change to raising the TypeError that @tensorclass raises.",
+                FutureWarning,
+                stacklevel=3,
+            )
+
     if isinstance(obj, type):
         if is_tensorclass(obj):
             return obj
@@ -940,6 +964,7 @@ def from_dataclass(
         clz._shadow = shadow
         clz._frozen = frozen
         clz._tensor_only = tensor_only
+        _warn_exclusive_flags()
         return clz
 
     if not is_dataclass(obj):
@@ -987,6 +1012,8 @@ def from_dataclass(
                 TensorDictBase._CONFLICTING_BATCH_SIZES.format("from_dataclass")
             )
         result = result.auto_batch_size_(batch_dims=batch_dims)
+    if dest_cls is None:
+        _warn_exclusive_flags()
     return result
 
 
@@ -1350,10 +1377,14 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
         if isinstance(tensorclass_instance, (tuple, list)):
             tensorclass_instance = tensorclass_instance[0]
+        # torch.clamp(..., out=out) returns out itself, as TensorDict.clamp does
+        clamp_out = kwargs.get("out") if func is torch.clamp else None
         args = tuple(_arg_to_tensordict(arg) for arg in args)
         kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
 
         result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        if clamp_out is not None and result is kwargs["out"]:
+            return clamp_out
         if isinstance(result, (list, tuple)):
             return type(result)(
                 _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
@@ -1510,10 +1541,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
                 def _getter(self):
                     td = self._tensordict
                     if type(td) is TensorDict:
-                        # Cheaper than _get_str. Dynamo also guards on a key
-                        # that dict.get misses, but not on the KeyError in
-                        # _get_str: a compiled function that read None would
-                        # keep reading None once the field holds a tensor.
+                        # Cheaper than _get_str. Dynamo guards on a key that
+                        # dict.get misses: a compiled function that read None
+                        # recompiles once the field holds a tensor.
                         out = td._tensordict.get(key, _UNSET)
                     else:
                         out = td._get_str(key, _UNSET)
@@ -3231,8 +3261,8 @@ def _getattr(self, item: str, **kwargs) -> Any:
                 return out
         td = self._tensordict
         if type(td) is TensorDict:
-            # as in the tensor_only getter: Dynamo guards on a key that
-            # dict.get misses, but not on the KeyError in _get_str
+            # as in the tensor_only getter: cheaper than _get_str, and
+            # Dynamo guards on a key that dict.get misses
             out = td._tensordict.get(item, _UNSET)
         else:
             out = td._get_str(item, _UNSET, **kwargs)
@@ -3292,8 +3322,8 @@ class _FieldGetter:
                 return _from_shared_nontensor(out)
             return out
         if type(td) is TensorDict:
-            # as in the tensor_only getter: Dynamo guards on a key that
-            # dict.get misses, but not on the KeyError in _get_str
+            # as in the tensor_only getter: cheaper than _get_str, and
+            # Dynamo guards on a key that dict.get misses
             out = td._tensordict.get(name, _UNSET)
         else:
             out = td._get_str(name, _UNSET)
@@ -4199,15 +4229,15 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         and is_non_tensor(value)
         and _non_tensor_value_differs(self, value)
     ):
-        raise ValueError(
-            "A NonTensorData holds one value for all its elements, so it "
-            "cannot take another value at an index. Call maybe_to_stack() "
-            "to get a NonTensorStack, which holds a value per element."
-        )
+        raise ValueError(_NON_TENSOR_ONE_VALUE_MSG)
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor)
     ):
+        if isinstance(self, NonTensorData):
+            # A raw value, such as a string written through the list of
+            # NonTensorData.tolist(as_linked_list=True).
+            raise ValueError(_NON_TENSOR_ONE_VALUE_MSG)
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
             f" numeric scalars and tensors. Got {type(value)}"
@@ -6548,7 +6578,12 @@ class NonTensorDataBase(TensorClass):
                 Defaults to ``False``.
             as_linked_list (bool, optional): if ``True``, returns a
                 ``tensordict.utils.LinkedList`` bound to the entry instead of a
-                list. Defaults to ``False``.
+                list. A :class:`NonTensorData` holds one value, so setting an
+                item of the list to a non-tensor value, such as a string,
+                raises a ``ValueError`` and leaves the list unchanged. Call
+                :meth:`~tensordict.NonTensorData.maybe_to_stack` first to get a
+                :class:`~tensordict.NonTensorStack`, whose list writes back.
+                Defaults to ``False``.
 
         Examples:
             >>> from tensordict import NonTensorData

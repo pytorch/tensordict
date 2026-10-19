@@ -2104,6 +2104,45 @@ class TestTensorClass:
         from_dataclass(MyDataClass, nocast=True)
         from_dataclass(MyDataClass)
 
+    def test_from_dataclass_exclusive_flags(self):
+        # https://github.com/pytorch/tensordict/issues/2979 (item 17)
+        @dataclasses.dataclass
+        class Tensors:
+            a: torch.Tensor
+
+        x = MyDataClass(a=0, b=torch.zeros(()), c="c")
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            cls = from_dataclass(MyDataClass, autocast=True, nocast=True)
+        assert cls._autocast and cls._nocast
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            assert is_tensorclass(from_dataclass(x, autocast=True, nocast=True))
+        for flag in ("autocast", "nocast"):
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                cls = from_dataclass(Tensors, tensor_only=True, **{flag: True})
+            assert cls._tensor_only and getattr(cls, f"_{flag}")
+            # An instance raises already.
+            with pytest.raises(TypeError, match="exclusive"):
+                from_dataclass(
+                    Tensors(torch.zeros(())), tensor_only=True, **{flag: True}
+                )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            from_dataclass(MyDataClass, autocast=True)
+            from_dataclass(x, nocast=True)
+            from_dataclass(Tensors, tensor_only=True)
+            # The flags are not used with dest_cls or for a tensorclass type.
+            dest_cls = from_dataclass(MyDataClass)
+            assert isinstance(
+                from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
+                dest_cls,
+            )
+            assert from_dataclass(dest_cls, tensor_only=True, autocast=True) is dest_cls
+            # Inputs that are not dataclasses raise as before.
+            with pytest.raises(TypeError, match="Expected a obj input"):
+                from_dataclass(3, autocast=True, nocast=True)
+            with pytest.raises(AttributeError, match="__dataclass_fields__"):
+                from_dataclass(int, autocast=True, nocast=True)
+
     def test_from_dataclass(self):
         assert is_tensorclass(MyTensorClass_autocast)
         assert MyTensorClass_nocast is not MyDataClass
@@ -4121,6 +4160,13 @@ class TestTensorClass:
         assert (data_replace.X == 0).all()
         assert (data_replace.y.X == 0).all()
 
+        # The keyword entries do not change the positional argument (#2949)
+        data_replace = data.replace(replacement, z="keyword")
+        assert replacement.z == "replacement"
+        assert data_replace.z == "keyword"
+        assert isinstance(data_replace.y, MyDataNested)
+        assert data_replace.y.z == "replacement"
+
     def test_squeeze(self):
         @tensorclass
         class MyDataNested:
@@ -5831,6 +5877,17 @@ class TestCastFilter:
             assert mesh64.points.dtype == torch.float64
             assert mesh64.cells.dtype == torch.long
         assert mesh.points.dtype == torch.float32
+
+    def test_type_locked(self):
+        # type() of a locked tensorclass is unlocked, unlike to(dtype): a
+        # FutureWarning says it stays locked from 0.17 (#2959)
+        mesh = self._mesh(self.Mesh).lock_()
+        with pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked") as w:
+            out = mesh.type(torch.float64)
+        assert w[0].filename == __file__
+        self._check_mesh(out, self.Mesh, torch.float64)
+        assert not out.is_locked
+        assert mesh.to(torch.float64).is_locked
 
     def test_cast_filter_attrs(self):
         # The class default does not stop to(attrs), whose attrs give each

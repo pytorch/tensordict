@@ -806,6 +806,21 @@ class TestTD:
         assert x is None
         torch.testing.assert_close(a, data["a"] + 1)
 
+    @pytest.mark.parametrize("out_dim", [0, 1])
+    def test_lazy_stack_apply_out(self, out_dim, mode):
+        # #2982: out stacked along another dim than the source
+        def apply(td, out):
+            return td.apply(lambda x: x + 1, out=out)
+
+        apply_c = torch.compile(apply, fullgraph=True, mode=mode)
+        data = TensorDict(x=torch.arange(6).reshape(2, 3), batch_size=[2, 3])
+        source = lazy_stack(data.unbind(0), 0)
+        out = lazy_stack(torch.zeros_like(data).unbind(out_dim), out_dim)
+        result = apply_c(source, out)
+        assert (result is out) == (out_dim == 1)
+        assert out.stack_dim == out_dim
+        torch.testing.assert_close(out.to_tensordict(), data + 1)
+
     @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor"])
     def test_dense_get_ignored_kwargs(self, kwarg, mode):
         # a dense get warns about these keywords in eager mode only (#2551)
@@ -1655,6 +1670,21 @@ class TestTD:
         update_c(td, x).backward()
         assert (x.grad == 2).all()
         assert not td["b"].requires_grad
+
+    def test_update_batch_size_prefix_future_warning(self, mode):
+        # eager mode warns on this call (#2957); compiled code skips the warning
+        def update(x):
+            td = TensorDict(x=x.clone())
+            td.update(TensorDict(x=x * 0, batch_size=[2]), update_batch_size=True)
+            return td
+
+        x = torch.ones(2, 3)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            expected = update(x)
+        update_c = torch.compile(update, fullgraph=True, mode=mode)
+        result = update_c(x)
+        assert result.batch_size == expected.batch_size == ()
+        assert_close(result, expected)
 
     @pytest.mark.parametrize("lazy", [False, True])
     def test_detach_no_grad(self, lazy, mode):
@@ -4570,6 +4600,41 @@ class TestGuardCount:
             torch.testing.assert_close(out, torch.ones(3))
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
+    @pytest.mark.parametrize("variant", ["flat", "nested", "tensorclass"])
+    def test_get_missing_key_guards(self, variant):
+        # gh-2980: a get that misses guards on the key being absent, so the
+        # compiled function does not keep the default once the key appears
+        @tensorclass
+        class TC:
+            cache: TensorDict
+
+        def fn(td):
+            if variant == "flat":
+                v = td["cache"].get("c", None)
+            elif variant == "nested":
+                v = td.get(("cache", "c"), None)
+            else:
+                v = td.cache.get("c", None)
+            if v is None:
+                return torch.full((), -1.0)
+            return v.sum()
+
+        def make(keys):
+            cache = TensorDict({k: torch.ones(3) for k in keys})
+            if variant == "nested":
+                # the first level is missing whenever "c" is
+                return TensorDict({"cache" if "c" in keys else "other": cache})
+            if variant == "tensorclass":
+                return TC(cache=cache)
+            return TensorDict(cache=cache)
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for keys in [[], ["c"], ["a"], ["c", "a"]]:
+            td = make(keys)
+            torch.testing.assert_close(compiled(td), fn(td))
+        assert counter.frame_count == 2, f"{counter.frame_count} frames"
 
     @pytest.mark.parametrize("kind", ["memmap", "shared"])
     def test_slice_dynamic_memmap_shared_no_recompile(self, kind, tmpdir):

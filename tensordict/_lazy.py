@@ -104,6 +104,7 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _parse_to,
     _pass_through,
+    _positional_non_blocking,
     _recursive_unbind_list,
     _REPR_OPTIONS,
     _shape,
@@ -1408,7 +1409,7 @@ class LazyStackedTensorDict(TensorDictBase):
         try:
             for td in self.tensordicts:
                 renamed.append((td, _names_snapshot(td)))
-                td.rename_(*names_list)
+                td._set_names(names_list)
             # The rename gives the members names_list and keeps the names of
             # the dims their nested tensordicts add, so a name free before
             # the rename is taken after it only if it is in names_list.
@@ -1473,6 +1474,10 @@ class LazyStackedTensorDict(TensorDictBase):
         Args:
             key (NestedKey): the key of the entry.
 
+        Raises:
+            KeyError: if the stack has no entry at ``key``, or only some of
+                its members have one.
+
         Examples:
             >>> import torch
             >>> from tensordict import LazyStackedTensorDict, TensorDict
@@ -1486,7 +1491,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if leaf is not None:
             return leaf[0]
         try:
-            item = self.get(key)
+            item = self.get(key, NO_DEFAULT)
             return item.shape
         except RuntimeError as err:
             if re.match(
@@ -1747,6 +1752,16 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
             )
         return self
+
+    # Override: each member keeps or replaces its own entry on the path.
+    def _create_nested_tuple(self, key):
+        # A stack of plain TensorDicts hands the key to each member, which
+        # keeps or replaces its own entry at key[0]. Any other stack, such as
+        # a NonTensorStack or a stack of files, replaces each level.
+        if len(key) == 1 or not all(type(td) is TensorDict for td in self.tensordicts):
+            return super()._create_nested_tuple(key)
+        for td in self.tensordicts:
+            td._create_nested_tuple(key)
 
     def _unbatched_member_values(self, value: Tensor) -> list[Tensor]:
         """The ``UnbatchedTensor`` ``value`` for each member, as ``unbind`` gives it.
@@ -3446,6 +3461,23 @@ class LazyStackedTensorDict(TensorDictBase):
                     local_futures=local_futures[-1],
                 )
 
+    def _apply_out_tensordicts(
+        self, out: TensorDictBase
+    ) -> list[TensorDictBase] | None:
+        """The members of ``out`` that the members of ``self`` write their results into.
+
+        Returns ``None`` if ``out`` is stacked along another dimension: its
+        members are then other slices than those of ``self``, so the caller
+        computes the result without ``out`` and writes it with ``out.update``.
+        """
+        if not isinstance(out, LazyStackedTensorDict):
+            raise ValueError(
+                "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+            )
+        if out.stack_dim != self.stack_dim:
+            return None
+        return out.tensordicts
+
     def _multithread_rebuild(
         self,
         *,
@@ -3471,11 +3503,28 @@ class LazyStackedTensorDict(TensorDictBase):
                 "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
             )
         if out is not None:
-            if not isinstance(out, LazyStackedTensorDict):
-                raise ValueError(
-                    "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+            out_tensordicts = self._apply_out_tensordicts(out)
+            if out_tensordicts is None and not inplace:
+                result = self._multithread_rebuild(
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    inplace=inplace,
+                    checked=checked,
+                    filter_empty=filter_empty,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_futures,
+                    subs_results=subs_results,
+                    multithread_set=multithread_set,
+                    **constructor_kwargs,
                 )
-            out = out.tensordicts
+                if result is not None:
+                    out.update(result)
+                if names is not NO_DEFAULT:
+                    out.names = names
+                return out
+            out = out_tensordicts
         results = []
         for i, (td, local_future) in enumerate(
             _zip_strict(self.tensordicts, local_futures)
@@ -3544,11 +3593,32 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"batch_size={batch_size}, device={device}, names={names}, constructor_kwargs={constructor_kwargs}"
             )
         if out is not None:
-            if not isinstance(out, LazyStackedTensorDict):
-                raise ValueError(
-                    "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+            out_tensordicts = self._apply_out_tensordicts(out)
+            if out_tensordicts is None and not inplace:
+                result = self._apply_nest(
+                    fn,
+                    *others,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    inplace=inplace,
+                    checked=checked,
+                    call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix,
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    call_on_unbatched=call_on_unbatched,
+                    **constructor_kwargs,
                 )
-            out = out.tensordicts
+                if result is not None:
+                    out.update(result)
+                if names is not NO_DEFAULT:
+                    out.names = names
+                return out
+            out = out_tensordicts
         elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
             batch_size = torch.Size(batch_size)
@@ -5200,8 +5270,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     *self.tensordicts, stack_dim=dim1, stack_dim_name=self._td_dim_name
                 )
             else:
+                # Each member moves its dim dim1 - 1 to dim0. For adjacent dims
+                # that is a transpose, which is cheaper than movedim.
+                if dim1 - 1 == dim0 + 1:
+                    members = (td.transpose(dim0, dim1 - 1) for td in self.tensordicts)
+                else:
+                    members = (td.movedim(dim1 - 1, dim0) for td in self.tensordicts)
                 result = type(self)(
-                    *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
+                    *members,
                     stack_dim=dim1,
                     stack_dim_name=self._td_dim_name,
                 )
@@ -5213,8 +5289,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     *self.tensordicts, stack_dim=dim0, stack_dim_name=self._td_dim_name
                 )
             else:
+                # Each member moves its dim dim0 to dim1 - 1. For adjacent dims
+                # that is a transpose, which is cheaper than movedim.
+                if dim1 - 1 == dim0 + 1:
+                    members = (td.transpose(dim0, dim1 - 1) for td in self.tensordicts)
+                else:
+                    members = (td.movedim(dim0, dim1 - 1) for td in self.tensordicts)
                 result = type(self)(
-                    *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
+                    *members,
                     stack_dim=dim0,
                     stack_dim_name=self._td_dim_name,
                 )
@@ -5761,6 +5843,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> Self:
+        positional = "non_blocking" not in kwargs
         non_blocking = kwargs.pop("non_blocking", None)
         (
             device,
@@ -5772,6 +5855,8 @@ class _CustomOpTensorDict(TensorDictBase):
             num_threads,
             inplace,
         ) = _parse_to(*args, **kwargs)
+        if positional and len(args) > 1:
+            non_blocking = _positional_non_blocking(args)
         if inplace:
             raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
 

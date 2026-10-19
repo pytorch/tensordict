@@ -45,6 +45,7 @@ from tensordict.base import (
     _has_lazy_stack,
     _holds_its_tensors,
     _in_dense_is_empty,
+    _InplaceWriteError,
     _is_accepted_class,
     _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
@@ -111,6 +112,7 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
+    _user_stacklevel,
     _zip_strict,
     DeviceType,
     expand_as_right,
@@ -1616,7 +1618,7 @@ class TensorDict(TensorDictBase):
             except KeyError as err:
                 raise err
             except Exception as err:
-                raise ValueError(
+                raise _InplaceWriteError(
                     f"Failed to update '{key}' in tensordict {self}"
                 ) from err
         return self
@@ -1905,8 +1907,20 @@ class TensorDict(TensorDictBase):
             ):
                 return NotImplemented
             indexed_dest_values.append(dest_indexed)
-        copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
+        compiling = is_compiling()
+        copy_fn = _foreach_copy_compiled if compiling else _foreach_copy_
         copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
+        # _items_list leaves the non-tensor entries out: they were skipped
+        if not compiling and input_dict_or_td._has_non_tensor:
+            warn(
+                "copy_at_(..., fast=True) copied the tensors of the source and "
+                "skipped its non-tensor entries. Starting with TensorDict 0.17, "
+                "the default will change to raising a RuntimeError, as for a "
+                "source with only non-tensor entries. Use fast=False or "
+                "update_at_ to write the non-tensor entries.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
         return self
 
     # Override: dense fast path: a top-level key is deleted without the call
@@ -2036,7 +2050,11 @@ class TensorDict(TensorDictBase):
         try:
             return self._tensordict[key]
         except KeyError:
-            return self._default_get(key, default)
+            # `in` makes Dynamo guard on the key being absent: it adds no guard
+            # for a KeyError caught from a dict read (gh-2980)
+            if key not in self._tensordict:
+                return self._default_get(key, default)
+            raise
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -2057,7 +2075,10 @@ class TensorDict(TensorDictBase):
         try:
             value = self._tensordict[key[0]]
         except KeyError:
-            return self._default_get(key[0], default)
+            # see _get_str
+            if key[0] not in self._tensordict:
+                return self._default_get(key[0], default)
+            raise
         if len(key) == 1:
             return value
         for i in range(1, len(key)):
@@ -2534,6 +2555,22 @@ class TensorDict(TensorDictBase):
             dtype = torch.get_default_dtype()
 
         if last_node._memmap_prefix is not None:
+            if getattr(storage, "filename", None) is None and (
+                isinstance(shape, Tensor) or storage.nbytes()
+            ):
+                # load_memmap and memmap_refresh_ drop such an entry, or load a
+                # stale file left at its path (#2952).
+                warn(
+                    "make_memmap_from_storage got a storage without a file, so "
+                    f"the entry {key!r} is not written to the directory of the "
+                    "tensordict: load_memmap and memmap_refresh_ drop it, or "
+                    "load a stale file left at its path. "
+                    "Starting with TensorDict 0.17, the default will change to "
+                    "raising a RuntimeError. Use make_memmap_from_tensor to "
+                    "copy the data into the directory.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
+                )
             metadata = _load_metadata(last_node._memmap_prefix)
             memmap_tensor = _populate_storage(
                 key=last_key,

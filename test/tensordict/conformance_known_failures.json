@@ -123,6 +123,8 @@
   "squeeze()",
   "squeeze(-1)",
   "transpose(0, 1)",
+  "transpose(0, 2)",
+  "transpose(1, 3)",
   "unsqueeze(-1)",
   "unsqueeze(0)"
  ],
@@ -154,6 +156,8 @@
   "squeeze()",
   "squeeze(-1)",
   "transpose(0, 1)",
+  "transpose(0, 2)",
+  "transpose(1, 3)",
   "unsqueeze(-1)",
   "unsqueeze(0)",
   "view(-1)"
@@ -203,6 +207,8 @@
   "squeeze()",
   "squeeze(-1)",
   "transpose(0, 1)",
+  "transpose(0, 2)",
+  "transpose(1, 3)",
   "unsqueeze(-1)",
   "unsqueeze(0)",
   "view(-1)"
@@ -236,6 +242,8 @@
   "squeeze()",
   "squeeze(-1)",
   "transpose(0, 1)",
+  "transpose(0, 2)",
+  "transpose(1, 3)",
   "unsqueeze(-1)",
   "unsqueeze(0)",
   "view(-1)"
@@ -295,6 +303,8 @@
   "squeeze()",
   "squeeze(-1)",
   "transpose(0, 1)",
+  "transpose(0, 2)",
+  "transpose(1, 3)",
   "unsqueeze(-1)",
   "unsqueeze(0)",
   "view(-1)"
@@ -435,6 +445,8 @@
   "squeeze()",
   "squeeze(-1)",
   "transpose(0, 1)",
+  "transpose(0, 2)",
+  "transpose(1, 3)",
   "unsqueeze(-1)",
   "unsqueeze(0)",
   "view(-1)"

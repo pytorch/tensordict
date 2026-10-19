@@ -441,7 +441,8 @@ class _H5Backend(_PersistentBackend):
         except (ValueError, OSError) as err:
             if "name already exists" in str(err):
                 return False
-            return True
+            # e.g. a closed or read-only file: the write cannot be made
+            raise
 
     def copy_dataset(self, dest_file, key, src_node, kwargs) -> None:
         node = dest_file.create_dataset(key, data=src_node, **kwargs)
@@ -1425,8 +1426,9 @@ class PersistentTensorDict(
         """Closes the file or store of the tensordict.
 
         The file is not closed when the tensordict goes out of scope. After
-        ``close()``, reading an entry raises a ``KeyError``, and writing one
-        has no effect.
+        ``close()``, reading an entry raises a ``KeyError``. Writing one to
+        an HDF5 file raises; whether a zarr store still accepts writes depends
+        on the store (a local directory store does).
         """
         self._backend.close(self.file)
 

@@ -225,6 +225,8 @@ _OPS = {
         "unsqueeze(-1)": lambda td: td.unsqueeze(-1),
         "permute(3, 2, 1, 0)": lambda td: td.permute(3, 2, 1, 0),
         "transpose(0, 1)": lambda td: td.transpose(0, 1),
+        "transpose(0, 2)": lambda td: td.transpose(0, 2),
+        "transpose(1, 3)": lambda td: td.transpose(1, 3),
         "expand(2, 4, 3, 2, 1)": lambda td: td.expand(2, 4, 3, 2, 1),
         "chunk(2, 0)": lambda td: td.chunk(2, 0),
         "split(2, 0)": lambda td: td.split(2, 0),
