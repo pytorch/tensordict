@@ -66,8 +66,19 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_slow)
 
 
+@pytest.hookimpl(optionalhook=True)
+def pytest_benchmark_update_json(config, benchmarks, output_json):
+    # pytest-benchmark writes the timing of every round in stats.data, which
+    # makes the --benchmark-json file hundreds of MB and slow to write. No
+    # step in CI reads it: the summary statistics stay. Pass
+    # --benchmark-save-data to keep it.
+    if config.getoption("benchmark_save_data"):
+        return
+    for benchmark in output_json["benchmarks"]:
+        benchmark["stats"].pop("data", None)
+
+
 def pytest_addoption(parser):
-    parser.addoption("--rank", action="store")
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )

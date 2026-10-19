@@ -355,6 +355,15 @@ class _KeyThroughLeafError(ValueError):
     """
 
 
+class _InplaceWriteError(ValueError, RuntimeError):
+    """The error raised when an in-place write of an entry fails.
+
+    Subclasses ValueError, the type that :meth:`~TensorDictBase.set_` raised
+    before, and RuntimeError, which torch raises for the same write in
+    :meth:`~TensorDictBase.update_` and :meth:`~TensorDictBase.copy_`.
+    """
+
+
 def _key_through_leaf_error(key: tuple, i: int, value: Any) -> _KeyThroughLeafError:
     """The error for reading ``key[i:]`` in ``value``, the leaf at ``key[i - 1]``."""
     rest = key[i] if len(key) == i + 1 else key[i:]
@@ -779,6 +788,40 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         *results,
                         stack_dim=stack_dim,
                         stack_dim_name=self_expand._td_dim_name,
+                    )
+                if (
+                    n_other > 1
+                    and any(_is_tensor_collection(type(o)) for o in others_map)
+                    # an empty tensordict returns an empty result, as before
+                    and not self_expand.is_empty()
+                    # the leaves of a nested lazy stack lack the stack dim, so
+                    # expand_as_right would misalign the tensors: raise as before
+                    and not any(
+                        _has_nested_lazy_stack(o)
+                        for o in (self_expand, *others_map)
+                        if _is_tensor_collection(type(o))
+                    )
+                ):
+                    if op == "clamp":
+                        # clamp rejects a tensordict bound next to a tensor one
+                        return func(self, *others, *args, **kwargs)
+                    # pair the tensordict operands by key, expand the tensors
+                    is_tensor = [
+                        isinstance(other, torch.Tensor) for other in others_map
+                    ]
+                    return _apply_pointwise(
+                        self_expand,
+                        lambda x, *xs: leaf_op(
+                            x,
+                            *[
+                                expand_as_right(other, x) if flag else other
+                                for other, flag in zip(xs, is_tensor)
+                            ],
+                            *args,
+                            **kwargs,
+                        ),
+                        others_map,
+                        inplace,
                     )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
@@ -1785,6 +1828,23 @@ def _warn_map_seed(method: str) -> None:
     )
 
 
+def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
+    """Warns that ``update(update_batch_size=True)`` keeps a batch size that is a prefix of the source's, until 0.17 (#2957)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        "update(update_batch_size=True) got a source with batch size "
+        f"{source_batch_size} for a destination with batch size "
+        f"{dest_batch_size}, a prefix of it, and keeps the destination's batch "
+        "size. Starting with TensorDict 0.17, the default will change to "
+        "giving the destination the source's batch size, as for any other "
+        "mismatch, which raises if the destination has keys that the source "
+        "lacks, or with inplace=True or keys_to_update.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
@@ -1840,6 +1900,22 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
     td = _unwrap(td)
     if isinstance(td, LazyStackedTensorDict):
         return True
+    if td._reads_return_copies:
+        return False
+    return any(
+        _has_lazy_stack(value)
+        for value in td.values()
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
+def _has_nested_lazy_stack(td: TensorDictBase) -> bool:
+    """Whether a tensordict below the root of ``td``, or below the members of a lazy stack ``td``, is a lazy stack."""
+    from tensordict._lazy import LazyStackedTensorDict
+
+    td = _unwrap(td)
+    if isinstance(td, LazyStackedTensorDict):
+        return any(_has_lazy_stack(member) for member in td.tensordicts)
     if td._reads_return_copies:
         return False
     return any(
@@ -4637,7 +4713,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         If the storage has a file, it must be the file of the new entry in the
         directory of the tensordict, or the call raises a ``RuntimeError``. A
         storage without a file is used as it is: its data is not written to
-        the directory.
+        the directory. If the tensordict has a directory and the storage is
+        not empty, :meth:`~.load_memmap` and
+        :meth:`~tensordict.TensorDictBase.memmap_refresh_` drop the entry, and
+        the call emits a ``FutureWarning``: starting with TensorDict 0.17, the
+        default will change to raising a ``RuntimeError``. Use
+        :meth:`~.make_memmap_from_tensor` to copy the data into the directory.
 
         Args:
             key (NestedKey): the key of the new entry. A tuple key creates
@@ -4805,7 +4886,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 and the call adds or replaces an entry, or if the leading
                 dimensions of the value do not match the batch size.
             ValueError: if ``inplace=True`` and the value does not fit the
-                shape of the existing entry.
+                shape of the existing entry. The error is also a
+                ``RuntimeError``, the type that :meth:`~.update_` raises.
 
         Examples:
             >>> import torch
@@ -5178,6 +5260,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             RuntimeError: if the leading dimensions of the value do not match
                 the batch size.
             ValueError: if the value does not fit the shape of the entry.
+                The error is also a ``RuntimeError``, the type that
+                :meth:`~.update_` raises.
 
         Examples:
             >>> import torch
@@ -5579,7 +5663,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 A lazy stack is then refilled with copies of the tensordicts of
                 the input. It needs ``keys_to_update=None`` and
                 ``inplace=False``, and the keys of the tensordict must all be in
-                the input. Defaults to ``False``.
+                the input. A batch size that is a prefix of the input's (``[]``
+                for an input of batch size ``[2]``) is kept, with a
+                :class:`FutureWarning`: starting with TensorDict 0.17, the
+                default will change to replacing it as well. A batch size whose
+                leading dims are those of the input (``[2, 3]`` for ``[2]``) is
+                kept. Defaults to ``False``.
             ignore_lock (bool, optional): deprecated: ``True`` warns, and the
                 argument will be removed in TensorDict 0.17. On a locked
                 :class:`~tensordict.TensorDict`, it does not lift the lock: a
@@ -5714,8 +5803,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         with :meth:`_set_tuple`, merging the sub-tensordicts. Returns ``self``.
         """
         batch_size_changed = False
+        is_collection = _is_tensor_collection(type(input_dict_or_td))
         if (
-            _is_tensor_collection(type(input_dict_or_td))
+            is_collection
             # here, we do a loose check on the batch sizes: it could be that the source has batch_size (1,) and self (1, 2)
             # and that all the values have an appropriate shape for the new batch size.
             # What we want to catch is any batch size item that is obviously mismatching, like (1, 2, 3) and (1, 4, 3).
@@ -5757,6 +5847,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.batch_size = input_dict_or_td.batch_size
             self.update(input_dict_or_td, update_batch_size=True)
             return self
+        if (
+            update_batch_size
+            and is_collection
+            and self.batch_dims < input_dict_or_td.batch_dims
+        ):
+            # self's batch size is a prefix of the source's (#2957)
+            _warn_update_batch_size_prefix(self.batch_size, input_dict_or_td.batch_size)
 
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
@@ -6716,8 +6813,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         ``copy_at_`` is a faster :meth:`~.update_at_` for the hot paths where
         every key of ``tensordict`` is a tensor entry of the tensordict. With
-        ``fast=True``, the non-tensor entries of ``tensordict`` are skipped,
-        not copied. Use ``fast=False`` or :meth:`~.update_at_` to write them.
+        ``fast=True``, a ``tensordict`` with only non-tensor entries raises a
+        ``RuntimeError``. If it also holds tensors, its non-tensor entries are
+        skipped, not copied, with a ``FutureWarning``: starting with
+        TensorDict 0.17, the default will change to raising the same
+        ``RuntimeError``. Use ``fast=False`` or :meth:`~.update_at_` to write
+        them.
 
         Args:
             tensordict (TensorDictBase): the entries to copy. Their leading

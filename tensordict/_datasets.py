@@ -4,12 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+import warnings
 from typing import Literal
 
 import numpy as np
 import torch
 from tensordict._tensorcollection import TensorCollection
-from tensordict.utils import is_non_tensor
+from tensordict.utils import _user_stacklevel, is_non_tensor
 
 
 def to_mds(
@@ -21,7 +23,8 @@ def to_mds(
     compression: str | None = None,
     hashes: list[str] | None = None,
     size_limit: int | str | None = 1 << 26,
-    writer: "streaming.MDSWriter" | None = None,  # noqa # type-ignore
+    writer: "streaming.MDSWriter" | None = None,  # noqa # type-ignore
+    finish_writer: bool | None = None,
     **kwargs,
 ) -> None:
     """Writes the tensordict to a MosaicML Streaming (MDS) dataset.
@@ -64,7 +67,16 @@ def to_mds(
             ``1 << 26`` (64 MiB).
         writer (streaming.MDSWriter, optional): the writer to use. Defaults to
             ``None``, which creates one from ``out`` and the other keyword
-            arguments.
+            arguments, and finishes it after writing.
+        finish_writer (bool, optional): whether to finish a writer passed as
+            ``writer`` after writing, which writes the dataset index. Pass
+            ``False`` to write more samples through it, and finish it
+            yourself afterwards, once. A writer that ``to_mds`` creates is
+            always finished. Defaults to ``None``, which leaves the writer
+            open for a tensordict without batch dimensions, and finishes it,
+            with a ``FutureWarning``, for a tensordict with batch dimensions.
+            Starting with TensorDict 0.17, the default will change to leaving
+            the writer open in both cases.
         **kwargs: passed to ``streaming.MDSWriter``.
 
     Raises:
@@ -113,10 +125,22 @@ def to_mds(
                 size_limit=size_limit,
                 **kwargs,
             )
+            finish_writer = True
+        elif finish_writer is None:
+            warnings.warn(
+                "to_mds finished the writer passed by the caller after a "
+                "tensordict with batch dims. Starting with TensorDict 0.17, the "
+                "default will change to leaving it open, as for a tensordict "
+                "without batch dims. Pass finish_writer=True or False to choose.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
+            finish_writer = True
         td_dict = self.tolist(convert_tensors="numpy")
         if not isinstance(td_dict, list):
             raise ValueError(f"Expected a list of dictionarie, got {type(td_dict)}.")
-        with writer as w:
+        # a writer is a context manager that finishes it on exit
+        with writer if finish_writer else contextlib.nullcontext(writer) as w:
             for td_i in td_dict:
                 for k, v in td_i.items():
                     if isinstance(v, np.ndarray) and v.shape == ():
@@ -124,7 +148,8 @@ def to_mds(
                 w.write(td_i)
             return
 
-    # a writer passed by the caller is left open: they may write more samples
+    # a writer passed by the caller is left open unless finish_writer=True:
+    # they may write more samples
     created = writer is None
     if created:
         if columns is None:
@@ -155,7 +180,7 @@ def to_mds(
         for k in pkl:
             if k in self.keys():
                 td_dict[k] = self[k]
-    if created:
+    if created or finish_writer:
         with writer as w:
             w.write(td_dict)
     else:

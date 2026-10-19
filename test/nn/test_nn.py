@@ -5923,6 +5923,38 @@ class TestCompositeDist:
         assert isinstance(s["0"], torch.Tensor)
         assert isinstance(s["1", "nested"], torch.Tensor)
 
+    @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
+    def test_event_shape(self, constructor):
+        # The sample's batch size is batch_shape: no dims are left for events.
+        if constructor == "init":
+            params = TensorDict(
+                {
+                    "cont": {"loc": torch.zeros(3, 4), "scale": torch.ones(3, 4)},
+                    ("nested", "disc"): {"logits": torch.zeros(3, 10)},
+                },
+                [3],
+            )
+            dist = CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.Categorical,
+                },
+            )
+        else:
+            dist = CompositeDistribution.from_distributions(
+                TensorDict(batch_size=[3]),
+                {
+                    "cont": distributions.Normal(torch.zeros(3, 4), torch.ones(3, 4)),
+                    ("nested", "disc"): distributions.Categorical(
+                        logits=torch.zeros(3, 10)
+                    ),
+                },
+            )
+        assert dist.event_shape == torch.Size([])
+        assert dist.batch_shape + dist.event_shape == dist.sample().batch_size
+        assert dist.sample((2,)).batch_size == torch.Size([2, 3])
+
     def test_sample_named(self):
         params = TensorDict(
             {
@@ -8015,6 +8047,16 @@ class TestTensorClassModuleForward:
         td_output = td_module(value.to_tensordict())
         assert td_output["added"] == 25
         assert td_output["substracted"] == 0
+
+    @pytest.mark.parametrize("training", [True, False])
+    def test_wrapper_training_mode(self, training: bool) -> None:
+        """Test that the wrapper starts in the training mode of the module."""
+        module = TestTensorClassModule().train(training)
+        td_module = module.as_td_module()
+        assert td_module.training is training
+        assert module.training is training
+        td_module = td_module.select_out_keys(("result", "added"))
+        assert td_module.training is training
 
     def test_wrapper_keys(self) -> None:
         """Test that wrapper correctly extracts in_keys and out_keys."""

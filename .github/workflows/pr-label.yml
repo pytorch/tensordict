@@ -101,7 +101,15 @@ jobs:
           comment = comment.replace("TITLE_PLACEHOLDER", os.environ["COMMENT_TITLE"])
           path.write_text(comment)
           PY
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
+            # Edit the comment from an earlier run, if any, so that each push does not add another one
+            local comment_ids
+            comment_ids=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## PR Title Label Error"))) | .id')
+            if [[ -n "$comment_ids" ]]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/${comment_ids%%$'\n'*}" -F body=@/tmp/pr_comment.md > /dev/null
+            else
+              gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
+            fi
           }
 
           echo "PR Title: $PR_TITLE"

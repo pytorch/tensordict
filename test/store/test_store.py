@@ -9,6 +9,7 @@ import importlib
 import inspect
 import io
 import pickle
+import re
 import ssl
 import uuid
 import warnings
@@ -3892,7 +3893,10 @@ class TestLazyStackedTensorDictStore:
             )
             with pytest.warns(FutureWarning, match=match) as record:
                 assert store_td.masked_fill_(mask, 1.0) is store_td
-            assert record[0].filename == __file__
+            # The redis client can record a warning of its own first (seen on
+            # free-threaded Python 3.14t), so check the warning under test.
+            (warning,) = [w for w in record if re.search(match, str(w.message))]
+            assert warning.filename == __file__
             torch.testing.assert_close(
                 store_td["b"], torch.zeros(batch_size).masked_fill(mask, 1.0)
             )

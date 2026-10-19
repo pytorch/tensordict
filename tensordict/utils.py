@@ -4101,7 +4101,7 @@ class LinkedList(list):
     ``insert``, ``pop``, ``remove``, ``clear`` and ``del``) change the list
     only, and unlink it from the tensordict: later item assignments no longer
     write back. A :class:`LinkedList` compares equal to a list with the same
-    items.
+    items. If the write to the tensordict raises, the list is unchanged.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -4119,10 +4119,20 @@ class LinkedList(list):
         self._td = weakref.ref(td)
 
     def __setitem__(self, key, value):
-        super().__setitem__(key, value)
         td = self._td()
-        if td is not None:
+        if td is None:
+            super().__setitem__(key, value)
+            return
+        # Keep the old items, to put them back if the write to the tensordict
+        # fails.
+        is_slice = isinstance(key, slice)
+        old = list(self) if is_slice else list.__getitem__(self, key)
+        super().__setitem__(key, value)
+        try:
             td[key] = value
+        except Exception:
+            super().__setitem__(slice(None) if is_slice else key, old)
+            raise
 
     def append(self, object: Any) -> None:
         """Appends ``object`` to the list and unlinks the list from the tensordict."""

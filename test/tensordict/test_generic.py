@@ -5931,6 +5931,42 @@ class TestGeneric:
                 dtype=torch.float32,
             )
 
+    def test_make_memmap_from_storage_no_file_warns(self, tmpdir):
+        # #2952: load_memmap and memmap_refresh_ drop an entry made from a
+        # storage without a file in a tensordict with a directory.
+        td_base = TensorDict({"a": torch.zeros(3)}).memmap_(Path(tmpdir) / "base")
+        td = TensorDict().memmap_(Path(tmpdir) / "base")
+        src = torch.arange(4.0)
+        with pytest.warns(FutureWarning, match="TensorDict 0.17, the default"):
+            entry = td.make_memmap_from_storage(
+                "b", src.untyped_storage(), shape=[4], dtype=torch.float32
+            )
+        # The entry still shares the storage of the caller.
+        src[0] = 10
+        assert entry[0] == 10
+        assert td["b"][0] == 10
+        with pytest.warns(FutureWarning, match="make_memmap_from_tensor"):
+            td.make_memmap_from_storage(
+                ("n", "c"), torch.ones(2).untyped_storage(), shape=[2]
+            )
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            # A storage with the file of the entry, an empty storage, and a
+            # tensordict without a directory keep working in 0.17.
+            td.make_memmap_from_storage(
+                "a", td_base["a"].untyped_storage(), shape=[3], dtype=torch.float32
+            )
+            td.make_memmap_from_storage(
+                "e", torch.empty(0).untyped_storage(), shape=[0]
+            )
+            TensorDict().memmap_().make_memmap_from_storage(
+                "a", torch.ones(2).untyped_storage(), shape=[2]
+            )
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        td_load = TensorDict.load_memmap(Path(tmpdir) / "base")
+        assert set(td_load.keys(True, True)) == {"a", "e"}
+
     def test_make_memmap_from_tensor(self, tmpdir):
         td = TensorDict()
         td.memmap_(tmpdir)
@@ -11623,6 +11659,67 @@ class TestGeneric:
         assert isinstance(row["b"], np.ndarray)
         assert (row["b"] == td["b"].numpy()).all()
 
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    @pytest.mark.parametrize("finish_writer", [None, True, False])
+    def test_to_mds_writer_finish(self, tmpdir, finish_writer):
+        # after a tensordict with batch dims, a writer passed by the caller is
+        # finished unless finish_writer=False; the default warns that it stays
+        # open from 0.17 (#2967)
+        from streaming import MDSWriter
+
+        td = TensorDict(a=torch.arange(4), batch_size=[4])
+
+        tmpdir = str(tmpdir)
+        writer = MDSWriter(out=tmpdir, columns={"a": "int"})
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td[:2].to_mds(out=tmpdir, writer=writer, finish_writer=finish_writer)
+        record = [w for w in record if "finish_writer" in str(w.message)]
+        assert len(record) == (finish_writer is None)
+        if record:
+            assert record[0].category is FutureWarning
+            assert record[0].filename == __file__
+        index = os.path.join(tmpdir, "index.json")
+        assert os.path.exists(index) == (finish_writer is not False)
+        if finish_writer is False:
+            td[2:].to_mds(out=tmpdir, writer=writer, finish_writer=False)
+            writer.finish()
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        n = 4 if finish_writer is False else 2
+        assert len(dataset) == n
+        test_td = TensorDict.from_list([dataset[i] for i in range(n)])
+        assert (test_td["a"] == td["a"][:n]).all()
+
+    @pytest.mark.skipif(not _has_streaming, reason="streaming is not installed")
+    @pytest.mark.parametrize("finish_writer", [None, True, False])
+    @pytest.mark.parametrize("batched", [True, False])
+    def test_to_mds_writer_finish_silent(self, tmpdir, finish_writer, batched):
+        # calls whose result stays the same in 0.17 do not warn: a writer that
+        # to_mds creates is always finished, and a caller's writer is left
+        # open for a tensordict without batch dims unless finish_writer=True
+        from streaming import MDSWriter
+
+        td = TensorDict(a=torch.arange(2), batch_size=[2] if batched else [])
+
+        tmpdir = str(tmpdir)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            if batched:
+                td.to_mds(out=tmpdir, finish_writer=finish_writer)
+            else:
+                writer = MDSWriter(out=tmpdir, columns={"a": "ndarray"})
+                td.to_mds(out=tmpdir, writer=writer, finish_writer=finish_writer)
+                assert os.path.exists(os.path.join(tmpdir, "index.json")) == (
+                    finish_writer is True
+                )
+                if finish_writer is not True:
+                    writer.finish()
+        assert not [w for w in record if "finish_writer" in str(w.message)]
+
+        dataset = streaming_dataset(local=tmpdir, remote=None, batch_size=1)
+        assert len(dataset) == (2 if batched else 1)
+
     def test_to_module_state_dict(self):
         net0 = nn.Transformer(
             d_model=16,
@@ -12124,6 +12221,64 @@ class TestGeneric:
         td1 = TensorDict(a=torch.zeros((4,)), batch_size=(4,))
         with pytest.raises(RuntimeError, match="keys_to_update"):
             td0.update(td1, update_batch_size=True, keys_to_update=[("a",)])
+
+    def test_update_batch_size_prefix_deprecated(self):
+        # #2957: a destination batch size that is a prefix of the source's is
+        # kept with a FutureWarning, until 0.17. More batch dims than the
+        # source stays silent: TorchRL's Minari loader relies on it.
+        def source():
+            return TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+
+        match = (
+            r"^update\(update_batch_size=True\) got a source with batch size "
+            r"torch\.Size\(\[2\]\) for a destination with batch size "
+            r"torch\.Size\(\[\]\), a prefix of it, .*Starting with TensorDict "
+            r"0\.17, the default will change"
+        )
+        td = TensorDict(x=torch.ones(2, 3), y=torch.ones(5))
+        with pytest.warns(FutureWarning, match=match) as record:
+            td.update(source(), update_batch_size=True)
+        assert record[0].filename == __file__
+        assert td.batch_size == ()
+        assert (td["x"] == 0).all()
+        assert set(td.keys()) == {"x", "y"}
+        nested = TensorDict(n=TensorDict(x=torch.ones(2, 3)))
+        with pytest.warns(FutureWarning, match=match):
+            nested.update(TensorDict(n=source()), update_batch_size=True)
+        assert nested["n"].batch_size == ()
+        out = TensorDict(x=torch.ones(2, 3))
+        with pytest.warns(FutureWarning, match=match):
+            source().where(
+                torch.tensor([True, False]), 0.0, out=out, update_batch_size=True
+            )
+        assert out.batch_size == ()
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td = TensorDict(x=torch.ones(2, 3))
+            td.update(source())
+            assert td.batch_size == ()
+            td = TensorDict(x=torch.ones(2, 3), batch_size=[2, 3])
+            td.update(source(), update_batch_size=True)
+            assert td.batch_size == (2, 3)
+            td = TensorDict(x=torch.ones(2, 3), batch_size=[2])
+            td.update(source(), update_batch_size=True)
+            assert td.batch_size == (2,)
+            td = TensorDict(x=torch.ones(4, 3), batch_size=[4])
+            td.update(source(), update_batch_size=True)
+            assert td.batch_size == (2,)
+            td = TensorDict(a=torch.zeros(5), batch_size=[5])
+            td.update(TensorDict(b=torch.ones(5, 2)), update_batch_size=True)
+            assert td.batch_size == (5,)
+            assert set(td.keys()) == {"a", "b"}
+            td = TensorDict(x=torch.ones(2, 3))
+            td.update({"x": torch.zeros(2, 3)}, update_batch_size=True)
+            assert td.batch_size == ()
+            out = TensorDict(x=torch.ones(2, 3))
+            source().where(
+                torch.tensor([True, False]), source(), out=out, update_batch_size=True
+            )
+            assert out.batch_size == ()
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
 
     @set_list_to_stack(True)
     def test_update_nested_dict(self):

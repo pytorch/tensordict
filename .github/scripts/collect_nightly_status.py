@@ -25,7 +25,6 @@ NIGHTLY_WORKFLOWS = [
     "test-linux.yml",
     "test-macos.yml",
     "test-rl-gpu.yml",
-    "lint.yml",
     "docs.yml",
     "benchmarks.yml",
 ]
@@ -35,7 +34,6 @@ WORKFLOW_DISPLAY_NAMES = {
     "test-linux.yml": "Linux Tests",
     "test-macos.yml": "MacOS Tests",
     "test-rl-gpu.yml": "RL GPU Tests",
-    "lint.yml": "Lint",
     "docs.yml": "Documentation",
     "benchmarks.yml": "Benchmarks",
 }
@@ -47,7 +45,6 @@ WORKFLOW_JOB_PREFIXES = {
     "test-linux.yml": "test-linux",
     "test-macos.yml": "test-macos",
     "test-rl-gpu.yml": "test-rl-gpu",
-    "lint.yml": "lint",
     "docs.yml": "docs",
     "benchmarks.yml": "benchmarks",
 }
