@@ -25,9 +25,9 @@ Keyword Arguments:
 **consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, consolidates the tensordict
 (see [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)) unless it is
 already, and sends its storage as one buffer. If `False`, sends the
-tensor leaves at the root of the tensordict one by one, in the format
-of a pipe with `consolidated=False`, which [`recv_tensordict()`](tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict)
-does not read. Defaults to `True`.
+tensor leaves of the tensordict, nested ones included, one by one, in
+the format of a pipe with `consolidated=False`, which
+[`recv_tensordict()`](tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict) does not read. Defaults to `True`.
 
 Raises:
 

@@ -67,8 +67,9 @@ tensors, and non-tensor data is kept unchanged. Pass
 non-tensor data too.
 - **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the results
 into, instead of a new one. When `batch_size` or `device` is
-given, `out` must have it. See the warning below about
-`out=self`. Defaults to `None`.
+given, `out` must have it. For a lazy stack, `out` must be a
+lazy stack too, stacked along any dimension. See the warning
+below about `out=self`. Defaults to `None`.
 - ****constructor_kwargs** - accepted and ignored.
 
 Returns:

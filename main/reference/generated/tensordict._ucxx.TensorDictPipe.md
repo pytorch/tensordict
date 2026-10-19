@@ -29,9 +29,9 @@ are views into it.
 the buffer of the first message, without allocating memory or parsing
 metadata.
 
-With `consolidated=False`, each message carries the tensor leaves at
-the root of the tensordict, one by one, and the receiver builds a new
-tensordict with an empty batch size each time.
+With `consolidated=False`, each message carries the tensor leaves of
+the tensordict, nested ones included, one by one, and the receiver builds
+a new tensordict with an empty batch size each time.
 
 A pipe is a context manager and an async context manager, which close
 it at the end of the block, and an async iterator: `async for td in
