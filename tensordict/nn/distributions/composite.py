@@ -48,7 +48,8 @@ class CompositeDistribution(d.Distribution, Mapping):
     :meth:`log_prob`, :meth:`cdf` and :meth:`icdf` take such a tensordict.
     The batch size of ``params`` is the ``batch_shape`` of the distribution,
     and a sample of shape ``sample_shape`` has the batch size
-    ``sample_shape + batch_shape``.
+    ``sample_shape + batch_shape``. The ``event_shape`` is ``torch.Size([])``:
+    the event dimensions of each component stay in its entry of the sample.
 
     The distribution is also a read-only mapping from the sample keys to the
     components: ``dist["cont"]``, ``list(dist)``, ``len(dist)``.
@@ -127,6 +128,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         entropy_key: NestedKey | None = None,
     ):
         self._batch_shape = params.shape
+        self._event_shape = torch.Size(())
         if extra_kwargs is None:
             extra_kwargs = {}
         dists = {}
@@ -239,6 +241,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         """
         self = cls.__new__(cls)
         self._batch_shape = params.shape
+        self._event_shape = torch.Size(())
         dists = {}
         write_names = _resolve_name_map(name_map, distributions)
         for name, dist in distributions.items():
