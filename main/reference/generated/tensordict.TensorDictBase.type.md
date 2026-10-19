@@ -6,6 +6,11 @@ Returns a tensordict whose tensor leaves are cast to `dst_type`.
 
 Each leaf is cast with [`torch.Tensor.type()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.type.html#torch.Tensor.type).
 
+Unlike [`int()`](tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int), [`float()`](tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float) and `to(dtype)`, it returns an
+unlocked tensordict for a locked one, with a `FutureWarning`.
+Starting with TensorDict 0.17, the default will change to a locked
+result, as these casts return.
+
 Parameters:
 
 **dst_type** ([*dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*or*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - the dtype, or the name of a tensor

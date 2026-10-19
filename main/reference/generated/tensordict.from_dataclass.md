@@ -57,7 +57,13 @@ device of the result. Defaults to `None`, which leaves each leaf
 where it is.
 
 The class flags are described in [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass). Pass
-at most one of `autocast`, `nocast` and `tensor_only`.
+at most one of `autocast`, `nocast` and `tensor_only`, as for
+[`tensorclass()`](tensordict.tensorclass.html#tensordict.tensorclass). When the flags are applied (not with
+`dest_cls`, and not for a type that is already a tensorclass),
+`autocast` with `nocast`, or, for a type, `tensor_only` with either
+of them, emits a `FutureWarning` today. Starting with TensorDict 0.17,
+the default will change to raising the `TypeError` that
+[`tensorclass()`](tensordict.tensorclass.html#tensordict.tensorclass) raises.
 
 Returns:
 

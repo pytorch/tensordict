@@ -45,7 +45,12 @@ target, only if a leaf comes from another device. Under
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), these copies are blocking instead.
 `True` copies without synchronizing: synchronize before you
 read the results. `False` makes blocking copies. Defaults to
-`None`. Pass it by keyword: a positional value is ignored.
+`None`. It can also follow the device, dtype or tensor
+positionally, as in `to("cpu", torch.float64, False)`. A
+positional `True` is ignored for now, with a
+`FutureWarning`: the copies synchronize as for `None`.
+Starting with TensorDict 0.17, the default will change to
+honoring it as the keyword `True` is.
 - **memory_format** ([*memory_format*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.memory_format)*,**optional*) - the memory format of
 the 4D and 5D tensors of the result, as in
 [`torch.nn.Module.to()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to). Defaults to `None`, which keeps

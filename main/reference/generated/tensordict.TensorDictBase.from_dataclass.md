@@ -48,6 +48,9 @@ type if `as_tensorclass=True`.
 Raises:
 
 [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if `dataclass` is not a dataclass and
+ `as_tensorclass=False`, if it is a dataclass type with a
+ field that cannot be read from the class (a field without a
+ default, or a field of a tensorclass type) and
  `as_tensorclass=False`, or if both `auto_batch_size=True`
  and `batch_size` are given.
 
