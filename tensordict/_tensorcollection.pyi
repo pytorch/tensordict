@@ -1265,7 +1265,9 @@ class TensorCollection:
         weight: TensorCollection | torch.Tensor | float,
     ): ...
     def lerp_(
-        self, end: TensorCollection | float, weight: TensorCollection | float
+        self,
+        end: TensorCollection | torch.Tensor,
+        weight: TensorCollection | torch.Tensor | float,
     ): ...
     def addcdiv(
         self,
@@ -1379,6 +1381,7 @@ class TensorCollection:
         out: str | tuple[str, str],
         columns: dict[str, str] | None = None,
         writer: MDSWriter | None = None,
+        finish_writer: bool | None = None,
     ) -> None: ...
     def to_dict(
         self,

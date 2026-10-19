@@ -94,6 +94,9 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         self, module: TensorClassModuleBase[InputTensorClass, OutputTensorClass]
     ) -> None:
         super().__init__()
+        # Start in the module's mode. Set the flag only: ``train()`` would also
+        # reset the mode of every submodule of ``module``.
+        self.training = module.training
         self.tc_module = module
         self.in_keys = _tensor_class_keys(cast(type[TensorClass], module.input_type))
         self.out_keys = _tensor_class_keys(cast(type[TensorClass], module.output_type))

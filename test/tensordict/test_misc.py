@@ -621,6 +621,35 @@ class TestPointwiseOps:
         assert type(result) is type(td)
         assert_allclose_td(result, expected)
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("tensor_first", [False, True])
+    @pytest.mark.parametrize(
+        "op", ["lerp", "lerp_", "addcmul", "addcmul_", "addcdiv", "addcdiv_"]
+    )
+    def test_tensordict_and_tensor_operands(self, op, tensor_first, lazy):
+        # A tensordict operand is paired by key and a tensor operand is
+        # broadcast to the batch dims, also when they come together (#2963)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(3, 2),
+            nested=TensorDict(b=torch.randn(3, 2, 4), batch_size=[3, 2]),
+            batch_size=[3, 2],
+        )
+        other_td = td.apply(lambda x: torch.rand_like(x) + 1)
+        other = torch.rand(3, 2) + 1
+        other_as_td = td.apply(lambda x: expand_as_right(other, x))
+        args = [other, other_td]
+        expected_args = [other_as_td, other_td]
+        if not tensor_first:
+            args, expected_args = args[::-1], expected_args[::-1]
+        expected = getattr(td.clone(), op)(*expected_args)
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        result = getattr(td, op)(*args)
+        if op.endswith("_"):
+            assert result is td
+        assert_allclose_td(result, expected)
+
     def test_clamp_min_default(self):
         # Create two tds with different key sets
         td0 = TensorDict(a=2, b=2, c=2)
@@ -658,6 +687,125 @@ class TestPointwiseOps:
         with pytest.raises(RuntimeError, match="must match the size"):
             getattr(td, name)(other)
 
+    @pytest.mark.parametrize("kind", ["dense", "lazy", "locked", "torch", "keyword"])
+    @pytest.mark.parametrize(
+        "bounds",
+        [
+            "number,number",
+            "number,None",
+            "None,number",
+            "0d,0d",
+            "batch,batch",
+            "batch,None",
+            "td,td",
+            "None,td",
+        ],
+    )
+    def test_clamp_out(self, bounds, kind):
+        # clamp copies its result into the leaves of out and returns it (#2961)
+        def make_td():
+            return TensorDict(
+                a=torch.tensor([[-2.0, 0.5], [1.0, 3.0]]),
+                nested=TensorDict(b=torch.tensor([0.2, -1.0]), batch_size=[2]),
+                batch_size=[2],
+            )
+
+        values = {
+            "number": (0.0, 1.0),
+            "None": (None, None),
+            "0d": (torch.tensor(0.0), torch.tensor(1.0)),
+            "batch": (torch.tensor([0.0, 0.5]), torch.tensor([1.0, 2.0])),
+            "td": (make_td() * 0, make_td() * 0 + 1),
+        }
+        low, high = (values[name][i] for i, name in enumerate(bounds.split(",")))
+        td = make_td()
+        out = make_td().zero_()
+        if kind == "lazy":
+            td = LazyStackedTensorDict(*td.unbind(0), stack_dim=0)
+            out = LazyStackedTensorDict(*out.unbind(0), stack_dim=0)
+        args, kwargs = (low, high), {}
+        if kind == "keyword":
+            args, kwargs = (), {"min": low, "max": high}
+        expected = td.clamp(*args, **kwargs)
+        tds = out.tensordicts if kind == "lazy" else [out]
+        data_ptrs = [x.data_ptr() for t in tds for x in t.values(True, True)]
+        if kind == "locked":
+            out.lock_()
+        if kind == "torch":
+            result = torch.clamp(td, *args, **kwargs, out=out)
+        else:
+            result = td.clamp(*args, **kwargs, out=out)
+        assert result is out
+        assert [x.data_ptr() for t in tds for x in t.values(True, True)] == data_ptrs
+        assert_allclose_td(out, expected)
+
+    def test_clamp_out_errors(self):
+        td = TensorDict(a=torch.zeros(2), batch_size=[2])
+        with pytest.raises(ValueError, match="isn't implemented"):
+            td.clamp(None, None, out=td.clone())
+        for bound in (1.0, torch.tensor(1.0), torch.ones(2)):
+            with pytest.raises(ValueError, match="Mixed tensordict"):
+                td.clamp(td, bound)
+            with pytest.raises(ValueError, match="Mixed tensordict"):
+                td.clamp(bound, td, out=td.clone())
+
+    def test_clamp_out_checks_out(self):
+        # out must have the keys and dtypes of the result: nothing is dropped
+        # or cast (#2961)
+        td = TensorDict(x=torch.arange(3.0), z=torch.arange(3.0), batch_size=[3])
+        with pytest.raises(KeyError, match="lacks {'z'}"):
+            td.clamp(0.5, 1.5, out=TensorDict(x=torch.zeros(3), batch_size=[3]))
+        with pytest.raises(KeyError, match="extra keys {'y'}"):
+            td.clamp(0.5, 1.5, out=td.clone().set("y", torch.zeros(3)))
+        td = TensorDict(x=torch.tensor([1, 2, 3]), batch_size=[3])
+        with pytest.raises(RuntimeError, match="Found dtype torch.int64"):
+            td.clamp(0.4, 2.5, out=td.clone())
+        # torch.clamp raises for the same leaves
+        with pytest.raises(RuntimeError, match="Found dtype Long"):
+            torch.clamp(td["x"], 0.4, 2.5, out=td["x"].clone())
+        out = td.clone()
+        assert td.clamp(1, 2, out=out) is out
+        assert (out["x"] == torch.tensor([1, 2, 2])).all()
+
+    def test_clamp_out_empty(self):
+        # an empty tensordict returns out, also with a tensor bound (#2961)
+        td = TensorDict(batch_size=[2])
+        out = TensorDict(batch_size=[2])
+        assert td.clamp(torch.tensor([0.0, 1.0]), None, out=out) is out
+        assert td.clamp(0.0, 1.0, out=out) is out
+
+    def test_torch_clamp_out_tensorclass(self):
+        @tensorclass
+        class TC:
+            x: torch.Tensor
+
+        tc = TC(x=torch.arange(3.0), batch_size=[3])
+        out = tc.clone()
+        assert torch.clamp(tc, 0.5, 2.0, out=out) is out
+        assert (out.x == torch.tensor([0.5, 1.0, 2.0])).all()
+
+    @pytest.mark.parametrize(
+        "op", ["lerp", "lerp_", "addcmul", "addcmul_", "addcdiv", "addcdiv_"]
+    )
+    @pytest.mark.parametrize("tensor_first", [False, True])
+    def test_nested_lazy_and_tensor_operands(self, op, tensor_first):
+        # With a lazy stack nested in the tensordict, the leaves of each member
+        # lack the stack dim and a batch-shaped tensor would be misaligned, so
+        # the ops still raise
+        def make_td():
+            return TensorDict(
+                n=LazyStackedTensorDict(
+                    TensorDict(a=torch.arange(2.0)), TensorDict(a=torch.arange(2.0))
+                ),
+                batch_size=[2],
+            )
+
+        args = [make_td() + 10, torch.tensor([0.0, 1.0])]
+        if tensor_first:
+            args = args[::-1]
+        with pytest.raises(TypeError):
+            getattr(make_td(), op)(*args)
+
     @pytest.mark.parametrize("op", ["maximum", "minimum"])
     @pytest.mark.parametrize("other_type", ["tensordict", "float", "tensor"])
     def test_maximum_minimum_unbatched(self, op, other_type):
@@ -688,6 +836,54 @@ class TestPointwiseOps:
         assert isinstance(td.get("unbatched"), UnbatchedTensor)
         assert {key: td.get(key).data_ptr() for key in td.keys()} == data_ptrs
         assert (td == expected).all()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("op", ["maximum", "minimum", "clamp_min", "clamp_max"])
+    def test_inplace_broadcast_tensor_max_min(self, op, lazy):
+        # The in-place ops broadcast a tensor to the batch dims, as the
+        # out-of-place ones do (#2962)
+        torch.manual_seed(0)
+        td = TensorDict(
+            a=torch.randn(2, 3),
+            nested=TensorDict(b=torch.randn(2, 3, 4), batch_size=[2, 3]),
+            batch_size=[2, 3],
+        )
+        other = torch.randn(3)
+        expected = getattr(td, op)(other)
+        if lazy:
+            td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        tds = td.tensordicts if lazy else [td]
+        data_ptrs = [x.data_ptr() for t in tds for x in t.values(True, True)]
+        assert getattr(td, op + "_")(other) is td
+        assert [x.data_ptr() for t in tds for x in t.values(True, True)] == data_ptrs
+        assert_allclose_td(td, expected)
+
+    @pytest.mark.parametrize("op", ["maximum_", "minimum_", "clamp_min_", "clamp_max_"])
+    def test_inplace_tensor_empty_and_unbatched(self, op):
+        # An empty tensordict and an UnbatchedTensor leaf keep their own
+        # paths for a tensor with dims (#2962 changes neither)
+        td = TensorDict(batch_size=[2])
+        assert getattr(td, op)(torch.ones(3)) is td
+        other = torch.tensor([-1.0, 1.0])
+        td = TensorDict(
+            a=torch.zeros(2, 2), u=UnbatchedTensor(torch.zeros(3, 2)), batch_size=[2]
+        )
+        # every leaf meets the tensor as torch broadcasts it, from the right
+        torch_op = {"maximum_": "clamp_min", "minimum_": "clamp_max"}.get(op, op[:-1])
+        assert getattr(td, op)(other) is td
+        assert (td["a"] == getattr(torch.zeros(2, 2), torch_op)(other)).all()
+        assert (td["u"] == getattr(torch.zeros(3, 2), torch_op)(other)).all()
+
+    @pytest.mark.parametrize("op", ["lerp", "addcmul", "addcdiv", "clamp"])
+    def test_empty_tensordict_and_tensor_operands(self, op):
+        # An empty tensordict gives an empty result, whatever the keys of a
+        # tensordict operand (#2963 changes only tensordicts with leaves)
+        td = TensorDict(batch_size=[2])
+        result = getattr(td, op)(
+            TensorDict(a=torch.ones(2), batch_size=[2]), torch.ones(2)
+        )
+        assert result.is_empty()
+        assert result.batch_size == td.batch_size
 
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     def test_broadcast_tensor(self, shape):
@@ -952,6 +1148,10 @@ class TestPointwiseOps:
             ("pow_", (other,)),
             ("addcmul_", (other, other)),
             ("addcdiv_", (other, other)),
+            ("maximum_", (other,)),
+            ("minimum_", (other,)),
+            ("clamp_min_", (other,)),
+            ("clamp_max_", (other,)),
         ]:
             assert getattr(td, name)(*args) is td
             expected = getattr(expected, name[:-1])(*args)

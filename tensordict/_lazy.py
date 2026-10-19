@@ -1474,6 +1474,10 @@ class LazyStackedTensorDict(TensorDictBase):
         Args:
             key (NestedKey): the key of the entry.
 
+        Raises:
+            KeyError: if the stack has no entry at ``key``, or only some of
+                its members have one.
+
         Examples:
             >>> import torch
             >>> from tensordict import LazyStackedTensorDict, TensorDict
@@ -1487,7 +1491,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if leaf is not None:
             return leaf[0]
         try:
-            item = self.get(key)
+            item = self.get(key, NO_DEFAULT)
             return item.shape
         except RuntimeError as err:
             if re.match(
@@ -2716,7 +2720,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = LazyStackedTensorDict.lazy_stack(
-                [td.cpu().as_tensor() for td in self.tensordicts], 0
+                [td.cpu()._as_tensor(warn=False) for td in self.tensordicts], 0
             )
         else:
             td = self
@@ -5266,8 +5270,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     *self.tensordicts, stack_dim=dim1, stack_dim_name=self._td_dim_name
                 )
             else:
+                # Each member moves its dim dim1 - 1 to dim0. For adjacent dims
+                # that is a transpose, which is cheaper than movedim.
+                if dim1 - 1 == dim0 + 1:
+                    members = (td.transpose(dim0, dim1 - 1) for td in self.tensordicts)
+                else:
+                    members = (td.movedim(dim1 - 1, dim0) for td in self.tensordicts)
                 result = type(self)(
-                    *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
+                    *members,
                     stack_dim=dim1,
                     stack_dim_name=self._td_dim_name,
                 )
@@ -5279,8 +5289,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     *self.tensordicts, stack_dim=dim0, stack_dim_name=self._td_dim_name
                 )
             else:
+                # Each member moves its dim dim0 to dim1 - 1. For adjacent dims
+                # that is a transpose, which is cheaper than movedim.
+                if dim1 - 1 == dim0 + 1:
+                    members = (td.transpose(dim0, dim1 - 1) for td in self.tensordicts)
+                else:
+                    members = (td.movedim(dim0, dim1 - 1) for td in self.tensordicts)
                 result = type(self)(
-                    *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
+                    *members,
                     stack_dim=dim0,
                     stack_dim_name=self._td_dim_name,
                 )

@@ -123,7 +123,7 @@ jobs:
           uv run --active python -c "import sys; actual_version = f'{sys.version_info.major}.{sys.version_info.minor}'; expected_version = '${{ matrix.python-version }}'; print(f'Expected: {expected_version}, Actual: {actual_version}'); exit(1) if actual_version != expected_version else None; exit(1) if sys.version_info >= (3, 13) else print(f'Python version check passed: {actual_version}')"
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
-          uv run --active pytest -vvv --rank 0 --benchmark-json output.json
+          uv run --active pytest -vvv --benchmark-json output.json
 
       # Upload benchmark results for main branch, manual dispatch, or PRs with 'benchmarks/upload' label
       - name: Upload benchmark results
@@ -180,11 +180,12 @@ jobs:
       # such as the fractional part of a mean of 32.100025873592784 usec, as a
       # secret of type "BII - UID" and rejects the push to gh-pages. Round the
       # results so that the steps below write at most 12 significant digits.
-      # Also drop the fields that the steps below do not read, such as the
-      # timings of every round: they make the files about 500 MB, and the
-      # action fails with "Invalid string length" once a file is larger than
-      # the longest string that Node.js can hold, about 512 MiB. This changes
-      # the downloaded files only, not the uploaded artifacts.
+      # Also drop the fields that the steps below do not read. The timings of
+      # every round are already left out by benchmarks/conftest.py: with them
+      # the files are about 500 MB, and the action fails with "Invalid string
+      # length" once a file is larger than the longest string that Node.js
+      # can hold, about 512 MiB. This changes the downloaded files only, not
+      # the uploaded artifacts.
       - name: Round benchmark results and drop the fields the action does not read
         run: |
           python3 .github/scripts/round_benchmark_results.py \

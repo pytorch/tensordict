@@ -131,7 +131,12 @@ def list_workflow_runs(
 
 
 def parse_junit_xml(xml_path: Path) -> list[dict]:
-    """Parse a JUnit XML file and return a list of per-test records."""
+    """Parse a JUnit XML file and return a list of per-test records.
+
+    pytest-rerunfailures writes one ``<testcase>`` per attempt, and only the
+    last one carries the final outcome. Each earlier entry of a test is a
+    failed attempt, so it is recorded as ``failed``.
+    """
     tests: list[dict] = []
     try:
         tree = ET.parse(xml_path)
@@ -171,6 +176,12 @@ def parse_junit_xml(xml_path: Path) -> list[dict]:
                 "duration": duration,
             }
         )
+
+    seen: set[str] = set()
+    for test in reversed(tests):
+        if test["nodeid"] in seen:
+            test["outcome"] = "failed"
+        seen.add(test["nodeid"])
 
     return tests
 

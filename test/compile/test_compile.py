@@ -14,6 +14,7 @@ import weakref
 from pathlib import Path
 from typing import Any, Callable
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import is_npu_available, legacy_lazy_mode
@@ -1671,6 +1672,21 @@ class TestTD:
         assert (x.grad == 2).all()
         assert not td["b"].requires_grad
 
+    def test_update_batch_size_prefix_future_warning(self, mode):
+        # eager mode warns on this call (#2957); compiled code skips the warning
+        def update(x):
+            td = TensorDict(x=x.clone())
+            td.update(TensorDict(x=x * 0, batch_size=[2]), update_batch_size=True)
+            return td
+
+        x = torch.ones(2, 3)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            expected = update(x)
+        update_c = torch.compile(update, fullgraph=True, mode=mode)
+        result = update_c(x)
+        assert result.batch_size == expected.batch_size == ()
+        assert_close(result, expected)
+
     @pytest.mark.parametrize("lazy", [False, True])
     def test_detach_no_grad(self, lazy, mode):
         # detach_() traces when no leaf requires grad: Dynamo cannot trace
@@ -2553,6 +2569,23 @@ class TestTC:
         finally:
             _set_get_defaults_to_none(set_back)
 
+    def test_tc_get_through_tensor_field(self, mode):
+        # eager get warns that this raises from 0.17 (#2979); compiled, it
+        # returns None as on main, since dynamo cannot trace the warning
+        def get(td):
+            return td.get(("b", "y"))
+
+        get_c = torch.compile(get, fullgraph=True, mode=mode)
+        data = MyClass(a=None, b=torch.zeros(3))
+        set_back = _get_defaults_to_none()
+        try:
+            _set_get_defaults_to_none(True)
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                assert get(data) is None
+            assert get_c(data) is None
+        finally:
+            _set_get_defaults_to_none(set_back)
+
     def test_tc_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)
@@ -2998,6 +3031,20 @@ class TestNN:
         out = prob_mod_c(td.copy())
         torch.testing.assert_close(out["action"], td["loc"])
         torch.testing.assert_close(out["action_log_prob"], torch.full((3,), 7.0))
+
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_default_out_key(self, mode):
+        # Without out_keys, the sample is written at "_"; the FutureWarning
+        # about it must not break a fullgraph compile (#2971)
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            distribution_class=torch.distributions.Normal,
+            return_log_prob=True,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        out = prob_mod_c(td.copy())
+        assert set(out.keys()) == {"_", "__log_prob", "loc", "scale"}
 
     @pytest.mark.parametrize("mean_raises", [False, True])
     def test_prob_module_mean(self, mode, mean_raises):
@@ -3644,6 +3691,42 @@ class TestCudaGraphs:
             result = graphed(make(h))
             torch.testing.assert_close(result["y"], expected["y"])
             torch.testing.assert_close(result["h"], expected["h"])
+
+    @pytest.mark.parametrize(
+        "in_keys,out_keys,warns",
+        [
+            (["z"], ["w"], ["in_keys", "out_keys"]),
+            (["z"], None, ["in_keys"]),
+            ([], [("w",), "v"], ["out_keys"]),
+            ([], [], []),
+            (None, None, []),
+            ([("x",)], ["y"], []),
+            ("z", "y", ["in_keys"]),
+            (("z", "x"), {"y"}, ["in_keys"]),
+            ({"x"}, {"w"}, ["out_keys"]),
+            (np.array(["z", "w"]), torch.tensor([1, 2]), []),
+            (torch.tensor([0, 1]), np.array(["v"]), []),
+        ],
+    )
+    def test_cudagraphs_ignored_keys_warn(self, compiled, in_keys, out_keys, warns):
+        # pytorch/tensordict#2973: the module's own in_keys/out_keys win over the
+        # arguments. Non-empty arguments that differ from them warn; empty
+        # lists (TorchRL's collector passes them) and equal keys stay silent.
+        # Arguments that are not a str, list, tuple or set (an array, a tensor)
+        # are ignored silently, as on main.
+        module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        if compiled:
+            module = torch.compile(module)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            graphed = CudaGraphModule(module, in_keys=in_keys, out_keys=out_keys)
+        ignored = [w for w in record if "ignores" in str(w.message)]
+        assert len(ignored) == len(warns)
+        for name, w in zip(warns, ignored):
+            assert str(w.message).startswith(f"CudaGraphModule ignores {name}=")
+            assert w.filename == __file__
+        assert graphed.in_keys == ["x"]
+        assert graphed.out_keys == ["y"]
 
     @staticmethod
     def _make_cudagraph(
