@@ -3446,6 +3446,23 @@ class LazyStackedTensorDict(TensorDictBase):
                     local_futures=local_futures[-1],
                 )
 
+    def _apply_out_tensordicts(
+        self, out: TensorDictBase
+    ) -> list[TensorDictBase] | None:
+        """The members of ``out`` that the members of ``self`` write their results into.
+
+        Returns ``None`` if ``out`` is stacked along another dimension: its
+        members are then other slices than those of ``self``, so the caller
+        computes the result without ``out`` and writes it with ``out.update``.
+        """
+        if not isinstance(out, LazyStackedTensorDict):
+            raise ValueError(
+                "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+            )
+        if out.stack_dim != self.stack_dim:
+            return None
+        return out.tensordicts
+
     def _multithread_rebuild(
         self,
         *,
@@ -3471,11 +3488,28 @@ class LazyStackedTensorDict(TensorDictBase):
                 "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
             )
         if out is not None:
-            if not isinstance(out, LazyStackedTensorDict):
-                raise ValueError(
-                    "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+            out_tensordicts = self._apply_out_tensordicts(out)
+            if out_tensordicts is None and not inplace:
+                result = self._multithread_rebuild(
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    inplace=inplace,
+                    checked=checked,
+                    filter_empty=filter_empty,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_futures,
+                    subs_results=subs_results,
+                    multithread_set=multithread_set,
+                    **constructor_kwargs,
                 )
-            out = out.tensordicts
+                if result is not None:
+                    out.update(result)
+                if names is not NO_DEFAULT:
+                    out.names = names
+                return out
+            out = out_tensordicts
         results = []
         for i, (td, local_future) in enumerate(
             _zip_strict(self.tensordicts, local_futures)
@@ -3544,11 +3578,32 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"batch_size={batch_size}, device={device}, names={names}, constructor_kwargs={constructor_kwargs}"
             )
         if out is not None:
-            if not isinstance(out, LazyStackedTensorDict):
-                raise ValueError(
-                    "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+            out_tensordicts = self._apply_out_tensordicts(out)
+            if out_tensordicts is None and not inplace:
+                result = self._apply_nest(
+                    fn,
+                    *others,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    inplace=inplace,
+                    checked=checked,
+                    call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix,
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    call_on_unbatched=call_on_unbatched,
+                    **constructor_kwargs,
                 )
-            out = out.tensordicts
+                if result is not None:
+                    out.update(result)
+                if names is not NO_DEFAULT:
+                    out.names = names
+                return out
+            out = out_tensordicts
         elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
             batch_size = torch.Size(batch_size)
