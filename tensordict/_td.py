@@ -2538,11 +2538,13 @@ class TensorDict(TensorDictBase):
             if getattr(storage, "filename", None) is None and (
                 isinstance(shape, Tensor) or storage.nbytes()
             ):
-                # load_memmap and memmap_refresh_ drop such an entry (#2952).
+                # load_memmap and memmap_refresh_ drop such an entry, or load a
+                # stale file left at its path (#2952).
                 warn(
                     "make_memmap_from_storage got a storage without a file, so "
                     f"the entry {key!r} is not written to the directory of the "
-                    "tensordict, and load_memmap and memmap_refresh_ drop it. "
+                    "tensordict: load_memmap and memmap_refresh_ drop it, or "
+                    "load a stale file left at its path. "
                     "Starting with TensorDict 0.17, the default will change to "
                     "raising a RuntimeError. Use make_memmap_from_tensor to "
                     "copy the data into the directory.",
