@@ -8065,6 +8065,23 @@ class TestTensorClassModuleForward:
         assert td_output["result", "substracted"] == 5
         assert set(td_output["input"].keys()) == {"a", "b"}
 
+    def test_td_forward_extra_args_warn(self) -> None:
+        """Test that the wrapper warns about the arguments it ignores (#2979)."""
+        td_module = TestTensorClassModule().as_td_module()
+        td = TensorDict(a=10, b=5)
+        out = TensorDict()
+        with pytest.warns(FutureWarning, match="'tensordict_out'.*TensorDict 0.17"):
+            td_output = td_module(td, tensordict_out=out)
+        assert td_output is not out
+        assert out.is_empty()
+        with pytest.warns(FutureWarning, match="1 positional argument\\(s\\), 'foo'"):
+            td_output = td_module(td, 1, foo=3)
+        assert td_output["result", "added"] == 15
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert td_module(td)["result", "added"] == 15
+            assert td_module(a=10, b=5)[0] == 10
+
     def test_td_forward_nested_input_extra_keys(self) -> None:
         """Test that the wrapper ignores the entries next to nested input fields."""
         value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))

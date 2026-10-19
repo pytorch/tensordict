@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from abc import ABC, abstractmethod
 from typing import cast, Generic, get_args, get_origin, TypeVar, Union
 
 from tensordict._td import TensorDict
 from tensordict.nn.common import dispatch, TensorDictModuleBase
 from tensordict.tensorclass import TensorClass
+from tensordict.utils import _user_stacklevel
 from torch import nn, Tensor
 
 __all__ = ["TensorClassModuleBase", "TensorClassModuleWrapper"]
@@ -103,13 +105,30 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
         Args:
             tensordict (TensorDictBase): the input tensordict. Its entries that
                 are not fields of the input class are ignored.
-            *args: ignored.
-            **kwargs: ignored.
+            *args: ignored, with a :class:`FutureWarning`.
+            **kwargs: ignored, ``tensordict_out`` included, with a
+                :class:`FutureWarning`. Starting with TensorDict 0.17, the
+                default will change to writing the outputs into
+                ``tensordict_out`` and returning it, as
+                :class:`~tensordict.nn.TensorDictModule` does, and to raising
+                a ``TypeError`` for the other arguments.
 
         Returns:
             A new TensorDict with the fields of the output tensorclass.
 
         """
+        if args or kwargs:
+            ignored = [f"{len(args)} positional argument(s)"] if args else []
+            ignored += [repr(name) for name in kwargs]
+            warnings.warn(
+                f"TensorClassModuleWrapper ignores {', '.join(ignored)}. "
+                "Starting with TensorDict 0.17, the default will change to "
+                "writing the outputs into tensordict_out and returning it, as "
+                "TensorDictModule does, and to raising a TypeError for the "
+                "other arguments.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
         input_type = self.tc_module.input_type
         # from_tensordict rejects the keys that are not fields of the input class
         extra_keys = [

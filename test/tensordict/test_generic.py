@@ -9398,6 +9398,22 @@ class TestGeneric:
                     f"torch.tensor(value) gives ({new})"
                 ) in str(w.message)
 
+    def test_set_unknown_kwargs_warn(self):
+        # set ignores unknown keywords with a FutureWarning, which raises a
+        # TypeError from 0.17, as set_ does (#2979)
+        x = torch.ones(3)
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        for td in (TensorDict(), lazy_stack([TensorDict(), TensorDict()]), params):
+            value = x if td.batch_dims == 0 else torch.ones(2, 3)
+            with pytest.warns(FutureWarning, match="'inplcae'"):
+                assert td.set("a", value, inplcae=True) is td
+            assert (td["a"] == 1).all()
+        td = TensorDict(a=torch.zeros(3))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td.set("a", x, inplace=True, non_blocking=False)
+            td.set("b", x)
+
     def test_set_tuple_no_warning(self):
         # Tuples that do not hold only Python numbers, and lists, do not warn (#2679)
         with warnings.catch_warnings():
@@ -13410,6 +13426,30 @@ class TestGeneric:
             else:
                 data.apply(lambda x: seen.append(type(x).__name__), is_leaf=is_leaf)
             assert seen == expected
+
+    def test_apply_unknown_kwargs_warn(self):
+        # apply, named_apply and apply_ ignore unknown keywords with a
+        # FutureWarning, which raises a TypeError from 0.17 (#2979)
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.zeros(3)}, batch_size=[3])
+        calls = [
+            lambda: td.apply(lambda x: x + 1, batch_sise=[]),
+            lambda: td.named_apply(lambda name, x: x + 1, foo=1),
+            lambda: td.apply_(lambda x: x + 1, foo=1),
+            lambda: lazy_stack([td, td]).apply(lambda x: x + 1, foo=1),
+        ]
+        for call in calls:
+            with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+                result = call()
+            assert result.batch_size[-1:] == torch.Size([3])
+        # keywords that apply passes to its implementation stay silent
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td.apply(lambda x: x + 1)
+            td.apply(lambda x: x + 1, call_on_unbatched=True)
+            out = td.apply(lambda name, x: x, named=True, nested_keys=True)
+            td.named_apply(lambda name, x: x, prefix=())
+            td.apply_(lambda x: x, default=0)
+        assert_allclose_td(out, td)
 
     def test_apply_out_batch_size_list_multithread(self):
         td = TensorDict(a=torch.ones(3), b=torch.ones(3, 2), batch_size=[3])
