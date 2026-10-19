@@ -27,7 +27,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import NonTensorData, NonTensorStack, TensorDict, UnbatchedTensor
 
 # Protocol helpers and classes are importable even without ucxx installed
 from tensordict._ucxx import (
@@ -40,6 +40,7 @@ from tensordict._ucxx import (
     send_tensordict,
     TensorDictPipe,
 )
+from tensordict.base import _is_leaf_nontensor
 
 try:
     import ucxx  # noqa: F401
@@ -430,6 +431,24 @@ class TestRoundtrip:
                 "shapes": [[1], shape],
             }
             for shape in ([-1], [True], [1.5], ["1"], None, 1)
+        ]
+        + [
+            {"keys": ["x"], "dtypes": ["torch.float32"], "shapes": [[2]], **extra}
+            for extra in (
+                {"batch_size": [-1]},
+                {"batch_size": [True]},
+                {"batch_size": 2},
+                {"batch_size": [3]},
+                {"batch_size": [2, 1]},
+                {"unbatched": "x"},
+                {"unbatched": ["y"]},
+                {"non_tensors": {"y": 1}},
+                {"non_tensors": [["y"]]},
+                {"non_tensors": [[1, 1]]},
+                {"non_tensors": [["x", 1]]},
+                {"non_tensors": [[["x", "y"], 1]]},
+                {"non_tensors": [["y", 1], ["y", 2]]},
+            )
         ],
     )
     def test_uncollated_invalid_header_before_payload(self, header, monkeypatch):
@@ -488,6 +507,83 @@ class TestRoundtrip:
         for key, value in td.items(True, True):
             assert result[key].dtype == value.dtype
             torch.testing.assert_close(result[key], value)
+
+    @pytest.mark.parametrize("sender", ["pipe", "send_tensordict"])
+    @pytest.mark.parametrize("receiver", ["pipe", "recv_tensordict"])
+    def test_uncollated_batch_size_and_non_tensors(self, sender, receiver):
+        # https://github.com/pytorch/tensordict/issues/2966
+        td = TensorDict(
+            a=torch.ones(2, 3),
+            u=UnbatchedTensor(torch.arange(5)),
+            text="hi",
+            nested=TensorDict(
+                b=torch.zeros(2),
+                meta=NonTensorData({"k": [1, 2.5, None, True]}),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+        ep = _FakeEndpoint()
+        if sender == "pipe":
+            asyncio.run(TensorDictPipe(ep, consolidated=False).asend(td))
+        else:
+            asyncio.run(send_tensordict.__wrapped__(ep, td, consolidated=False))
+        if receiver == "pipe":
+            result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        else:
+            result = asyncio.run(
+                recv_tensordict.__wrapped__(ep, td, consolidated=False)
+            )
+        assert result is not td
+        assert result.batch_size == td.batch_size
+        assert result["nested"].batch_size == td.batch_size
+        assert set(result.keys(True, True, is_leaf=_is_leaf_nontensor)) == set(
+            td.keys(True, True, is_leaf=_is_leaf_nontensor)
+        )
+        assert isinstance(result.get("u"), UnbatchedTensor)
+        torch.testing.assert_close(result.get("u"), td.get("u"))
+        torch.testing.assert_close(result["a"], td["a"])
+        for key in ("text", ("nested", "meta")):
+            assert isinstance(result.get(key), NonTensorData)
+            assert result[key] == td[key]
+
+    def test_uncollated_old_sender(self):
+        # A sender without batch_size and non_tensors in its header.
+        header = {"keys": ["x"], "dtypes": ["torch.float32"], "shapes": [[2]]}
+        encoded = json.dumps(header).encode()
+        ep = _FakeEndpoint()
+        ep._buffers = [
+            struct.pack("<Q", len(encoded)),
+            encoded,
+            np.ones(2, dtype=np.float32).tobytes(),
+        ]
+        result = asyncio.run(recv_tensordict.__wrapped__(ep, consolidated=False))
+        assert result.batch_size == torch.Size([])
+        torch.testing.assert_close(result["x"], torch.ones(2))
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            NonTensorData(object()),
+            NonTensorData((1, 2)),
+            NonTensorData({1: "a"}),
+            NonTensorData([1, {"k": object()}]),
+            NonTensorStack(NonTensorData("a"), NonTensorData("b")),
+        ],
+    )
+    @pytest.mark.parametrize("sender", ["pipe", "send_tensordict"])
+    def test_uncollated_unsupported_non_tensor(self, value, sender):
+        # https://github.com/pytorch/tensordict/issues/2966
+        td = TensorDict(
+            a=torch.ones(2), nested=TensorDict(v=value, batch_size=[2]), batch_size=[2]
+        )
+        ep = _FakeEndpoint()
+        with pytest.raises(ValueError, match="consolidated=True"):
+            if sender == "pipe":
+                asyncio.run(TensorDictPipe(ep, consolidated=False).asend(td))
+            else:
+                asyncio.run(send_tensordict.__wrapped__(ep, td, consolidated=False))
+        assert ep._buffers == []
 
     @pytest.mark.parametrize("key", ["", ["x"], ["nested", "x"], ["nested", ["x"]]])
     def test_uncollated_nested_keys(self, key):
