@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6061+g0853d1ddd.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6062+gc4cca4712.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6061+g0853d1ddd.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6062+gc4cca4712.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1643,11 +1643,13 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.to_parquet">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">to_parquet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">separator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.to_parquet" title="Link to this definition">#</a></dt>
 <dd><p>Writes the tensordict to a Parquet file, with one column per leaf.</p>
-<p>The tensordict is converted with <a class="reference internal" href="tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas" title="tensordict.TensorDictBase.to_pandas"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_pandas()</span></code></a>, so the same
-rules apply. Requires pandas. The file is written with
-<code class="docutils literal notranslate"><span class="pre">pyarrow.parquet.write_table</span></code> when pyarrow is installed, and with
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_parquet()</span></code> otherwise. <a class="reference internal" href="tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet" title="tensordict.TensorDictBase.from_parquet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_parquet()</span></code></a>
-reads the file back.</p>
+<p>The columns are built as in <a class="reference internal" href="tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas" title="tensordict.TensorDictBase.to_pandas"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_pandas()</span></code></a>, so the same rules
+apply. Requires pyarrow or pandas. When pyarrow is installed, the
+file is written with <code class="docutils literal notranslate"><span class="pre">pyarrow.parquet.write_table</span></code>, from a pandas
+DataFrame if pandas is installed and from the columns directly
+otherwise. With pandas alone, the file is written with
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_parquet()</span></code>, which then needs fastparquet.
+<a class="reference internal" href="tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet" title="tensordict.TensorDictBase.from_parquet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_parquet()</span></code></a> reads the file back.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em>) – the path of the Parquet file.</p>
@@ -2040,7 +2042,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_parquet",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_parquet",
        "url": "/reference/generated/tensordict.TensorDictBase.to_parquet.html",
-       "articleBody": "TensorDictBase.to_parquet# TensorDictBase.to_parquet(path, *, separator: str | None = None, **kwargs)# Writes the tensordict to a Parquet file, with one column per leaf. The tensordict is converted with to_pandas(), so the same rules apply. Requires pandas. The file is written with pyarrow.parquet.write_table when pyarrow is installed, and with pandas.DataFrame.to_parquet() otherwise. from_parquet() reads the file back. Parameters: path (str or Path) \u2013 the path of the Parquet file. Keyword Arguments: separator (str, optional) \u2013 if given, joins the keys of nested entries with it to build the column names: with separator=\".\", the entry (\"obs\", \"x\") becomes the column \"obs.x\". Required when the tensordict has nested tensordicts. Defaults to None. **kwargs \u2013 passed to the Parquet writer. Raises: ValueError \u2013 as to_pandas(). Examples \u003e\u003e\u003e import os \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.arange(2), b=TensorDict(c=torch.zeros(2)), batch_size=[2]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... path = os.path.join(tmpdir, \"data.parquet\") ... td.to_parquet(path, separator=\".\") ... td2 = TensorDict.from_parquet(path, separator=\".\") \u003e\u003e\u003e td2[\"b\", \"c\"] tensor([0., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_parquet# TensorDictBase.to_parquet(path, *, separator: str | None = None, **kwargs)# Writes the tensordict to a Parquet file, with one column per leaf. The columns are built as in to_pandas(), so the same rules apply. Requires pyarrow or pandas. When pyarrow is installed, the file is written with pyarrow.parquet.write_table, from a pandas DataFrame if pandas is installed and from the columns directly otherwise. With pandas alone, the file is written with pandas.DataFrame.to_parquet(), which then needs fastparquet. from_parquet() reads the file back. Parameters: path (str or Path) \u2013 the path of the Parquet file. Keyword Arguments: separator (str, optional) \u2013 if given, joins the keys of nested entries with it to build the column names: with separator=\".\", the entry (\"obs\", \"x\") becomes the column \"obs.x\". Required when the tensordict has nested tensordicts. Defaults to None. **kwargs \u2013 passed to the Parquet writer. Raises: ValueError \u2013 as to_pandas(). Examples \u003e\u003e\u003e import os \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.arange(2), b=TensorDict(c=torch.zeros(2)), batch_size=[2]) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... path = os.path.join(tmpdir, \"data.parquet\") ... td.to_parquet(path, separator=\".\") ... td2 = TensorDict.from_parquet(path, separator=\".\") \u003e\u003e\u003e td2[\"b\", \"c\"] tensor([0., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
