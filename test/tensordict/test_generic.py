@@ -9771,6 +9771,39 @@ class TestGeneric:
         expected[idx] = expected[idx].add(1.0).mul(2).clamp_max(9.0)
         assert (td.to_tensordict() == expected).all()
 
+    @pytest.mark.parametrize("idx", [1, slice(1, 3), (slice(1, 3), 0)])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_sub_td_inplace_methods_nested_lazy(self, idx, stack_dim):
+        # The leaves of a lazy stack below a sub-tensordict are stacked
+        # copies: the in-place methods write them into the members (#3043)
+        expected = TensorDict(
+            a=torch.arange(24.0).view(4, 3, 2),
+            nested=TensorDict(b=torch.arange(12.0).view(4, 3), batch_size=[4, 3]),
+            batch_size=[4, 3],
+        )
+        td = expected.clone()
+        td["nested"] = lazy_stack(list(td["nested"].unbind(stack_dim)), stack_dim)
+        sub_td = td._get_sub_tensordict(idx)
+        w = torch.arange(1.0, 1.0 + sub_td.batch_size.numel()).view(sub_td.batch_size)
+        end = sub_td.to_tensordict().apply(lambda x: x + 5)
+        assert sub_td.add_(1.0) is sub_td
+        r = sub_td.add_(w)
+        if r is not sub_td:
+            # the result holds copies, not a view of the source
+            assert not isinstance(r["nested"], _SubTensorDict)
+            r.lock_()
+        sub_td += 2
+        assert sub_td.mul_(3) is sub_td
+        sub_td.clamp_min_(w * 20)
+        assert sub_td.lerp_(end, 0.5) is sub_td
+        expected_sub = expected._get_sub_tensordict(idx)
+        expected_sub.add_(1.0)
+        expected_sub.add_(w)
+        expected_sub.add_(2).mul_(3)
+        expected_sub.clamp_min_(w * 20)
+        expected_sub.lerp_(end, 0.5)
+        assert (td.to_tensordict() == expected).all()
+
     def test_setdefault_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)
