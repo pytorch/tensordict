@@ -4003,6 +4003,40 @@ def _warn_dim_past_batch_dims(op: str) -> None:
     )
 
 
+def _warn_batch_dims_ignored(op: str, result, batch_dims, batch_size) -> None:
+    """Warns that ``op`` ignored ``batch_dims`` without ``auto_batch_size``, where turning it on, as from 0.17, changes ``result`` (#2979)."""
+    from tensordict.base import _is_tensor_collection
+
+    if batch_size is None:
+        # with a batch_size, auto_batch_size raises: the result changes
+        try:
+            expected = result.copy().auto_batch_size_(batch_dims=batch_dims)
+        except Exception:
+            expected = None
+        if expected is not None and (
+            expected.batch_size == result.batch_size
+            and all(
+                expected.get(key).batch_size == value.batch_size
+                for key, value in result.items(include_nested=True)
+                if _is_tensor_collection(type(value))
+            )
+        ):
+            return
+    # with a batch_size, auto_batch_size=True raises: advise it only without
+    advice = (
+        "Drop batch_dims to keep today's result."
+        if batch_size is not None
+        else "Pass auto_batch_size=True to get that result now, or drop batch_dims."
+    )
+    warnings.warn(
+        f"{op} ignores batch_dims={batch_dims} without auto_batch_size=True. "
+        "Starting with TensorDict 0.17, the default will change to turning "
+        f"auto_batch_size on when batch_dims is given, as from_dict does. {advice}",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_lazy_shape_args(op: str, args: str) -> None:
     """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17."""
     warnings.warn(

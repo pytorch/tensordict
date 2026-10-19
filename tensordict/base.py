@@ -3332,7 +3332,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 passed and ``False`` otherwise.
             batch_size (torch.Size or list of int, optional): the batch size of
                 the result: the leading dimensions that all its entries share.
-                Exclusive with ``batch_dims``. Defaults to ``None``.
+                Takes precedence over ``auto_batch_size=True``: no batch size
+                is computed. Exclusive with ``batch_dims``. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.

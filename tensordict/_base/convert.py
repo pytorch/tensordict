@@ -68,6 +68,7 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _set_max_batch_size,
     _user_stacklevel,
+    _warn_batch_dims_ignored,
     is_non_tensor,
     LinkedList,
     set_lazy_legacy,
@@ -309,7 +310,10 @@ class _Conversion:
         Each dict is converted with :meth:`from_dict` and the results are
         stacked along a new leading dimension. A tensordict or tensorclass in
         the list is stacked as it is: the keyword arguments do not apply to
-        it.
+        it. When the result does not get the ``batch_size`` or ``device``
+        asked for, a ``FutureWarning`` is emitted: starting with TensorDict
+        0.17, the default will change to applying them to the result, which
+        raises if the batch size does not fit, as for a list of dicts.
 
         Args:
             input (list): the dicts or tensor collections to stack.
@@ -396,6 +400,26 @@ class _Conversion:
             for d in input
         ]
         out = stack(input)
+        ignored = []
+        if batch_size is not None and out.batch_size != torch.Size(batch_size):
+            ignored.append(f"batch_size={list(batch_size)}")
+        if device is not None:
+            from tensordict._td import _parse_device
+
+            if out.device != _parse_device(device, memoize=False)[0]:
+                ignored.append(f"device={device}")
+        if ignored:
+            # the tensor collections of the list skip from_dict (#2979)
+            warnings.warn(
+                f"from_list ignores {' and '.join(ignored)} for the tensor "
+                f"collections of the list: the result has batch size "
+                f"{out.batch_size} and device {out.device}. Starting with "
+                "TensorDict 0.17, the default will change to applying them "
+                "to the result, which raises if the batch size does not "
+                "fit, as for a list of dicts.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
         if names is not None:
             # the stack does not name the list dimension, and from_dict does
             # not apply names with auto_batch_size: name the result
@@ -568,7 +592,11 @@ class _Conversion:
                 Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
 
         .. note::
             A module ``state_dict()`` round-trips through ``from_pytree``, and its
@@ -685,6 +713,9 @@ class _Conversion:
         if result is not None:
             if auto_batch_size:
                 result.auto_batch_size_(batch_dims)
+            elif batch_dims is not None:
+                # auto_batch_size applies after batch_size here: it does not raise
+                _warn_batch_dims_ignored("from_pytree", result, batch_dims, None)
             return result
         if isinstance(pytree, (int, float, np.ndarray)):
             return torch.as_tensor(pytree)
@@ -784,7 +815,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             batch_size (torch.Size or list of int, optional): the batch size of
                 the result: the leading dimensions that all its entries share.
                 Exclusive with ``auto_batch_size``. Defaults to ``None``, which
@@ -838,6 +873,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_h5"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_h5", result, batch_dims, batch_size)
         return result
 
     @classmethod
@@ -872,7 +909,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             batch_size (torch.Size or list of int, optional): the batch size of
                 the result: the leading dimensions that all its entries share.
                 Exclusive with ``auto_batch_size``. Defaults to ``None``, which
@@ -935,6 +976,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_zarr"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_zarr", result, batch_dims, batch_size)
         return result
 
     @classmethod
@@ -2084,17 +2127,26 @@ class _Conversion:
         Keyword Args:
             auto_batch_size (bool, optional): if ``True``, sets the batch size
                 to the largest leading shape that all the entries share.
-                Exclusive with ``batch_size``. Defaults to ``False``.
+                Exclusive with ``batch_size``, except for a dict, where
+                ``batch_size`` wins, and for an :class:`h5py.File`, where
+                ``auto_batch_size`` wins. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
                 Defaults to ``None``.
             batch_size (torch.Size or list of int, optional): the batch size of
                 the result: the leading dimensions that all its entries share.
-                Exclusive with ``auto_batch_size``. Defaults to ``None``.
+                Exclusive with ``auto_batch_size``, except for a dict, where
+                ``batch_size`` wins and no batch size is computed, and for an
+                :class:`h5py.File`, where ``auto_batch_size`` wins and
+                ``batch_size`` is ignored. Defaults to ``None``.
 
         Returns:
             A tensordict (a :class:`~tensordict.PersistentTensorDict` for an
@@ -2127,22 +2179,17 @@ class _Conversion:
             #         return obj
             #     return cls.from_any(obj.data, auto_batch_size=auto_batch_size)
             return obj
-        if isinstance(obj, dict):
-            return cls.from_dict(
-                obj,
+        if isinstance(obj, (dict, UserDict)):
+            result = cls.from_dict(
+                obj if isinstance(obj, dict) else dict(obj),
                 auto_batch_size=auto_batch_size,
                 batch_dims=batch_dims,
                 device=device,
                 batch_size=batch_size,
             )
-        if isinstance(obj, UserDict):
-            return cls.from_dict(
-                dict(obj),
-                auto_batch_size=auto_batch_size,
-                batch_dims=batch_dims,
-                device=device,
-                batch_size=batch_size,
-            )
+            if batch_dims is not None and not auto_batch_size:
+                _warn_batch_dims_ignored("from_any", result, batch_dims, batch_size)
+            return result
         if (
             isinstance(obj, np.ndarray)
             and hasattr(obj.dtype, "names")
@@ -2195,12 +2242,15 @@ class _Conversion:
                     # for backward compatibility, a batch_dims that cannot be
                     # applied, for example to a nested NonTensorStack, is ignored
                     pass
-            return cls.from_dataclass(
+            result = cls.from_dataclass(
                 obj,
                 auto_batch_size=auto_batch_size,
                 device=device,
                 batch_size=batch_size,
             )
+            if batch_dims is not None and not auto_batch_size:
+                _warn_batch_dims_ignored("from_any", result, batch_dims, batch_size)
+            return result
         if not is_compiling() and importlib.util.find_spec("pandas") is not None:
             import pandas as pd
 
@@ -2221,7 +2271,7 @@ class _Conversion:
 
                 if not auto_batch_size and batch_size is not None:
                     try:
-                        return PersistentTensorDict(
+                        result = PersistentTensorDict(
                             group=obj,
                             batch_size=TensorDict._parse_batch_size(None, batch_size),
                         )
@@ -2229,9 +2279,17 @@ class _Conversion:
                         # for backward compatibility, a batch size that is not a
                         # size or that the file does not take is ignored
                         pass
+                    else:
+                        if batch_dims is not None:
+                            _warn_batch_dims_ignored(
+                                "from_any", result, batch_dims, batch_size
+                            )
+                        return result
                 obj = PersistentTensorDict(group=obj)
                 if auto_batch_size:
                     obj.auto_batch_size_(batch_dims=_int_batch_dims(batch_dims))
+                elif batch_dims is not None:
+                    _warn_batch_dims_ignored("from_any", obj, batch_dims, batch_size)
                 return obj
         return obj
 
@@ -2259,7 +2317,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -2301,6 +2363,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_tuple"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_tuple", result, batch_dims, batch_size)
         return result
 
     @classmethod
@@ -2341,7 +2405,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             as_tensorclass (bool, optional): if ``True``, returns a
                 tensorclass instance (or a tensorclass type, for a dataclass
                 type) through :func:`~tensordict.from_dataclass`. Defaults to
@@ -2432,6 +2500,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_dataclass"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_dataclass", result, batch_dims, batch_size)
         return result
 
     @classmethod
@@ -2461,7 +2531,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -2521,6 +2595,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_namedtuple"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_namedtuple", result, batch_dims, batch_size)
         return result
 
     @classmethod
@@ -2555,7 +2631,11 @@ class _Conversion:
                 ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -2607,6 +2687,8 @@ class _Conversion:
                     cls._CONFLICTING_BATCH_SIZES.format("from_struct_array")
                 )
             td.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_struct_array", td, batch_dims, batch_size)
         return td
 
     def to_struct_array(self) -> np.ndarray:
@@ -2768,7 +2850,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -2822,6 +2908,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_pandas"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_pandas", result, batch_dims, batch_size)
         return result
 
     def to_pandas(self, *, separator: str | None = None):
@@ -2888,7 +2976,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -2945,6 +3037,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_csv"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_csv", result, batch_dims, batch_size)
         return result
 
     def to_csv(self, path, *, separator: str | None = None, **kwargs):
@@ -3018,7 +3112,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -3077,6 +3175,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_parquet"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_parquet", result, batch_dims, batch_size)
         return result
 
     def to_parquet(self, path, *, separator: str | None = None, **kwargs):
@@ -3153,7 +3253,11 @@ class _Conversion:
                 Exclusive with ``batch_size``. Defaults to ``False``.
             batch_dims (int, optional): with ``auto_batch_size``, the maximum
                 number of batch dimensions. Ignored without
-                ``auto_batch_size``. Defaults to ``None``.
+                ``auto_batch_size``, with a ``FutureWarning`` when it would
+                change the result. Starting with TensorDict 0.17, the default
+                will change to turning on ``auto_batch_size`` when
+                ``batch_dims`` is given, as ``from_dict`` does. Defaults to
+                ``None``.
             device (torch.device, str or int, optional): the device of the
                 result. Leaves on another device are moved to it. ``None``
                 leaves each leaf where it is, and the result has no device.
@@ -3215,6 +3319,8 @@ class _Conversion:
             if batch_size is not None:
                 raise TypeError(cls._CONFLICTING_BATCH_SIZES.format("from_json"))
             result.auto_batch_size_(batch_dims=batch_dims)
+        elif batch_dims is not None:
+            _warn_batch_dims_ignored("from_json", result, batch_dims, batch_size)
         return result
 
     def to_json(
