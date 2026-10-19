@@ -125,10 +125,8 @@ def _dataframe_to_tensordict(
     )
 
 
-def _tensordict_to_dataframe(td, *, separator: str | None):
-    """Convert a TensorDict to a pandas DataFrame."""
-    import pandas as pd
-
+def _tensordict_to_columns(td, *, separator: str | None) -> dict[str, Any]:
+    """Convert a TensorDict to a dict of 1D columns (numpy arrays or lists)."""
     if separator is not None:
         flat = _flatten_keys(td, separator)
     else:
@@ -161,7 +159,14 @@ def _tensordict_to_dataframe(td, *, separator: str | None):
         else:
             data[key] = value
 
-    return pd.DataFrame(data)
+    return data
+
+
+def _tensordict_to_dataframe(td, *, separator: str | None):
+    """Convert a TensorDict to a pandas DataFrame."""
+    import pandas as pd
+
+    return pd.DataFrame(_tensordict_to_columns(td, separator=separator))
 
 
 def _pyarrow_table_to_columns(table) -> tuple[dict[str, np.ndarray | list], int]:
@@ -293,8 +298,11 @@ def _write_parquet(td, path, separator: str | None, **kwargs):
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        df = _tensordict_to_dataframe(td, separator=separator)
-        table = pa.Table.from_pandas(df)
+        if _has_pandas():
+            df = _tensordict_to_dataframe(td, separator=separator)
+            table = pa.Table.from_pandas(df)
+        else:
+            table = pa.table(_tensordict_to_columns(td, separator=separator))
         pq.write_table(table, str(path), **kwargs)
     elif _has_pandas():
         df = _tensordict_to_dataframe(td, separator=separator)
