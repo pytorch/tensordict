@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict._tensorcollection import TensorCollection
-from tensordict.utils import is_non_tensor
+from tensordict.utils import is_non_tensor, is_tensorclass
 
 
 def _has_pandas() -> bool:
@@ -52,7 +52,9 @@ def _flatten_keys(td, separator: str) -> dict[str, Any]:
     """Flatten a TensorDict into a dict with separated key names."""
     result = {}
     for key, value in td.items():
-        if isinstance(value, TensorCollection) and not is_non_tensor(value):
+        if (
+            isinstance(value, TensorCollection) or is_tensorclass(value)
+        ) and not is_non_tensor(value):
             sub = _flatten_keys(value, separator)
             for sub_key, sub_val in sub.items():
                 result[f"{key}{separator}{sub_key}"] = sub_val
