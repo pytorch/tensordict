@@ -9,10 +9,19 @@ into it with [`update()`](tensordict.TensorDictBase.update.html#tensordict.Tenso
 tensordict does not change. With no entry to write, `replace`
 returns `self`.
 
+When both a positional argument and `**kwargs` are given, the
+keyword entries are merged into a copy of the positional argument
+(with `dict` unpacking for a dictionary, with [`copy()`](tensordict.TensorDictBase.copy.html#tensordict.TensorDictBase.copy) and
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) for a tensordict), so the argument does not change.
+A tensordict backed by a file or a store, such as a
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), shares that storage with
+its copy and still receives the keyword entries.
+
 Parameters:
 
 - ***args** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)*or*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - at most one, the entries to write.
-- ****kwargs** - top-level entries to write, by key.
+- ****kwargs** - top-level entries to write, by key. They take
+precedence over the entries of the positional argument.
 
 Returns:
 
