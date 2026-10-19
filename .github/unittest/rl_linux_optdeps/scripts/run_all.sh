@@ -181,8 +181,12 @@ case "${RL_TEST_SHARD:-}" in
     ;;
 esac
 
-# TorchRL validates its standalone Triton GRU numerics in its own CI. Keep this
-# reverse-dependency job focused on TensorDict interoperability.
+# TorchRL validates its standalone Triton GRU numerics, and the Triton kernels
+# behind LSTMModule and GRUModule, in its own CI. Keep this reverse-dependency
+# job focused on TensorDict interoperability: the other backends in test_rnn.py
+# go through the same TensorDict code. The Triton tests of test_rnn.py took 6.4
+# of its 9.8 minutes. --deselect drops every test whose ID starts with the
+# given text, so test_lstm_module_triton_ covers five tests.
 # torchvision is not installed here (it would have to match the torch nightly),
 # and this test fails instead of skipping without it.
 # These tests fail at random, whatever the TensorDict change, and turn
@@ -216,6 +220,15 @@ MUJOCO_GL=egl python -m pytest "${shard_args[@]}" --instafail -v --durations 20 
   --ignore test/test_setup.py \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
+  --deselect test/modules/test_rnn.py::TestLSTMModule::test_lstm_module_triton_ \
+  --deselect test/modules/test_rnn.py::TestLSTMModule::test_lstm_triton_recompute_parity \
+  --deselect "test/modules/test_rnn.py::TestLSTMModule::test_lstm_module_backends_non_contiguous_recurrent_inputs[triton]" \
+  --deselect test/modules/test_rnn.py::TestGRUModule::test_gru_module_triton_ \
+  --deselect test/modules/test_rnn.py::TestGRUModule::test_gru_triton_recompute_parity \
+  --deselect "test/modules/test_rnn.py::TestGRUModule::test_gru_module_backends_non_contiguous_recurrent_inputs[triton]" \
+  --deselect test/modules/test_rnn.py::TestRecurrentMatmulPrecision::test_lstm_triton_precision_grad_parity \
+  --deselect test/modules/test_rnn.py::TestRecurrentMatmulPrecision::test_gru_triton_precision_grad_parity \
+  --deselect test/modules/test_rnn.py::test_triton_compile_forward_backward \
   --deselect "test/test_helpers.py::test_transformed_env_constructor_with_state_dict[from_pixels1]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cpu-autocast]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cuda-autocast]" \
