@@ -853,9 +853,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             in that it will create a TensorDictParams instance with a new copy of the
             parameters and buffers __detached__ from the current graph. For a
             regular clone (ie, cloning leaf parameters onto a new tensor that
-            is part of the graph), simply call
+            is part of the graph), simply call::
 
-                >>> params.apply(torch.clone)
+                params.apply(torch.clone)
 
         .. note::
             If a parameter is duplicated in the tree, ``clone`` will preserve this

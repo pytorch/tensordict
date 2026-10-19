@@ -6076,18 +6076,19 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
 
     When calling `tensordict.unsqueeze(dim)`, a lazy view of this operation is
     returned such that the following code snippet works without raising an
-    exception:
+    exception::
 
-        >>> assert tensordict.unsqueeze(dim).squeeze(dim) is tensordict
+        assert tensordict.unsqueeze(dim).squeeze(dim) is tensordict
 
     Examples:
-        >>> from tensordict import TensorDict
+        >>> from tensordict import TensorDict, set_lazy_legacy
         >>> import torch
         >>> td = TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
-        >>> td_unsqueeze = td.unsqueeze(-1)
-        >>> print(td_unsqueeze.shape)
+        >>> with set_lazy_legacy(True):
+        ...     td_unsqueeze = td.unsqueeze(-1)
+        ...     print(td_unsqueeze.shape)
+        ...     print(td_unsqueeze.squeeze(-1) is td)
         torch.Size([3, 1])
-        >>> print(td_unsqueeze.squeeze(-1) is td)
         True
     """
 
@@ -6203,9 +6204,9 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
     returned such that the following code snippet works without raising an
-    exception:
+    exception::
 
-        >>> assert tensordict.transpose(dims_list, dim).transpose(dims_list, dim) is tensordict
+        assert tensordict.transpose(dims_list, dim).transpose(dims_list, dim) is tensordict
 
     """
 
@@ -6277,18 +6278,19 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
     returned such that the following code snippet works without raising an
-    exception:
+    exception::
 
-        >>> assert tensordict.permute(dims_list, dim).permute(dims_list, dim) is tensordict
+        assert tensordict.permute(dims_list, dim).permute(dims_list, dim) is tensordict
 
     Examples:
-        >>> from tensordict import TensorDict
+        >>> from tensordict import TensorDict, set_lazy_legacy
         >>> import torch
-        >>> td = TensorDict({'a': torch.randn(4, 5, 6, 9)}, batch_size=[3])
-        >>> td_permute = td.permute(dims=(2, 1, 0))
-        >>> print(td_permute.shape)
+        >>> td = TensorDict({'a': torch.randn(4, 5, 6, 9)}, batch_size=[4, 5, 6])
+        >>> with set_lazy_legacy(True):
+        ...     td_permute = td.permute(dims=(2, 1, 0))
+        ...     print(td_permute.shape)
+        ...     print(td_permute.permute(dims=(2, 1, 0)) is td)
         torch.Size([6, 5, 4])
-        >>> print(td_permute.permute(dims=(2, 1, 0)) is td)
         True
 
     """

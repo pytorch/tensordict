@@ -3701,8 +3701,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 device=None,
                 is_shared=False)
             >>> # the data of both subtensordict is the same
-            >>> print(data.get("a").data_ptr(), sub_data.get("a").data_ptr())
-            140183705558208 140183705558208
+            >>> data.get("a").data_ptr() == sub_data.get("a").data_ptr()
+            True
             >>> sub_data_clone = sub_data.clone(recurse=True)
             >>> print(sub_data_clone)
             TensorDict(
@@ -3711,8 +3711,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 batch_size=torch.Size([2]),
                 device=None,
                 is_shared=False)
-            >>. print(sub_data.get("a").data_ptr())
-            140183705558208
+            >>> sub_data_clone.get("a").data_ptr() == sub_data.get("a").data_ptr()
+            False
             >>> sub_data_clone = sub_data.clone(recurse=False)
             >>> print(sub_data_clone)
             _SubTensorDict(
@@ -3721,8 +3721,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 batch_size=torch.Size([2]),
                 device=None,
                 is_shared=False)
-            >>> print(sub_data.get("a").data_ptr())
-            140183705558208
+            >>> sub_data_clone.get("a").data_ptr() == sub_data.get("a").data_ptr()
+            True
         """
         if not recurse:
             return _SubTensorDict(

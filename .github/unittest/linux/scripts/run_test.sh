@@ -82,6 +82,15 @@ mkdir -p "$JUNIT_DIR"
 
 python -m pytest test/smoke_test.py -v --durations 20 --junitxml="$JUNIT_DIR/junit-smoke.xml"
 test_status=0
+# Run the examples of the docstrings and of the docs. The jobs with a pinned
+# torch set TD_RUN_DOCTESTS: the printed reprs can change with nightly torch.
+if [ -n "${TD_RUN_DOCTESTS:-}" ]; then
+    # Without the cache, so that the --last-failed rerun below skips them.
+    python -m pytest --doctest-modules tensordict -n 4 -p no:cacheprovider \
+        --junitxml="$JUNIT_DIR/junit-doctests.xml" || test_status=$?
+    python -m pytest --doctest-glob='*.rst' docs/source -n 4 -p no:cacheprovider \
+        --junitxml="$JUNIT_DIR/junit-doctests-docs.xml" || test_status=$?
+fi
 # Run the tests in TD_TEST_WORKERS pytest-xdist workers (4 unless the job sets
 # it), except two files that run on their own afterwards. With worksteal, an
 # idle worker takes tests from the queue of a busy one: the default scheduler
