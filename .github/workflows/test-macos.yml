@@ -36,6 +36,9 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
       runner: macos-m1-stable
+      # setup_env.sh creates its own env with the Miniconda that macos_job.yml
+      # installs, and needs none of the packages it pre-installs by default.
+      default-packages: ""
       repository: pytorch/tensordict
       timeout: 120
       script: |

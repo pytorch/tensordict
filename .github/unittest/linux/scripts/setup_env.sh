@@ -25,13 +25,17 @@ case "$(uname -s)" in
 esac
 
 # 1. Install conda at ./conda
+if [ "${os}" == "MacOSX" ]; then
+    # test-infra's macos_job.yml has installed Miniconda and exported its
+    # CONDA_EXE: link to it rather than download a second one. Keep the package
+    # cache out of that install, which actions/cache saves after the job.
+    ln -sfn "$(dirname "$(dirname "${CONDA_EXE:?macos_job.yml exports CONDA_EXE}")")" "${conda_dir}"
+    export CONDA_PKGS_DIRS="${root_dir}/conda-pkgs"
+    printf "* Using conda at %s\n" "$(readlink "${conda_dir}")"
+fi
 if [ ! -d "${conda_dir}" ]; then
     printf "* Installing conda\n"
-    if [ "${os}" == "MacOSX" ]; then
-      curl -L -o miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
-    else
-      wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
-    fi
+    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
     bash ./miniconda.sh -b -f -p "${conda_dir}"
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
