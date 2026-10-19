@@ -247,6 +247,9 @@ jobs:
           # Run the examples of the docstrings and of the docs (run_test.sh)
           # in the jobs with the newest and the oldest pinned torch.
           TD_RUN_DOCTESTS: ${{ matrix.python_version == '3.14' && '1' || '' }}
+          # The ONNX export tests skip without onnx. One job installs it: a
+          # released Python with stable torch, which onnxruntime supports.
+          TD_INSTALL_ONNX: ${{ matrix.python_version == '3.14' && '1' || '' }}
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |

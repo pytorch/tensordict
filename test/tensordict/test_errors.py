@@ -119,6 +119,26 @@ class TestErrorMessage:
             td.set_("a", torch.randn(2))
 
     @staticmethod
+    def test_inplace_error_is_runtime_error():
+        # update_ and copy_ raise torch's RuntimeError for the same mismatch:
+        # the error of set_ is caught by except ValueError and except RuntimeError
+        td = TensorDict(a=torch.zeros(3, 4), nested=TensorDict(b=torch.zeros(3)))
+        for write in (
+            lambda: td.set_("a", torch.zeros(3, 5)),
+            lambda: td.set("a", torch.zeros(3, 5), inplace=True),
+            lambda: td.update({"a": torch.zeros(3, 5)}, inplace=True),
+            lambda: td.set_(("nested", "b"), torch.zeros(4)),
+            lambda: LazyStackedTensorDict.lazy_stack([td, td]).set_(
+                "a", torch.zeros(2, 3, 5)
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="Failed to update") as err:
+                write()
+            assert isinstance(err.value, ValueError)
+        with pytest.raises(RuntimeError, match="must match"):
+            td.update_({"a": torch.zeros(3, 5)})
+
+    @staticmethod
     @pytest.mark.parametrize("key", [1, None, (1, "a")])
     def test_non_str_key(key):
         err = re.escape(_GENERIC_NESTED_ERR.format(key))

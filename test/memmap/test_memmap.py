@@ -738,6 +738,45 @@ def test_filename(tmp_path):
     assert (tmp_path / "test2.memmap").exists()
 
 
+def test_constructor_filename_source_and_index(tmp_path):
+    # https://github.com/pytorch/tensordict/issues/2970
+    filename = str(tmp_path / "x.memmap")
+    MemoryMappedTensor.from_tensor(torch.arange(6.0), filename=filename)
+
+    # a str source maps the file, as from_filename does
+    x = MemoryMappedTensor(filename, dtype=torch.float32, shape=(6,))
+    assert type(x) is MemoryMappedTensor
+    assert x.filename == filename
+    torch.testing.assert_close(x, torch.arange(6.0))
+    x[0] = 9.0
+    y = MemoryMappedTensor.from_filename(filename, torch.float32, (6,))
+    assert y[0] == 9.0
+    loaded = pickle.loads(pickle.dumps(x))
+    torch.testing.assert_close(loaded, y)
+
+    # index on every route
+    x = MemoryMappedTensor(filename, dtype=torch.float32, shape=(2, 3), index=1)
+    torch.testing.assert_close(x, torch.tensor([3.0, 4.0, 5.0]))
+    x = MemoryMappedTensor(
+        torch.arange(6.0), filename=tmp_path / "y.memmap", index=slice(2, 4)
+    )
+    torch.testing.assert_close(x, torch.tensor([2.0, 3.0]))
+    x = MemoryMappedTensor(
+        y.untyped_storage(), dtype=torch.float32, shape=(6,), index=slice(1, 3)
+    )
+    torch.testing.assert_close(x, torch.tensor([1.0, 2.0]))
+    x = MemoryMappedTensor(torch.arange(6.0), index=-1)
+    assert type(x) is MemoryMappedTensor
+    assert x == 5.0
+
+    with pytest.raises(TypeError, match="Duplicated filename argument"):
+        MemoryMappedTensor(
+            filename, dtype=torch.float32, shape=(6,), filename=tmp_path / "z"
+        )
+    with pytest.raises(TypeError, match="dtype and shape are required"):
+        MemoryMappedTensor(filename)
+
+
 def test_handler():
     mt = MemoryMappedTensor.from_tensor(torch.zeros((), dtype=torch.float32).expand(10))
 

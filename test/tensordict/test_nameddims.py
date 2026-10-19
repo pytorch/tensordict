@@ -623,6 +623,24 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == ["m", "n", "o", "p"]
         assert td2.names == ["w", "x", "y", "z"]
 
+    @pytest.mark.parametrize("method", ["rename", "rename_"])
+    @pytest.mark.parametrize("batch_size", [[], [3], [3, 4]])
+    def test_rename_none(self, method, batch_size):
+        # a single None clears every name, for any number of batch dims
+        names = list("ab")[: len(batch_size)] or None
+        sub = TensorDict(batch_size=batch_size + [5], names=names and names + ["z"])
+        td = TensorDict({"sub": sub}, batch_size, names=names)
+        with pytest.raises(ValueError, match="Passed both a name map"):
+            getattr(td, method)(None, a="x")
+        assert td.names == (names or [])
+        out = getattr(td, method)(None)
+        assert out is td if method == "rename_" else out is not td
+        assert out.names == [None] * len(batch_size)
+        assert out["sub"].names == [None] * len(batch_size) + ["z" if names else None]
+        assert td.names == (
+            [None] * len(batch_size) if method == "rename_" else names or []
+        )
+
     def test_select(self):
         td = TensorDict(batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         tds = td.select()

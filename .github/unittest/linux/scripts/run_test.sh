@@ -28,14 +28,34 @@ export LIST_TO_STACK=1
 # check the tensordicts that are built without validation (see _check_invariants)
 export TD_CHECK_INVARIANTS=1
 
-# Start Redis server on port 6379 (non-fatal if unavailable)
-if command -v redis-server &> /dev/null; then
+# Ping a Redis-compatible server on port $2 up to 30 times, a second apart, and
+# fail the job, showing log file $3, if it does not answer.
+wait_for_server() {
+    local ping="import redis; redis.Redis(port=$2, socket_connect_timeout=1).ping()"
+    for _ in $(seq 30); do
+        python -c "$ping" 2> /dev/null && return 0
+        sleep 1
+    done
+    if ! python -c "$ping"; then
+        echo "$1 did not start on port $2:"
+        cat "$3"
+        exit 1
+    fi
+}
+
+# Start Redis on port 6379. The store tests skip when it is not reachable, so a
+# Linux job fails if Redis cannot be started, as it does for Dragonfly below.
+if [ "$(uname -s)" == "Linux" ]; then
+    if ! command -v redis-server &> /dev/null; then
+        apt update -y
+        apt install -y redis-server
+    fi
+    redis-server --daemonize yes --port 6379 --save "" --appendonly no --logfile /tmp/redis.log
+    wait_for_server Redis 6379 /tmp/redis.log
+elif command -v redis-server &> /dev/null; then
     redis-server --daemonize yes --port 6379 --save "" --appendonly no || true
 else
     case "$(uname -s)" in
-        Linux*)
-            apt update -y && apt install -y redis-server && redis-server --daemonize yes --port 6379 --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
-            ;;
         Darwin*)
             brew install redis 2>/dev/null && redis-server --daemonize yes --port 6379 --save "" --appendonly no || echo "Redis server not available, redis tests will be skipped"
             ;;
@@ -65,16 +85,7 @@ fi
 if [ -n "${dragonfly_bin:-}" ]; then
     # Dragonfly has no --daemonize flag, so run it in the background.
     "$dragonfly_bin" --port 6380 --dbfilename "" --logtostderr > /tmp/dragonfly.log 2>&1 &
-    ping_dragonfly="import redis; redis.Redis(port=6380, socket_connect_timeout=1).ping()"
-    for _ in $(seq 30); do
-        python -c "$ping_dragonfly" 2> /dev/null && break
-        sleep 1
-    done
-    if ! python -c "$ping_dragonfly"; then
-        echo "Dragonfly did not start on port 6380:"
-        cat /tmp/dragonfly.log
-        exit 1
-    fi
+    wait_for_server Dragonfly 6380 /tmp/dragonfly.log
 fi
 
 JUNIT_DIR="${RUNNER_ARTIFACT_DIR:-.}"

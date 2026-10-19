@@ -6,7 +6,18 @@
 name: Push Binary Nightly
 
 on:
+  # On PRs, only when the build or the smoke-test run can change. Build Wheel
+  # builds and smoke-tests the same wheel on every PR.
   pull_request:
+    paths:
+      - .github/workflows/nightly_build.yml
+      - pyproject.toml
+      - setup.py
+      - MANIFEST.in
+      - version.txt
+      - pytest.ini
+      - test/conftest.py
+      - test/smoke_test.py
   workflow_call:
     secrets:
 #      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:

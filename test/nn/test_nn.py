@@ -8,11 +8,13 @@ import contextlib
 import copy
 import functools
 import importlib
+import inspect
 import os
 import pathlib
 import pickle
 import re
 import threading
+import typing
 import unittest
 import warnings
 import weakref
@@ -39,6 +41,7 @@ from tensordict import (
     set_list_to_stack,
     tensorclass,
     TensorDict,
+    TensorDictBase,
     unravel_key,
     unravel_key_list,
 )
@@ -68,6 +71,7 @@ from tensordict.nn.probabilistic import (
     InteractionType,
     set_interaction_type,
 )
+from tensordict.nn.tensorclass_module import InputClass, OutputClass
 from tensordict.nn.utils import (
     _dispatch_td_nn_modules,
     _set_dispatch_td_nn_modules,
@@ -2138,6 +2142,11 @@ class TestTDSequence:
         params = seq.get_dist_params(TensorDict(x=torch.zeros(3)))
         assert (params["loc"] == 1).all()
 
+    def test_prob_seq_get_dist_params_return_hint(self):
+        # get_dist_params returns the tensordict, not a (distribution, td) tuple
+        hints = typing.get_type_hints(ProbabilisticTensorDictSequential.get_dist_params)
+        assert hints["return"] is TensorDictBase
+
     def test_prob_seq_no_prob_modules(self):
         """Test ProbabilisticTensorDictSequential with no probabilistic modules.
 
@@ -2549,6 +2558,75 @@ class TestTDSequence:
             assert set(lp.keys()) == expected
             for key in expected:
                 torch.testing.assert_close(lp[key], td[key])
+
+    @pytest.mark.parametrize("aggregate", [True, False])
+    def test_probtdseq_log_prob_key(self, aggregate):
+        # The sequence gives its one log-probability key. With several, the
+        # lookup fails with an AttributeError, as on main, so getattr() with a
+        # default, hasattr() and inspect.getmembers() keep working.
+        with set_composite_lp_aggregate(aggregate):
+            prob_a = ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=["a"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+            )
+            prob_b = ProbabilisticTensorDictModule(
+                in_keys={"loc": "a"},
+                out_keys=["b"],
+                distribution_class=Normal,
+                distribution_kwargs={"scale": 1.0},
+                return_log_prob=True,
+                log_prob_key="lp_b",
+            )
+            seq = ProbabilisticTensorDictSequential(prob_a)
+            assert seq.log_prob_key == prob_a.log_prob_key
+            nested = ProbabilisticTensorDictSequential(
+                TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["loc"]),
+                seq,
+            )
+            assert nested.log_prob_key == prob_a.log_prob_key
+            assert hasattr(nested, "log_prob_key")
+            seq2 = ProbabilisticTensorDictSequential(prob_a, prob_b)
+            with pytest.raises(AttributeError):
+                seq2.log_prob_key
+            assert getattr(seq2, "log_prob_key", None) is None
+            assert not hasattr(seq2, "log_prob_key")
+            # getmembers() reads every attribute, the deprecated ones too.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                assert isinstance(inspect.getmembers(seq2), list)
+
+    @pytest.mark.parametrize("aggregate_changed", [False, True])
+    def test_probtdseq_log_prob_key_composite(self, aggregate_changed):
+        # A composite distribution with composite_lp_aggregate() False has
+        # several log-probability keys, and a change of the setting after the
+        # build makes log_prob_keys raise: log_prob_key is then missing.
+        with set_composite_lp_aggregate(aggregate_changed):
+            seq = ProbabilisticTensorDictSequential(
+                ProbabilisticTensorDictModule(
+                    in_keys=["params"],
+                    out_keys=["a", "b"],
+                    distribution_class=CompositeDistribution,
+                    distribution_kwargs={
+                        "distribution_map": {"a": Normal, "b": Normal}
+                    },
+                    return_log_prob=True,
+                )
+            )
+        with set_composite_lp_aggregate(False):
+            with pytest.raises(AttributeError):
+                seq.log_prob_key
+            assert getattr(seq, "log_prob_key", None) is None
+            assert not hasattr(seq, "log_prob_key")
+            if aggregate_changed:
+                # getmembers() also reads log_prob_keys, which raises here.
+                return
+            # getmembers() reads every attribute, the deprecated ones too.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                assert isinstance(inspect.getmembers(seq), list)
 
     def test_probtdseq_log_prob_aggregate_changed_after_init(self):
         # Modules built while composite_lp_aggregate() was True keep the
@@ -3225,6 +3303,18 @@ class TestSelectOutKeys:
                 match=r"key should be a |Can't select non existent",
             ):
                 mod2 = mod.select_out_keys(out_d_key)
+
+    def test_tdmodule_missing_out_key(self, out_d_key, unpack):
+        # One missing key and several keys with one missing raise the same
+        # error, which is both a ValueError and a RuntimeError
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
+        )
+        keys = (*out_d_key, "z") if unpack else ("z",)
+        for error in (ValueError, RuntimeError):
+            with pytest.raises(error, match="Can't select non existent key.*z"):
+                mod.select_out_keys(*keys)
+        assert mod.out_keys == ["c", "d", "e"]
 
     def test_tdmodule_dispatch(self, out_d_key, unpack):
         mod = TensorDictModule(
@@ -4667,6 +4757,33 @@ class TestProbabilisticTensorDictModule:
         s2 = seq2(td.copy())["sample"].clone()
         assert torch.equal(s1, s2)
 
+    def test_default_out_key_warns(self):
+        # Without out_keys, the sample is written at "_"; from 0.17 it is not (#2971)
+        td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3))
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            module = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"], distribution_class=Normal
+            )
+            module.get_dist(td)
+            explicit = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"], out_keys=["_"], distribution_class=Normal
+            )
+            assert "_" in explicit(td.clone()).keys()
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        assert module.out_keys == ["_"]
+        with pytest.warns(
+            FutureWarning,
+            match=r'Starting with TensorDict 0\.17, the default will change to not writing the sample at "_"',
+        ) as record:
+            out = module(td.clone())
+        assert record[0].filename == __file__
+        assert "_" in out.keys()
+        # The module warns once
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert "_" in module(td.clone()).keys()
+
 
 class TestEnsembleModule:
     def test_init(self):
@@ -5475,6 +5592,16 @@ class TestTensorDictParams:
         assert isinstance(params["a"], nn.Parameter)
         assert params["a"].shape == (5, 3)
 
+    def test_replace_does_not_modify_arg(self):
+        # https://github.com/pytorch/tensordict/issues/2949
+        params = TensorDictParams(TensorDict(a=nn.Parameter(torch.ones(3))))
+        td = TensorDict(a=torch.zeros(3))
+        td_replace = td.replace(params, b=torch.ones(3))
+        assert set(params.keys()) == {"a"}
+        assert [name for name, _ in params.named_parameters()] == ["a"]
+        assert td_replace["a"] is params["a"]
+        assert (td_replace["b"] == 1).all()
+
     @pytest.mark.parametrize("no_convert", [False, True])
     @pytest.mark.parametrize("lock", [False, True])
     def test_setitem(self, lock, no_convert):
@@ -5834,6 +5961,38 @@ class TestCompositeDist:
         assert s["1", "nested"].shape == (1, 2)
         assert isinstance(s["0"], torch.Tensor)
         assert isinstance(s["1", "nested"], torch.Tensor)
+
+    @pytest.mark.parametrize("constructor", ["init", "from_distributions"])
+    def test_event_shape(self, constructor):
+        # The sample's batch size is batch_shape: no dims are left for events.
+        if constructor == "init":
+            params = TensorDict(
+                {
+                    "cont": {"loc": torch.zeros(3, 4), "scale": torch.ones(3, 4)},
+                    ("nested", "disc"): {"logits": torch.zeros(3, 10)},
+                },
+                [3],
+            )
+            dist = CompositeDistribution(
+                params,
+                distribution_map={
+                    "cont": distributions.Normal,
+                    ("nested", "disc"): distributions.Categorical,
+                },
+            )
+        else:
+            dist = CompositeDistribution.from_distributions(
+                TensorDict(batch_size=[3]),
+                {
+                    "cont": distributions.Normal(torch.zeros(3, 4), torch.ones(3, 4)),
+                    ("nested", "disc"): distributions.Categorical(
+                        logits=torch.zeros(3, 10)
+                    ),
+                },
+            )
+        assert dist.event_shape == torch.Size([])
+        assert dist.batch_shape + dist.event_shape == dist.sample().batch_size
+        assert dist.sample((2,)).batch_size == torch.Size([2, 3])
 
     def test_sample_named(self):
         params = TensorDict(
@@ -7291,6 +7450,43 @@ class TestCompositeDist:
                     )
             assert (out["act"] == act).all()
 
+    def test_partial_name_map_default_out_keys_warns(self):
+        # Without out_keys, a component that name_map leaves out is written but
+        # is not in out_keys; from 0.17 it is (#2972)
+        def make(name_map, out_keys=None):
+            return ProbabilisticTensorDictModule(
+                in_keys=["params"],
+                out_keys=out_keys,
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={
+                    "distribution_map": {"a": Normal, "b": Normal},
+                    "name_map": name_map,
+                },
+                return_log_prob=True,
+            )
+
+        with set_composite_lp_aggregate(False):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                make({"a": "x", "b": "y"})
+                make({("a",): "x", "b": "y"})
+                make(None)
+                assert make({"a": "x"}, out_keys=["x", "b"]).out_keys == [
+                    "x",
+                    "b",
+                    "x_log_prob",
+                    "b_log_prob",
+                ]
+            assert not [w for w in record if issubclass(w.category, FutureWarning)]
+            with pytest.warns(
+                FutureWarning,
+                match=r"Starting with TensorDict 0\.17, the default will change to "
+                r"out_keys that include them",
+            ) as record:
+                module = make({"a": "x"})
+            assert record[0].filename == __file__
+            assert module.out_keys == ["x", "x_log_prob"]
+
 
 class TestAddStateIndependentNormalScale:
     def test_add_scale_basic(self, num_outputs=4):
@@ -7928,6 +8124,16 @@ class TestTensorClassModuleForward:
         assert td_output["added"] == 25
         assert td_output["substracted"] == 0
 
+    @pytest.mark.parametrize("training", [True, False])
+    def test_wrapper_training_mode(self, training: bool) -> None:
+        """Test that the wrapper starts in the training mode of the module."""
+        module = TestTensorClassModule().train(training)
+        td_module = module.as_td_module()
+        assert td_module.training is training
+        assert module.training is training
+        td_module = td_module.select_out_keys(("result", "added"))
+        assert td_module.training is training
+
     def test_wrapper_keys(self) -> None:
         """Test that wrapper correctly extracts in_keys and out_keys."""
         module = TestTensorClassModule()
@@ -8063,6 +8269,22 @@ class TestEdgeCases:
             ValueError,
             match="Only TensorClassModuleBase implementations with both input and output type as TensorClass",
         ):
+            module.as_td_module()
+
+    @pytest.mark.parametrize("subscript", ["none", "typevars"])
+    def test_missing_type_arguments_conversion_error(self, subscript) -> None:
+        """Test that conversion fails with a ValueError when the types are not set."""
+        if subscript == "none":
+            base = TensorClassModuleBase
+        else:
+            base = TensorClassModuleBase[InputClass, OutputClass]
+
+        class UnsetModule(base):
+            def forward(self, x):
+                return x
+
+        module = UnsetModule()
+        with pytest.raises(ValueError, match="input/output types not set"):
             module.as_td_module()
 
     def test_field_named_fields(self) -> None:

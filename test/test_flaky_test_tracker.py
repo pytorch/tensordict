@@ -188,3 +188,50 @@ def test_report_counts_families_and_changes_from_previous_report(tmp_path):
     }
     assert report["resolved_test_families"] == ["test_mod.py::test_resolved"]
     assert all(test["is_new"] for test in report["flaky_tests"])
+
+
+def test_rerunfailures_attempts_count_as_failures(tmp_path):
+    # The shape pytest-rerunfailures 16.7 writes with pytest 9.1.1: one
+    # <testcase> per attempt, with only the last one holding the outcome.
+    xml_path = tmp_path / "junit-tests.xml"
+    xml_path.write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests">'
+        '<testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3">'
+        '<testcase classname="test.test_mod" name="test_flaky" time="0.002" />'
+        '<testcase classname="test.test_mod" name="test_flaky" time="0.003" />'
+        '<testcase classname="test.test_mod" name="test_flaky" time="0.001" />'
+        '<testcase classname="test.test_mod" name="test_ok" time="0.000" />'
+        '<testcase classname="test.test_mod" name="test_broken" time="0.001" />'
+        '<testcase classname="test.test_mod" name="test_broken" time="0.001">'
+        '<failure message="assert False">AssertionError</failure></testcase>'
+        "</testsuite></testsuites>",
+        encoding="utf-8",
+    )
+
+    tests = analyze_flaky_tests.parse_junit_xml(xml_path)
+
+    assert [(test["nodeid"], test["outcome"]) for test in tests] == [
+        ("test.test_mod::test_flaky", "failed"),
+        ("test.test_mod::test_flaky", "failed"),
+        ("test.test_mod::test_flaky", "passed"),
+        ("test.test_mod::test_ok", "passed"),
+        ("test.test_mod::test_broken", "failed"),
+        ("test.test_mod::test_broken", "failed"),
+    ]
+
+    for test in tests:
+        test.update(
+            {
+                "_run_id": 1,
+                "_run_date": "2026-08-26T10:00:00Z",
+                "_commit_sha": "sha",
+                "_workflow": "test-linux.yml",
+                "_artifact": "test-results-cpu-3.10",
+                "_xml_file": xml_path.name,
+            }
+        )
+    stats = analyze_flaky_tests.aggregate_test_stats(tests)
+    flaky_tests = analyze_flaky_tests.identify_flaky_tests(
+        stats, now=datetime(2026, 8, 27, tzinfo=timezone.utc)
+    )
+    assert [test["nodeid"] for test in flaky_tests] == ["test.test_mod::test_flaky"]

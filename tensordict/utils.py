@@ -341,8 +341,8 @@ def expand_as_right(
     """
     if dest.ndimension() < tensor.ndimension():
         raise RuntimeError(
-            "expand_as_right requires the destination tensor to have less "
-            f"dimensions than the input tensor, got"
+            "expand_as_right requires the destination tensor to have at least "
+            f"as many dimensions as the input tensor, got"
             f" tensor.ndimension()={tensor.ndimension()} and "
             f"dest.ndimension()={dest.ndimension()}"
         )
@@ -1223,6 +1223,30 @@ def _parse_to(*args, **kwargs):
     )
 
 
+def _positional_non_blocking(args):
+    # The non_blocking of to(device, dtype, non_blocking), to(dtype, non_blocking)
+    # and to(tensor, non_blocking), when it is not passed by keyword. A bool
+    # first is not non_blocking: torch.Tensor.to does not read it as one
+    for arg in args[1:]:
+        if type(arg) is bool:
+            if not arg:
+                return False
+            if not is_compiling():
+                warnings.warn(
+                    "to() ignores a positional non_blocking=True: it copies as "
+                    "for the default non_blocking=None, which synchronizes "
+                    "after a copy to a device other than CUDA. Starting with "
+                    "TensorDict 0.17, the default will change to honoring it "
+                    "as the keyword non_blocking=True is, without that "
+                    "synchronization. Pass non_blocking=True by keyword to get "
+                    "the new behaviour now, or drop it to keep the current one.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
+                )
+            return None
+    return None
+
+
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
 
@@ -1759,7 +1783,8 @@ def assert_close(
             tensorclass.
         KeyError: if the keys differ and ``intersection=False``.
         AssertionError: if two values are not close. The message names the
-            key and the root mean squared error.
+            key and the root mean squared error, followed by
+            :func:`torch.testing.assert_close`'s description of the mismatch.
         RuntimeError: if the shapes of two tensors cannot be broadcast
             together.
 
@@ -1772,10 +1797,12 @@ def assert_close(
         >>> b = TensorDict(x=torch.full((3,), 0.01), y=torch.ones(3))
         >>> assert_close(a, b, atol=0.1, rtol=0)
         True
-        >>> assert_close(a, b)
+        >>> assert_close(a, b)  # doctest: +ELLIPSIS
         Traceback (most recent call last):
             ...
         AssertionError: key ('x',) does not match, got mse = 0.0100
+        Tensor-likes are not close!
+        ...
 
     """
     from tensordict.base import _is_tensor_collection
@@ -1883,7 +1910,7 @@ def assert_close(
                 rtol=rtol,
                 atol=atol,
                 equal_nan=equal_nan,
-                msg=new_msg,
+                msg=lambda torch_msg, _msg=new_msg: f"{_msg}\n{torch_msg}",
             )
         else:
             torch.testing.assert_close(
@@ -1892,7 +1919,7 @@ def assert_close(
                 rtol=rtol,
                 atol=atol,
                 equal_nan=equal_nan,
-                msg=new_msg,
+                msg=lambda torch_msg, _msg=new_msg: f"{_msg}\n{torch_msg}",
             )
         local_msg = f"key {prefix + (key,)} matches"
         msg = "\t".join([local_msg, msg]) if len(msg) else local_msg
@@ -4076,7 +4103,7 @@ class LinkedList(list):
     ``insert``, ``pop``, ``remove``, ``clear`` and ``del``) change the list
     only, and unlink it from the tensordict: later item assignments no longer
     write back. A :class:`LinkedList` compares equal to a list with the same
-    items.
+    items. If the write to the tensordict raises, the list is unchanged.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -4094,10 +4121,20 @@ class LinkedList(list):
         self._td = weakref.ref(td)
 
     def __setitem__(self, key, value):
-        super().__setitem__(key, value)
         td = self._td()
-        if td is not None:
+        if td is None:
+            super().__setitem__(key, value)
+            return
+        # Keep the old items, to put them back if the write to the tensordict
+        # fails.
+        is_slice = isinstance(key, slice)
+        old = list(self) if is_slice else list.__getitem__(self, key)
+        super().__setitem__(key, value)
+        try:
             td[key] = value
+        except Exception:
+            super().__setitem__(slice(None) if is_slice else key, old)
+            raise
 
     def append(self, object: Any) -> None:
         """Appends ``object`` to the list and unlinks the list from the tensordict."""

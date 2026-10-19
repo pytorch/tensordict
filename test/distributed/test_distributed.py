@@ -416,6 +416,39 @@ class TestReduce:
             tertiary_worker.join(timeout=TIMEOUT)
             assert out == "yuppie"
 
+    @staticmethod
+    def group_worker(queue, rank):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29530"
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=3, timeout=timedelta(seconds=30)
+        )
+        # Rank 2 is outside the group and does not take part in the reduction.
+        group = dist.new_group([0, 1], timeout=timedelta(seconds=30))
+        if rank in (0, 1):
+            td = TensorDict({("a", "b"): torch.ones(2), "c": torch.ones(2)}, [2])
+            td.reduce(0, group=group)
+            if rank == 0:
+                queue.put((td["a", "b"].tolist(), td["c"].tolist()))
+        dist.barrier()
+        dist.destroy_process_group()
+
+    def test_reduce_group(self, set_context):
+        queue = mp.Queue(1)
+        workers = [
+            mp.Process(target=type(self).group_worker, args=(queue, rank))
+            for rank in range(3)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+        assert out == ([2.0, 2.0], [2.0, 2.0])
+
 
 # =========================================
 # Test td.send

@@ -18,7 +18,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.tensorclass import NonTensorData
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 _has_pandas = importlib.util.find_spec("pandas") is not None
 _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
@@ -323,6 +323,32 @@ class TestParquet:
         td2 = TensorDict.from_parquet(path)
         assert (td2["a"] == td["a"]).all()
         assert torch.allclose(td2["b"], td["b"])
+
+    def test_to_parquet_without_pandas(self, tmp_path, monkeypatch):
+        # The parquet extra only installs pyarrow: to_parquet must not need pandas.
+        import pyarrow as pa
+        import tensordict._tabular
+
+        # pyarrow looks for pandas once, on first use, and remembers the result:
+        # let it do so before pandas is hidden, so other tests are not affected.
+        pa.table({"a": [1]})
+        monkeypatch.setattr(tensordict._tabular, "_has_pandas", lambda: False)
+        monkeypatch.setitem(sys.modules, "pandas", None)
+        path = tmp_path / "no_pandas.parquet"
+        td = TensorDict(
+            a=torch.tensor([1.0, 2.0, 3.0]),
+            b=torch.tensor([True, False, True]),
+            s=NonTensorStack("x", "y", "z"),
+            obs=TensorDict(x=torch.tensor([4, 5, 6]), batch_size=[3]),
+            batch_size=[3],
+        )
+        td.to_parquet(path, separator=".")
+        td2 = TensorDict.from_parquet(path, separator=".")
+        assert td2.batch_size == torch.Size([3])
+        assert (td2["a"] == td["a"]).all()
+        assert (td2["b"] == td["b"]).all()
+        assert (td2["obs", "x"] == td["obs", "x"]).all()
+        assert td2["s"] == ["x", "y", "z"]
 
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa

@@ -468,6 +468,27 @@ class TestRoundtrip:
         assert result["x"].shape == shape
         torch.testing.assert_close(result["x"].float(), td["x"].float())
 
+    @pytest.mark.parametrize("sender", ["pipe", "send_tensordict"])
+    def test_uncollated_roundtrip_nested(self, sender):
+        # https://github.com/pytorch/tensordict/issues/2966
+        td = TensorDict(
+            a=torch.ones(2),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                c=TensorDict(d=torch.arange(4), e=torch.tensor(1.0)),
+            ),
+        )
+        ep = _FakeEndpoint()
+        if sender == "pipe":
+            asyncio.run(TensorDictPipe(ep, consolidated=False).asend(td))
+        else:
+            asyncio.run(send_tensordict.__wrapped__(ep, td, consolidated=False))
+        result = asyncio.run(TensorDictPipe(ep, consolidated=False).arecv())
+        assert set(result.keys(True, True)) == set(td.keys(True, True))
+        for key, value in td.items(True, True):
+            assert result[key].dtype == value.dtype
+            torch.testing.assert_close(result[key], value)
+
     @pytest.mark.parametrize("key", ["", ["x"], ["nested", "x"], ["nested", ["x"]]])
     def test_uncollated_nested_keys(self, key):
         header = {"keys": [key], "dtypes": ["torch.float32"], "shapes": [[2]]}

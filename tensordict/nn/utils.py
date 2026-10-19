@@ -547,7 +547,7 @@ _composite_lp_aggregate = _ContextManager(
 )
 
 
-def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
+def composite_lp_aggregate(nowarn: bool = False) -> bool:
     """Returns whether a :class:`~tensordict.nn.distributions.CompositeDistribution` sums its log-probabilities in one tensor.
 
     The value also applies to entropies. It is ``False`` unless
@@ -558,7 +558,8 @@ def composite_lp_aggregate(nowarn: bool = False) -> bool | None:
     changes.
 
     Args:
-        nowarn (bool, optional): has no effect. Defaults to ``False``.
+        nowarn (bool, optional): has no effect. It is kept so that calls
+            that pass it keep working. Defaults to ``False``.
 
     .. seealso:: :func:`~tensordict.nn.set_composite_lp_aggregate`
 
