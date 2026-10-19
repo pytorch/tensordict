@@ -3630,6 +3630,35 @@ class TestCudaGraphs:
             torch.testing.assert_close(result["y"], expected["y"])
             torch.testing.assert_close(result["h"], expected["h"])
 
+    @pytest.mark.parametrize(
+        "in_keys,out_keys,warns",
+        [
+            (["z"], ["w"], ["in_keys", "out_keys"]),
+            (["z"], None, ["in_keys"]),
+            ([], [("w",), "v"], ["out_keys"]),
+            ([], [], []),
+            (None, None, []),
+            ([("x",)], ["y"], []),
+        ],
+    )
+    def test_cudagraphs_ignored_keys_warn(self, compiled, in_keys, out_keys, warns):
+        # pytorch/tensordict#2973: the module's own in_keys/out_keys win over the
+        # arguments. Non-empty arguments that differ from them warn; empty
+        # lists (TorchRL's collector passes them) and equal keys stay silent.
+        module = TensorDictModule(lambda x: x + 1, in_keys=["x"], out_keys=["y"])
+        if compiled:
+            module = torch.compile(module)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            graphed = CudaGraphModule(module, in_keys=in_keys, out_keys=out_keys)
+        ignored = [w for w in record if "ignores" in str(w.message)]
+        assert len(ignored) == len(warns)
+        for name, w in zip(warns, ignored):
+            assert str(w.message).startswith(f"CudaGraphModule ignores {name}=")
+            assert w.filename == __file__
+        assert graphed.in_keys == ["x"]
+        assert graphed.out_keys == ["y"]
+
     @staticmethod
     def _make_cudagraph(
         func: Callable, compiled: bool, *args, **kwargs

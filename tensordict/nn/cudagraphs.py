@@ -21,7 +21,12 @@ from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_TDS,
 )
 from tensordict.nn.probabilistic import interaction_type, ProbabilisticTensorDictModule
-from tensordict.utils import _zip_strict, logger as tensordict_logger
+from tensordict.utils import (
+    _user_stacklevel,
+    _zip_strict,
+    logger as tensordict_logger,
+    unravel_key,
+)
 from torch import nn, Tensor
 from torch.utils._pytree import (
     tree_flatten as _pytree_flatten,
@@ -36,6 +41,18 @@ from torch.utils._pytree import (
 # the global pytree registry is left as it is (pytorch/tensordict#2076).
 # ``SUPPORTED_NODES`` is keyed by exact type, hence ``type(x)``.
 _TD_LEAF_TYPES = frozenset(PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS)
+
+
+def _keys_differ(keys, module_keys) -> bool:
+    """Whether ``keys``, given explicitly, are non-empty and differ from the module's own keys (pytorch/tensordict#2973)."""
+    if not keys:
+        return False
+    try:
+        return [unravel_key(key) for key in keys] != [
+            unravel_key(key) for key in module_keys
+        ]
+    except (RuntimeError, TypeError):
+        return True
 
 
 def _is_td_leaf(x: Any) -> bool:
@@ -174,11 +191,13 @@ class CudaGraphModule:
             enough calls to finish compiling before the capture, for example
             ``CudaGraphModule(torch.compile(module), warmup=3)``. Defaults to ``2``.
         in_keys (list of NestedKey, optional): the input keys, if the module takes a tensordict. If ``module``
-            has an ``in_keys`` attribute, that attribute is used and this argument is ignored. An empty list
+            has an ``in_keys`` attribute, that attribute is used and this argument is ignored, with a
+            ``UserWarning`` if the argument is a non-empty list that differs from the attribute. An empty list
             marks a function that takes a tensordict, without keyword calls. Defaults to ``None``, which
             means that the function takes tensors.
         out_keys (list of NestedKey, optional): the output keys, if the module returns a tensordict. If
-            ``module`` has an ``out_keys`` attribute, that attribute is used and this argument is ignored.
+            ``module`` has an ``out_keys`` attribute, that attribute is used and this argument is ignored,
+            with a ``UserWarning`` if the argument is a non-empty list that differs from the attribute.
             Defaults to ``None``, which becomes ``[]`` when ``in_keys`` is given.
         device (torch.device, optional): the device of the CUDA streams that run the warmup and the capture.
             Defaults to ``None``, the current CUDA device.
@@ -257,6 +276,15 @@ class CudaGraphModule:
             f"Setting up CudaGraphModule with stream {self._warmup_stream} on device {self.device}."
         )
 
+        for name, keys in (("in_keys", in_keys), ("out_keys", out_keys)):
+            if hasattr(module, name) and _keys_differ(keys, getattr(module, name)):
+                warnings.warn(
+                    f"CudaGraphModule ignores {name}={keys} because the module has "
+                    f"its own {name}={getattr(module, name)}, which it uses instead. "
+                    f"Leave {name} unset, or pass an empty list, to silence this warning.",
+                    UserWarning,
+                    stacklevel=_user_stacklevel(),
+                )
         if hasattr(module, "in_keys"):
             self.in_keys = module.in_keys
         else:
