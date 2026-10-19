@@ -784,6 +784,28 @@ class TestPointwiseOps:
         assert torch.clamp(tc, 0.5, 2.0, out=out) is out
         assert (out.x == torch.tensor([0.5, 1.0, 2.0])).all()
 
+    @pytest.mark.parametrize(
+        "op", ["lerp", "lerp_", "addcmul", "addcmul_", "addcdiv", "addcdiv_"]
+    )
+    @pytest.mark.parametrize("tensor_first", [False, True])
+    def test_nested_lazy_and_tensor_operands(self, op, tensor_first):
+        # With a lazy stack nested in the tensordict, the leaves of each member
+        # lack the stack dim and a batch-shaped tensor would be misaligned, so
+        # the ops still raise
+        def make_td():
+            return TensorDict(
+                n=LazyStackedTensorDict(
+                    TensorDict(a=torch.arange(2.0)), TensorDict(a=torch.arange(2.0))
+                ),
+                batch_size=[2],
+            )
+
+        args = [make_td() + 10, torch.tensor([0.0, 1.0])]
+        if tensor_first:
+            args = args[::-1]
+        with pytest.raises(TypeError):
+            getattr(make_td(), op)(*args)
+
     @pytest.mark.parametrize("op", ["maximum", "minimum"])
     @pytest.mark.parametrize("other_type", ["tensordict", "float", "tensor"])
     def test_maximum_minimum_unbatched(self, op, other_type):
