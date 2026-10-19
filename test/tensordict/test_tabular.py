@@ -505,6 +505,27 @@ class TestTensorClassTabular:
         td2 = TensorDict.from_csv(csv_path, separator=".")
         assert (td2["inner", "x"] == tc.inner.x).all()
 
+    def test_nested_tensorclass_multi_dim_leaf(self, tmp_path):
+        # A nested tensorclass with a leaf that does not fit one column stays
+        # one object column, where a nested TensorDict raises.
+        import pandas as pd
+
+        tc = _nested_tensorclass()
+        tc.inner.x = torch.ones(3, 2)
+        with pytest.raises(ValueError, match="Cannot convert tensor with shape"):
+            tc.to_tensordict().to_pandas(separator=".")
+        df = tc.to_pandas(separator=".")
+        assert list(df.columns) == ["a", "inner"]
+        assert isinstance(df["inner"][0], TabularTensorClass)
+        assert (df["inner"][0].x == tc.inner.x[0]).all()
+        df_outer = TensorDict(tc=tc, batch_size=[3]).to_pandas(separator=".")
+        assert list(df_outer.columns) == ["tc"]
+        csv_path = tmp_path / "nested.csv"
+        tc.to_csv(csv_path, separator=".")
+        df2 = pd.read_csv(csv_path)
+        assert list(df2.columns) == ["a", "inner"]
+        assert df2["inner"][0] == str(df["inner"][0])
+
     def test_csv_roundtrip(self, tmp_path):
         csv_path = tmp_path / "tensorclass.csv"
         tc = TabularTensorClass(
