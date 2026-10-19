@@ -4096,6 +4096,15 @@ class TestLazyStackedTensorDict:
         lazy.unlock_()
         assert lazy.names == ["s", "x"]
 
+    @pytest.mark.parametrize("method", ["rename", "rename_"])
+    def test_rename_none(self, method):
+        tds = [TensorDict(batch_size=[3], names=["x"]) for _ in range(2)]
+        lazy = lazy_stack(tds, stack_dim_name="s")
+        out = getattr(lazy, method)(None)
+        assert out.names == [None, None]
+        assert lazy.names == ([None, None] if method == "rename_" else ["s", "x"])
+        assert tds[0].names == ([None] if method == "rename_" else ["x"])
+
     def test_views_is_shared_mixed_members(self):
         tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
         tds[0].share_memory_()

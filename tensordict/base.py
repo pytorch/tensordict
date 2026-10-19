@@ -4244,8 +4244,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         dimensions they share with it.
 
         Args:
-            *names (str or None): the new names, one per batch dimension.
-                Exclusive with ``**rename_map``.
+            *names (str or None): the new names, one per batch dimension, or
+                a single ``None`` to clear every name. Exclusive with
+                ``**rename_map``.
             **rename_map (str or None): new names by old name, as in
                 ``rename(old="new")``. Exclusive with ``*names``.
 
@@ -4261,13 +4262,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ['a', 'b', 'g', 'd']
             >>> td.rename("w", "x", "y", "z").names
             ['w', 'x', 'y', 'z']
+            >>> td.rename(None).names
+            [None, None, None, None]
             >>> td.names
             ['a', 'b', 'c', 'd']
 
         """
         clone = self.clone(recurse=False)
-        if len(names) == 1 and names[0] is None:
-            clone.names = None
         if rename_map and names:
             raise ValueError(
                 "Passed both a name map and a name list. Only one is accepted."
@@ -4287,6 +4288,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 raise ValueError(
                     f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}."
                 )
+        elif len(names) == 1 and names[0] is None:
+            clone.names = None
         else:
             clone.names = names
         return clone
@@ -4299,8 +4302,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         the new names for the batch dimensions they share with the tensordict.
 
         Args:
-            *names (str or None): the new names, one per batch dimension.
-                Exclusive with ``**rename_map``.
+            *names (str or None): the new names, one per batch dimension, or
+                a single ``None`` to clear every name. Exclusive with
+                ``**rename_map``.
             **rename_map (str or None): new names by old name, as in
                 ``rename_(old="new")``. Exclusive with ``*names``.
 
@@ -4318,9 +4322,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             True
             >>> td.names
             ['a', 'b', 'g', 'd']
+            >>> td.rename_(None).names
+            [None, None, None, None]
         """
-        if len(names) == 1 and names[0] is None:
-            self._set_names(None)
         if rename_map and names:
             raise ValueError(
                 "Passed both a name map and a name list. Only one is accepted."
@@ -4340,6 +4344,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}."
                 )
             self._set_names(cnames)
+        elif len(names) == 1 and names[0] is None:
+            self._set_names(None)
         else:
             self._set_names(names)
         return self
