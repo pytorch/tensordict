@@ -952,6 +952,23 @@ class TestNonTensorData:
         assert values == ["a", "a"]
         assert data.tolist() == ["a", "a"]
 
+    @pytest.mark.parametrize(
+        "key,value,error",
+        [
+            # the list write fails, so the tensordict must not be written
+            (slice(0, 2), 5, TypeError),
+            # the list write works, the tensordict write fails
+            (slice(1, 2), ["x", "y", "z"], RuntimeError),
+        ],
+    )
+    def test_linked_list_failed_write_unchanged(self, key, value, error):
+        stack = NonTensorStack("a", "b", "c")
+        values = stack.tolist(as_linked_list=True)
+        with pytest.raises(error):
+            values[key] = value
+        assert values == ["a", "b", "c"]
+        assert stack.tolist() == ["a", "b", "c"]
+
     @set_list_to_stack(True)
     @pytest.mark.parametrize(
         "rows,batch_size",

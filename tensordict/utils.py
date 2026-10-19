@@ -4092,12 +4092,20 @@ class LinkedList(list):
         self._td = weakref.ref(td)
 
     def __setitem__(self, key, value):
-        # Write to the tensordict first, so that a failed write leaves the
-        # list as it was.
         td = self._td()
-        if td is not None:
-            td[key] = value
+        if td is None:
+            super().__setitem__(key, value)
+            return
+        # Keep the old items, to put them back if the write to the tensordict
+        # fails.
+        is_slice = isinstance(key, slice)
+        old = list(self) if is_slice else list.__getitem__(self, key)
         super().__setitem__(key, value)
+        try:
+            td[key] = value
+        except Exception:
+            super().__setitem__(slice(None) if is_slice else key, old)
+            raise
 
     def append(self, object: Any) -> None:
         """Appends ``object`` to the list and unlinks the list from the tensordict."""
