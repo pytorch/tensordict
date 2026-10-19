@@ -427,9 +427,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             to ``None``: for a
             :class:`~tensordict.nn.distributions.CompositeDistribution`, the
             values of the ``name_map`` of ``distribution_kwargs`` if it has
-            one, and the keys of its ``distribution_map`` otherwise. For
-            another distribution, ``None`` gives the key ``"_"``: the module
-            writes the sample there, and warns the first time it does.
+            one, and the keys of its ``distribution_map`` otherwise. A
+            component that ``name_map`` leaves out is written under its own
+            name but is not in ``out_keys``, and the module warns. Starting
+            with TensorDict 0.17, the default will change to ``out_keys`` that
+            include these components. For another distribution, ``None``
+            gives the key ``"_"``: the module writes the sample there, and
+            warns the first time it does.
             Starting with TensorDict 0.17, the default will change to not
             writing the sample at ``"_"``, which marks an output that is not
             written, as in :class:`~tensordict.nn.TensorDictModule`. Pass
@@ -646,6 +650,19 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 name_map = distribution_kwargs.get("name_map")
                 if name_map is not None:
                     out_keys = list(name_map.values())
+                    mapped = {unravel_key(name) for name in name_map}
+                    if any(
+                        unravel_key(name) not in mapped for name in distribution_map
+                    ):
+                        warnings.warn(
+                            "ProbabilisticTensorDictModule got a name_map that leaves "
+                            "out components of distribution_map and no out_keys: these "
+                            "components are written but are not in out_keys. Starting "
+                            "with TensorDict 0.17, the default will change to out_keys "
+                            "that include them. Pass out_keys to keep the current keys.",
+                            FutureWarning,
+                            stacklevel=_user_stacklevel(),
+                        )
                 else:
                     out_keys = list(distribution_map.keys())
             else:
