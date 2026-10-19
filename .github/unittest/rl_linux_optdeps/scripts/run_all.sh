@@ -151,8 +151,42 @@ python -c "import torchrl"
 
 python -m torch.utils.collect_env
 
-# TorchRL validates its standalone Triton GRU numerics in its own CI. Keep this
-# reverse-dependency job focused on TensorDict interoperability.
+# RL_TEST_SHARD picks one of three parallel jobs, split as TorchRL splits its
+# own suite: test_collectors.py, the other process-spawning files, and the
+# rest. Together they run every test once.
+collector_paths=(test/test_collectors.py)
+mp_paths=(
+  test/envs/test_parallel.py
+  test/envs/test_special.py
+  test/envs/test_auto_reset.py
+  test/envs/test_env_base.py
+  test/envs/test_nested.py
+  test/envs/test_step_mdp.py
+  test/services
+  test/test_inference_server.py
+  test/test_loggers.py
+)
+case "${RL_TEST_SHARD:-}" in
+  collectors) shard_args=("${collector_paths[@]}") ;;
+  mp) shard_args=("${mp_paths[@]}") ;;
+  rest)
+    shard_args=(test)
+    for path in "${collector_paths[@]}" "${mp_paths[@]}"; do
+      shard_args+=(--ignore "${path}")
+    done
+    ;;
+  *)
+    echo "Unknown RL_TEST_SHARD='${RL_TEST_SHARD:-}'. Expected: collectors|mp|rest."
+    exit 1
+    ;;
+esac
+
+# TorchRL validates its standalone Triton GRU numerics, and the Triton kernels
+# behind LSTMModule and GRUModule, in its own CI. Keep this reverse-dependency
+# job focused on TensorDict interoperability: the other backends in test_rnn.py
+# go through the same TensorDict code. The Triton tests of test_rnn.py took 6.4
+# of its 9.8 minutes. --deselect drops every test whose ID starts with the
+# given text, so test_lstm_module_triton_ covers five tests.
 # torchvision is not installed here (it would have to match the torch nightly),
 # and this test fails instead of skipping without it.
 # These tests fail at random, whatever the TensorDict change, and turn
@@ -180,12 +214,21 @@ python -m torch.utils.collect_env
 # the draw itself (rsample_and_log_prob), which differs from the re-scored one
 # when tanh saturates. The loss is unchanged. Run the test again once TorchRL
 # computes its expected value the way the loss does.
-MUJOCO_GL=egl python -m pytest test --instafail -v --durations 20 \
+MUJOCO_GL=egl python -m pytest "${shard_args[@]}" --instafail -v --durations 20 \
   --ignore test/test_distributed.py \
   --ignore test/llm \
   --ignore test/test_setup.py \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity \
   --deselect test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss \
+  --deselect test/modules/test_rnn.py::TestLSTMModule::test_lstm_module_triton_ \
+  --deselect test/modules/test_rnn.py::TestLSTMModule::test_lstm_triton_recompute_parity \
+  --deselect "test/modules/test_rnn.py::TestLSTMModule::test_lstm_module_backends_non_contiguous_recurrent_inputs[triton]" \
+  --deselect test/modules/test_rnn.py::TestGRUModule::test_gru_module_triton_ \
+  --deselect test/modules/test_rnn.py::TestGRUModule::test_gru_triton_recompute_parity \
+  --deselect "test/modules/test_rnn.py::TestGRUModule::test_gru_module_backends_non_contiguous_recurrent_inputs[triton]" \
+  --deselect test/modules/test_rnn.py::TestRecurrentMatmulPrecision::test_lstm_triton_precision_grad_parity \
+  --deselect test/modules/test_rnn.py::TestRecurrentMatmulPrecision::test_gru_triton_precision_grad_parity \
+  --deselect test/modules/test_rnn.py::test_triton_compile_forward_backward \
   --deselect "test/test_helpers.py::test_transformed_env_constructor_with_state_dict[from_pixels1]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cpu-autocast]" \
   --deselect "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_discrete_actor[cuda-autocast]" \

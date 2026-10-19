@@ -20,12 +20,14 @@ env:
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
-  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  # On main, a run is never cancelled, but a newer push replaces the run still waiting in the group: one run goes on
+  # and one waits, and the tip of main is always tested. Pushes come faster than the run takes, so a group per SHA
+  # queued a run for every commit.
   # The Nightly Orchestrator calls this workflow, and a called workflow evaluates the group with the caller's
   # context: without the event name, the nightly run for main's head joined the group of its push run and
   # cancelled it.
-  group: test-rl-gpu-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
-  cancel-in-progress: true
+  group: test-rl-gpu-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && 'ci-main' || format('ci-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test-gpu:
@@ -34,6 +36,8 @@ jobs:
         # torch nightlies have no Python 3.10 wheels since 2.15
         python_version: ["3.12"]
         cuda_arch_version: ["13.0"]
+        # Runs the suite in three parallel jobs; run_all.sh lists the files of each.
+        shard: [collectors, mp, rest]
       fail-fast: false
     runs-on: mt-l-x86aavx2-11-41-a10g
     container:
@@ -77,6 +81,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CUDA_ARCH_VERSION: ${{ matrix.cuda_arch_version }}
+          RL_TEST_SHARD: ${{ matrix.shard }}
           TORCH_VERSION: nightly
         run: |
           set -eux
