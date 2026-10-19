@@ -69,6 +69,7 @@ from tensordict.base import (
     _UNSET,
     _update_at_aliases,
     _warn_get_kwargs,
+    _warn_unsupported_operand,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -5444,12 +5445,15 @@ def _or(self, other: object) -> bool:
 
     Returns:
         ``False`` if ``other`` is not a tensor collection, a dict, a number or
-        a tensor; otherwise a tensorclass of boolean tensors.
+        a tensor, with a ``FutureWarning``: starting with TensorDict 0.17, the
+        default will change to returning ``NotImplemented``, so that Python
+        raises a ``TypeError``. Otherwise a tensorclass of boolean tensors.
 
     """
     if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor)
     ):
+        _warn_unsupported_operand("__or__", other, False)
         return False
     if is_tensorclass(other):
         tensor = self._tensordict | other._tensordict
@@ -5475,12 +5479,15 @@ def _xor(self, other: object) -> bool:
 
     Returns:
         ``False`` if ``other`` is not a tensor collection, a dict, a number or
-        a tensor; otherwise a tensorclass of boolean tensors.
+        a tensor, with a ``FutureWarning``: starting with TensorDict 0.17, the
+        default will change to returning ``NotImplemented``, so that Python
+        raises a ``TypeError``. Otherwise a tensorclass of boolean tensors.
 
     """
     if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor)
     ):
+        _warn_unsupported_operand("__xor__", other, False)
         return False
     if is_tensorclass(other):
         tensor = self._tensordict ^ other._tensordict

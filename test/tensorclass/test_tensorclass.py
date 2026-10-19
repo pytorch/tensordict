@@ -6837,6 +6837,30 @@ class TestPointWise:
         # not implemented
         # 1 ** c
 
+    @pytest.mark.parametrize("operand", [None, "abc"])
+    def test_logic_unsupported_operand(self, operand):
+        # ^ and | with an operand that is not a tensor, number, dict or tensor
+        # collection return False and warn that they return NotImplemented
+        # from 0.17, as on TensorDict (#2979)
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+        c = MyClass(torch.zeros(3, dtype=torch.bool), batch_size=[3])
+        for op in ("__xor__", "__or__"):
+            with pytest.warns(FutureWarning, match=f"{op} got an operand") as record:
+                assert getattr(c, op)(operand) is False
+            record = [w for w in record if "NotImplemented" in str(w.message)]
+            assert len(record) == 1
+            assert record[0].filename == __file__
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert (c == operand) is False
+            assert (c != operand) is True
+            zeros = torch.zeros(3, dtype=torch.bool)
+            for other in (c, c._tensordict, {"x": zeros}, zeros, True):
+                assert type(c ^ other) is type(c | other) is MyClass
+
 
 class TestSubClassing:
     def test_subclassing(self):

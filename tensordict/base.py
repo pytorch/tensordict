@@ -1830,6 +1830,21 @@ def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
     )
 
 
+def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
+    """Warns that ``op`` (``"__xor__"``, ``"__lt__"``, ...) returns ``result`` for ``other``, which is not a tensor collection, a tensor or a number, until 0.17 (#2979)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        f"{op} got an operand of type {type(other).__name__}, which is not a "
+        f"tensordict, a tensor or a number, and returns {result}. Starting "
+        "with TensorDict 0.17, the default will change to returning "
+        "NotImplemented, so that Python raises a TypeError, as it does for "
+        "torch tensors and for the & operator.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_get_kwargs(
     td: TensorDictBase, kwargs: dict[str, Any], result: Any, default: Any
 ) -> None:
