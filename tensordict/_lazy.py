@@ -5115,8 +5115,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     *self.tensordicts, stack_dim=dim1, stack_dim_name=self._td_dim_name
                 )
             else:
+                # Each member moves its dim dim1 - 1 to dim0. For adjacent dims
+                # that is a transpose, which is cheaper than movedim.
+                if dim1 - 1 == dim0 + 1:
+                    members = (td.transpose(dim0, dim1 - 1) for td in self.tensordicts)
+                else:
+                    members = (td.movedim(dim1 - 1, dim0) for td in self.tensordicts)
                 result = type(self)(
-                    *(td.movedim(dim1 - 1, dim0) for td in self.tensordicts),
+                    *members,
                     stack_dim=dim1,
                     stack_dim_name=self._td_dim_name,
                 )
@@ -5128,8 +5134,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     *self.tensordicts, stack_dim=dim0, stack_dim_name=self._td_dim_name
                 )
             else:
+                # Each member moves its dim dim0 to dim1 - 1. For adjacent dims
+                # that is a transpose, which is cheaper than movedim.
+                if dim1 - 1 == dim0 + 1:
+                    members = (td.transpose(dim0, dim1 - 1) for td in self.tensordicts)
+                else:
+                    members = (td.movedim(dim0, dim1 - 1) for td in self.tensordicts)
                 result = type(self)(
-                    *(td.movedim(dim0, dim1 - 1) for td in self.tensordicts),
+                    *members,
                     stack_dim=dim0,
                     stack_dim_name=self._td_dim_name,
                 )
