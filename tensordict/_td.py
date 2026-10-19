@@ -2192,6 +2192,13 @@ class TensorDict(TensorDictBase):
                         robust_key=robust_key,
                     )
                 else:
+                    if like and existsok and prefix is not None:
+                        # Warn on the calling thread: the executor's threads
+                        # do not see the caller's warning filters on
+                        # free-threaded builds.
+                        _warn_if_existing_file_smaller(
+                            value, key, _memmap_filename(prefix, key, robust_key)
+                        )
                     futures.append(
                         executor.submit(
                             _populate_memmap,
@@ -2203,6 +2210,7 @@ class TensorDict(TensorDictBase):
                             like=like,
                             existsok=existsok,
                             robust_key=robust_key,
+                            warn_existing_size=False,
                         )
                     )
                 if prefix is not None:
@@ -4268,9 +4276,11 @@ from tensordict._td_functions import (  # noqa: F401
     stack,
 )
 from tensordict._td_memmap import (
+    _memmap_filename,
     _populate_empty,
     _populate_memmap,
     _populate_storage,
     _save_metadata,
     _update_metadata,
+    _warn_if_existing_file_smaller,
 )

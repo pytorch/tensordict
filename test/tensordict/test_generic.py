@@ -8918,6 +8918,9 @@ class TestGeneric:
                 warnings.simplefilter("always")
                 out = TensorDict(**kwargs).memmap_like(prefix, num_threads=num_threads)
             record = [w for w in record if issubclass(w.category, FutureWarning)]
+            # Raised on the calling thread, so it points at this call, also
+            # with num_threads > 1.
+            assert all(w.filename == __file__ for w in record)
             return out, [str(w.message) for w in record]
 
         prefix = Path(tmpdir) / "data"
