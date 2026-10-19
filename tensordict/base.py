@@ -856,12 +856,13 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                     inplace
                     and self_expand is self
                     and isinstance(self, _SubTensorDict)
-                    and _has_lazy_stack(self._source)
+                    and _has_nested_copies(self._source)
                 ):
-                    # The leaves of a sub-tensordict over a lazy stack are
-                    # copies: call the op on that sub-tensordict, which writes
-                    # them back (#3043). It returns itself, a view of the
-                    # source: the result holds a TensorDict copy instead.
+                    # The leaves of a sub-tensordict over a lazy stack or an
+                    # h5 file are copies: call the op on that sub-tensordict,
+                    # which writes them back (#3043, #3049). It returns itself,
+                    # a view of the source: the result holds a TensorDict copy
+                    # instead.
                     is_leaf = _is_leaf_or_sub_tensordict
 
                     def apply_fn(x):
@@ -2042,6 +2043,26 @@ def _has_lazy_stack(td: TensorDictBase) -> bool:
         for value in td.values()
         if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
     )
+
+
+def _has_nested_copies(td: TensorDictBase) -> bool:
+    """Whether ``td`` is a lazy stack or holds a nested tensordict whose leaves are read as copies.
+
+    Such as a lazy stack or an h5 file. Like ``_has_lazy_stack``, no data of
+    a file or a store is read.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+
+    td = _unwrap(td)
+    if isinstance(td, LazyStackedTensorDict):
+        return True
+    if td._reads_return_copies:
+        return False
+    for value in td.values():
+        copies = _entry_reads_copies(value)
+        if copies or (copies is not None and _has_nested_copies(value)):
+            return True
+    return False
 
 
 def _all_leaf_keys(td: TensorDictBase) -> list:
