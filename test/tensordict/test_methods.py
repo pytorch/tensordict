@@ -3184,12 +3184,16 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip("UnbatchedTensor incompatible with reduction ops")
         td = getattr(self, td_name)(device)
         td = _to_float(td, td_name, tmpdir)
+        tol = {}
         if red == "prod":
             # Keep the product of all the elements of a leaf finite: 60 values
             # up to 9 overflow float32, and torch.prod then gives nan or 0.0
             # depending on the order in which it multiplies.
             with torch.no_grad():
                 td.apply_(lambda x: x.mul_(0.01).add_(1))
+            # Products over hundreds of float32 values in another order differ
+            # by up to about n * eps, above assert_close's default rtol.
+            tol = {"rtol": 1e-4, "atol": 1e-5}
         leaves = dict(td.items(True, True))
         # torch.prod does not take dim=(); prod(dim=()) gives prod()
         kwargs = {} if red == "prod" else {"dim": ()}
@@ -3197,12 +3201,13 @@ class TestTensorDicts(TestTensorDictsBase):
         assert tdr.batch_size == torch.Size(())
         for key, val in leaves.items():
             torch.testing.assert_close(
-                tdr[key], getattr(torch, red)(val, **kwargs), equal_nan=True
+                tdr[key], getattr(torch, red)(val, **kwargs), equal_nan=True, **tol
             )
         torch.testing.assert_close(
             getattr(td, red)(dim=(), reduce=True),
             getattr(td, red)(reduce=True),
             equal_nan=True,
+            **tol,
         )
         # a NumPy integer dim is not compared with ()
         assert (
