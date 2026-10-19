@@ -4622,7 +4622,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         If the storage has a file, it must be the file of the new entry in the
         directory of the tensordict, or the call raises a ``RuntimeError``. A
         storage without a file is used as it is: its data is not written to
-        the directory.
+        the directory. If the tensordict has a directory and the storage is
+        not empty, :meth:`~.load_memmap` and
+        :meth:`~tensordict.TensorDictBase.memmap_refresh_` drop the entry, and
+        the call emits a ``FutureWarning``: starting with TensorDict 0.17, the
+        default will change to raising a ``RuntimeError``. Use
+        :meth:`~.make_memmap_from_tensor` to copy the data into the directory.
 
         Args:
             key (NestedKey): the key of the new entry. A tuple key creates
