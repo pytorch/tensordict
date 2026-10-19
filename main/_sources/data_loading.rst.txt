@@ -319,13 +319,22 @@ This script computes the kinetic energy of 8 particles in two processes:
                batch_size=[8],
            ).memmap_()
            out = TensorDict({"energy": torch.zeros(8)}, batch_size=[8]).memmap_like(path)
-           particles.map(kinetic_energy, num_workers=2, chunksize=2, out=out)
+           particles.map(
+               kinetic_energy,
+               num_workers=2,
+               chunksize=2,
+               out=out,
+               generator=torch.default_generator,
+           )
            # MemoryMappedTensor([ 0.0000,  1.5000,  6.0000, 13.5000])
            print(out["energy"][:4])
 
 ``map`` also takes ``num_chunks``, a ``pool`` that you create, and a
-``generator`` that seeds each worker. :meth:`~tensordict.TensorDictBase.map_iter`
-returns the results one chunk at a time.
+``generator`` that seeds each worker. Starting with TensorDict 0.17, the
+default will change to drawing the seed from the global RNG;
+``generator=torch.default_generator`` does that now.
+:meth:`~tensordict.TensorDictBase.map_iter` returns the results one chunk at
+a time.
 
 See also
 --------

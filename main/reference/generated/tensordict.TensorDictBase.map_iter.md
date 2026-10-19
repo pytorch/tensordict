@@ -54,7 +54,14 @@ so that the workers draw different random numbers. This makes the workers indepe
 not the results reproducible: which worker gets which chunk
 changes from call to call. Defaults to `None`, which uses a
 new [`torch.Generator`](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator), so the base seed is the same on
-every call. To leave the workers unseeded, pass a `pool`.
+every call, and emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with
+TensorDict 0.17, the default will change to drawing the base
+seed from the global torch RNG, as
+[`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) does, which also advances
+it by one draw. Pass `generator=torch.default_generator` for
+that behaviour now, or `generator=torch.Generator()` to keep
+the current seeds. To leave the workers unseeded, pass a
+`pool`.
 - **max_tasks_per_child** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of chunks a worker
 process handles before it is replaced by a new one. Defaults to
 `None`, which keeps the workers for the whole call.
@@ -95,7 +102,15 @@ def process_data(data):
 
 if __name__ == "__main__":
  data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
- for sample in data.map_iter(process_data, dim=1, num_workers=2, chunksize=5):
+ # generator=torch.default_generator seeds the workers from
+ # the global RNG, the default from TensorDict 0.17.
+ for sample in data.map_iter(
+ process_data,
+ dim=1,
+ num_workers=2,
+ chunksize=5,
+ generator=torch.default_generator,
+ ):
  print(sample["y"])
  # tensor([[1., 1., 1., 1., 1.]])
  break
