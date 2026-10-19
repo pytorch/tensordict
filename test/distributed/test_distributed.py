@@ -512,6 +512,65 @@ class TestReduce:
                     w.terminate()
         assert out == ([expected], [expected], [expected])
 
+    @staticmethod
+    def mixed_worker(queue, rank, lazy_rank, return_premature):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29532"
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=2, timeout=timedelta(seconds=30)
+        )
+        v = float(rank + 1)
+        # One rank holds lazy stacks, the other dense tensordicts of the same
+        # keys and shapes.
+        if rank == lazy_rank:
+            root = LazyStackedTensorDict(
+                TensorDict(a=torch.full((3,), v)), TensorDict(a=torch.full((3,), v))
+            )
+        else:
+            root = TensorDict(a=torch.full((2, 3), v), batch_size=[2])
+        nested = TensorDict(b=torch.full((2,), v), s=root.clone(), batch_size=[2])
+        for td in (root, nested):
+            works = td.reduce(
+                0, async_op=return_premature, return_premature=return_premature
+            )
+            for work in works or ():
+                work.wait()
+        if rank == 0:
+            queue.put(
+                (
+                    root["a"].unique().tolist(),
+                    nested["b"].unique().tolist(),
+                    nested["s", "a"].unique().tolist(),
+                )
+            )
+        dist.barrier()
+        dist.destroy_process_group()
+
+    @pytest.mark.parametrize("return_premature", [False, True])
+    @pytest.mark.parametrize("lazy_rank", [0, 1])
+    def test_reduce_lazy_stack_and_dense(
+        self, set_context, lazy_rank, return_premature
+    ):
+        queue = mp.Queue(1)
+        workers = [
+            mp.Process(
+                target=type(self).mixed_worker,
+                args=(queue, rank, lazy_rank, return_premature),
+            )
+            for rank in range(2)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+                if w.is_alive():
+                    w.terminate()
+        assert out == ([3.0], [3.0], [3.0])
+
 
 # =========================================
 # Test td.send

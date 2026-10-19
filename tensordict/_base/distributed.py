@@ -834,7 +834,10 @@ class _Distributed:
         :func:`torch.distributed.reduce`. After the call, rank ``dst`` holds the
         result. On the other ranks, the values of the tensordict are not defined
         (with ``gloo``, they can hold partial results): clone the tensordict
-        before the call if you need them. See :ref:`distributed-collectives`.
+        before the call if you need them. A lazy stack reduces each stacked
+        leaf, like a dense tensordict of the same keys and shapes, and rank
+        ``dst`` writes the result back into its members. See
+        :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the result.
@@ -846,7 +849,9 @@ class _Distributed:
             return_premature (bool, optional): with ``async_op=True``, if
                 ``True``, returns the list of ``Work`` objects of the reductions
                 without waiting for them: call ``wait()`` on each one before you use
-                the tensordict. Defaults to ``False``.
+                the tensordict. On rank ``dst``, the leaves of a lazy stack give a
+                :class:`torch.futures.Future` instead, which also writes the
+                result back. Defaults to ``False``.
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
 

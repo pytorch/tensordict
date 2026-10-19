@@ -4176,8 +4176,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 future.wait()
             return
 
-    # Override: reduces the leaves of each member in place, in stack order;
-    # the stacked leaves that _get_str returns are copies.
+    # Override: issues the collectives of a dense tensordict with the same
+    # keys and shapes, one per key on the stacked leaf. That leaf is a copy, so
+    # rank dst, the only rank where the result is defined, writes it back into
+    # the members.
     def _reduce(
         self,
         dst,
@@ -4187,18 +4189,40 @@ class LazyStackedTensorDict(TensorDictBase):
         _future_list=None,
         group=None,
     ):
+        from torch import distributed as dist
+
+        if op is None:
+            op = dist.ReduceOp.SUM
         root = False
         if _future_list is None:
             _future_list = []
             root = True
-        for td in self.tensordicts:
-            _future_list = td._reduce(
-                dst=dst,
-                op=op,
-                async_op=async_op,
-                _future_list=_future_list,
-                group=group,
-            )
+        is_dst = dist.get_rank() == dst
+
+        def write_back(key, value):
+            self._set_str(key, value, inplace=True, validated=True, ignore_lock=True)
+
+        for key in self.sorted_keys:
+            value = self._get_str(key, NO_DEFAULT)
+            if _is_tensor_collection(type(value)):
+                _future_list = value._reduce(
+                    dst=dst,
+                    op=op,
+                    async_op=async_op,
+                    _future_list=_future_list,
+                    group=group,
+                )
+                continue
+            elif not isinstance(value, Tensor):
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            work = dist.reduce(value, dst=dst, op=op, async_op=async_op, group=group)
+            if is_dst and async_op:
+                work = work.get_future().then(
+                    lambda _, key=key, value=value: write_back(key, value)
+                )
+            elif is_dst:
+                write_back(key, value)
+            _future_list.append(work)
         if not root:
             return _future_list
         elif async_op and return_premature:
