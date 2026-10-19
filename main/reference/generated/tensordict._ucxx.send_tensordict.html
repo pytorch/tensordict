@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6140+g0bd51471d.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6141+gb87708466.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6140+g0bd51471d.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6141+gb87708466.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1665,11 +1665,19 @@ from <code class="docutils literal notranslate"><span class="pre">ucxx.create_en
 (see <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>) unless it is
 already, and sends its storage as one buffer. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, sends the
 tensor leaves of the tensordict, nested ones included, one by one, in
-the format of a pipe with <code class="docutils literal notranslate"><span class="pre">consolidated=False</span></code>, which
-<a class="reference internal" href="tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict" title="tensordict._ucxx.recv_tensordict"><code class="xref py py-func docutils literal notranslate"><span class="pre">recv_tensordict()</span></code></a> does not read. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+the format of a pipe with <code class="docutils literal notranslate"><span class="pre">consolidated=False</span></code>: the receiver calls
+<a class="reference internal" href="tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict" title="tensordict._ucxx.recv_tensordict"><code class="xref py py-func docutils literal notranslate"><span class="pre">recv_tensordict()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">consolidated=False</span></code>. Defaults to
+<code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ImportError" title="(in Python v3.15)"><strong>ImportError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> is not installed.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ImportError" title="(in Python v3.15)"><strong>ImportError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">ucxx</span></code> is not installed.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – with <code class="docutils literal notranslate"><span class="pre">consolidated=False</span></code>, if the tensordict holds a
+    non-tensor entry other than a <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> or
+    <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> whose values are <code class="docutils literal notranslate"><span class="pre">str</span></code>,
+    <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>, <code class="docutils literal notranslate"><span class="pre">None</span></code>, or lists or dicts (with
+    <code class="docutils literal notranslate"><span class="pre">str</span></code> keys) of them. Send it with <code class="docutils literal notranslate"><span class="pre">consolidated=True</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -2030,7 +2038,7 @@ the format of a pipe with <code class="docutils literal notranslate"><span class
        "headline": "send_tensordict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - send_tensordict",
        "url": "/reference/generated/tensordict._ucxx.send_tensordict.html",
-       "articleBody": "send_tensordict# async tensordict._ucxx.send_tensordict(endpoint, td: TensorDictBase, *, consolidated: bool = True) \u2192 None# Sends a tensordict over a UCXX endpoint, with its metadata, in one call. Warning send_tensordict is experimental: its API can change in a minor release without a deprecation cycle. Unlike a TensorDictPipe, it keeps no state: each call sends the metadata (as JSON) and then the consolidated storage. The receiver calls recv_tensordict(). It needs the optional ucxx package. The protocol does not authenticate the peer: use it only on a trusted network. Parameters: endpoint (ucxx.Endpoint) \u2013 the endpoint to send through, for example from ucxx.create_endpoint. td (TensorDictBase) \u2013 the tensordict to send. Keyword Arguments: consolidated (bool, optional) \u2013 if True, consolidates the tensordict (see consolidate()) unless it is already, and sends its storage as one buffer. If False, sends the tensor leaves of the tensordict, nested ones included, one by one, in the format of a pipe with consolidated=False, which recv_tensordict() does not read. Defaults to True. Raises: ImportError \u2013 if ucxx is not installed.",
+       "articleBody": "send_tensordict# async tensordict._ucxx.send_tensordict(endpoint, td: TensorDictBase, *, consolidated: bool = True) \u2192 None# Sends a tensordict over a UCXX endpoint, with its metadata, in one call. Warning send_tensordict is experimental: its API can change in a minor release without a deprecation cycle. Unlike a TensorDictPipe, it keeps no state: each call sends the metadata (as JSON) and then the consolidated storage. The receiver calls recv_tensordict(). It needs the optional ucxx package. The protocol does not authenticate the peer: use it only on a trusted network. Parameters: endpoint (ucxx.Endpoint) \u2013 the endpoint to send through, for example from ucxx.create_endpoint. td (TensorDictBase) \u2013 the tensordict to send. Keyword Arguments: consolidated (bool, optional) \u2013 if True, consolidates the tensordict (see consolidate()) unless it is already, and sends its storage as one buffer. If False, sends the tensor leaves of the tensordict, nested ones included, one by one, in the format of a pipe with consolidated=False: the receiver calls recv_tensordict() with consolidated=False. Defaults to True. Raises: ImportError \u2013 if ucxx is not installed. ValueError \u2013 with consolidated=False, if the tensordict holds a non-tensor entry other than a NonTensorData or NonTensorStack whose values are str, int, float, bool, None, or lists or dicts (with str keys) of them. Send it with consolidated=True.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

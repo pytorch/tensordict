@@ -29,9 +29,16 @@ are views into it.
 the buffer of the first message, without allocating memory or parsing
 metadata.
 
-With `consolidated=False`, each message carries the tensor leaves of
-the tensordict, nested ones included, one by one, and the receiver builds
-a new tensordict with an empty batch size each time.
+With `consolidated=False`, each message carries a JSON header, with the
+batch size and the non-tensor entries, and then the tensor leaves of the
+tensordict, nested ones included, one by one. The receiver builds a new
+tensordict each time, with the batch size of the sent one; its nested
+tensordicts get the same batch size. A non-tensor entry must be a
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) or [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack)
+whose values are `str`, `int`, `float`, `bool`, `None`, or lists
+or dicts (with `str` keys) of them: a send of any other non-tensor entry
+raises a `ValueError`. A stack comes back with the same batch size and
+stack dimension.
 
 A pipe is a context manager and an async context manager, which close
 it at the end of the block, and an async iterator: `async for td in
@@ -114,8 +121,8 @@ next messages carry the storage only, and the pipe writes it into the
 same tensordict, without allocating memory. So each receive can overwrite
 the values of the previous one: clone a tensordict to keep it.
 
-With `consolidated=False`, each call returns a new tensordict with an
-empty batch size.
+With `consolidated=False`, each call returns a new tensordict with the
+batch size of the sent one (an empty batch size from an older sender).
 
 Parameters:
 
@@ -159,7 +166,9 @@ Parameters:
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the pipe is closed.
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the pipe is closed.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - with `consolidated=False`, if `td` holds a non-tensor
+ entry that the pipe cannot send (see the class description).
 
 close() → [None](https://docs.python.org/3/builtins/constants.html#None)
 

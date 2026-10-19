@@ -69,7 +69,7 @@ path for now, although the module name starts with an underscore.
 
 | [`send_tensordict`](generated/tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict)(endpoint, td, *[, consolidated]) | Sends a tensordict over a UCXX endpoint, with its metadata, in one call. |
 | --- | --- |
-| [`recv_tensordict`](generated/tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict)(endpoint[, td, device]) | Receives a tensordict that [`send_tensordict()`](generated/tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict) sends over a UCXX endpoint. |
+| [`recv_tensordict`](generated/tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict)(endpoint[, td, device, ...]) | Receives a tensordict that [`send_tensordict()`](generated/tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict) sends over a UCXX endpoint. |
 
 ## See also
 

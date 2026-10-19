@@ -26,9 +26,15 @@ Keyword Arguments:
 (see [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)) unless it is
 already, and sends its storage as one buffer. If `False`, sends the
 tensor leaves of the tensordict, nested ones included, one by one, in
-the format of a pipe with `consolidated=False`, which
-[`recv_tensordict()`](tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict) does not read. Defaults to `True`.
+the format of a pipe with `consolidated=False`: the receiver calls
+[`recv_tensordict()`](tensordict._ucxx.recv_tensordict.html#tensordict._ucxx.recv_tensordict) with `consolidated=False`. Defaults to
+`True`.
 
 Raises:
 
-[**ImportError**](https://docs.python.org/3/builtins/exceptions.html#ImportError) - if `ucxx` is not installed.
+- [**ImportError**](https://docs.python.org/3/builtins/exceptions.html#ImportError) - if `ucxx` is not installed.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - with `consolidated=False`, if the tensordict holds a
+ non-tensor entry other than a [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) or
+ [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) whose values are `str`,
+ `int`, `float`, `bool`, `None`, or lists or dicts (with
+ `str` keys) of them. Send it with `consolidated=True`.

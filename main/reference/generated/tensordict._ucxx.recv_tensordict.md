@@ -1,6 +1,6 @@
 # recv_tensordict
 
-*async*tensordict._ucxx.recv_tensordict(*endpoint*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+*async*tensordict._ucxx.recv_tensordict(*endpoint*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *consolidated: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Receives a tensordict that [`send_tensordict()`](tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict) sends over a UCXX endpoint.
 
@@ -24,13 +24,23 @@ data is written into its storage, and `td` is returned. Otherwise
 
 Keyword Arguments:
 
-**device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device to receive on.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device to receive on.
 Defaults to `None`, which uses the device of the storage of `td`
-if it is consolidated, and the CPU otherwise.
+if it is consolidated, and the CPU otherwise. With
+`consolidated=False`, the default is the CPU.
+- **consolidated** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - the `consolidated` argument of the
+sender's [`send_tensordict()`](tensordict._ucxx.send_tensordict.html#tensordict._ucxx.send_tensordict). With `False`, reads the
+leaves one by one, as a pipe with `consolidated=False` does, and
+returns a new tensordict: `td` is not used. Defaults to `True`.
 
 Returns:
 
-The received tensordict, `td` or a new consolidated tensordict.
+`td` or a new consolidated tensordict, or
+with `consolidated=False`, a new tensordict that is not consolidated.
+
+Return type:
+
+The received tensordict
 
 Raises:
 
