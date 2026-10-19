@@ -11,6 +11,7 @@ import enum
 import gc
 import importlib
 import importlib.util
+import inspect
 
 # JSON backend is now handled by _utils_key_json.json_dumps
 import json
@@ -20,7 +21,7 @@ import warnings
 import weakref
 from collections.abc import Iterable, Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from functools import wraps
+from functools import cache, wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
@@ -694,6 +695,33 @@ def _apply_pointwise(
     return td.apply(leaf_fn, *tds, propagate_lock=True, is_leaf=is_leaf)
 
 
+@cache
+def _operand_params(func: Callable, n_other: int) -> tuple[tuple, tuple]:
+    """Returns the names and defaults of the first ``n_other`` parameters of ``func`` after ``self``."""
+    params = list(inspect.signature(func).parameters.values())[1 : 1 + n_other]
+    return tuple(p.name for p in params), tuple(p.default for p in params)
+
+
+def _operands_from_kwargs(
+    others: tuple, kwargs: dict, names: tuple, defaults: tuple
+) -> tuple[tuple, dict]:
+    """Moves the operands passed by keyword in ``kwargs`` to the positional ``others``.
+
+    An operand skipped before one passed by keyword gets its default.
+    """
+    others, kwargs, skipped = list(others), dict(kwargs), []
+    for name, default in zip(names[len(others) :], defaults[len(others) :]):
+        if name in kwargs:
+            others += [*skipped, kwargs.pop(name)]
+            skipped = []
+        elif default is inspect.Parameter.empty:
+            # a missing operand: the method raises, as with no keyword
+            break
+        else:
+            skipped.append(default)
+    return tuple(others), kwargs
+
+
 def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
     """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
@@ -714,8 +742,13 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
         )
 
     def wrap_func(func):
+        names, defaults = _operand_params(func, n_other)
+
         @wraps(func)
         def new_func(self, *others, **kwargs):
+            if kwargs and len(others) < n_other and any(n in kwargs for n in names):
+                # an operand passed by keyword is broadcast as a positional one
+                others, kwargs = _operands_from_kwargs(others, kwargs, names, defaults)
             others, args = others[:n_other], others[n_other:]
             need_broadcast = False
             for other in others:

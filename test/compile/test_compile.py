@@ -1605,6 +1605,24 @@ class TestTD:
         assert add_c(td, other) is td
         assert (td["a"] == 2).all()
 
+    def test_broadcast_tensor_keyword(self, mode):
+        # A tensor operand passed by keyword is aligned with the batch dims
+        # without a graph break (#3042)
+        def ops(td, w):
+            return (
+                td.add(other=w),
+                td.add(other=2.0, alpha=2),
+                td.clamp(min=w, max=w + 0.5),
+                td.clamp(max=w),
+            )
+
+        td = TensorDict(a=torch.randn(3, 4, 2), batch_size=[3, 4])
+        w = torch.randn(3, 4)
+        ops_c = torch.compile(ops, fullgraph=True, mode=mode)
+        for result, expected in zip(ops_c(td, w), ops(td, w)):
+            assert (result == expected).all()
+        assert (ops(td, w)[0] == td.add(w)).all()
+
     def test_inplace_methods(self, mode):
         # The in-place methods trace without a graph break: the check for
         # containers that read copies of their data is a class attribute, and

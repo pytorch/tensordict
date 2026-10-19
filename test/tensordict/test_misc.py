@@ -980,6 +980,49 @@ class TestPointwiseOps:
             ),
         )
 
+    @pytest.mark.parametrize("stack_dim", [None, 0, 1])
+    @pytest.mark.parametrize("shape", [(3, 4), (3, 1)])
+    def test_broadcast_tensor_keyword(self, shape, stack_dim):
+        # A tensor operand passed by keyword is aligned with the batch dims, as
+        # a positional one is (#3042)
+        torch.manual_seed(0)
+        dense = TensorDict(
+            a=torch.randn(3, 4, 2),
+            nested=TensorDict(b=torch.randn(3, 4), batch_size=[3, 4]),
+            batch_size=[3, 4],
+        )
+
+        def make():
+            if stack_dim is None:
+                return dense.clone()
+            return LazyStackedTensorDict(
+                *dense.clone().unbind(stack_dim), stack_dim=stack_dim
+            )
+
+        w = torch.randn(shape)
+        w2 = w + 0.5
+        # (op, positional operands, keyword spelling: positional part and kwargs)
+        calls = [
+            ("add", (w,), (), {"other": w}),
+            ("add", (w,), (), {"other": w, "alpha": 2}),
+            ("mul", (w,), (), {"other": w}),
+            ("clamp_min", (w,), (), {"other": w}),
+            ("clamp", (w, w2), (), {"min": w, "max": w2}),
+            ("clamp", (w, w2), (w,), {"max": w2}),
+            ("clamp", (None, w2), (), {"max": w2}),
+            ("clamp", (w,), (), {"min": w}),
+            ("lerp", (w, 0.5), (), {"end": w, "weight": 0.5}),
+            ("lerp", (w2, w), (w2,), {"weight": w}),
+            ("addcmul", (w, w2), (), {"other1": w, "other2": w2, "value": 2}),
+            ("add_", (w,), (), {"other": w}),
+            ("addcdiv_", (w, w2), (), {"other2": w2, "other1": w}),
+        ]
+        for op, operands, pos, kwargs in calls:
+            extra = {k: v for k, v in kwargs.items() if k in ("alpha", "value")}
+            expected = getattr(dense.clone(), op)(*operands, **extra)
+            result = getattr(make(), op)(*pos, **kwargs)
+            assert_allclose_td(result.to_tensordict(), expected)
+
     @pytest.mark.parametrize("shape", [(4,), (3, 4), (2, 3, 4)])
     @pytest.mark.parametrize("alpha", [None, 2])
     def test_rsub_broadcast_tensor(self, shape, alpha):

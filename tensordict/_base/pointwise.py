@@ -63,8 +63,8 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
 def _clamp_into_out(clamp: Callable) -> Callable:
     """Makes ``clamp(..., out=out)`` copy the result of ``clamp(...)`` into the leaves of ``out``.
 
-    The bounds go on as they come: ``_maybe_broadcast_other`` broadcasts only
-    the positional ones.
+    The bounds go on as they come, and ``_maybe_broadcast_other`` broadcasts
+    them.
     """
 
     @wraps(clamp)
@@ -1681,12 +1681,6 @@ class _PointwiseOps:
             >>> start.lerp(end, 0.25)["x"]
             tensor([2.5000, 2.5000])
         """
-        if (isinstance(end, Tensor) and end.ndim) or (
-            isinstance(weight, Tensor) and weight.ndim
-        ):
-            # passed by keyword: _maybe_broadcast_other only reads positional
-            # arguments, and broadcasts them to the batch dims
-            return self.lerp(end, weight)
         keys, vals = self._items_list(True, True)
         if not vals:
             return self.copy()
