@@ -44,15 +44,26 @@ _TD_LEAF_TYPES = frozenset(PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS)
 
 
 def _keys_differ(keys, module_keys) -> bool:
-    """Whether ``keys``, given explicitly, are non-empty and differ from the module's own keys (pytorch/tensordict#2973)."""
-    if not keys:
+    """Whether ``keys``, given explicitly, are non-empty and differ from the module's own keys (pytorch/tensordict#2973).
+
+    Only a str, or a list, tuple or set of nested keys, is compared; anything else returns ``False``.
+    """
+    collections = (str, list, tuple, set)
+    if not isinstance(keys, collections) or not isinstance(module_keys, collections):
         return False
+    if not len(keys):
+        return False
+    unordered = isinstance(keys, set) or isinstance(module_keys, set)
     try:
-        return [unravel_key(key) for key in keys] != [
-            unravel_key(key) for key in module_keys
-        ]
-    except (RuntimeError, TypeError):
-        return True
+        keys, module_keys = (
+            [unravel_key(key) for key in ([k] if isinstance(k, str) else k)]
+            for k in (keys, module_keys)
+        )
+    except (RuntimeError, TypeError, ValueError):
+        return False
+    if unordered:
+        return set(keys) != set(module_keys)
+    return keys != module_keys
 
 
 def _is_td_leaf(x: Any) -> bool:
@@ -192,12 +203,13 @@ class CudaGraphModule:
             ``CudaGraphModule(torch.compile(module), warmup=3)``. Defaults to ``2``.
         in_keys (list of NestedKey, optional): the input keys, if the module takes a tensordict. If ``module``
             has an ``in_keys`` attribute, that attribute is used and this argument is ignored, with a
-            ``UserWarning`` if the argument is a non-empty list that differs from the attribute. An empty list
-            marks a function that takes a tensordict, without keyword calls. Defaults to ``None``, which
-            means that the function takes tensors.
+            ``UserWarning`` if the argument is a non-empty str, list, tuple or set of keys that differs from
+            the attribute. An empty list marks a function that takes a tensordict, without keyword calls.
+            Defaults to ``None``, which means that the function takes tensors.
         out_keys (list of NestedKey, optional): the output keys, if the module returns a tensordict. If
             ``module`` has an ``out_keys`` attribute, that attribute is used and this argument is ignored,
-            with a ``UserWarning`` if the argument is a non-empty list that differs from the attribute.
+            with a ``UserWarning`` if the argument is a non-empty str, list, tuple or set of keys that differs
+            from the attribute.
             Defaults to ``None``, which becomes ``[]`` when ``in_keys`` is given.
         device (torch.device, optional): the device of the CUDA streams that run the warmup and the capture.
             Defaults to ``None``, the current CUDA device.
