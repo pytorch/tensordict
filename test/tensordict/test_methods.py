@@ -767,7 +767,37 @@ class TestTensorDicts(TestTensorDictsBase):
             value.dtype is torch.int
             for value in tdint.values(True, True, is_leaf=is_leaf)
         )
-        tdint = td.type(torch.int)
+        with (
+            pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked")
+            if td.is_locked
+            else contextlib.nullcontext()
+        ):
+            tdint = td.type(torch.int)
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
+
+    @pytest.mark.parametrize("cast_filter", [None, lambda key, value: True])
+    def test_type_locked(self, td_name, device, cast_filter):
+        # type() of a locked tensordict is unlocked, unlike int(): a
+        # FutureWarning says it stays locked from 0.17 (#2959)
+        td = getattr(self, td_name)(device)
+        if td.is_locked:
+            td.unlock_()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            td.type(torch.int, cast_filter=cast_filter)
+        assert not [x for x in w if "type() returns an unlocked" in str(x.message)]
+        try:
+            td.lock_()
+        except Exception:
+            return
+        with pytest.warns(FutureWarning, match="type\\(\\) returns an unlocked"):
+            tdint = td.type(torch.int, cast_filter=cast_filter)
+        assert not tdint.is_locked
+        assert td.int().is_locked
+        is_leaf = lambda cls: issubclass(cls, torch.Tensor)
         assert all(
             value.dtype is torch.int
             for value in tdint.values(True, True, is_leaf=is_leaf)

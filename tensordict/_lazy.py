@@ -104,6 +104,7 @@ from tensordict.utils import (
     _maybe_correct_neg_dim,
     _parse_to,
     _pass_through,
+    _positional_non_blocking,
     _recursive_unbind_list,
     _REPR_OPTIONS,
     _shape,
@@ -5761,6 +5762,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> Self:
+        positional = "non_blocking" not in kwargs
         non_blocking = kwargs.pop("non_blocking", None)
         (
             device,
@@ -5772,6 +5774,8 @@ class _CustomOpTensorDict(TensorDictBase):
             num_threads,
             inplace,
         ) = _parse_to(*args, **kwargs)
+        if positional and len(args) > 1:
+            non_blocking = _positional_non_blocking(args)
         if inplace:
             raise TypeError(f"Cannot use inplace=True with {type(self).__name__}.to().")
 
