@@ -9787,7 +9787,11 @@ class TestGeneric:
         w = torch.arange(1.0, 1.0 + sub_td.batch_size.numel()).view(sub_td.batch_size)
         end = sub_td.to_tensordict().apply(lambda x: x + 5)
         assert sub_td.add_(1.0) is sub_td
-        sub_td.add_(w)
+        r = sub_td.add_(w)
+        if r is not sub_td:
+            # the result holds copies, not a view of the source
+            assert not isinstance(r["nested"], _SubTensorDict)
+            r.lock_()
         sub_td += 2
         assert sub_td.mul_(3) is sub_td
         sub_td.clamp_min_(w * 20)

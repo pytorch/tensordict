@@ -840,6 +840,18 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         inplace,
                         is_leaf=is_leaf,
                     )
+
+                def leaf_fn(x):
+                    return leaf_op(
+                        x,
+                        *[
+                            expand_as_right(other, x) if flag else other
+                            for other, flag in zip(others_map, is_operand)
+                        ],
+                        *args,
+                        **kwargs,
+                    )
+
                 if (
                     inplace
                     and self_expand is self
@@ -848,20 +860,19 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                 ):
                     # The leaves of a sub-tensordict over a lazy stack are
                     # copies: call the op on that sub-tensordict, which writes
-                    # them back (#3043).
+                    # them back (#3043). It returns itself, a view of the
+                    # source: the result holds a TensorDict copy instead.
                     is_leaf = _is_leaf_or_sub_tensordict
-                result = self_expand._fast_apply(
-                    lambda x: leaf_op(
-                        x,
-                        *[
-                            expand_as_right(other, x) if flag else other
-                            for other, flag in zip(others_map, is_operand)
-                        ],
-                        *args,
-                        **kwargs,
-                    ),
-                    is_leaf=is_leaf,
-                )
+
+                    def apply_fn(x):
+                        out = leaf_fn(x)
+                        if isinstance(out, _SubTensorDict):
+                            return out.to_tensordict()
+                        return out
+
+                else:
+                    apply_fn = leaf_fn
+                result = self_expand._fast_apply(apply_fn, is_leaf=is_leaf)
                 # Like torch, an in-place op returns self once it has written into
                 # the tensors that self holds. Containers that build their entries
                 # on each read (lazy stacks, views) still return the new tensordict.
