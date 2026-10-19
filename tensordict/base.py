@@ -6648,8 +6648,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         ``copy_at_`` is a faster :meth:`~.update_at_` for the hot paths where
         every key of ``tensordict`` is a tensor entry of the tensordict. With
-        ``fast=True``, the non-tensor entries of ``tensordict`` are skipped,
-        not copied. Use ``fast=False`` or :meth:`~.update_at_` to write them.
+        ``fast=True``, a ``tensordict`` with only non-tensor entries raises a
+        ``RuntimeError``. If it also holds tensors, its non-tensor entries are
+        skipped, not copied, with a ``FutureWarning``: starting with
+        TensorDict 0.17, the default will change to raising the same
+        ``RuntimeError``. Use ``fast=False`` or :meth:`~.update_at_` to write
+        them.
 
         Args:
             tensordict (TensorDictBase): the entries to copy. Their leading

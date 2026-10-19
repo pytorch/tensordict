@@ -5355,6 +5355,37 @@ class TestTensorDicts(TestTensorDictsBase):
             td.copy_at_(newdata, slice(1, None, 2), fast=None)
         assert td.get("val").tolist() == [0] * 10
 
+    def test_copy_at_fast_non_tensor_warns(self, td_name, device):
+        # #2951: fast=True skips the non-tensor entries of a source that also
+        # holds tensors, and warns that this raises from TensorDict 0.17.
+        td = TensorDict(
+            x=torch.zeros(3), a=TensorDict(y=torch.zeros(3)), batch_size=[3]
+        )
+        td.set_non_tensor("z", "a")
+        source = TensorDict(x=torch.ones(()), a=TensorDict(y=torch.ones(())))
+        nested = source.clone()
+        source.set_non_tensor("z", "b")
+        nested.set_non_tensor(("a", "z"), "b")
+        for src in (source, nested):
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                td.copy_at_(src, 0)
+            assert td["x"].tolist() == [1, 0, 0]
+            assert td["a", "y"].tolist() == [1, 0, 0]
+            assert td.get_non_tensor("z") == "a"
+            assert ("a", "z") not in td.keys(True)
+            td.zero_()
+
+        # the calls whose result stays the same in 0.17 do not warn
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td.copy_at_(source.filter_non_tensor_data(), 1)
+            with pytest.raises(RuntimeError, match="fast=True"):
+                td.copy_at_(source.select("z"), 1)
+            td.copy_at_(source, 2, fast=False)
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        assert td["x"].tolist() == [0, 1, 1]
+        assert td.get("z").tolist() == ["a", "a", "b"]
+
     # This is needed because update in lazy permute/view etc does not behave correctly when
     # legacy is False. When these classes will be deprecated, we can just remove the decorator
     @legacy_lazy_mode()

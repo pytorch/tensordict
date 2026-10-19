@@ -111,6 +111,7 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
+    _user_stacklevel,
     _zip_strict,
     DeviceType,
     expand_as_right,
@@ -1905,8 +1906,20 @@ class TensorDict(TensorDictBase):
             ):
                 return NotImplemented
             indexed_dest_values.append(dest_indexed)
-        copy_fn = _foreach_copy_compiled if is_compiling() else _foreach_copy_
+        compiling = is_compiling()
+        copy_fn = _foreach_copy_compiled if compiling else _foreach_copy_
         copy_fn(indexed_dest_values, source_values, non_blocking=non_blocking)
+        # _items_list leaves the non-tensor entries out: they were skipped
+        if not compiling and input_dict_or_td._has_non_tensor:
+            warn(
+                "copy_at_(..., fast=True) copied the tensors of the source and "
+                "skipped its non-tensor entries. Starting with TensorDict 0.17, "
+                "the default will change to raising a RuntimeError, as for a "
+                "source with only non-tensor entries. Use fast=False or "
+                "update_at_ to write the non-tensor entries.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
         return self
 
     # Override: dense fast path: a top-level key is deleted without the call
