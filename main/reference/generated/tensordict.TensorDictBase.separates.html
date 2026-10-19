@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6141+gb87708466.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6144+g58ab0e8ad.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6141+gb87708466.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6144+g58ab0e8ad.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1654,12 +1654,18 @@ the rest.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – if given, a missing key does not raise.
-The value of <code class="docutils literal notranslate"><span class="pre">default</span></code> is not used: the result holds a
-<code class="docutils literal notranslate"><span class="pre">None</span></code> entry under the missing key.</p></li>
+<li><p><strong>default</strong> (<em>Any</em><em>, </em><em>optional</em>) – if given, a missing key does not raise,
+and the result holds <code class="docutils literal notranslate"><span class="pre">default</span></code> under it, as
+<a class="reference internal" href="tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys" title="tensordict.TensorDictBase.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a> does. A <code class="docutils literal notranslate"><span class="pre">default</span></code> of <code class="docutils literal notranslate"><span class="pre">None</span></code> gives a
+<code class="docutils literal notranslate"><span class="pre">None</span></code> entry. A <code class="docutils literal notranslate"><span class="pre">default</span></code> that does not fit the batch size
+(for example <code class="docutils literal notranslate"><span class="pre">0</span></code> with a batch size of <code class="docutils literal notranslate"><span class="pre">[3]</span></code>) also gives a
+<code class="docutils literal notranslate"><span class="pre">None</span></code> entry, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>: starting with
+TensorDict 0.17, the default will change to raising the error
+of <a class="reference internal" href="tensordict.TensorDictBase.split_keys.html#tensordict.TensorDictBase.split_keys" title="tensordict.TensorDictBase.split_keys"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split_keys()</span></code></a>.</p></li>
 <li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a missing key raises a
-<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the result holds a <code class="docutils literal notranslate"><span class="pre">None</span></code> entry
-under it. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the result holds <code class="docutils literal notranslate"><span class="pre">default</span></code> under
+it, or a <code class="docutils literal notranslate"><span class="pre">None</span></code> entry if no <code class="docutils literal notranslate"><span class="pre">default</span></code> is given. Defaults to
+<code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 <li><p><strong>filter_empty</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the nested tensordicts
 of the tensordict that the removal leaves empty are removed
 too. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
@@ -2045,7 +2051,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.separates",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.separates",
        "url": "/reference/generated/tensordict.TensorDictBase.separates.html",
-       "articleBody": "TensorDictBase.separates# TensorDictBase.separates(*keys: NestedKey, default: Any = NO_DEFAULT, strict: bool = True, filter_empty: bool = True) \u2192 Self# Removes the entries of keys from the tensordict in place, and returns them in a new tensordict. The values are not copied. The result keeps the nested tensordicts that hold the removed entries, with the batch size of the tensordict. This is split_keys() with inplace=True and one key set, except that only the separated part is returned: the tensordict holds the rest. Parameters: *keys (NestedKey) \u2013 the keys to remove. Keyword Arguments: default (Any, optional) \u2013 if given, a missing key does not raise. The value of default is not used: the result holds a None entry under the missing key. strict (bool, optional) \u2013 if True, a missing key raises a KeyError. If False, the result holds a None entry under it. Defaults to True. filter_empty (bool, optional) \u2013 if True, the nested tensordicts of the tensordict that the removal leaves empty are removed too. Defaults to True. Returns: A new tensordict with the removed entries. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=torch.zeros(3), ... b=torch.zeros(3), ... nested=TensorDict(c=torch.zeros(3), batch_size=[3]), ... batch_size=[3], ... ) \u003e\u003e\u003e out = td.separates(\"a\", (\"nested\", \"c\")) \u003e\u003e\u003e sorted(out.keys(include_nested=True, leaves_only=True), key=str) [(\u0027nested\u0027, \u0027c\u0027), \u0027a\u0027] \u003e\u003e\u003e list(td.keys()) [\u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.separates# TensorDictBase.separates(*keys: NestedKey, default: Any = NO_DEFAULT, strict: bool = True, filter_empty: bool = True) \u2192 Self# Removes the entries of keys from the tensordict in place, and returns them in a new tensordict. The values are not copied. The result keeps the nested tensordicts that hold the removed entries, with the batch size of the tensordict. This is split_keys() with inplace=True and one key set, except that only the separated part is returned: the tensordict holds the rest. Parameters: *keys (NestedKey) \u2013 the keys to remove. Keyword Arguments: default (Any, optional) \u2013 if given, a missing key does not raise, and the result holds default under it, as split_keys() does. A default of None gives a None entry. A default that does not fit the batch size (for example 0 with a batch size of [3]) also gives a None entry, with a FutureWarning: starting with TensorDict 0.17, the default will change to raising the error of split_keys(). strict (bool, optional) \u2013 if True, a missing key raises a KeyError. If False, the result holds default under it, or a None entry if no default is given. Defaults to True. filter_empty (bool, optional) \u2013 if True, the nested tensordicts of the tensordict that the removal leaves empty are removed too. Defaults to True. Returns: A new tensordict with the removed entries. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict( ... a=torch.zeros(3), ... b=torch.zeros(3), ... nested=TensorDict(c=torch.zeros(3), batch_size=[3]), ... batch_size=[3], ... ) \u003e\u003e\u003e out = td.separates(\"a\", (\"nested\", \"c\")) \u003e\u003e\u003e sorted(out.keys(include_nested=True, leaves_only=True), key=str) [(\u0027nested\u0027, \u0027c\u0027), \u0027a\u0027] \u003e\u003e\u003e list(td.keys()) [\u0027b\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
