@@ -11,6 +11,7 @@ import os
 import pathlib
 import platform
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -88,6 +89,10 @@ pytestmark = [
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
+    # map and map_iter without a generator, until TensorDict 0.17 (#2954)
+    pytest.mark.filterwarnings(
+        r"ignore:map(_iter)?\(\) got no generator:FutureWarning"
+    ),
 ]
 
 mp_ctx = "spawn"
@@ -609,6 +614,41 @@ class TestMap:
             td_out_0["s"].sort().values,
             td_out_1["s"].sort().values,
         )
+
+    @staticmethod
+    def _identity(td):
+        return td
+
+    @pytest.mark.parametrize("method", ["map", "map_iter"])
+    def test_map_seed_default_warns(self, method):
+        # #2954: without a generator, every call seeds the workers alike. From
+        # 0.17 the base seed comes from the global RNG, so only that call warns.
+        gc.collect()
+        td = TensorDict(a=torch.arange(4), batch_size=[4])
+
+        def run(**kwargs):
+            out = getattr(td, method)(
+                self._identity,
+                num_workers=1,
+                chunksize=2,
+                mp_start_method=mp_ctx,
+                **kwargs,
+            )
+            if method == "map_iter":
+                out = torch.cat(list(out))
+            assert (out["a"] == td["a"]).all()
+
+        with pytest.warns(FutureWarning, match="TensorDict 0.17") as record:
+            run()
+        (seed_warning,) = [w for w in record if "got no generator" in str(w.message)]
+        assert seed_warning.filename == __file__
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            run(generator=torch.default_generator)
+            run(generator=torch.Generator())
+            with mp.get_context(mp_ctx).Pool(1) as pool:
+                run(pool=pool)
+        assert not [w for w in record if "TensorDict 0.17" in str(w.message)]
 
     def test_map_seed_single(self):
         gc.collect()

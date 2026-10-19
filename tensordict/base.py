@@ -1885,6 +1885,21 @@ def _warn_split_keys_kept_in_last() -> None:
     )
 
 
+def _warn_map_seed(method: str) -> None:
+    """Warns that ``method`` seeds its workers alike on every call without a ``generator``, until 0.17 (#2954)."""
+    warnings.warn(
+        f"{method}() got no generator and draws the base seed of its workers "
+        "from a new torch.Generator, so every call seeds them alike. Starting "
+        "with TensorDict 0.17, the default will change to drawing it from the "
+        "global torch RNG, as torch.utils.data.DataLoader does, which also "
+        "advances that RNG by one draw. Pass generator=torch.default_generator "
+        "for the new behaviour now, or generator=torch.Generator() to keep the "
+        "current seeds.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_separates_default(key: NestedKey) -> None:
     """Warns that ``separates`` puts ``None`` under a missing key whose ``default`` does not fit the batch size, until 0.17 (#2948)."""
     if is_compiling():
@@ -9107,7 +9122,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 not the results reproducible: which worker gets which chunk
                 changes from call to call. Defaults to ``None``, which uses a
                 new :class:`torch.Generator`, so the base seed is the same on
-                every call. To leave the workers unseeded, pass a ``pool``.
+                every call, and emits a :class:`FutureWarning`. Starting with
+                TensorDict 0.17, the default will change to drawing the base
+                seed from the global torch RNG, as
+                :class:`~torch.utils.data.DataLoader` does, which also advances
+                it by one draw. Pass ``generator=torch.default_generator`` for
+                that behaviour now, or ``generator=torch.Generator()`` to keep
+                the current seeds. To leave the workers unseeded, pass a
+                ``pool``.
             max_tasks_per_child (int, optional): the number of chunks a worker
                 process handles before it is replaced by a new one. Defaults to
                 ``None``, which keeps the workers for the whole call.
@@ -9148,7 +9170,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 if __name__ == "__main__":
                     data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
-                    data = data.map(process_data, dim=1, num_workers=2)
+                    # generator=torch.default_generator seeds the workers from
+                    # the global RNG, the default from TensorDict 0.17.
+                    data = data.map(
+                        process_data, dim=1, num_workers=2, generator=torch.default_generator
+                    )
                     print(data["y"][:, :10])
                     # tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
         """
@@ -9158,6 +9184,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
             if generator is None:
+                _warn_map_seed("map")
                 generator = torch.Generator()
             seed = (
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
@@ -9269,7 +9296,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 not the results reproducible: which worker gets which chunk
                 changes from call to call. Defaults to ``None``, which uses a
                 new :class:`torch.Generator`, so the base seed is the same on
-                every call. To leave the workers unseeded, pass a ``pool``.
+                every call, and emits a :class:`FutureWarning`. Starting with
+                TensorDict 0.17, the default will change to drawing the base
+                seed from the global torch RNG, as
+                :class:`~torch.utils.data.DataLoader` does, which also advances
+                it by one draw. Pass ``generator=torch.default_generator`` for
+                that behaviour now, or ``generator=torch.Generator()`` to keep
+                the current seeds. To leave the workers unseeded, pass a
+                ``pool``.
             max_tasks_per_child (int, optional): the number of chunks a worker
                 process handles before it is replaced by a new one. Defaults to
                 ``None``, which keeps the workers for the whole call.
@@ -9309,7 +9343,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
                 if __name__ == "__main__":
                     data = TensorDict({"x": torch.zeros(1, 1_000)}, [1, 1_000]).memmap_()
-                    for sample in data.map_iter(process_data, dim=1, num_workers=2, chunksize=5):
+                    # generator=torch.default_generator seeds the workers from
+                    # the global RNG, the default from TensorDict 0.17.
+                    for sample in data.map_iter(
+                        process_data,
+                        dim=1,
+                        num_workers=2,
+                        chunksize=5,
+                        generator=torch.default_generator,
+                    ):
                         print(sample["y"])
                         # tensor([[1., 1., 1., 1., 1.]])
                         break
@@ -9320,6 +9362,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
             if generator is None:
+                _warn_map_seed("map_iter")
                 generator = torch.Generator()
             seed = (
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
