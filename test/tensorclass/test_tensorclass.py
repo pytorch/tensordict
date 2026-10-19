@@ -2130,6 +2130,18 @@ class TestTensorClass:
             from_dataclass(MyDataClass, autocast=True)
             from_dataclass(x, nocast=True)
             from_dataclass(Tensors, tensor_only=True)
+            # The flags are not used with dest_cls or for a tensorclass type.
+            dest_cls = from_dataclass(MyDataClass)
+            assert isinstance(
+                from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
+                dest_cls,
+            )
+            assert from_dataclass(dest_cls, tensor_only=True, autocast=True) is dest_cls
+            # Inputs that are not dataclasses raise as before.
+            with pytest.raises(TypeError, match="Expected a obj input"):
+                from_dataclass(3, autocast=True, nocast=True)
+            with pytest.raises(AttributeError, match="__dataclass_fields__"):
+                from_dataclass(int, autocast=True, nocast=True)
 
     def test_from_dataclass(self):
         assert is_tensorclass(MyTensorClass_autocast)

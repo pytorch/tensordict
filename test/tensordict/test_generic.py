@@ -3032,6 +3032,11 @@ class TestGeneric:
         class Defaults:
             n: int = 3
 
+        class TCDefaults(TensorClass):
+            n: int = 3
+
+        with pytest.raises(TypeError, match="cannot all be read from the class"):
+            TensorDict.from_dataclass(TCDefaults)
         for cls in (Data, Factory):
             with pytest.raises(TypeError, match="Pass an instance"):
                 TensorDict.from_dataclass(cls)

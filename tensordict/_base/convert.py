@@ -2353,7 +2353,8 @@ class _Conversion:
         Raises:
             TypeError: if ``dataclass`` is not a dataclass and
                 ``as_tensorclass=False``, if it is a dataclass type with a
-                field without a class-level default and
+                field that cannot be read from the class (a field without a
+                default, or a field of a tensorclass type) and
                 ``as_tensorclass=False``, or if both ``auto_batch_size=True``
                 and ``batch_size`` are given.
 
@@ -2398,7 +2399,7 @@ class _Conversion:
         ):
             raise TypeError(
                 f"from_dataclass() got the dataclass type {dataclass.__name__}, "
-                "which has fields without a class-level default. Pass an "
+                "whose fields cannot all be read from the class. Pass an "
                 "instance, or as_tensorclass=True to convert the type."
             )
         source = {}
