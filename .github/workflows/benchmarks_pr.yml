@@ -2,21 +2,26 @@ name: Continuous Benchmark (PR)
 
 on:
   pull_request:
+    # labeled: adding the benchmarks/compare label starts the comparison.
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  # A run for another label skips its job, and gets a group of its own so that it does not cancel a comparison.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}${{ github.event.action == 'labeled' && github.event.label.name != 'benchmarks/compare' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
+    # The comparison takes about 20 min on the CPU runner and 27 min on the
+    # GPU runner, so it runs only on pull requests with the benchmarks/compare
+    # label. Adding that label starts it; adding another label does not.
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'benchmarks/compare') && (github.event.action != 'labeled' || github.event.label.name == 'benchmarks/compare') }}
     # The CPU benchmarks run on a runner without a GPU: they measure the CPU
     # only, and the GPU runner stays free for the GPU benchmarks.
     runs-on: ${{ matrix.runner }}
@@ -101,7 +106,6 @@ jobs:
           echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
           echo "BASELINE_JSON=${RUNNER_TEMP}/${{ matrix.device }}-baseline.json" >> $GITHUB_ENV
           echo "CONTENDER_JSON=${RUNNER_TEMP}/${{ matrix.device }}-contender.json" >> $GITHUB_ENV
-          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
       - name: Run benchmarks
         run: |
           set -e
@@ -149,15 +153,10 @@ jobs:
           path: |
             ${{ env.BASELINE_JSON }}
             ${{ env.CONTENDER_JSON }}
-      - name: Publish results
-        continue-on-error: true
-        uses: apbard/pytest-benchmark-commenter@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: ${{ env.CONTENDER_JSON }}
-          comparison-benchmark-file: ${{ env.BASELINE_JSON }}
-          benchmark-metrics: 'name,max,mean,ops'
-          comparison-benchmark-metric: 'ops'
-          comparison-higher-is-better: true
-          comparison-threshold: 5
-          benchmark-title: 'Result of ${{ matrix.device }} Benchmark Tests'
+      - name: Summarize the comparison
+        run: |
+          {
+            echo "## ${{ matrix.device }} benchmarks: PR ${HEAD_SHA} against base ${BASE_SHA}"
+            echo
+            python3 .github/scripts/compare_benchmark_results.py "${BASELINE_JSON}" "${CONTENDER_JSON}"
+          } >> "${GITHUB_STEP_SUMMARY}"

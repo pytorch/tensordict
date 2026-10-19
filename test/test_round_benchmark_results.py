@@ -22,6 +22,14 @@ assert _SPEC is not None and _SPEC.loader is not None
 round_benchmark_results = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(round_benchmark_results)
 
+_COMPARE_SCRIPT_PATH = _SCRIPT_PATH.with_name("compare_benchmark_results.py")
+_COMPARE_SPEC = importlib.util.spec_from_file_location(
+    "compare_benchmark_results", _COMPARE_SCRIPT_PATH
+)
+assert _COMPARE_SPEC is not None and _COMPARE_SPEC.loader is not None
+compare_benchmark_results = importlib.util.module_from_spec(_COMPARE_SPEC)
+_COMPARE_SPEC.loader.exec_module(compare_benchmark_results)
+
 
 def _benchmark(ops, stddev, mean):
     return {
@@ -112,3 +120,57 @@ def test_main_keeps_only_the_values_the_action_reads_rounded(tmp_path):
     assert repr(stats["stddev"]) == "1.51818855346e-05"
     assert repr(stats["mean"] * 1e6) == "32.1000258736"
     assert stats["rounds"] == 3
+
+
+def test_compare_lists_only_large_changes_of_the_median(tmp_path):
+    def results(medians):
+        return {
+            "benchmarks": [
+                # The mean would put every benchmark beyond the threshold.
+                {"fullname": name, "stats": {"median": median, "mean": 10 * median}}
+                for name, median in medians.items()
+            ]
+        }
+
+    base = {
+        "test_slower": 1e-3,
+        "test_much_slower": 2e-6,
+        "test_faster[a|b]": 4.0,
+        "test_noise": 1e-3,
+        "test_removed": 1e-3,
+    }
+    pr = {
+        "test_slower": 1.25e-3,
+        "test_much_slower": 6e-6,
+        "test_faster[a|b]": 3.0,
+        "test_noise": 1.2e-3,
+        "test_new": 1e-3,
+    }
+    base_path = tmp_path / "base.json"
+    pr_path = tmp_path / "pr.json"
+    base_path.write_text(json.dumps(results(base)))
+    pr_path.write_text(json.dumps(results(pr)))
+
+    summary = subprocess.run(
+        [sys.executable, str(_COMPARE_SCRIPT_PATH), str(base_path), str(pr_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    assert summary.startswith(
+        "Compared the median time of 4 benchmarks; "
+        "1 new and 1 removed ones are not compared."
+    )
+    _, slower, faster = summary.split("### ")
+    assert slower.splitlines()[0] == "Slower (2)"
+    assert slower.splitlines()[4:6] == [
+        "| `test_much_slower` | 2 us | 6 us | +200% |",
+        "| `test_slower` | 1 ms | 1.25 ms | +25% |",
+    ]
+    assert faster.splitlines()[0] == "Faster (1)"
+    assert faster.splitlines()[4] == "| `test_faster[a\\|b]` | 4 s | 3 s | -25% |"
+    assert "test_noise" not in summary
+    assert compare_benchmark_results.compare(results(base), results(base)).endswith(
+        "### Slower (0)\n\nNone.\n\n### Faster (0)\n\nNone.\n"
+    )
