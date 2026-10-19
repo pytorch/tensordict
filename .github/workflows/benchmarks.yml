@@ -31,8 +31,8 @@ concurrency:
 jobs:
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
-    # On pull requests, Continuous Benchmark (PR) benchmarks the head against
-    # its base. Run this workflow on a pull request only to upload its
+    # On pull requests with the benchmarks/compare label, Continuous Benchmark
+    # (PR) benchmarks the head against its base. Run this workflow on a pull request only to upload its
     # results, which needs the benchmarks/upload label.
     if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'benchmarks/upload') }}
     # The CPU benchmarks run on a runner without a GPU: they measure the CPU
