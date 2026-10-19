@@ -14,6 +14,10 @@ Parameters:
 
 **dataclass** - the dataclass instance to convert. With
 `as_tensorclass=True`, it can also be a dataclass type.
+Without it, a dataclass type whose fields all have defaults
+gives a tensordict of the defaults, with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the
+default will change to raising a [`TypeError`](https://docs.python.org/3/builtins/exceptions.html#TypeError) for it.
 
 Keyword Arguments:
 

@@ -19,7 +19,11 @@ Starting with TensorDict 0.17, the default will change to their
 field names (`"values"`, `"indices"`, ...), as
 [`from_namedtuple()`](tensordict.TensorDictBase.from_namedtuple.html#tensordict.TensorDictBase.from_namedtuple) gives;
 - a dataclass instance: [`from_dataclass()`](tensordict.TensorDictBase.from_dataclass.html#tensordict.TensorDictBase.from_dataclass) (the result is a
-tensordict, not a tensorclass);
+tensordict, not a tensorclass). A dataclass type whose fields all
+have defaults gives a tensordict of the defaults too, with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict 0.17, the default
+will change to returning the type unchanged, as for any other
+class;
 - a NumPy structured array: [`from_struct_array()`](tensordict.TensorDictBase.from_struct_array.html#tensordict.TensorDictBase.from_struct_array);
 - a pandas DataFrame: [`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas);
 - an open `h5py.File`: a
