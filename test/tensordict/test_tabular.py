@@ -47,6 +47,22 @@ class TabularTensorClass:
     y: torch.Tensor
 
 
+@tensorclass
+class TabularNestedTensorClass:
+    a: torch.Tensor
+    inner: TabularTensorClass
+
+
+def _nested_tensorclass():
+    return TabularNestedTensorClass(
+        a=torch.tensor([1.0, 2.0, 3.0]),
+        inner=TabularTensorClass(
+            x=torch.tensor([4, 5, 6]), y=torch.tensor([7.0, 8.0, 9.0]), batch_size=[3]
+        ),
+        batch_size=[3],
+    )
+
+
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
 class TestFromPandas:
     def test_numeric_columns(self):
@@ -350,6 +366,37 @@ class TestParquet:
         assert (td2["obs", "x"] == td["obs", "x"]).all()
         assert td2["s"] == ["x", "y", "z"]
 
+    @pytest.mark.parametrize("with_pandas", [True, False])
+    @pytest.mark.parametrize("in_tensordict", [True, False])
+    def test_to_parquet_nested_tensorclass(
+        self, tmp_path, monkeypatch, with_pandas, in_tensordict
+    ):
+        # A nested tensorclass gets one column per leaf, as a nested TensorDict.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        import tensordict._tabular
+
+        if with_pandas and not _has_pandas:
+            pytest.skip("pandas not found")
+        pa.table({"a": [1]})
+        if not with_pandas:
+            monkeypatch.setattr(tensordict._tabular, "_has_pandas", lambda: False)
+            monkeypatch.setitem(sys.modules, "pandas", None)
+        tc = _nested_tensorclass()
+        data = TensorDict(tc=tc, batch_size=[3]) if in_tensordict else tc
+        path = tmp_path / "nested.parquet"
+        data.to_parquet(path, separator=".")
+        prefix = ("tc",) if in_tensordict else ()
+        assert pq.read_table(str(path)).column_names == [
+            ".".join((*prefix, "a")),
+            ".".join((*prefix, "inner", "x")),
+            ".".join((*prefix, "inner", "y")),
+        ]
+        td2 = TensorDict.from_parquet(path, separator=".")
+        assert (td2[(*prefix, "a")] == tc.a).all()
+        assert (td2[(*prefix, "inner", "x")] == tc.inner.x).all()
+        assert (td2[(*prefix, "inner", "y")] == tc.inner.y).all()
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -441,6 +488,55 @@ class TestTensorClassTabular:
         assert list(df.columns) == ["x", "y"]
         assert (df["x"].values == np.array([1, 2, 3])).all()
         assert (df["y"].values == np.array([4.0, 5.0, 6.0], dtype=np.float32)).all()
+
+    def test_nested_tensorclass_columns(self, tmp_path):
+        # A nested tensorclass gets one column per leaf, as a nested TensorDict.
+        import pandas as pd
+
+        tc = _nested_tensorclass()
+        columns = ["a", "inner.x", "inner.y"]
+        assert list(tc.to_tensordict().to_pandas(separator=".").columns) == columns
+        df = tc.to_pandas(separator=".")
+        assert list(df.columns) == columns
+        assert (df["inner.x"].values == np.array([4, 5, 6])).all()
+        csv_path = tmp_path / "nested.csv"
+        tc.to_csv(csv_path, separator=".")
+        assert list(pd.read_csv(csv_path).columns) == columns
+        td2 = TensorDict.from_csv(csv_path, separator=".")
+        assert (td2["inner", "x"] == tc.inner.x).all()
+
+    def test_nested_tensorclass_multi_dim_leaf(self, tmp_path):
+        # A nested tensorclass with a leaf that does not fit one column stays
+        # one object column, where a nested TensorDict raises.
+        import pandas as pd
+
+        tc = _nested_tensorclass()
+        tc.inner.x = torch.ones(3, 2)
+        with pytest.raises(ValueError, match="Cannot convert tensor with shape"):
+            tc.to_tensordict().to_pandas(separator=".")
+        df = tc.to_pandas(separator=".")
+        assert list(df.columns) == ["a", "inner"]
+        assert isinstance(df["inner"][0], TabularTensorClass)
+        assert (df["inner"][0].x == tc.inner.x[0]).all()
+        df_outer = TensorDict(tc=tc, batch_size=[3]).to_pandas(separator=".")
+        assert list(df_outer.columns) == ["tc"]
+        csv_path = tmp_path / "nested.csv"
+        tc.to_csv(csv_path, separator=".")
+        df2 = pd.read_csv(csv_path)
+        assert list(df2.columns) == ["a", "inner"]
+        assert df2["inner"][0] == str(df["inner"][0])
+
+    def test_nested_tensorclass_without_leaves(self):
+        # A nested tensorclass whose fields are all None has nothing to flatten
+        # and stays one object column.
+        tc = TabularNestedTensorClass(
+            a=torch.tensor([1.0, 2.0, 3.0]),
+            inner=TabularTensorClass(x=None, y=None, batch_size=[3]),
+            batch_size=[3],
+        )
+        df = tc.to_pandas(separator=".")
+        assert list(df.columns) == ["a", "inner"]
+        assert isinstance(df["inner"][0], TabularTensorClass)
 
     def test_csv_roundtrip(self, tmp_path):
         csv_path = tmp_path / "tensorclass.csv"

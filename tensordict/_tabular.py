@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict._tensorcollection import TensorCollection
-from tensordict.utils import is_non_tensor
+from tensordict.utils import is_non_tensor, is_tensorclass
 
 
 def _has_pandas() -> bool:
@@ -48,12 +48,33 @@ def _unflatten_columns(flat_dict: dict, separator: str) -> dict:
     return result
 
 
+def _is_multi_column(value) -> bool:
+    """Whether a flattened leaf does not fit a single DataFrame column."""
+    return isinstance(value, torch.Tensor) and value.ndim > 1
+
+
 def _flatten_keys(td, separator: str) -> dict[str, Any]:
     """Flatten a TensorDict into a dict with separated key names."""
     result = {}
     for key, value in td.items():
-        if isinstance(value, TensorCollection) and not is_non_tensor(value):
+        if (
+            isinstance(value, TensorCollection) or is_tensorclass(value)
+        ) and not is_non_tensor(value):
             sub = _flatten_keys(value, separator)
+            if not isinstance(value, TensorCollection) and (
+                not sub
+                or any(
+                    _is_multi_column(sub_val)
+                    or (is_tensorclass(sub_val) and not is_non_tensor(sub_val))
+                    for sub_val in sub.values()
+                )
+            ):
+                # Keep a @tensorclass with no leaves, or with a leaf that does
+                # not fit one column, here or in a @tensorclass it holds, as one
+                # column of objects as before, so that a call that worked keeps
+                # its result.
+                result[key] = value
+                continue
             for sub_key, sub_val in sub.items():
                 result[f"{key}{separator}{sub_key}"] = sub_val
         else:
@@ -142,7 +163,7 @@ def _tensordict_to_columns(td, *, separator: str | None) -> dict[str, Any]:
     data = {}
     for key, value in flat.items():
         if isinstance(value, torch.Tensor):
-            if value.ndim > 1:
+            if _is_multi_column(value):
                 raise ValueError(
                     f"Cannot convert tensor with shape {value.shape} at key '{key}' "
                     f"to a single DataFrame column. Only 1D tensors (matching the "
