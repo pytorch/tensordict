@@ -72,11 +72,11 @@ def to_mds(
             ``writer`` after writing, which writes the dataset index. Pass
             ``False`` to write more samples through it, and finish it
             yourself afterwards, once. A writer that ``to_mds`` creates is
-            always finished. Defaults to ``None``,
-            which leaves the writer open for a tensordict without batch
-            dimensions, and finishes it, with a ``FutureWarning``, for a
-            tensordict with batch dimensions. Starting with TensorDict 0.17,
-            the default will change to leaving the writer open in both cases.
+            always finished. Defaults to ``None``, which leaves the writer
+            open for a tensordict without batch dimensions, and finishes it,
+            with a ``FutureWarning``, for a tensordict with batch dimensions.
+            Starting with TensorDict 0.17, the default will change to leaving
+            the writer open in both cases.
         **kwargs: passed to ``streaming.MDSWriter``.
 
     Raises:
