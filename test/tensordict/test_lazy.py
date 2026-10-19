@@ -1168,6 +1168,12 @@ class TestLazyStackedTensorDict:
             lo = torch.rand(3) - 0.5
             check(lazy.clamp(min=lo, max=lo + 0.5), dense.clamp(min=lo, max=lo + 0.5))
             check(lazy.mod(other=lo + 2), dense.mod(other=lo + 2))
+            # a tensor bound next to a number raises, as on the dense
+            # tensordict, though the slice of y's bound is 0-d
+            with pytest.raises(TypeError):
+                dense.exclude("x").clamp(min=lo, max=0.75)
+            with pytest.raises(TypeError):
+                lazy.exclude("x").clamp(min=lo, max=0.75)
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("kind", ["tensorclass", "typed"])

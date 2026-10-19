@@ -721,13 +721,22 @@ def _keyword_operand(other: Any, shape: torch.Size, path: tuple) -> Any:
     return other
 
 
+def _float_or_complex(dtype: torch.dtype) -> bool:
+    return dtype.is_floating_point or dtype.is_complex
+
+
 def _apply_on_members(
-    td: TensorDictBase, f: Callable, operands: list, failed: list, path: tuple = ()
+    td: TensorDictBase,
+    f: Callable,
+    operands: list,
+    failed: list,
+    rejects: Callable | None = None,
+    path: tuple = (),
 ) -> TensorDictBase:
     """Returns ``f(leaf, *operands)`` on the member leaves of the lazy stack ``td``, each with its part of the tensors of ``operands`` (#3042).
 
-    Appends to ``failed`` where a leaf has no part of an operand: the caller
-    then discards the result.
+    Appends to ``failed`` where a leaf has no part of an operand, or has a
+    dtype that ``rejects``: the caller then discards the result.
     """
     from tensordict._lazy import LazyStackedTensorDict
 
@@ -736,12 +745,18 @@ def _apply_on_members(
     for i, member in enumerate(td.tensordicts):
         member_path = path + ((stack_dim, i, size),)
         if isinstance(member, LazyStackedTensorDict):
-            results.append(_apply_on_members(member, f, operands, failed, member_path))
+            results.append(
+                _apply_on_members(member, f, operands, failed, rejects, member_path)
+            )
             continue
         cache = {}
 
         def fn(x, member_path=member_path, cache=cache):
             if isinstance(x, Tensor):
+                if rejects is not None and rejects(x.dtype):
+                    # f raises another error than the dense tensordict
+                    failed.append(x)
+                    return x
                 ops = cache.get(x.shape)
                 if ops is None:
                     ops = cache[x.shape] = [
@@ -752,7 +767,7 @@ def _apply_on_members(
                         ops = cache[x.shape] = operands
                 return f(x, *ops)
             if isinstance(x, LazyStackedTensorDict) and not is_non_tensor(x):
-                return _apply_on_members(x, f, operands, failed, member_path)
+                return _apply_on_members(x, f, operands, failed, rejects, member_path)
             if isinstance(_unwrap(x), LazyStackedTensorDict):
                 # a tensorclass on a lazy stack would lose the stack's path
                 failed.append(x)
@@ -807,9 +822,9 @@ def _maybe_broadcast_other(
                     need_broadcast = True
                     break
             if (
-                keywords
+                self._lazy
+                and keywords
                 and kwargs
-                and self._lazy
                 and not need_broadcast
                 and not args
                 and set(kwargs) == set(keywords[len(others) :])
@@ -821,13 +836,19 @@ def _maybe_broadcast_other(
                 if (
                     isinstance(self, LazyStackedTensorDict)
                     and not is_non_tensor(self)
-                    and not any(
-                        o is None or _is_tensor_collection(type(o)) for o in operands
-                    )
+                    # torch takes a 0-d slice for a number: keep the error
+                    # of a number next to a tensor
+                    and all(isinstance(o, Tensor) for o in operands)
                 ):
                     failed = []
                     result = _apply_on_members(
-                        self, torch_op or getattr(torch.Tensor, op), operands, failed
+                        self,
+                        torch_op or getattr(torch.Tensor, op),
+                        operands,
+                        failed,
+                        # bitwise ops raise NotImplementedError on members
+                        # where the dense tensordict raises RuntimeError
+                        _float_or_complex if op.startswith("bitwise") else None,
                     )
                     if not failed:
                         return result
