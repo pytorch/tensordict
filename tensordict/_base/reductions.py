@@ -768,8 +768,8 @@ class _Reductions:
                 ``None``, which reduces every element of each leaf, and the result
                 has an empty batch size.
             keepdim (bool, optional): if ``True``, the reduced batch dimensions are
-                kept with size 1. Not allowed with ``dim="feature"``. Without a
-                ``dim``, pass ``dim=None`` to use it. Defaults to ``False``.
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
             dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
@@ -1057,8 +1057,8 @@ class _Reductions:
                 ``None``, which reduces every element of each leaf, and the result
                 has an empty batch size.
             keepdim (bool, optional): if ``True``, the reduced batch dimensions are
-                kept with size 1. Not allowed with ``dim="feature"``. Without a
-                ``dim``, pass ``dim=None`` to use it. Defaults to ``False``.
+                kept with size 1. Not allowed with ``dim="feature"``. Defaults to
+                ``False``.
 
         Keyword Args:
             dtype (torch.dtype, optional): if given, each leaf is cast to this dtype
@@ -1745,6 +1745,9 @@ class _Reductions:
                 names = [None] * len(q_dims) + names
             if dim is not NO_DEFAULT:
                 kwargs["dim"] = dim
+            elif reduction_name in ("sum", "mean"):
+                # torch's sum and mean need a dim with keepdim
+                kwargs["dim"] = None
             if keepdim is not NO_DEFAULT:
                 kwargs["keepdim"] = keepdim
 
