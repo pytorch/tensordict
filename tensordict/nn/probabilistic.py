@@ -1135,9 +1135,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     warnings.warn(
                         "ProbabilisticTensorDictModule got no out_keys and writes "
                         'its sample at "_". Starting with TensorDict 0.17, the '
-                        'default will change to not writing the sample at "_", '
-                        "which marks an output that is not written. Pass out_keys "
-                        "to keep the sample.",
+                        'default will change to not writing the sample at "_". '
+                        "Pass out_keys to write the sample at a key of your "
+                        "choice and silence this warning.",
                         FutureWarning,
                         stacklevel=_user_stacklevel(),
                     )
