@@ -339,8 +339,8 @@ def expand_as_right(
     """
     if dest.ndimension() < tensor.ndimension():
         raise RuntimeError(
-            "expand_as_right requires the destination tensor to have less "
-            f"dimensions than the input tensor, got"
+            "expand_as_right requires the destination tensor to have at least "
+            f"as many dimensions as the input tensor, got"
             f" tensor.ndimension()={tensor.ndimension()} and "
             f"dest.ndimension()={dest.ndimension()}"
         )

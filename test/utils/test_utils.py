@@ -52,6 +52,7 @@ from tensordict.utils import (
     _TensorDictPropertyError,
     _unravel_key_to_tuple,
     _unravel_keys,
+    expand_as_right,
     isin,
     parse_tensor_dict_string,
     remove_duplicates,
@@ -1321,6 +1322,11 @@ def test_assert_close_keeps_torch_message():
         "key ('x',) does not match, got mse = 0.0100,\textra\n"
     )
     assert "Tensor-likes are not close!" in str(err.value)
+
+
+def test_expand_as_right_fewer_dims_message():
+    with pytest.raises(RuntimeError, match="at least as many dimensions"):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3))
 
 
 def test_get_shared_executor():
