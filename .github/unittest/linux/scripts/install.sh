@@ -74,6 +74,11 @@ python -m pip install redis pandas pyarrow
 # tests pass with newer releases, so this overrides the cap.
 python -m pip install --upgrade "numpy${NUMPY_SPEC:-}"
 python -c "import numpy; print('Installed numpy', numpy.__version__)"
+# The onnx extra of pyproject.toml, for the ONNX export tests, in the job that
+# sets TD_INSTALL_ONNX.
+if [ -n "${TD_INSTALL_ONNX:-}" ]; then
+  python -m pip install onnx onnxscript onnxruntime
+fi
 python -m pip install -e . --no-deps
 
 # smoke test
