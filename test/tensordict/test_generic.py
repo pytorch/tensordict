@@ -3387,9 +3387,11 @@ class TestGeneric:
                 td = call(batch_dims=1)
             # the result is the one without batch_dims, until 0.17
             assert td.batch_size == call().batch_size != expected.batch_size
-        with pytest.warns(FutureWarning, match="from_tuple ignores batch_dims=1"):
+        with pytest.warns(FutureWarning, match="from_tuple ignores batch_dims=1") as w:
             td = TensorDict.from_tuple((x,), batch_dims=1, batch_size=[3])
         assert td.batch_size == (3,)
+        # auto_batch_size=True with batch_size raises: the message does not advise it
+        assert not any("Pass auto_batch_size=True" in str(m.message) for m in w)
         # silent where turning auto_batch_size on gives the same result
         with warnings.catch_warnings():
             warnings.simplefilter("error")

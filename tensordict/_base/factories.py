@@ -46,6 +46,7 @@ def from_any(
         auto_batch_size (bool, optional): if ``True``, sets the batch size to
             the largest leading shape that all the entries share. Exclusive
             with ``batch_size``, except for a dict, where ``batch_size``
+            wins, and for an :class:`h5py.File`, where ``auto_batch_size``
             wins. Defaults to ``False``.
         batch_dims (int, optional): with ``auto_batch_size``, the maximum
             number of batch dimensions. Ignored without
@@ -61,8 +62,9 @@ def from_any(
         batch_size (torch.Size or list of int, optional): the batch size of
             the result: the leading dimensions that all its entries share.
             Exclusive with ``auto_batch_size``, except for a dict, where
-            ``batch_size`` wins and no batch size is computed. Defaults to
-            ``None``.
+            ``batch_size`` wins and no batch size is computed, and for an
+            :class:`h5py.File`, where ``auto_batch_size`` wins and
+            ``batch_size`` is ignored. Defaults to ``None``.
 
     Returns:
         A tensordict (a :class:`~tensordict.PersistentTensorDict` for an HDF5

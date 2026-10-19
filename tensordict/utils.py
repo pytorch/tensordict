@@ -4020,11 +4020,16 @@ def _warn_batch_dims_ignored(op: str, result, batch_dims, batch_size) -> None:
             )
         ):
             return
+    # with a batch_size, auto_batch_size=True raises: advise it only without
+    advice = (
+        "Drop batch_dims to keep today's result."
+        if batch_size is not None
+        else "Pass auto_batch_size=True to get that result now, or drop batch_dims."
+    )
     warnings.warn(
         f"{op} ignores batch_dims={batch_dims} without auto_batch_size=True. "
         "Starting with TensorDict 0.17, the default will change to turning "
-        "auto_batch_size on when batch_dims is given, as from_dict does. Pass "
-        "auto_batch_size=True to get that result now, or drop batch_dims.",
+        f"auto_batch_size on when batch_dims is given, as from_dict does. {advice}",
         FutureWarning,
         stacklevel=_user_stacklevel(),
     )
