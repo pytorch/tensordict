@@ -9804,6 +9804,34 @@ class TestGeneric:
         expected_sub.lerp_(end, 0.5)
         assert (td.to_tensordict() == expected).all()
 
+    @pytest.mark.parametrize("idx", [lambda j: (slice(None), j), lambda j: (..., j)])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_lazy_stack_of_sub_td_inplace_methods_nested_lazy(self, idx, stack_dim):
+        # A lazy stack of sub-tensordicts of a tensordict that holds a lazy
+        # stack, as TorchRL's replay buffer builds: the in-place methods write
+        # into the members of the nested stack (#3048)
+        expected = TensorDict(
+            a=torch.arange(24.0).view(4, 3, 2),
+            nested=TensorDict(b=torch.arange(12.0).view(4, 3), batch_size=[4, 3]),
+            batch_size=[4, 3],
+        )
+        td = expected.clone()
+        td["nested"] = lazy_stack(list(td["nested"].unbind(stack_dim)), stack_dim)
+        ptrs = [member["b"].data_ptr() for member in td["nested"].tensordicts]
+        lz = lazy_stack([td._get_sub_tensordict(idx(j)) for j in range(3)], 1)
+        expected_lz = lazy_stack(
+            [expected._get_sub_tensordict(idx(j)) for j in range(3)], 1
+        )
+        end = lz.to_tensordict().apply(lambda x: x + 5)
+        for lazy in (lz, expected_lz):
+            assert lazy.add_(1.0) is lazy
+            lazy += 2
+            assert lazy.clamp_min_(4.0) is lazy
+            assert lazy.lerp_(end, 0.5) is lazy
+            assert lazy.sqrt_() is lazy
+        assert (td.to_tensordict() == expected).all()
+        assert [member["b"].data_ptr() for member in td["nested"].tensordicts] == ptrs
+
     def test_setdefault_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
         tensor2 = torch.ones(4, 5, 6, 7)

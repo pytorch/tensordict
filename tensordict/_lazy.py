@@ -3367,7 +3367,9 @@ class LazyStackedTensorDict(TensorDictBase):
         """The stack with each member that reads copies replaced by a copy of its leaves.
 
         A member that holds such tensordicts, such as h5 files, is replaced by
-        a copy in which they are (``TensorDict._tree_of_copies``). Called by
+        a copy in which they are (``TensorDict._tree_of_copies``), and so is a
+        sub-tensordict of a tensordict that holds them, such as a lazy stack
+        (``_SubTensorDict._tree_of_copies``). Called by
         ``_inplace_on_copies``. Appends each such member and its copy to
         ``written``, for the member to write the copy back.
         """
@@ -3378,6 +3380,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 members.append(td._tree_of_copies(written))
             elif isinstance(td, LazyStackedTensorDict) and not td._is_non_tensor:
                 members.append(td._stack_of_copies(written))
+            elif isinstance(td, _SubTensorDict) and not td._reads_return_copies:
+                # a view of a tensordict that holds a lazy stack (#3048)
+                members.append(td._tree_of_copies(written))
             elif not td._reads_return_copies:
                 members.append(td)
             elif _has_lazy_stack(td):
