@@ -52,7 +52,12 @@ size of the tensordict to that of the input when they differ.
 A lazy stack is then refilled with copies of the tensordicts of
 the input. It needs `keys_to_update=None` and
 `inplace=False`, and the keys of the tensordict must all be in
-the input. Defaults to `False`.
+the input. A batch size that is a prefix of the input's (`[]`
+for an input of batch size `[2]`) is kept, with a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning): starting with TensorDict 0.17, the
+default will change to replacing it as well. A batch size whose
+leading dims are those of the input (`[2, 3]` for `[2]`) is
+kept. Defaults to `False`.
 - **ignore_lock** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - deprecated: `True` warns, and the
 argument will be removed in TensorDict 0.17. On a locked
 [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), it does not lift the lock: a

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6111+gb9c87d2a4.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6112+g7cad9031f.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6111+gb9c87d2a4.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6112+g7cad9031f.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1670,9 +1670,14 @@ entry that only one of the tensordict and a tensordict
 <code class="docutils literal notranslate"><span class="pre">other</span></code> has. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which raises a
 <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for such an entry.</p></li>
 <li><p><strong>update_batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – passed to <a class="reference internal" href="tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDictBase.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>
-when the result is written into <code class="docutils literal notranslate"><span class="pre">out</span></code>. It only matters when
-<code class="docutils literal notranslate"><span class="pre">out</span></code> is a lazy stack: if <code class="docutils literal notranslate"><span class="pre">True</span></code>, its number of members
-follows the result. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+when the result is written into <code class="docutils literal notranslate"><span class="pre">out</span></code>. If <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy
+stack <code class="docutils literal notranslate"><span class="pre">out</span></code> gets as many members as the result. When
+<code class="docutils literal notranslate"><span class="pre">other</span></code> is not a tensordict, or <code class="docutils literal notranslate"><span class="pre">self</span></code> is a lazy stack, an
+<code class="docutils literal notranslate"><span class="pre">out</span></code> whose batch size is a prefix of the result’s
+(<code class="docutils literal notranslate"><span class="pre">[]</span></code> for <code class="docutils literal notranslate"><span class="pre">[2]</span></code>) keeps it, with a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>:
+starting with TensorDict 0.17, the default will change to
+giving <code class="docutils literal notranslate"><span class="pre">out</span></code> the batch size of the result, as
+<a class="reference internal" href="tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update" title="tensordict.TensorDictBase.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> does. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2048,7 +2053,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.where",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.where",
        "url": "/reference/generated/tensordict.TensorDictBase.where.html",
-       "articleBody": "TensorDictBase.where# TensorDictBase.where(condition: Tensor, other: Tensor | TensorDictBase, *, out: TensorDictBase | None = None, pad: int | bool = None, update_batch_size: bool = False) \u2192 Self# Returns a tensordict with the leaves where condition is True and other elsewhere. torch.where() is applied to every leaf. condition is aligned with the batch dimensions of each leaf and expanded over its feature dimensions. Parameters: condition (Tensor) \u2013 a boolean mask over the leading batch dimensions. other (TensorDictBase, Tensor or Number) \u2013 the values to take where condition is False. A tensordict is paired with the tensordict key by key. On a LazyStackedTensorDict, a tensor other that starts with the batch shape up to the stack dimension is split along that dimension, one piece per member, so it must have the stack size there: expand it to the batch shape first. Keyword Arguments: out (TensorDictBase, optional) \u2013 the tensordict to write the result into, which is returned. Defaults to None, which returns a new tensordict. pad (Number or bool, optional) \u2013 the value that stands in for an entry that only one of the tensordict and a tensordict other has. Defaults to None, which raises a KeyError for such an entry. update_batch_size (bool, optional) \u2013 passed to update() when the result is written into out. It only matters when out is a lazy stack: if True, its number of members follows the result. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.ones(2, 3), batch_size=[2]) \u003e\u003e\u003e td.where(torch.tensor([True, False]), 0.0)[\"x\"] tensor([[1., 1., 1.], [0., 0., 0.]]) \u003e\u003e\u003e other = TensorDict(y=torch.zeros(2), batch_size=[2]) \u003e\u003e\u003e sorted(td.where(torch.tensor([True, False]), other, pad=-1).keys()) [\u0027x\u0027, \u0027y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.where# TensorDictBase.where(condition: Tensor, other: Tensor | TensorDictBase, *, out: TensorDictBase | None = None, pad: int | bool = None, update_batch_size: bool = False) \u2192 Self# Returns a tensordict with the leaves where condition is True and other elsewhere. torch.where() is applied to every leaf. condition is aligned with the batch dimensions of each leaf and expanded over its feature dimensions. Parameters: condition (Tensor) \u2013 a boolean mask over the leading batch dimensions. other (TensorDictBase, Tensor or Number) \u2013 the values to take where condition is False. A tensordict is paired with the tensordict key by key. On a LazyStackedTensorDict, a tensor other that starts with the batch shape up to the stack dimension is split along that dimension, one piece per member, so it must have the stack size there: expand it to the batch shape first. Keyword Arguments: out (TensorDictBase, optional) \u2013 the tensordict to write the result into, which is returned. Defaults to None, which returns a new tensordict. pad (Number or bool, optional) \u2013 the value that stands in for an entry that only one of the tensordict and a tensordict other has. Defaults to None, which raises a KeyError for such an entry. update_batch_size (bool, optional) \u2013 passed to update() when the result is written into out. If True, a lazy stack out gets as many members as the result. When other is not a tensordict, or self is a lazy stack, an out whose batch size is a prefix of the result\u2019s ([] for [2]) keeps it, with a FutureWarning: starting with TensorDict 0.17, the default will change to giving out the batch size of the result, as update() does. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.ones(2, 3), batch_size=[2]) \u003e\u003e\u003e td.where(torch.tensor([True, False]), 0.0)[\"x\"] tensor([[1., 1., 1.], [0., 0., 0.]]) \u003e\u003e\u003e other = TensorDict(y=torch.zeros(2), batch_size=[2]) \u003e\u003e\u003e sorted(td.where(torch.tensor([True, False]), other, pad=-1).keys()) [\u0027x\u0027, \u0027y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

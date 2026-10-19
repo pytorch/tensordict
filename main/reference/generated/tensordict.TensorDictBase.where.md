@@ -30,9 +30,14 @@ entry that only one of the tensordict and a tensordict
 `other` has. Defaults to `None`, which raises a
 `KeyError` for such an entry.
 - **update_batch_size** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - passed to [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update)
-when the result is written into `out`. It only matters when
-`out` is a lazy stack: if `True`, its number of members
-follows the result. Defaults to `False`.
+when the result is written into `out`. If `True`, a lazy
+stack `out` gets as many members as the result. When
+`other` is not a tensordict, or `self` is a lazy stack, an
+`out` whose batch size is a prefix of the result's
+(`[]` for `[2]`) keeps it, with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning):
+starting with TensorDict 0.17, the default will change to
+giving `out` the batch size of the result, as
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) does. Defaults to `False`.
 
 Examples
 
