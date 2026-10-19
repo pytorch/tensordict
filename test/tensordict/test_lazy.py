@@ -1132,6 +1132,44 @@ class TestLazyStackedTensorDict:
             check(td, make(False) * other)
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("kind", ["tensorclass", "typed"])
+    def test_arithmetic_ops_broadcast_tensor_nested_wrapped(self, stack_dim, kind):
+        # A tensorclass or a TypedTensorDict that wraps a lazy stack, nested in
+        # a tensordict, also gives each member its slice of a batch-shaped
+        # tensor (#3005)
+        class MC(TensorClass):
+            a: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+
+        def make(lazy):
+            n = TensorDict(a=torch.arange(8.0).view(2, 2, 2), batch_size=[2, 2])
+            if lazy:
+                n = lazy_stack(list(n.unbind(stack_dim)), stack_dim)
+            n = (MC if kind == "tensorclass" else Typed).from_tensordict(n)
+            return TensorDict(n=n, batch_size=[2, 2])
+
+        def check(result, expected):
+            assert type(result["n"]) is type(expected["n"])
+            torch.testing.assert_close(result["n", "a"], expected["n", "a"])
+
+        other = torch.arange(4.0).view(2, 2) * 10
+        for op in ("add", "mul", "maximum"):
+            check(getattr(make(True), op)(other), getattr(make(False), op)(other))
+        check(
+            make(True).lerp(make(True) + 1, other),
+            make(False).lerp(make(False) + 1, other),
+        )
+        check(
+            make(True).addcmul(other, make(True) + 1),
+            make(False).addcmul(other, make(False) + 1),
+        )
+        td = make(True)
+        assert td.add_(other) is td
+        check(td, make(False) + other)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize(
         "op,args",
         [

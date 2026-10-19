@@ -768,6 +768,18 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
             if any(isinstance(other, torch.Tensor) for other in others_map):
                 from tensordict._lazy import LazyStackedTensorDict
 
+                wrapped_attr = type(self_expand)._wrapped_attr
+                if wrapped_attr is not None:
+                    source = getattr(self_expand, wrapped_attr)
+                    if isinstance(source, LazyStackedTensorDict) and not is_non_tensor(
+                        source
+                    ):
+                        # A TypedTensorDict on a lazy stack: the op on the stack
+                        # gives each member its slice of the operands.
+                        result = getattr(source, op)(*others_map, *args, **kwargs)
+                        if inplace and self_expand is self:
+                            return self
+                        return type(self_expand)._wrap_td(result)
                 if isinstance(self_expand, LazyStackedTensorDict) and not is_non_tensor(
                     self_expand
                 ):
@@ -793,6 +805,12 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         stack_dim=stack_dim,
                         stack_dim_name=self_expand._td_dim_name,
                     )
+                # A lazy stack below the root would run the op on the leaves of
+                # its members, which lack the stack dim: call the op on the
+                # stack, or on the tensorclass or TypedTensorDict that wraps it.
+                is_leaf = (
+                    _is_leaf_or_lazy_stack if _has_lazy_stack(self_expand) else None
+                )
                 if (
                     n_other > 1
                     and any(_is_tensor_collection(type(o)) for o in others_map)
@@ -819,7 +837,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         ),
                         others_map,
                         inplace,
-                        is_leaf=_is_leaf_or_lazy_stack,
+                        is_leaf=is_leaf,
                     )
                 result = self_expand._fast_apply(
                     lambda x: leaf_op(
@@ -831,7 +849,7 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                         *args,
                         **kwargs,
                     ),
-                    is_leaf=_is_leaf_or_lazy_stack,
+                    is_leaf=is_leaf,
                 )
                 # Like torch, an in-place op returns self once it has written into
                 # the tensors that self holds. Containers that build their entries
@@ -1245,7 +1263,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_or_lazy_stack(cls: Type) -> bool:
-    """Returns ``True`` for a leaf of ``_default_is_leaf`` and for a lazy stack of tensordicts.
+    """Returns ``True`` for a leaf of ``_default_is_leaf``, a lazy stack of tensordicts, and a tensorclass or TypedTensorDict, which may wrap one.
 
     The pointwise ops call themselves on a nested lazy stack, which gives each
     member its slice of a batch-shaped tensor: the leaves of a member lack the
@@ -1253,9 +1271,15 @@ def _is_leaf_or_lazy_stack(cls: Type) -> bool:
     """
     if _default_is_leaf(cls):
         return True
+    if _is_non_tensor(cls):
+        return False
     from tensordict._lazy import LazyStackedTensorDict
 
-    return issubclass(cls, LazyStackedTensorDict) and not _is_non_tensor(cls)
+    return (
+        issubclass(cls, LazyStackedTensorDict)
+        or _is_tensorclass(cls)
+        or getattr(cls, "_wrapped_attr", None) is not None
+    )
 
 
 def _flatten_keys_leaves(
