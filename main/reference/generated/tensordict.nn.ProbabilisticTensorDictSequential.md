@@ -265,11 +265,9 @@ are written into `tensordict_out`, which is returned (unless
 
 Keyword Arguments:
 
-****kwargs** - with `return_composite=True`, passed to the modules
-that are not
-[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule). With
-`return_composite=False`, any keyword argument raises a
-`RuntimeError`.
+****kwargs** - passed to the modules that are not
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), with
+either value of `return_composite`.
 
 Returns:
 
@@ -306,7 +304,7 @@ Defaults to `None`.
 Keyword Arguments:
 
 ****kwargs** - ignored when `return_composite` is `True`. When it
-is `False`, any keyword argument raises a `RuntimeError`.
+is `False`, passed to `get_dist_params()`.
 
 Returns:
 
@@ -338,8 +336,9 @@ Defaults to `None`.
 
 Keyword Arguments:
 
-****kwargs** - not supported: any keyword argument raises a
-`RuntimeError`.
+****kwargs** - passed to the modules that are not
+[`ProbabilisticTensorDictModule`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule), as in
+`forward()` with `return_composite=True`.
 
 Returns:
 
@@ -418,9 +417,14 @@ input does not get new entries. Defaults to `None`.
 
 Keyword Arguments:
 
-**dist** (*torch.distributions.Distribution**,**optional*) - the
+- **dist** (*torch.distributions.Distribution**,**optional*) - the
 distribution. Defaults to `None`, which builds it with
 `get_dist()`.
+- ****kwargs** - if `dist` is `None`, `return_composite` is
+`False` and the last module does not override
+[`ProbabilisticTensorDictModule.log_prob()`](tensordict.nn.ProbabilisticTensorDictModule.html#tensordict.nn.ProbabilisticTensorDictModule.log_prob), passed to
+`get_dist()`. Otherwise, passed to the `log_prob` method
+of the distribution, or of the last module.
 
 Returns:
 
