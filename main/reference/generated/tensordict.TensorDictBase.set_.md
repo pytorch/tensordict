@@ -31,6 +31,8 @@ Raises:
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the leading dimensions of the value do not match
  the batch size.
 - [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if the value does not fit the shape of the entry.
+ The error is also a `RuntimeError`, the type that
+ [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) raises.
 
 Examples
 

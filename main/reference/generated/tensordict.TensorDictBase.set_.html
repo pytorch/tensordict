@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6112+g7cad9031f.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6113+gce43c8dd6.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6112+g7cad9031f.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6113+gce43c8dd6.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1668,7 +1668,9 @@ can run asynchronously with respect to the host. Defaults to
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the key is missing.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if the leading dimensions of the value do not match
     the batch size.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if the value does not fit the shape of the entry.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – if the value does not fit the shape of the entry.
+    The error is also a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>, the type that
+    <a class="reference internal" href="tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDictBase.update_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_()</span></code></a> raises.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2049,7 +2051,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.set",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.set",
        "url": "/reference/generated/tensordict.TensorDictBase.set_.html",
-       "articleBody": "TensorDictBase.set# TensorDictBase.set_(key: NestedKey, item: Tensor | TensorCollection, *, non_blocking: bool = False) \u2192 Self# Copies a value into an existing entry, which keeps its storage, and returns self. The existing tensor keeps its data_ptr(), so other references to it see the new values. set_ works on a locked tensordict. See In-place operations. Parameters: key (NestedKey) \u2013 the key of the entry. The key must exist. item (Tensor, TensorDictBase or any compatible value) \u2013 the value to copy into the entry. Its leading dimensions must match the batch size, and it is broadcast to the shape of the entry. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Returns: self. Raises: KeyError \u2013 if the key is missing. RuntimeError \u2013 if the leading dimensions of the value do not match the batch size. ValueError \u2013 if the value does not fit the shape of the entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = torch.ones(3, 4) \u003e\u003e\u003e td = TensorDict(x=x, batch_size=[3, 4]) \u003e\u003e\u003e td = td.set_(\"x\", torch.zeros(3, 4)) \u003e\u003e\u003e td[\"x\"] is x, x.sum() (True, tensor(0.)) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use set_# Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.set# TensorDictBase.set_(key: NestedKey, item: Tensor | TensorCollection, *, non_blocking: bool = False) \u2192 Self# Copies a value into an existing entry, which keeps its storage, and returns self. The existing tensor keeps its data_ptr(), so other references to it see the new values. set_ works on a locked tensordict. See In-place operations. Parameters: key (NestedKey) \u2013 the key of the entry. The key must exist. item (Tensor, TensorDictBase or any compatible value) \u2013 the value to copy into the entry. Its leading dimensions must match the batch size, and it is broadcast to the shape of the entry. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Returns: self. Raises: KeyError \u2013 if the key is missing. RuntimeError \u2013 if the leading dimensions of the value do not match the batch size. ValueError \u2013 if the value does not fit the shape of the entry. The error is also a RuntimeError, the type that update_() raises. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = torch.ones(3, 4) \u003e\u003e\u003e td = TensorDict(x=x, batch_size=[3, 4]) \u003e\u003e\u003e td = td.set_(\"x\", torch.zeros(3, 4)) \u003e\u003e\u003e td[\"x\"] is x, x.sum() (True, tensor(0.)) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use set_# Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

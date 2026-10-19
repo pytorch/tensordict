@@ -46,7 +46,8 @@ Raises:
  and the call adds or replaces an entry, or if the leading
  dimensions of the value do not match the batch size.
 - [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `inplace=True` and the value does not fit the
- shape of the existing entry.
+ shape of the existing entry. The error is also a
+ `RuntimeError`, the type that [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) raises.
 
 Examples
 
