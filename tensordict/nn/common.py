@@ -357,6 +357,14 @@ class dispatch:
         return source
 
 
+class _OutKeyNotFoundError(ValueError, RuntimeError):
+    """The error raised when :meth:`~TensorDictModuleBase.select_out_keys` gets a key that is not in ``out_keys``.
+
+    It subclasses both ``ValueError`` and ``RuntimeError``, the types that
+    a single missing key and several keys raised before.
+    """
+
+
 class _OutKeysSelect:
     module: nn.Module | None = None
 
@@ -368,8 +376,12 @@ class _OutKeysSelect:
     def _init(self, module):
         if self._initialized:
             return
-        if not all(key in module.out_keys for key in self.out_keys):
-            raise RuntimeError("Some keys are not part of the module out_keys.")
+        missing = [key for key in self.out_keys if key not in module.out_keys]
+        if missing:
+            raise _OutKeyNotFoundError(
+                f"Can't select non existent keys: {missing}. "
+                f"The module out_keys are {module.out_keys}."
+            )
         self.source = list(module.out_keys)
         had_out_keys_apparent = "_out_keys_apparent" in module.__dict__
         out_keys_apparent = module.__dict__.get("_out_keys_apparent")
@@ -609,10 +621,8 @@ class TensorDictModuleBase(nn.Module):
             ``self``.
 
         Raises:
-            ValueError: if a single key is given and it is not in
-                ``out_keys``.
-            RuntimeError: if several keys are given and one of them is not in
-                ``out_keys``.
+            ValueError: if a key is not in ``out_keys``. The error names the
+                missing keys, and is also a ``RuntimeError``.
 
         Examples:
             >>> import torch
@@ -655,7 +665,7 @@ class TensorDictModuleBase(nn.Module):
                     and out_keys[0][0] in self.out_keys
                 ):
                     err_msg += f"Are you passing the keys in a list? Try unpacking as: `{', '.join(out_keys[0])}`"
-                raise ValueError(err_msg)
+                raise _OutKeyNotFoundError(err_msg)
         hook = _OutKeysSelect(out_keys)
         hook._init(self)
         self.register_forward_hook(hook, with_kwargs=True)

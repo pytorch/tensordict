@@ -3214,6 +3214,18 @@ class TestSelectOutKeys:
             ):
                 mod2 = mod.select_out_keys(out_d_key)
 
+    def test_tdmodule_missing_out_key(self, out_d_key, unpack):
+        # One missing key and several keys with one missing raise the same
+        # error, which is both a ValueError and a RuntimeError
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
+        )
+        keys = (*out_d_key, "z") if unpack else ("z",)
+        for error in (ValueError, RuntimeError):
+            with pytest.raises(error, match="Can't select non existent key.*z"):
+                mod.select_out_keys(*keys)
+        assert mod.out_keys == ["c", "d", "e"]
+
     def test_tdmodule_dispatch(self, out_d_key, unpack):
         mod = TensorDictModule(
             lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
