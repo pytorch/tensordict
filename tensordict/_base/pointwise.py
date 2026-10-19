@@ -29,6 +29,7 @@ from tensordict.base import (
     _maybe_broadcast_other,
     _mixes_lazy_stacks,
     _NESTED_TENSORS_AS_LISTS,
+    _warn_unsupported_operand,
     _write_back_inplace,
     CompatibleType,
     is_tensor_collection,
@@ -117,6 +118,10 @@ class _PointwiseOps:
         Works as :meth:`~.__eq__`, except that an ``other`` of another type
         gives ``True``.
 
+        The result is a new tensordict that is not locked and, except with
+        a tensor ``other`` of one or more dims, has no dim names. ``&``, ``~``
+        and the arithmetic operators keep the dim names and the lock.
+
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the value to
                 compare with.
@@ -132,7 +137,14 @@ class _PointwiseOps:
         The operation is a logical XOR for boolean leaves and a bitwise XOR for
         integer leaves. ``other`` is paired as in :meth:`~.__eq__`: a
         tensordict or ``dict`` must have the same keys, or a ``KeyError`` is
-        raised.
+        raised. An ``other`` of another type, such as ``None`` or a string,
+        gives ``True`` and a ``FutureWarning``. Starting with TensorDict 0.17,
+        the default will change to returning ``NotImplemented``, so that
+        Python raises a ``TypeError``, as it does for tensors and for ``&``.
+
+        The result is a new tensordict that is not locked and, except with
+        a tensor ``other`` of one or more dims, has no dim names. ``&``, ``~``
+        and the arithmetic operators keep the dim names and the lock.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the other
@@ -150,7 +162,14 @@ class _PointwiseOps:
         The operation is a logical OR for boolean leaves and a bitwise OR for
         integer leaves. ``other`` is paired as in :meth:`~.__eq__`: a
         tensordict or ``dict`` must have the same keys, or a ``KeyError`` is
-        raised.
+        raised. An ``other`` of another type, such as ``None`` or a string,
+        gives ``False`` and a ``FutureWarning``. Starting with TensorDict 0.17,
+        the default will change to returning ``NotImplemented``, so that
+        Python raises a ``TypeError``, as it does for tensors and for ``&``.
+
+        The result is a new tensordict that is not locked and, except with
+        a tensor ``other`` of one or more dims, has no dim names. ``&``, ``~``
+        and the arithmetic operators keep the dim names and the lock.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the other
@@ -241,7 +260,15 @@ class _PointwiseOps:
         leaf; or a number. A batch size that differs from the tensordict's is
         broadcast with it. An ``other`` of another type, such as ``None``,
         gives ``False``. The other comparisons (``!=``, ``<``, ``<=``, ``>``,
-        ``>=``) work the same way.
+        ``>=``) work the same way, except for such an ``other``: ``!=`` gives
+        ``True``, and ``<``, ``<=``, ``>`` and ``>=`` give ``False`` and a
+        ``FutureWarning``. Starting with TensorDict 0.17, the default will
+        change to returning ``NotImplemented``, so that Python raises a
+        ``TypeError``, as it does for tensors and for ``&``.
+
+        The result is a new tensordict that is not locked and, except with
+        a tensor ``other`` of one or more dims, has no dim names. ``&``, ``~``
+        and the arithmetic operators keep the dim names and the lock.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the value to
@@ -268,7 +295,11 @@ class _PointwiseOps:
     def __ge__(self, other: Any) -> Self | bool:
         """Compares the tensordict with ``other`` leaf by leaf with ``>=``.
 
-        Works as :meth:`~.__eq__`.
+        Works as :meth:`~.__eq__`, except that an ``other`` of another type,
+        such as ``None``, gives ``False`` and a ``FutureWarning``. Starting
+        with TensorDict 0.17, the default will change to returning
+        ``NotImplemented``, so that Python raises a ``TypeError``, as it does
+        for tensors and for ``&``.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the value to
@@ -282,7 +313,11 @@ class _PointwiseOps:
     def __gt__(self, other: Any) -> Self | bool:
         """Compares the tensordict with ``other`` leaf by leaf with ``>``.
 
-        Works as :meth:`~.__eq__`.
+        Works as :meth:`~.__eq__`, except that an ``other`` of another type,
+        such as ``None``, gives ``False`` and a ``FutureWarning``. Starting
+        with TensorDict 0.17, the default will change to returning
+        ``NotImplemented``, so that Python raises a ``TypeError``, as it does
+        for tensors and for ``&``.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the value to
@@ -296,7 +331,11 @@ class _PointwiseOps:
     def __le__(self, other: Any) -> Self | bool:
         """Compares the tensordict with ``other`` leaf by leaf with ``<=``.
 
-        Works as :meth:`~.__eq__`.
+        Works as :meth:`~.__eq__`, except that an ``other`` of another type,
+        such as ``None``, gives ``False`` and a ``FutureWarning``. Starting
+        with TensorDict 0.17, the default will change to returning
+        ``NotImplemented``, so that Python raises a ``TypeError``, as it does
+        for tensors and for ``&``.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the value to
@@ -310,7 +349,11 @@ class _PointwiseOps:
     def __lt__(self, other: Any) -> Self | bool:
         """Compares the tensordict with ``other`` leaf by leaf with ``<``.
 
-        Works as :meth:`~.__eq__`.
+        Works as :meth:`~.__eq__`, except that an ``other`` of another type,
+        such as ``None``, gives ``False`` and a ``FutureWarning``. Starting
+        with TensorDict 0.17, the default will change to returning
+        ``NotImplemented``, so that Python raises a ``TypeError``, as it does
+        for tensors and for ``&``.
 
         Args:
             other (TensorDictBase, dict, torch.Tensor or Number): the value to
@@ -336,7 +379,9 @@ class _PointwiseOps:
         :class:`~tensordict.TensorDict`, and raises ``KeyError`` on mismatched
         key sets. :class:`~tensordict.LazyStackedTensorDict` compares each
         member and stacks the results lazily; it returns ``default`` only for
-        ``==`` and ``!=``, and raises ``ValueError`` for the other ops.
+        ``==`` and ``!=``, and raises ``ValueError`` for the other ops. The
+        base warns before it returns ``default`` for the ops other than ``==``
+        and ``!=``, which return ``NotImplemented`` from TensorDict 0.17.
         """
         TensorDict = _td_base._TENSORDICT_TYPE
 
@@ -381,6 +426,8 @@ class _PointwiseOps:
                 self.batch_size,
                 device=self.device,
             )
+        if op not in ("__eq__", "__ne__"):
+            _warn_unsupported_operand(op, other, default)
         return default
 
     def isfinite(self) -> Self:

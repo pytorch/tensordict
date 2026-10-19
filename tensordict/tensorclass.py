@@ -70,6 +70,7 @@ from tensordict.base import (
     _UNSET,
     _update_at_aliases,
     _warn_get_kwargs,
+    _warn_unsupported_operand,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -5471,6 +5472,9 @@ def _ne(self, other: object) -> bool:
 def _or(self, other: object) -> bool:
     """Computes the element-wise logical OR of the tensorclass and another object.
 
+    As for a tensordict, the result is not locked and, except with a tensor
+    ``other`` of one or more dims, has no dim names.
+
     Args:
         other: object to compare to this object. Can be a tensorclass, a
             tensordict or any compatible type (int, float or tensor), in
@@ -5478,12 +5482,15 @@ def _or(self, other: object) -> bool:
 
     Returns:
         ``False`` if ``other`` is not a tensor collection, a dict, a number or
-        a tensor; otherwise a tensorclass of boolean tensors.
+        a tensor, with a ``FutureWarning``: starting with TensorDict 0.17, the
+        default will change to returning ``NotImplemented``, so that Python
+        raises a ``TypeError``. Otherwise a tensorclass of boolean tensors.
 
     """
     if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor)
     ):
+        _warn_unsupported_operand("__or__", other, False)
         return False
     if is_tensorclass(other):
         tensor = self._tensordict | other._tensordict
@@ -5502,6 +5509,9 @@ def _or(self, other: object) -> bool:
 def _xor(self, other: object) -> bool:
     """Computes the element-wise exclusive OR of the tensorclass and another object.
 
+    As for a tensordict, the result is not locked and, except with a tensor
+    ``other`` of one or more dims, has no dim names.
+
     Args:
         other: object to compare to this object. Can be a tensorclass, a
             tensordict or any compatible type (int, float or tensor), in
@@ -5509,12 +5519,15 @@ def _xor(self, other: object) -> bool:
 
     Returns:
         ``False`` if ``other`` is not a tensor collection, a dict, a number or
-        a tensor; otherwise a tensorclass of boolean tensors.
+        a tensor, with a ``FutureWarning``: starting with TensorDict 0.17, the
+        default will change to returning ``NotImplemented``, so that Python
+        raises a ``TypeError``. Otherwise a tensorclass of boolean tensors.
 
     """
     if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor)
     ):
+        _warn_unsupported_operand("__xor__", other, False)
         return False
     if is_tensorclass(other):
         tensor = self._tensordict ^ other._tensordict

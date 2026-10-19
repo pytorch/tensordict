@@ -1687,6 +1687,20 @@ class TestTD:
         assert result.batch_size == expected.batch_size == ()
         assert_close(result, expected)
 
+    def test_compare_unsupported_operand_future_warning(self, mode):
+        # eager mode warns on these calls (#2979); compiled code skips the warning
+        def compare(x):
+            td = TensorDict(a=x)
+            return td ^ "x", td < None, x + 1
+
+        x = torch.ones(3, dtype=torch.bool)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            expected = compare(x)
+        compare_c = torch.compile(compare, fullgraph=True, mode=mode)
+        result = compare_c(x)
+        assert result[:2] == expected[:2] == (True, False)
+        torch.testing.assert_close(result[2], expected[2])
+
     @pytest.mark.parametrize("lazy", [False, True])
     def test_detach_no_grad(self, lazy, mode):
         # detach_() traces when no leaf requires grad: Dynamo cannot trace

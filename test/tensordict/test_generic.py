@@ -13697,12 +13697,42 @@ class TestGeneric:
     @pytest.mark.parametrize("operand", [None, "abc"])
     def test_comparison_unsupported_operand(self, operand):
         # An operand that is not a tensor, number, dict or tensor collection
-        # gives a bool: True for != and ^, False for the other ops
+        # gives a bool: True for != and ^, False for the other ops. All but
+        # == and != warn that they return NotImplemented from 0.17 (#2979).
         td = TensorDict(a=torch.zeros(3, dtype=torch.long), batch_size=[3])
-        for op in ("__eq__", "__lt__", "__le__", "__gt__", "__ge__", "__or__"):
-            assert getattr(td, op)(operand) is False
-        for op in ("__ne__", "__xor__"):
-            assert getattr(td, op)(operand) is True
+        for op, result in (
+            ("__eq__", False),
+            ("__ne__", True),
+            ("__lt__", False),
+            ("__le__", False),
+            ("__gt__", False),
+            ("__ge__", False),
+            ("__or__", False),
+            ("__xor__", True),
+        ):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                assert getattr(td, op)(operand) is result
+            record = [w for w in record if "NotImplemented" in str(w.message)]
+            if op in ("__eq__", "__ne__"):
+                assert not record, op
+                continue
+            assert len(record) == 1, op
+            assert record[0].category is FutureWarning
+            assert f"{op} got an operand of type {type(operand).__name__}" in str(
+                record[0].message
+            )
+            assert "Starting with TensorDict 0.17" in str(record[0].message)
+        with pytest.warns(FutureWarning, match="__xor__ got an operand") as record:
+            assert (operand ^ td) is True
+        assert record[0].filename == __file__
+        # the operands that keep their result in 0.17 stay silent
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            zeros = torch.zeros(3, dtype=torch.long)
+            for other in (td, {"a": zeros}, zeros, 1, torch.tensor(1)):
+                for result in (td < other, td | other, td ^ other):
+                    assert type(result) is TensorDict
 
     @pytest.mark.parametrize("op", ["__ne__", "__xor__", "__or__"])
     def test_comparison_mismatched_keys_keyerror(self, op):
