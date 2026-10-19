@@ -1796,20 +1796,24 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         See the :ref:`log-probability key table <log-prob-keys>`.
 
         Raises:
-            RuntimeError: if :attr:`log_prob_keys` does not have exactly one
+            AttributeError: if :attr:`log_prob_keys` does not have exactly one
                 element (use :attr:`log_prob_keys`), or if
                 :func:`~tensordict.nn.composite_lp_aggregate` changed since a
-                module was built.
+                module was built. The error message names the inner
+                ``ModuleList``.
         """
-        # A RuntimeError, not an AttributeError: TensorDictModule.__getattr__
-        # would hide an AttributeError behind a lookup on the inner ModuleList.
-        log_prob_keys = self.log_prob_keys
+        # An AttributeError keeps getattr() with a default, hasattr() and
+        # inspect.getmembers() working. Python then calls
+        # TensorDictModule.__getattr__, which raises its own error.
+        try:
+            log_prob_keys = self.log_prob_keys
+        except RuntimeError as err:
+            raise AttributeError("log_prob_key") from err
         if len(log_prob_keys) == 1:
             return log_prob_keys[0]
-        raise RuntimeError(
-            f"{type(self).__name__}.log_prob_key cannot be accessed unless there is one and only one "
-            f"element in log_prob_keys (got log_prob_keys={log_prob_keys}). "
-            f"Try to use {type(self).__name__}.log_prob_keys instead."
+        raise AttributeError(
+            f"log_prob_key needs exactly one log-probability key, got {log_prob_keys}. "
+            f"Use log_prob_keys instead."
         )
 
     @property
