@@ -694,8 +694,101 @@ def _apply_pointwise(
     return td.apply(leaf_fn, *tds, propagate_lock=True, is_leaf=is_leaf)
 
 
-def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
-    """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
+def _keyword_operand(other: Any, shape: torch.Size, path: tuple) -> Any:
+    """The part of ``other`` that a member leaf of ``shape`` meets on the dense tensordict, which broadcasts ``other`` from the right with the stacked leaf.
+
+    ``path`` lists the ``(stack_dim, index, size)`` of the lazy stacks above
+    the leaf. Returns ``None`` where the dense result has no member part:
+    ``other`` has more dims than the stacked leaf, or does not broadcast with
+    it.
+    """
+    ndim = len(shape) + len(path)
+    if not isinstance(other, Tensor):
+        return other
+    if other.ndim > ndim:
+        return None
+    for stack_dim, index, size in path:
+        dim = stack_dim - ndim + other.ndim
+        if dim >= 0:
+            if other.shape[dim] not in (size, 1):
+                return None
+            other = other.select(dim, index if other.shape[dim] == size else 0)
+        ndim -= 1
+    if any(
+        a != b and a != 1 and b != 1 for a, b in zip(other.shape[::-1], shape[::-1])
+    ):
+        return None
+    return other
+
+
+def _float_or_complex(dtype: torch.dtype) -> bool:
+    return dtype.is_floating_point or dtype.is_complex
+
+
+def _apply_on_members(
+    td: TensorDictBase,
+    f: Callable,
+    operands: list,
+    failed: list,
+    rejects: Callable | None = None,
+    path: tuple = (),
+) -> TensorDictBase:
+    """Returns ``f(leaf, *operands)`` on the member leaves of the lazy stack ``td``, each with its part of the tensors of ``operands`` (#3042).
+
+    Appends to ``failed`` where a leaf has no part of an operand, or has a
+    dtype that ``rejects``: the caller then discards the result.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+
+    stack_dim, size = td.stack_dim, td.batch_size[td.stack_dim]
+    results = []
+    for i, member in enumerate(td.tensordicts):
+        member_path = path + ((stack_dim, i, size),)
+        if isinstance(member, LazyStackedTensorDict):
+            results.append(
+                _apply_on_members(member, f, operands, failed, rejects, member_path)
+            )
+            continue
+        cache = {}
+
+        def fn(x, member_path=member_path, cache=cache):
+            if isinstance(x, Tensor):
+                if rejects is not None and rejects(x.dtype):
+                    # f raises another error than the dense tensordict
+                    failed.append(x)
+                    return x
+                ops = cache.get(x.shape)
+                if ops is None:
+                    ops = cache[x.shape] = [
+                        _keyword_operand(o, x.shape, member_path) for o in operands
+                    ]
+                    if any(o is None for o in ops):
+                        failed.append(x)
+                        ops = cache[x.shape] = operands
+                return f(x, *ops)
+            if isinstance(x, LazyStackedTensorDict) and not is_non_tensor(x):
+                return _apply_on_members(x, f, operands, failed, rejects, member_path)
+            if isinstance(_unwrap(x), LazyStackedTensorDict):
+                # a tensorclass on a lazy stack would lose the stack's path
+                failed.append(x)
+                return x
+            return x._fast_apply(fn, is_leaf=_is_leaf_or_lazy_stack)
+
+        results.append(member._fast_apply(fn, is_leaf=_is_leaf_or_lazy_stack))
+    return td._new_lazy_unsafe(
+        *results, stack_dim=stack_dim, stack_dim_name=td._td_dim_name
+    )
+
+
+def _maybe_broadcast_other(
+    op: str, n_other: int = 1, keywords: tuple = ()
+) -> Callable[[Callable], Callable]:
+    """Ensures that elementwise ops are broadcast when an nd tensor is passed.
+
+    A tensor passed by keyword broadcasts from the right with each leaf, as in
+    torch. ``keywords`` names the operands of the methods that apply them leaf
+    by leaf: on a lazy stack, each member leaf then gets its part of them.
+    """
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
@@ -728,6 +821,37 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
                 ):
                     need_broadcast = True
                     break
+            if (
+                self._lazy
+                and keywords
+                and kwargs
+                and not need_broadcast
+                and not args
+                and set(kwargs) == set(keywords[len(others) :])
+                and any(isinstance(v, Tensor) and v.ndim for v in kwargs.values())
+            ):
+                from tensordict._lazy import LazyStackedTensorDict
+
+                operands = [*others, *(kwargs[k] for k in keywords[len(others) :])]
+                if (
+                    isinstance(self, LazyStackedTensorDict)
+                    and not is_non_tensor(self)
+                    # torch takes a 0-d slice for a number: keep the error
+                    # of a number next to a tensor
+                    and all(isinstance(o, Tensor) for o in operands)
+                ):
+                    failed = []
+                    result = _apply_on_members(
+                        self,
+                        torch_op or getattr(torch.Tensor, op),
+                        operands,
+                        failed,
+                        # bitwise ops raise NotImplementedError on members
+                        # where the dense tensordict raises RuntimeError
+                        _float_or_complex if op.startswith("bitwise") else None,
+                    )
+                    if not failed:
+                        return result
             if not need_broadcast:
                 if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
                     return pointwise(self, others, args, kwargs)
