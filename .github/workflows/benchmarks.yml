@@ -22,7 +22,10 @@ permissions:
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: benchmarks-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  # The Nightly Orchestrator calls this workflow, and a called workflow evaluates the group with the caller's
+  # context: without the event name, the nightly run for main's head joined the group of its push run and
+  # cancelled it.
+  group: benchmarks-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
