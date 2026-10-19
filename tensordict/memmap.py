@@ -216,24 +216,32 @@ class MemoryMappedTensor(torch.Tensor):
         cannot prevent another process with directory write access from
         replacing a path after it has been validated.
 
-    The ``index`` and ``handler`` arguments are internal.
+    The ``handler`` argument is internal.
 
     Args:
-        source (torch.Tensor or torch.TypedStorage or torch.UntypedStorage):
-            the data. With ``filename``, the tensor is copied to that file, as
-            :meth:`from_tensor` does. A storage is passed to
+        source (torch.Tensor, torch.TypedStorage, torch.UntypedStorage or str):
+            the data. A str is the name of an existing file, mapped as
+            :meth:`from_filename` does with ``dtype``, ``shape`` and
+            ``index``. With ``filename``, the tensor is copied to that file,
+            as :meth:`from_tensor` does. A storage is passed to
             :meth:`from_storage` with the other arguments. A tensor without
             ``filename`` is wrapped as it is: the result shares its memory but
             has no file or shared-memory handle, so it cannot be pickled.
 
     Keyword Args:
-        dtype (torch.dtype, optional): with a storage, the dtype of the
-            tensor, as in :meth:`from_storage`. Not accepted with ``filename``.
-            Defaults to ``None``.
+        dtype (torch.dtype, optional): with a str ``source``, the dtype of
+            the data in the file (required). With a storage, the dtype of the
+            tensor, as in :meth:`from_storage`. Not accepted with the
+            ``filename`` keyword. Defaults to ``None``.
         shape (torch.Size, optional): the shape of the result, as in
-            :meth:`from_tensor` or :meth:`from_storage`. Ignored for a tensor
-            without ``filename``. Defaults to ``None``, which keeps the shape
-            of ``source``.
+            :meth:`from_filename`, :meth:`from_tensor` or :meth:`from_storage`;
+            required with a str ``source``. Ignored for a tensor without
+            ``filename``. Defaults to ``None``, which keeps the shape of
+            ``source``.
+        index (index, optional): an index applied to the result, as in
+            ``tensor[index]``. With a str or storage ``source``, ``shape`` is
+            the shape of the data before ``index`` is applied. Defaults to
+            ``None``.
         device (torch.device, str or int, optional): ``None`` or ``"cpu"``;
             another device raises a ``ValueError``. Defaults to ``None``.
         filename (str or Path, optional): the file to copy ``source`` to.
@@ -286,8 +294,9 @@ class MemoryMappedTensor(torch.Tensor):
         if isinstance(source, str):
             if filename is not None:
                 raise TypeError("Duplicated filename argument.")
-            filename = source
-            source = None
+            if dtype is None or shape is None:
+                raise TypeError("dtype and shape are required to map a file.")
+            return cls.from_filename(source, dtype, shape, index)
         if filename is not None:
             if dtype is not None:
                 raise TypeError("Cannot pass new dtype if source is provided.")
@@ -318,7 +327,10 @@ class MemoryMappedTensor(torch.Tensor):
                 shape,
                 index,
             )
-        return super().__new__(cls, source)
+        result = super().__new__(cls, source)
+        if index is not None:
+            return result[index]
+        return result
 
     def __init__(
         self,
@@ -327,6 +339,7 @@ class MemoryMappedTensor(torch.Tensor):
         handler=None,
         dtype=None,
         shape=None,
+        index=None,
         device=None,
         filename=None,
     ): ...
