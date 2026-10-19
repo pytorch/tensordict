@@ -30,11 +30,11 @@ jobs:
       matrix:
         # The zarr tutorial needs zarr>=3, which requires Python>=3.11.
         python_version: ["3.12"]
-        cuda_arch_version: ["12.8"]
-    # The docs build uses the CPU build of torch and no GPU.
-    runs-on: "mt-l-x86iavx512-48-384"
+    # The docs build uses the CPU build of torch and no GPU, and runs serially:
+    # the 8-core runner that lint uses, and a plain image, are enough.
+    runs-on: "mt-l-x86iavx512-8-64"
     container:
-      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+      image: "ubuntu:22.04"
     timeout-minutes: 120
     permissions:
       contents: read
@@ -48,11 +48,13 @@ jobs:
       # Before checkout on purpose: actions/checkout needs git in the
       # container, and this image has none -- without it the checkout
       # degrades to a REST API tarball with no .git, which setup_env.sh needs.
-      - name: Install git
+      # The plain image also lacks make (for docs/Makefile) and a C++
+      # compiler, which torch.compile in the tensordict_module tutorial needs.
+      - name: Install git and build tools
         run: |
           set -eux
           apt-get update
-          apt-get install -y git
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates git make g++
 
       - name: Check out code
         uses: actions/checkout@v4
@@ -118,7 +120,9 @@ jobs:
 
           # Build documentation
           cd ./docs
-          make docs
+          # Fail on any Sphinx warning, such as a broken cross-reference, but
+          # report them all before failing.
+          make docs SPHINXOPTS="-W --keep-going"
           cd ..
 
           # Copy artifacts
