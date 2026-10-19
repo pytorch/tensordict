@@ -76,9 +76,8 @@ Defaults to `None`, which uses the default start method of
 Returns:
 
 The results joined along `dim`, a tensordict or a tensor
-depending on what `fn` returns. When `out` is given, `out`
-if it is in regular memory, and `None` if it is shared or
-memory-mapped. `None` if `fn` returns `None` for every chunk.
+depending on what `fn` returns. When `out` is given, `out`.
+Otherwise, `None` if `fn` returns `None` for every chunk.
 
 Examples
 

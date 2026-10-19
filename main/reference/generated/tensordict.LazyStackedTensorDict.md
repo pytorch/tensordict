@@ -296,6 +296,11 @@ Parameters:
 
 **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the entry.
 
+Raises:
+
+[**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the stack has no entry at `key`, or only some of
+ its members have one.
+
 Examples
 
 ```

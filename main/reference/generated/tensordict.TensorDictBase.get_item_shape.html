@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6072+g168339535.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6093+g50c1b31c0.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6072+g168339535.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6093+g50c1b31c0.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1649,6 +1649,9 @@ entries has size <code class="docutils literal notranslate"><span class="pre">-1
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the entry.</p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the tensordict has no entry at <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p>
+</dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -2018,7 +2021,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.get_item_shape",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.get_item_shape",
        "url": "/reference/generated/tensordict.TensorDictBase.get_item_shape.html",
-       "articleBody": "TensorDictBase.get_item_shape# TensorDictBase.get_item_shape(key: NestedKey)# Returns the shape of the entry at key, without reading the entry when possible. For a lazy stack, a dimension whose size differs between the stacked entries has size -1. Parameters: key (NestedKey) \u2013 the key of the entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, lazy_stack \u003e\u003e\u003e td = lazy_stack([TensorDict(x=torch.zeros(2)), TensorDict(x=torch.zeros(3))]) \u003e\u003e\u003e td.get_item_shape(\"x\") torch.Size([2, -1]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.get_item_shape# TensorDictBase.get_item_shape(key: NestedKey)# Returns the shape of the entry at key, without reading the entry when possible. For a lazy stack, a dimension whose size differs between the stacked entries has size -1. Parameters: key (NestedKey) \u2013 the key of the entry. Raises: KeyError \u2013 if the tensordict has no entry at key. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, lazy_stack \u003e\u003e\u003e td = lazy_stack([TensorDict(x=torch.zeros(2)), TensorDict(x=torch.zeros(3))]) \u003e\u003e\u003e td.get_item_shape(\"x\") torch.Size([2, -1]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

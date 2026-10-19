@@ -11,6 +11,10 @@ Parameters:
 
 **key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)) - the key of the entry.
 
+Raises:
+
+[**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the tensordict has no entry at `key`.
+
 Examples
 
 ```
