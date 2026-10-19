@@ -5487,6 +5487,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             key (NestedKey): the key of the entry.
 
+        Raises:
+            KeyError: if the tensordict has no entry at ``key``.
+
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict, lazy_stack
@@ -5494,7 +5497,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.get_item_shape("x")
             torch.Size([2, -1])
         """
-        return _shape(self.get(key))
+        return _shape(self.get(key, NO_DEFAULT))
 
     def update(
         self,
