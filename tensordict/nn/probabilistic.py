@@ -1130,7 +1130,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 if isinstance(out_tensors, Tensor):
                     out_tensors = (out_tensors,)
-                if self._warn_default_out_key:
+                if (
+                    self._warn_default_out_key
+                    and not torch.compiler.is_dynamo_compiling()
+                ):
                     self._warn_default_out_key = False
                     warnings.warn(
                         "ProbabilisticTensorDictModule got no out_keys and writes "

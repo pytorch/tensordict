@@ -2984,6 +2984,20 @@ class TestNN:
         torch.testing.assert_close(out["action"], td["loc"])
         torch.testing.assert_close(out["action_log_prob"], torch.full((3,), 7.0))
 
+    @set_composite_lp_aggregate(False)
+    def test_prob_module_default_out_key(self, mode):
+        # Without out_keys, the sample is written at "_"; the FutureWarning
+        # about it must not break a fullgraph compile (#2971)
+        prob_mod = Prob(
+            in_keys=["loc", "scale"],
+            distribution_class=torch.distributions.Normal,
+            return_log_prob=True,
+        )
+        td = TensorDict(loc=torch.randn(3), scale=torch.ones(3))
+        prob_mod_c = torch.compile(prob_mod, fullgraph=True, mode=mode)
+        out = prob_mod_c(td.copy())
+        assert set(out.keys()) == {"_", "__log_prob", "loc", "scale"}
+
     @pytest.mark.parametrize("mean_raises", [False, True])
     def test_prob_module_mean(self, mode, mean_raises):
         class NoMeanNormal(torch.distributions.Normal):
