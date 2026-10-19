@@ -5677,6 +5677,42 @@ class TestGeneric:
                 dtype=torch.float32,
             )
 
+    def test_make_memmap_from_storage_no_file_warns(self, tmpdir):
+        # #2952: load_memmap and memmap_refresh_ drop an entry made from a
+        # storage without a file in a tensordict with a directory.
+        td_base = TensorDict({"a": torch.zeros(3)}).memmap_(Path(tmpdir) / "base")
+        td = TensorDict().memmap_(Path(tmpdir) / "base")
+        src = torch.arange(4.0)
+        with pytest.warns(FutureWarning, match="TensorDict 0.17, the default"):
+            entry = td.make_memmap_from_storage(
+                "b", src.untyped_storage(), shape=[4], dtype=torch.float32
+            )
+        # The entry still shares the storage of the caller.
+        src[0] = 10
+        assert entry[0] == 10
+        assert td["b"][0] == 10
+        with pytest.warns(FutureWarning, match="make_memmap_from_tensor"):
+            td.make_memmap_from_storage(
+                ("n", "c"), torch.ones(2).untyped_storage(), shape=[2]
+            )
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            # A storage with the file of the entry, an empty storage, and a
+            # tensordict without a directory keep working in 0.17.
+            td.make_memmap_from_storage(
+                "a", td_base["a"].untyped_storage(), shape=[3], dtype=torch.float32
+            )
+            td.make_memmap_from_storage(
+                "e", torch.empty(0).untyped_storage(), shape=[0]
+            )
+            TensorDict().memmap_().make_memmap_from_storage(
+                "a", torch.ones(2).untyped_storage(), shape=[2]
+            )
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        td_load = TensorDict.load_memmap(Path(tmpdir) / "base")
+        assert set(td_load.keys(True, True)) == {"a", "e"}
+
     def test_make_memmap_from_tensor(self, tmpdir):
         td = TensorDict()
         td.memmap_(tmpdir)
