@@ -14,7 +14,7 @@ The methods that change the length of the list (`append`, `extend`,
 `insert`, `pop`, `remove`, `clear` and `del`) change the list
 only, and unlink it from the tensordict: later item assignments no longer
 write back. A `LinkedList` compares equal to a list with the same
-items.
+items. If the write to the tensordict raises, the list is unchanged.
 
 Examples
 

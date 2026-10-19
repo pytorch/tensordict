@@ -14,7 +14,8 @@ one entry per component, at its name or at its `name_map` key.
 `log_prob()`, `cdf()` and `icdf()` take such a tensordict.
 The batch size of `params` is the `batch_shape` of the distribution,
 and a sample of shape `sample_shape` has the batch size
-`sample_shape + batch_shape`.
+`sample_shape + batch_shape`. The `event_shape` is `torch.Size([])`:
+the event dimensions of each component stay in its entry of the sample.
 
 The distribution is also a read-only mapping from the sample keys to the
 components: `dist["cont"]`, `list(dist)`, `len(dist)`.

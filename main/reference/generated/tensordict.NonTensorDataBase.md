@@ -245,7 +245,12 @@ It has no effect: the items are the stored value. Defaults to
 Defaults to `False`.
 - **as_linked_list** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, returns a
 `tensordict.utils.LinkedList` bound to the entry instead of a
-list. Defaults to `False`.
+list. A [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) holds one value, so setting an
+item of the list to a non-tensor value, such as a string,
+raises a `ValueError` and leaves the list unchanged. Call
+`maybe_to_stack()` first to get a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), whose list writes back.
+Defaults to `False`.
 
 Examples
 
