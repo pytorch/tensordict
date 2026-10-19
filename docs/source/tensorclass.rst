@@ -600,7 +600,10 @@ tensorclass type or instance from it. You do not change the class definition:
   1
 
 It accepts the flags of a tensorclass (``autocast``, ``nocast``, ``frozen``,
-``tensor_only``, ``shadow``).
+``tensor_only``, ``shadow``). ``autocast`` with ``nocast``, or ``tensor_only``
+with either of them on a type, emits a ``FutureWarning``. Starting with
+TensorDict 0.17, the default will change to raising the ``TypeError`` of the
+decorator.
 
 Saving and loading
 ------------------
