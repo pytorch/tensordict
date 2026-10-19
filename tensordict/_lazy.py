@@ -1474,6 +1474,10 @@ class LazyStackedTensorDict(TensorDictBase):
         Args:
             key (NestedKey): the key of the entry.
 
+        Raises:
+            KeyError: if the stack has no entry at ``key``, or only some of
+                its members have one.
+
         Examples:
             >>> import torch
             >>> from tensordict import LazyStackedTensorDict, TensorDict
@@ -1487,7 +1491,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if leaf is not None:
             return leaf[0]
         try:
-            item = self.get(key)
+            item = self.get(key, NO_DEFAULT)
             return item.shape
         except RuntimeError as err:
             if re.match(

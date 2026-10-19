@@ -4653,6 +4653,41 @@ class TestGeneric:
         else:
             assert fast == generic
 
+    @pytest.mark.parametrize("container", ["td", "lazy", "tensorclass"])
+    @pytest.mark.parametrize("key", ["zz", ("n", "zz")], ids=str)
+    def test_get_item_shape_missing_key(self, container, key):
+        # A missing key raises a KeyError, not an AttributeError from reading
+        # the shape of None (#2955)
+        @tensorclass
+        class Entries:
+            a: torch.Tensor
+            n: TensorDict
+
+        td = TensorDict(
+            a=torch.zeros(2, 3),
+            n=TensorDict(b=torch.zeros(2, 3), batch_size=[2]),
+            batch_size=[2],
+        )
+        if container == "lazy":
+            td = lazy_stack(list(td.unbind(0)))
+        elif container == "tensorclass":
+            td = Entries(a=td["a"], n=td["n"], batch_size=[2])
+        with pytest.raises(KeyError, match="zz"):
+            td.get_item_shape(key)
+
+    def test_get_item_shape_key_of_some_lazy_members(self):
+        # A key held by only some members of a lazy stack raises a KeyError
+        # (#2955)
+        td = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3)),
+                TensorDict(a=torch.zeros(4), c=torch.zeros(4)),
+            ]
+        )
+        assert td.get_item_shape("a") == torch.Size([2, -1])
+        with pytest.raises(KeyError, match='key "c" not found'):
+            td.get_item_shape("c")
+
     def test_get_nested_reads_dicts(self, monkeypatch):
         # A nested get through TensorDicts reads their dicts, without a
         # _get_str call per level, and keeps the results and errors of the

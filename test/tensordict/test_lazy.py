@@ -5016,8 +5016,7 @@ class TestLazyStackedTensorDict:
             TensorDict(a=torch.ones(2, 3, 1), batch_size=[2]),
         )
         assert td.get_item_shape("a") == torch.Size([-1])
-        # get returns None for a missing key with TD_GET_DEFAULTS_TO_NONE
-        with pytest.raises((KeyError, AttributeError)):
+        with pytest.raises(KeyError, match="missing"):
             td.get_item_shape("missing")
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
