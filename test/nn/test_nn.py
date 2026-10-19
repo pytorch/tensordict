@@ -4655,6 +4655,33 @@ class TestProbabilisticTensorDictModule:
         s2 = seq2(td.copy())["sample"].clone()
         assert torch.equal(s1, s2)
 
+    def test_default_out_key_warns(self):
+        # Without out_keys, the sample is written at "_"; from 0.17 it is not (#2971)
+        td = TensorDict(loc=torch.zeros(3), scale=torch.ones(3))
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            module = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"], distribution_class=Normal
+            )
+            module.get_dist(td)
+            explicit = ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"], out_keys=["_"], distribution_class=Normal
+            )
+            assert "_" in explicit(td.clone()).keys()
+        assert not [w for w in record if issubclass(w.category, FutureWarning)]
+        assert module.out_keys == ["_"]
+        with pytest.warns(
+            FutureWarning,
+            match=r'Starting with TensorDict 0\.17, the default will change to not writing the sample at "_"',
+        ) as record:
+            out = module(td.clone())
+        assert record[0].filename == __file__
+        assert "_" in out.keys()
+        # The module warns once
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            assert "_" in module(td.clone()).keys()
+
 
 class TestEnsembleModule:
     def test_init(self):
