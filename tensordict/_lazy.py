@@ -1408,7 +1408,7 @@ class LazyStackedTensorDict(TensorDictBase):
         try:
             for td in self.tensordicts:
                 renamed.append((td, _names_snapshot(td)))
-                td.rename_(*names_list)
+                td._set_names(names_list)
             # The rename gives the members names_list and keeps the names of
             # the dims their nested tensordicts add, so a name free before
             # the rename is taken after it only if it is in names_list.

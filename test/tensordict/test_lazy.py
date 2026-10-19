@@ -4105,6 +4105,15 @@ class TestLazyStackedTensorDict:
         assert lazy.names == ([None, None] if method == "rename_" else ["s", "x"])
         assert tds[0].names == ([None] if method == "rename_" else ["x"])
 
+    @pytest.mark.parametrize("method", ["rename", "rename_"])
+    def test_rename_short_names_raises(self, method):
+        # one None left for the members is a list too short, not a clear
+        tds = [TensorDict(batch_size=[3, 4], names=["x", "y"]) for _ in range(2)]
+        lazy = lazy_stack(tds, stack_dim_name="s")
+        with pytest.raises(ValueError, match="the length of the dimension names"):
+            getattr(lazy, method)("s", None)
+        assert lazy.names == ["s", "x", "y"]
+
     def test_views_is_shared_mixed_members(self):
         tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
         tds[0].share_memory_()
