@@ -14,7 +14,12 @@ processes, see it only after
 If the storage has a file, it must be the file of the new entry in the
 directory of the tensordict, or the call raises a `RuntimeError`. A
 storage without a file is used as it is: its data is not written to
-the directory.
+the directory. If the tensordict has a directory and the storage is
+not empty, [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) and
+[`memmap_refresh_()`](tensordict.TensorDictBase.memmap_refresh_.html#tensordict.TensorDictBase.memmap_refresh_) drop the entry, and
+the call emits a `FutureWarning`: starting with TensorDict 0.17, the
+default will change to raising a `RuntimeError`. Use
+[`make_memmap_from_tensor()`](tensordict.TensorDictBase.make_memmap_from_tensor.html#tensordict.TensorDictBase.make_memmap_from_tensor) to copy the data into the directory.
 
 Parameters:
 

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6104+g96871074c.d20261019)">
+<meta name="llm:version" content="main (0.15.0.dev6106+g3bfff6e04.d20261019)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6104+g96871074c.d20261019)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6106+g3bfff6e04.d20261019)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1651,7 +1651,12 @@ processes, see it only after
 <p>If the storage has a file, it must be the file of the new entry in the
 directory of the tensordict, or the call raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. A
 storage without a file is used as it is: its data is not written to
-the directory.</p>
+the directory. If the tensordict has a directory and the storage is
+not empty, <a class="reference internal" href="tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> and
+<a class="reference internal" href="tensordict.TensorDictBase.memmap_refresh_.html#tensordict.TensorDictBase.memmap_refresh_" title="tensordict.TensorDictBase.memmap_refresh_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_refresh_()</span></code></a> drop the entry, and
+the call emits a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>: starting with TensorDict 0.17, the
+default will change to raising a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. Use
+<a class="reference internal" href="tensordict.TensorDictBase.make_memmap_from_tensor.html#tensordict.TensorDictBase.make_memmap_from_tensor" title="tensordict.TensorDictBase.make_memmap_from_tensor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_memmap_from_tensor()</span></code></a> to copy the data into the directory.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2044,7 +2049,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.make_memmap_from_storage",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.make_memmap_from_storage",
        "url": "/reference/generated/tensordict.TensorDictBase.make_memmap_from_storage.html",
-       "articleBody": "TensorDictBase.make_memmap_from_storage# TensorDictBase.make_memmap_from_storage(key: NestedKey, storage: UntypedStorage, shape: Size | Tensor, *, dtype: dtype | None = None, robust_key: bool | None = True) \u2192 MemoryMappedTensor# Adds a memory-mapped tensor at key that reads its data from storage, and returns it. The tensordict must be memory-mapped (see memmap()). The entry is written even though a memory-mapped tensordict is locked. Other tensordicts that share its files, for example in other processes, see it only after memmap_refresh_(). If the storage has a file, it must be the file of the new entry in the directory of the tensordict, or the call raises a RuntimeError. A storage without a file is used as it is: its data is not written to the directory. Parameters: key (NestedKey) \u2013 the key of the new entry. A tuple key creates the missing nested tensordicts. storage (UntypedStorage) \u2013 the storage of the new tensor. It must be in physical memory. shape (Size or Tensor) \u2013 the shape of the new tensor, or a tensor of shapes for a nested tensor. Keyword Arguments: dtype (dtype, optional) \u2013 the dtype of the new tensor. Defaults to None, which uses torch.get_default_dtype(). robust_key (bool, optional) \u2013 if True, keys are percent-encoded in file names, so that every file stays inside the directory of the tensordict. If False, keys are used as file names unchanged. None is the same as True. Defaults to True. Returns: The new MemoryMappedTensor. Raises: RuntimeError \u2013 if the tensordict is not memory-mapped, if the key exists, or if the file of the storage is not the file of the new entry. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.make_memmap_from_storage# TensorDictBase.make_memmap_from_storage(key: NestedKey, storage: UntypedStorage, shape: Size | Tensor, *, dtype: dtype | None = None, robust_key: bool | None = True) \u2192 MemoryMappedTensor# Adds a memory-mapped tensor at key that reads its data from storage, and returns it. The tensordict must be memory-mapped (see memmap()). The entry is written even though a memory-mapped tensordict is locked. Other tensordicts that share its files, for example in other processes, see it only after memmap_refresh_(). If the storage has a file, it must be the file of the new entry in the directory of the tensordict, or the call raises a RuntimeError. A storage without a file is used as it is: its data is not written to the directory. If the tensordict has a directory and the storage is not empty, load_memmap() and memmap_refresh_() drop the entry, and the call emits a FutureWarning: starting with TensorDict 0.17, the default will change to raising a RuntimeError. Use make_memmap_from_tensor() to copy the data into the directory. Parameters: key (NestedKey) \u2013 the key of the new entry. A tuple key creates the missing nested tensordicts. storage (UntypedStorage) \u2013 the storage of the new tensor. It must be in physical memory. shape (Size or Tensor) \u2013 the shape of the new tensor, or a tensor of shapes for a nested tensor. Keyword Arguments: dtype (dtype, optional) \u2013 the dtype of the new tensor. Defaults to None, which uses torch.get_default_dtype(). robust_key (bool, optional) \u2013 if True, keys are percent-encoded in file names, so that every file stays inside the directory of the tensordict. If False, keys are used as file names unchanged. None is the same as True. Defaults to True. Returns: The new MemoryMappedTensor. Raises: RuntimeError \u2013 if the tensordict is not memory-mapped, if the key exists, or if the file of the storage is not the file of the new entry. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

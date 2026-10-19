@@ -1,6 +1,6 @@
 # TensorDictBase.to_mds
 
-TensorDictBase.to_mds(***, *columns: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *out: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [str](https://docs.python.org/3/builtins/stdtypes.html#str)]*, *keep_local: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *hashes: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *size_limit: [int](https://docs.python.org/3/builtins/functions.html#int) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = 67108864*, *writer: 'streaming.MDSWriter' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [None](https://docs.python.org/3/builtins/constants.html#None)
+TensorDictBase.to_mds(***, *columns: [dict](https://docs.python.org/3/builtins/stdtypes.html#dict)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *out: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [tuple](https://docs.python.org/3/builtins/stdtypes.html#tuple)[[str](https://docs.python.org/3/builtins/stdtypes.html#str), [str](https://docs.python.org/3/builtins/stdtypes.html#str)]*, *keep_local: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *hashes: [list](https://docs.python.org/3/builtins/stdtypes.html#list)[[str](https://docs.python.org/3/builtins/stdtypes.html#str)] | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *size_limit: [int](https://docs.python.org/3/builtins/functions.html#int) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = 67108864*, *writer: 'streaming.MDSWriter' | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *finish_writer: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Writes the tensordict to a MosaicML Streaming (MDS) dataset.
 
@@ -44,7 +44,16 @@ writes one shard. Ignored if `writer` is passed. Defaults to
 `1 << 26` (64 MiB).
 - **writer** (*streaming.MDSWriter**,**optional*) - the writer to use. Defaults to
 `None`, which creates one from `out` and the other keyword
-arguments.
+arguments, and finishes it after writing.
+- **finish_writer** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether to finish a writer passed as
+`writer` after writing, which writes the dataset index. Pass
+`False` to write more samples through it, and finish it
+yourself afterwards, once. A writer that `to_mds` creates is
+always finished. Defaults to `None`, which leaves the writer
+open for a tensordict without batch dimensions, and finishes it,
+with a `FutureWarning`, for a tensordict with batch dimensions.
+Starting with TensorDict 0.17, the default will change to leaving
+the writer open in both cases.
 - ****kwargs** - passed to `streaming.MDSWriter`.
 
 Raises:
