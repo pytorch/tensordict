@@ -21,7 +21,7 @@ import warnings
 import weakref
 from collections.abc import Iterable, Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from functools import cache, wraps
+from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
@@ -695,7 +695,6 @@ def _apply_pointwise(
     return td.apply(leaf_fn, *tds, propagate_lock=True, is_leaf=is_leaf)
 
 
-@cache
 def _operand_params(func: Callable, n_other: int) -> tuple[tuple, tuple]:
     """Returns the names and defaults of the first ``n_other`` parameters of ``func`` after ``self``."""
     params = list(inspect.signature(func).parameters.values())[1 : 1 + n_other]
@@ -722,8 +721,15 @@ def _operands_from_kwargs(
     return tuple(others), kwargs
 
 
-def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Callable]:
-    """Ensures that elementwise ops are broadcast when an nd tensor is passed."""
+def _maybe_broadcast_other(
+    op: str, n_other: int = 1, *, keyword_operands: bool = True
+) -> Callable[[Callable], Callable]:
+    """Ensures that elementwise ops are broadcast when an nd tensor is passed.
+
+    With ``keyword_operands=False`` the operands must be passed positionally:
+    the wrapper skips the lookup of their names, for the methods that build it
+    in their body on every call.
+    """
     # add_, mul_, ... are in-place; __eq__, __lt__, ... also end with "_".
     inplace = op.endswith("_") and not op.endswith("__")
     # torch.Tensor has no rsub method: call torch.rsub on the leaves instead.
@@ -742,12 +748,15 @@ def _maybe_broadcast_other(op: str, n_other: int = 1) -> Callable[[Callable], Ca
         )
 
     def wrap_func(func):
-        names, defaults = _operand_params(func, n_other)
+        names, defaults = (
+            _operand_params(func, n_other) if keyword_operands else ((), ())
+        )
 
         @wraps(func)
         def new_func(self, *others, **kwargs):
             if (
                 kwargs
+                and names
                 and len(others) < n_other
                 and any(
                     isinstance(o, torch.Tensor) and o.ndim

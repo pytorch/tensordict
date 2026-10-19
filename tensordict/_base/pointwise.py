@@ -1734,7 +1734,9 @@ class _PointwiseOps:
         ):
             # broadcast the tensor to the batch dims, as lerp does. The other
             # calls skip _maybe_broadcast_other, which costs a few us per call.
-            lerp_ = _maybe_broadcast_other("lerp_", 2)(type(self).lerp_)
+            lerp_ = _maybe_broadcast_other("lerp_", 2, keyword_operands=False)(
+                type(self).lerp_
+            )
             return lerp_(self, end, weight)
         if _mixes_lazy_stacks(self, (end, weight)):
             return _apply_pointwise(self, Tensor.lerp_, (end, weight), inplace=True)
@@ -2323,7 +2325,9 @@ class _PointwiseOps:
             and not torch._C._are_functorch_transforms_active()
         ):
             # broadcast the tensor to the batch dims, as maximum does
-            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
+            clamp_min_ = _maybe_broadcast_other("clamp_min_", keyword_operands=False)(
+                type(self).clamp_min_
+            )
             return clamp_min_(self, other)
         _foreach("maximum_", vals, other_val)
         return self
@@ -2434,7 +2438,9 @@ class _PointwiseOps:
             and not torch._C._are_functorch_transforms_active()
         ):
             # broadcast the tensor to the batch dims, as minimum does
-            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
+            clamp_max_ = _maybe_broadcast_other("clamp_max_", keyword_operands=False)(
+                type(self).clamp_max_
+            )
             return clamp_max_(self, other)
         _foreach("minimum_", vals, other_val)
         return self
@@ -2543,7 +2549,9 @@ class _PointwiseOps:
             and not torch._C._are_functorch_transforms_active()
         ):
             # broadcast the tensor to the batch dims, as clamp_max does
-            clamp_max_ = _maybe_broadcast_other("clamp_max_")(type(self).clamp_max_)
+            clamp_max_ = _maybe_broadcast_other("clamp_max_", keyword_operands=False)(
+                type(self).clamp_max_
+            )
             return clamp_max_(self, other)
         try:
             _foreach("clamp_max_", vals, other_val)
@@ -2668,7 +2676,9 @@ class _PointwiseOps:
             and not torch._C._are_functorch_transforms_active()
         ):
             # broadcast the tensor to the batch dims, as clamp_min does
-            clamp_min_ = _maybe_broadcast_other("clamp_min_")(type(self).clamp_min_)
+            clamp_min_ = _maybe_broadcast_other("clamp_min_", keyword_operands=False)(
+                type(self).clamp_min_
+            )
             return clamp_min_(self, other)
         try:
             _foreach("clamp_min_", vals, other_val)
