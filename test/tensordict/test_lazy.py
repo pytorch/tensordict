@@ -820,6 +820,143 @@ class TestLazyStackedTensorDict:
         with pytest.raises(RuntimeError, match="batch dimension mismatch"):
             dense.apply_(lambda x: x[..., :1])
 
+    @pytest.mark.parametrize("call", ["apply", "named_apply", "threads"])
+    @pytest.mark.parametrize("shape", [(2, 2), (2, 3)])
+    def test_apply_out_other_stack_dim(self, shape, call):
+        # #2982: out stacked along another dim than self gets the results in
+        # the matching entries, and is returned
+        dense = TensorDict(
+            x=torch.arange(math.prod(shape)).reshape(shape),
+            n=TensorDict(y=torch.ones(*shape, 2), batch_size=shape),
+            batch_size=shape,
+        )
+        expected = dense.apply(lambda v: v + 1)
+
+        def run(source, out, fn=lambda v: v + 1, *others, **kwargs):
+            if call == "apply":
+                return source.apply(fn, *others, out=out, **kwargs)
+            if call == "named_apply":
+                return source.named_apply(
+                    lambda key, *values: fn(*values), *others, out=out, **kwargs
+                )
+            return source._fast_apply(fn, *others, out=out, num_threads=2, **kwargs)
+
+        source = lazy_stack(dense.unbind(0), 0)
+        for out_dim in (0, 1):
+            out = lazy_stack(torch.zeros_like(dense).unbind(out_dim), out_dim)
+            members = list(out.tensordicts)
+            result = run(source, out)
+            assert out.stack_dim == out_dim
+            assert out.tensordicts == members
+            torch.testing.assert_close(out.to_tensordict(), expected)
+            torch.testing.assert_close(result.to_tensordict(), expected)
+            if out_dim == 0:
+                # the same stack dim: a new stack of the members of out
+                assert result is not out
+                assert result.tensordicts == members
+            else:
+                assert result is out
+        # out=self
+        source = lazy_stack(dense.clone().unbind(0), 0)
+        assert run(source, source).tensordicts == source.tensordicts
+        torch.testing.assert_close(source.to_tensordict(), expected)
+        if call == "threads":
+            return
+        source = lazy_stack(dense.unbind(0), 0)
+        out = lazy_stack(torch.zeros_like(dense).unbind(1), 1)
+        # others, names and batch_size
+        assert run(source, out, lambda v, w: v + w, source) is out
+        torch.testing.assert_close(out.to_tensordict(), dense * 2)
+        assert run(source, out, names=["a", "b"]) is out
+        assert out.names == ["a", "b"]
+        torch.testing.assert_close(out.to_tensordict(), expected.refine_names("a", "b"))
+        out = lazy_stack(torch.zeros_like(dense).unbind(1), 1)
+        assert run(source, out, batch_size=shape) is out
+        torch.testing.assert_close(out.to_tensordict(), expected)
+        # fn returns None everywhere: out is returned unchanged
+        out = lazy_stack(torch.zeros_like(dense).unbind(1), 1)
+        for filter_empty in (None, True):
+            assert run(source, out, lambda v: None, filter_empty=filter_empty) is out
+            assert (out.to_tensordict() == 0).all()
+        if call == "apply":
+            assert source.apply(lambda v: v + 1, out=out, call_on_nested=True) is out
+            torch.testing.assert_close(out.to_tensordict(), expected)
+        # inplace=True writes into self, as without out
+        out = lazy_stack(torch.zeros_like(dense).unbind(1), 1)
+        source = lazy_stack(dense.clone().unbind(0), 0)
+        assert source.apply(lambda v: v.add_(1), out=out, inplace=True) is source
+        torch.testing.assert_close(source.to_tensordict(), expected)
+        assert (out.to_tensordict() == 0).all()
+        # a dense out still raises
+        with pytest.raises(ValueError, match="out must be a LazyStackedTensorDict"):
+            run(source, dense.clone())
+
+    @pytest.mark.parametrize(
+        "kind", ["nested_source", "nested_out", "tensorclass", "typed", "h5"]
+    )
+    def test_apply_out_other_stack_dim_members(self, kind, tmp_path):
+        # #2982: with members of other types, nested lazy stacks included
+        if kind == "h5" and not _has_h5py:
+            pytest.skip("h5py not found.")
+
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            x: torch.Tensor
+
+        dense = TensorDict(x=torch.arange(24).reshape(2, 3, 4), batch_size=[2, 3, 4])
+        if kind == "tensorclass":
+            dense = TensorDict(c=MC.from_tensordict(dense), batch_size=[2, 3, 4])
+        expected = dense.apply(lambda v: v + 1)
+
+        def members(td, dim):
+            members = td.unbind(dim)
+            if kind == "typed":
+                return [Typed.from_tensordict(member) for member in members]
+            if kind == "h5":
+                return [
+                    PersistentTensorDict.from_dict(
+                        member, filename=tmp_path / f"{dim}-{i}.h5"
+                    )
+                    for i, member in enumerate(members)
+                ]
+            return members
+
+        def nested(td, dim, inner_dim):
+            return lazy_stack(
+                [lazy_stack(m.unbind(inner_dim), inner_dim) for m in td.unbind(dim)],
+                dim,
+            )
+
+        source = lazy_stack(members(dense, 0), 0)
+        out = lazy_stack(members(torch.zeros_like(dense), 2), 2)
+        if kind == "nested_source":
+            source = nested(dense, 0, 0)
+        elif kind == "nested_out":
+            out = nested(torch.zeros_like(dense), 2, 0)
+        types = [type(member) for member in out.tensordicts]
+        assert source.apply(lambda v: v + 1, out=out) is out
+        assert [type(member) for member in out.tensordicts] == types
+        key = ("c", "x") if kind == "tensorclass" else "x"
+        torch.testing.assert_close(out[key], expected[key])
+        if kind == "tensorclass":
+            assert isinstance(out["c"], MC)
+
+    @pytest.mark.parametrize("stack_dim,vmap_dim", [(1, 0), (2, 0), (0, 1), (2, 1)])
+    def test_apply_out_other_stack_dim_vmap(self, stack_dim, vmap_dim):
+        # #2982: under vmap, with out stacked along another dim than self
+        dense = TensorDict(x=torch.arange(12).reshape(2, 2, 3), batch_size=[2, 2, 3])
+        source = lazy_stack(dense.unbind(stack_dim), stack_dim)
+        for out_dim in {0, 1, 2} - {stack_dim, vmap_dim}:
+            out = lazy_stack(torch.zeros_like(dense).unbind(out_dim), out_dim)
+            result = torch.vmap(
+                lambda td, out: td.apply(lambda v: v + 1, out=out),
+                in_dims=vmap_dim,
+                out_dims=vmap_dim,
+            )(source, out)
+            torch.testing.assert_close(result.to_tensordict(), dense + 1)
+
     @pytest.mark.parametrize("heterogeneous", [False, True])
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_detach_members(self, heterogeneous, stack_dim):

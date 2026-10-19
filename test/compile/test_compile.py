@@ -806,6 +806,21 @@ class TestTD:
         assert x is None
         torch.testing.assert_close(a, data["a"] + 1)
 
+    @pytest.mark.parametrize("out_dim", [0, 1])
+    def test_lazy_stack_apply_out(self, out_dim, mode):
+        # #2982: out stacked along another dim than the source
+        def apply(td, out):
+            return td.apply(lambda x: x + 1, out=out)
+
+        apply_c = torch.compile(apply, fullgraph=True, mode=mode)
+        data = TensorDict(x=torch.arange(6).reshape(2, 3), batch_size=[2, 3])
+        source = lazy_stack(data.unbind(0), 0)
+        out = lazy_stack(torch.zeros_like(data).unbind(out_dim), out_dim)
+        result = apply_c(source, out)
+        assert (result is out) == (out_dim == 1)
+        assert out.stack_dim == out_dim
+        torch.testing.assert_close(out.to_tensordict(), data + 1)
+
     @pytest.mark.parametrize("kwarg", ["as_list", "as_nested_tensor"])
     def test_dense_get_ignored_kwargs(self, kwarg, mode):
         # a dense get warns about these keywords in eager mode only (#2551)
