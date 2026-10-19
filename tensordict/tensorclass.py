@@ -869,7 +869,13 @@ def from_dataclass(
             where it is.
 
     The class flags are described in :class:`~tensordict.TensorClass`. Pass
-    at most one of ``autocast``, ``nocast`` and ``tensor_only``.
+    at most one of ``autocast``, ``nocast`` and ``tensor_only``, as for
+    :func:`~tensordict.tensorclass`. When the flags are applied (not with
+    ``dest_cls``, and not for a type that is already a tensorclass),
+    ``autocast`` with ``nocast``, or, for a type, ``tensor_only`` with either
+    of them, emits a ``FutureWarning`` today. Starting with TensorDict 0.17,
+    the default will change to raising the ``TypeError`` that
+    :func:`~tensordict.tensorclass` raises.
 
     Returns:
         A tensorclass type if ``obj`` is a type, a tensorclass instance
@@ -921,6 +927,18 @@ def from_dataclass(
             for field in source.__dataclass_fields__.values()
         ]
 
+    def _warn_exclusive_flags():
+        # Called only where the flags are applied to a class.
+        if (autocast and nocast) or (tensor_only and (autocast or nocast)):
+            warnings.warn(
+                f"from_dataclass() got autocast={autocast}, nocast={nocast} and "
+                f"tensor_only={tensor_only}, flags that @tensorclass rejects as "
+                "exclusive. Starting with TensorDict 0.17, the default will "
+                "change to raising the TypeError that @tensorclass raises.",
+                FutureWarning,
+                stacklevel=3,
+            )
+
     if isinstance(obj, type):
         if is_tensorclass(obj):
             return obj
@@ -940,6 +958,7 @@ def from_dataclass(
         clz._shadow = shadow
         clz._frozen = frozen
         clz._tensor_only = tensor_only
+        _warn_exclusive_flags()
         return clz
 
     if not is_dataclass(obj):
@@ -987,6 +1006,8 @@ def from_dataclass(
                 TensorDictBase._CONFLICTING_BATCH_SIZES.format("from_dataclass")
             )
         result = result.auto_batch_size_(batch_dims=batch_dims)
+    if dest_cls is None:
+        _warn_exclusive_flags()
     return result
 
 

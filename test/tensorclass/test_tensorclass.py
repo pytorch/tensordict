@@ -2104,6 +2104,45 @@ class TestTensorClass:
         from_dataclass(MyDataClass, nocast=True)
         from_dataclass(MyDataClass)
 
+    def test_from_dataclass_exclusive_flags(self):
+        # https://github.com/pytorch/tensordict/issues/2979 (item 17)
+        @dataclasses.dataclass
+        class Tensors:
+            a: torch.Tensor
+
+        x = MyDataClass(a=0, b=torch.zeros(()), c="c")
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            cls = from_dataclass(MyDataClass, autocast=True, nocast=True)
+        assert cls._autocast and cls._nocast
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            assert is_tensorclass(from_dataclass(x, autocast=True, nocast=True))
+        for flag in ("autocast", "nocast"):
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                cls = from_dataclass(Tensors, tensor_only=True, **{flag: True})
+            assert cls._tensor_only and getattr(cls, f"_{flag}")
+            # An instance raises already.
+            with pytest.raises(TypeError, match="exclusive"):
+                from_dataclass(
+                    Tensors(torch.zeros(())), tensor_only=True, **{flag: True}
+                )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            from_dataclass(MyDataClass, autocast=True)
+            from_dataclass(x, nocast=True)
+            from_dataclass(Tensors, tensor_only=True)
+            # The flags are not used with dest_cls or for a tensorclass type.
+            dest_cls = from_dataclass(MyDataClass)
+            assert isinstance(
+                from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
+                dest_cls,
+            )
+            assert from_dataclass(dest_cls, tensor_only=True, autocast=True) is dest_cls
+            # Inputs that are not dataclasses raise as before.
+            with pytest.raises(TypeError, match="Expected a obj input"):
+                from_dataclass(3, autocast=True, nocast=True)
+            with pytest.raises(AttributeError, match="__dataclass_fields__"):
+                from_dataclass(int, autocast=True, nocast=True)
+
     def test_from_dataclass(self):
         assert is_tensorclass(MyTensorClass_autocast)
         assert MyTensorClass_nocast is not MyDataClass

@@ -2352,6 +2352,9 @@ class _Conversion:
 
         Raises:
             TypeError: if ``dataclass`` is not a dataclass and
+                ``as_tensorclass=False``, if it is a dataclass type with a
+                field that cannot be read from the class (a field without a
+                default, or a field of a tensorclass type) and
                 ``as_tensorclass=False``, or if both ``auto_batch_size=True``
                 and ``batch_size`` are given.
 
@@ -2390,6 +2393,14 @@ class _Conversion:
         if not is_dataclass(dataclass):
             raise TypeError(
                 f"Expected a dataclass input, got a {type(dataclass)} input instead."
+            )
+        if isinstance(dataclass, type) and not all(
+            hasattr(dataclass, field.name) for field in fields(dataclass)
+        ):
+            raise TypeError(
+                f"from_dataclass() got the dataclass type {dataclass.__name__}, "
+                "whose fields cannot all be read from the class. Pass an "
+                "instance, or as_tensorclass=True to convert the type."
             )
         source = {}
         for field in fields(dataclass):

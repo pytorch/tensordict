@@ -25,7 +25,7 @@ import warnings
 import weakref
 from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, get_type_hints
@@ -3148,6 +3148,37 @@ class TestGeneric:
         obj_tc = TensorDict.from_dataclass(obj, as_tensorclass=True)
         assert is_tensorclass(obj_tc)
         assert not is_tensorclass(obj_td)
+
+    def test_from_dataclass_type(self):
+        # https://github.com/pytorch/tensordict/issues/2960
+        @dataclass
+        class Data:
+            x: torch.Tensor
+
+        @dataclass
+        class Factory:
+            x: list = field(default_factory=list)
+
+        @dataclass
+        class Defaults:
+            n: int = 3
+
+        class TCDefaults(TensorClass):
+            n: int = 3
+
+        with pytest.raises(TypeError, match="cannot all be read from the class"):
+            TensorDict.from_dataclass(TCDefaults)
+        for cls in (Data, Factory):
+            with pytest.raises(TypeError, match="Pass an instance"):
+                TensorDict.from_dataclass(cls)
+            with pytest.raises(TypeError, match="Pass an instance"):
+                TensorDict.from_any(cls)
+            with pytest.raises(TypeError, match="Pass an instance"):
+                TensorDict.from_dict({"c": cls})
+            assert is_tensorclass(TensorDict.from_dataclass(cls, as_tensorclass=True))
+        # A type whose fields all have defaults gives a tensordict of them.
+        assert TensorDict.from_dataclass(Defaults)["n"] == 3
+        assert TensorDict.from_dict({"c": Defaults})["c", "n"] == 3
 
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])
     def test_from_any_dataclass_batch_dims(self, batch_dims):
