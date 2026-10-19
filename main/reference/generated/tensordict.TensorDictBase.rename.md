@@ -12,8 +12,9 @@ dimensions they share with it.
 
 Parameters:
 
-- ***names** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**None*) - the new names, one per batch dimension.
-Exclusive with `**rename_map`.
+- ***names** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**None*) - the new names, one per batch dimension, or
+a single `None` to clear every name. Exclusive with
+`**rename_map`.
 - ****rename_map** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**None*) - new names by old name, as in
 `rename(old="new")`. Exclusive with `*names`.
 
@@ -32,6 +33,8 @@ Examples
 ['a', 'b', 'g', 'd']
 >>> td.rename("w", "x", "y", "z").names
 ['w', 'x', 'y', 'z']
+>>> td.rename(None).names
+[None, None, None, None]
 >>> td.names
 ['a', 'b', 'c', 'd']
 ```

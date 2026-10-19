@@ -10,8 +10,9 @@ the new names for the batch dimensions they share with the tensordict.
 
 Parameters:
 
-- ***names** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**None*) - the new names, one per batch dimension.
-Exclusive with `**rename_map`.
+- ***names** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**None*) - the new names, one per batch dimension, or
+a single `None` to clear every name. Exclusive with
+`**rename_map`.
 - ****rename_map** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**None*) - new names by old name, as in
 `rename_(old="new")`. Exclusive with `*names`.
 
@@ -34,6 +35,8 @@ Examples
 True
 >>> td.names
 ['a', 'b', 'g', 'd']
+>>> td.rename_(None).names
+[None, None, None, None]
 ```
 
 Every tensordict class and every tensorclass has this method. For the

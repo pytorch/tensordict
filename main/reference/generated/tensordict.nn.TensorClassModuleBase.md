@@ -11,7 +11,8 @@ type is a [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) su
 [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), and implement `forward()`. A type checker
 then knows the type of the input and output, and can report a wrong
 field name. The class reads both types from the subscript: a subclass
-without it has no `input_type` and `output_type`.
+without it has no `input_type` and `output_type`, and its
+`as_td_module()` raises a `ValueError`.
 
 When both types are tensorclasses, `as_td_module()` returns a
 module that takes and returns a tensordict, for example to put the
@@ -62,7 +63,8 @@ classes. It returns a new TensorDict with only the output fields (see
 Raises:
 
 [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `input_type` or `output_type` is not a
- tensorclass.
+ tensorclass, or if the subclass did not set each of them to a
+ class with the subscript.
 
 Examples
 
