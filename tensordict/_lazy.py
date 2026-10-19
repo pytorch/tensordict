@@ -2720,7 +2720,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = LazyStackedTensorDict.lazy_stack(
-                [td.cpu().as_tensor() for td in self.tensordicts], 0
+                [td.cpu()._as_tensor(warn=False) for td in self.tensordicts], 0
             )
         else:
             td = self
