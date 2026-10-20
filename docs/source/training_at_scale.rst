@@ -404,6 +404,7 @@ See also
 - :ref:`data-loading`: tensordicts as datasets, and shared memory.
 - :ref:`distributed`: point-to-point transfers and collectives.
 - :ref:`saving`: consolidated tensordicts, and the formats for saving.
+- :ref:`cookbook`: short recipes, such as saving and resuming training.
 - `torch.distributed.checkpoint
   <https://docs.pytorch.org/docs/stable/distributed.checkpoint.html>`_ and
   `torchdata StatefulDataLoader
