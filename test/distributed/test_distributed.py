@@ -5,7 +5,9 @@
 
 import abc
 import argparse
+import importlib.util
 import os
+import pickle
 import socket
 import sys
 import warnings
@@ -15,7 +17,12 @@ import pytest
 import torch
 from _pytest.fixtures import fixture
 from _utils_internal import is_npu_available
-from tensordict import LazyStackedTensorDict, MemoryMappedTensor, TensorDict
+from tensordict import (
+    LazyStackedTensorDict,
+    MemoryMappedTensor,
+    PersistentTensorDict,
+    TensorDict,
+)
 from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
 from torch.distributed import checkpoint as dcp
@@ -34,6 +41,8 @@ from torch.distributed.fsdp import (
 )
 
 TIMEOUT = 100
+
+_has_h5py = importlib.util.find_spec("h5py") is not None
 
 
 @fixture
@@ -399,6 +408,140 @@ class TestGather:
         finally:
             main_worker.join()
             secondary_worker.join()
+
+    @staticmethod
+    def consolidated_worker(queue, rank):
+        # Gloo sends the tensors as one consolidated storage per rank, and
+        # pickles only the metadata
+        def no_pickle(*args, **kwargs):
+            raise AssertionError("the tensordict is pickled")
+
+        dist.gather_object = no_pickle
+        pickle.Pickler = no_pickle
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=3,
+            init_method="tcp://localhost:29534",
+        )
+        if rank == 0:
+            td = TensorDict(
+                {
+                    ("a", "b"): torch.zeros(2, 3),
+                    "c": torch.zeros(2, 3, dtype=torch.int64),
+                },
+                [2, 3],
+            )
+        else:
+            td = TensorDict(
+                {
+                    ("a", "b"): torch.full((3,), float(rank)),
+                    "c": torch.arange(3) + rank,
+                    "s": f"rank {rank}",
+                },
+                [3],
+            )
+        try:
+            result = td.gather_and_stack(0)
+            if rank == 0:
+                assert result is td
+                assert (td["a", "b"] == torch.tensor([[1.0], [2.0]])).all()
+                assert (td["c"] == torch.arange(3) + torch.tensor([[1], [2]])).all()
+                assert td.get("s").tolist() == [["rank 1"] * 3, ["rank 2"] * 3]
+            else:
+                assert result is None
+            queue.put("yuppie")
+        except Exception as err:
+            queue.put(repr(err))
+            raise
+
+    @pytest.mark.timeout(120)
+    def test_gather_consolidated(self, set_context):
+        queue = mp.Queue(3)
+        workers = [
+            mp.Process(target=type(self).consolidated_worker, args=(queue, rank))
+            for rank in range(3)
+        ]
+        for worker in workers:
+            worker.start()
+        try:
+            for _ in workers:
+                assert queue.get(timeout=TIMEOUT) == "yuppie"
+        finally:
+            for worker in workers:
+                worker.join(timeout=TIMEOUT)
+
+    @staticmethod
+    def not_in_memory_worker(queue, rank, source, port, path):
+        # A tensordict that its consolidated metadata cannot rebuild goes
+        # through gather_object
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=3,
+            init_method=f"tcp://localhost:{port}",
+        )
+        if rank == 0:
+            td = TensorDict(batch_size=[2, 3])
+        elif source == "h5":
+            td = PersistentTensorDict.from_h5(f"{path}/{rank}.h5", mode="r")
+        else:
+            td = TensorDict(
+                {"a": torch.full((4,), rank), ("b", "c"): torch.full((4, 2), rank)},
+                [4],
+            )._get_sub_tensordict(slice(0, 3))
+        try:
+            result = td.gather_and_stack(0)
+            if rank == 0:
+                assert result is td
+                assert (td["a"] == torch.tensor([[1], [2]])).all()
+                assert td["b", "c"].shape == (2, 3, 2)
+                assert (td["b", "c"] == torch.tensor([1, 2]).view(2, 1, 1)).all()
+            else:
+                assert result is None
+            queue.put("yuppie")
+        except Exception as err:
+            queue.put(repr(err))
+            raise
+
+    @pytest.mark.timeout(120)
+    @pytest.mark.parametrize(
+        "source,port",
+        [
+            pytest.param(
+                "h5",
+                29535,
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
+            ),
+            ("sub_tensordict", 29536),
+        ],
+    )
+    def test_gather_not_in_memory(self, set_context, tmp_path, source, port):
+        if source == "h5":
+            for rank in (1, 2):
+                TensorDict(
+                    {
+                        "a": torch.full((3,), rank),
+                        ("b", "c"): torch.full((3, 2), rank),
+                    },
+                    [3],
+                ).to_h5(tmp_path / f"{rank}.h5")
+        queue = mp.Queue(3)
+        workers = [
+            mp.Process(
+                target=type(self).not_in_memory_worker,
+                args=(queue, rank, source, port, str(tmp_path)),
+            )
+            for rank in range(3)
+        ]
+        for worker in workers:
+            worker.start()
+        try:
+            for _ in workers:
+                assert queue.get(timeout=TIMEOUT) == "yuppie"
+        finally:
+            for worker in workers:
+                worker.join(timeout=TIMEOUT)
 
 
 @pytest.mark.skipif(

@@ -235,10 +235,9 @@ To join tensordicts with :func:`torch.stack` and :func:`torch.cat`, see
 Dimension names
 ---------------
 
-You can give a name to each batch dimension, as with the named tensors of
-PyTorch. ``names`` has one entry for each batch dimension, and ``None`` means
-that the dimension has no name. Give the names at construction, or set them
-later:
+You can give a name to each batch dimension. ``names`` has one entry for
+each batch dimension, and ``None`` means that the dimension has no name. Give
+the names at construction, or set them later:
 
   >>> td = TensorDict(batch_size=[3, 4], names=["robot", None])
   >>> td.names

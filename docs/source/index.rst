@@ -123,6 +123,7 @@ Where to go
 
 - :ref:`Getting started <getting-started>`: a one-hour tour, with examples
   that you can run. Start here.
+- :ref:`Coming from JAX <coming-from-jax>`: JAX pytree idioms in tensordict.
 - :ref:`User guide <overview>`: one page for each concept, from the batch
   size to TensorClass and ``tensordict.nn``.
 - :ref:`How-to guides <saving>`: one page for each task, such as saving,
@@ -139,12 +140,14 @@ Where to go
 
    installation
    getting_started
+   coming_from_jax
 
 .. toctree::
    :hidden:
    :caption: User guide
 
    overview
+   pitfalls
    concepts/batch_size
    concepts/keys
    concepts/stacking
@@ -160,9 +163,12 @@ Where to go
    :hidden:
    :caption: How-to guides
 
+   cookbook
    saving
+   saving_format
    storage
    data_loading
+   integrations
    distributed
    training_at_scale
    compile

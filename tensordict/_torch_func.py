@@ -27,6 +27,7 @@ from tensordict.utils import (
     _ErrorInteceptor,
     _is_tensorclass,
     _is_unbatched,
+    _jagged_cat,
     _pass_through,
     _shape,
     _warn_dim_past_batch_dims,
@@ -493,7 +494,15 @@ def _cat(
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
                 ):
-                    out[key] = torch.cat(items, dim)
+                    try:
+                        out[key] = torch.cat(items, dim)
+                    except RuntimeError:
+                        # torch does not concatenate jagged nested tensors
+                        # along their batch dim
+                        result = _jagged_cat(items) if dim == 0 else None
+                        if result is None:
+                            raise
+                        out[key] = result
             else:
                 out[key] = torch.cat(items, dim)
         if device is None:
@@ -913,7 +922,22 @@ def _stack(
                             type(values[0])._stack_non_tensor(values, dim),
                             result_batch_size,
                         )
-                    return torch.stack(values, dim)
+                    try:
+                        return torch.stack(values, dim)
+                    except RuntimeError as err:
+                        if (
+                            dim == 0
+                            and getattr(values[0], "layout", None) is torch.jagged
+                        ):
+                            raise RuntimeError(
+                                f"Cannot stack the tensordicts: the entry {key!r} is a "
+                                "jagged nested tensor, and stacking jagged nested "
+                                "tensors along their batch dim would need a second "
+                                "ragged dim, which torch.jagged does not have. Use "
+                                "torch.cat, or tensordict.lazy_stack to keep the "
+                                "tensordicts apart."
+                            ) from err
+                        raise
                 with (
                     _ErrorInteceptor(
                         key, "Attempted to stack tensors on different devices at key"
