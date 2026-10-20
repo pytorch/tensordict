@@ -9552,6 +9552,55 @@ class TestGeneric:
         else:
             assert (d2[:, 0] == a).all()
 
+    def test_memmap_format_version(self, tmp_path):
+        td = TensorDict(
+            a=torch.zeros(3),
+            s=LazyStackedTensorDict(*TensorDict(b=torch.ones(3, 2), batch_size=[3])),
+            batch_size=[3],
+        )
+        td.memmap(tmp_path)
+        metadata = json.loads((tmp_path / "meta.json").read_text())
+        # _type stays for the readers that have no version.
+        assert metadata["_type"] == str(TensorDict)
+        assert metadata["_format_version"] == 1
+        assert metadata["_class"] == "tensordict:TensorDict"
+        stack_metadata = json.loads((tmp_path / "s" / "meta.json").read_text())
+        assert stack_metadata["_format_version"] == 1
+        assert stack_metadata["_class"] == "tensordict:LazyStackedTensorDict"
+
+        # The class identifier is read before _type, which names the private
+        # module that defines a class.
+        stack_metadata["_type"] = "<class 'tensordict._moved.LazyStackedTensorDict'>"
+        (tmp_path / "s" / "meta.json").write_text(json.dumps(stack_metadata))
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert isinstance(loaded["s"], LazyStackedTensorDict)
+        assert (loaded == td).all()
+
+        # A file without a version is version 0.
+        del metadata["_format_version"], metadata["_class"]
+        (tmp_path / "meta.json").write_text(json.dumps(metadata))
+        assert (TensorDict.load_memmap(tmp_path) == td).all()
+
+        metadata["_format_version"] = 2
+        (tmp_path / "meta.json").write_text(json.dumps(metadata))
+        with pytest.raises(RuntimeError, match="saved in the format version 2"):
+            TensorDict.load_memmap(tmp_path)
+
+    @pytest.mark.parametrize("name", ["_format_version", "_class"])
+    def test_memmap_format_entry_as_key(self, name, tmp_path):
+        # A key named like a format entry keeps its entry in meta.json.
+        td = TensorDict(
+            {
+                name: torch.arange(3),
+                "n": TensorDict({name: TensorDict(x=torch.ones(3))}, [3]),
+            },
+            batch_size=[3],
+        )
+        td.memmap(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert set(loaded.keys(True, True)) == {name, ("n", name, "x")}
+        assert (loaded == td).all()
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_select_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)

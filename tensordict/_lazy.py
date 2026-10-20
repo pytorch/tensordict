@@ -53,6 +53,7 @@ from tensordict._indexing import (
     _SLICE,
 )
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
+from tensordict._td_memmap import _format_metadata
 from tensordict._tensorcollection import TensorCollection
 from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
@@ -4330,7 +4331,11 @@ class LazyStackedTensorDict(TensorDictBase):
                     from tensordict._utils_key_json import json_dumps
 
                     json_str = json_dumps(
-                        {"_type": str(type(self)), "stack_dim": self.stack_dim}
+                        {
+                            "_type": str(type(self)),
+                            **_format_metadata(type(self)),
+                            "stack_dim": self.stack_dim,
+                        }
                     )
                     # Ensure we write bytes to the binary file
                     if isinstance(json_str, str):
@@ -6004,6 +6009,8 @@ class _CustomOpTensorDict(TensorDictBase):
                     "inv_op_kwargs": data.inv_op_kwargs,
                 }
             )
+            for name, value in _format_metadata(type(data)).items():
+                metadata.setdefault(name, value)
             with open(filepath, "wb") as json_metadata:
                 from tensordict._utils_key_json import json_dumps
 
