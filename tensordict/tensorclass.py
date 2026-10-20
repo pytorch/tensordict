@@ -1949,14 +1949,16 @@ def _did_you_mean(name: str, fields: Iterable[str]) -> str:
 def _no_attribute_error(self, item: str) -> AttributeError:
     """The error of reading ``item``, which is neither a field nor an attribute of ``self``.
 
-    It lists the fields and suggests the closest one. A private or dunder
+    It lists the public fields and suggests the closest one. A private or dunder
     name, which libraries probe with ``hasattr``, keeps the bare message: it
     costs nothing to build. ``obj`` without ``name`` keeps Python from adding
     its own suggestion to the traceback, which would repeat ours.
     """
     if item.startswith("_") or is_dynamo_compiling():
         return AttributeError(item)
-    fields = sorted(type(self).__expected_keys__)
+    fields = sorted(
+        key for key in type(self).__expected_keys__ if not key.startswith("_")
+    )
     return AttributeError(
         f"{type(self).__name__!r} object has no attribute or field {item!r}."
         f"{_did_you_mean(item, fields)} Its fields are {fields}.",

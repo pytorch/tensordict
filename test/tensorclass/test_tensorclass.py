@@ -2554,6 +2554,9 @@ class TestTensorClass:
             AttributeError, match=fields + re.escape(" Did you mean 'reward'?")
         ):
             data.rewrd = x
+        # the private fields are not listed
+        with pytest.raises(AttributeError, match=re.escape("Its fields are ['data'].")):
+            NonTensorData("a").foo
 
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_getattr(self, any_to_td):

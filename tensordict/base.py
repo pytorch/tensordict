@@ -2623,13 +2623,20 @@ def _warn_update_skipped(skipped: list) -> None:
     )
 
 
-def _update_shape_error(dest: TensorDictBase, source: Any, err: RuntimeError) -> None:
+def _update_shape_error(
+    dest: TensorDictBase,
+    source: Any,
+    err: RuntimeError,
+    keys_to_update: list[tuple[str, ...]] | None,
+) -> None:
     """Raises ``err`` again, with the key and the shapes of the first entry of ``source`` that does not fit ``dest``.
 
-    ``err`` is the ``RuntimeError`` of ``dest.update_(source)``: torch names
-    the operands of the failed copy "tensor a" and "tensor b", not the key.
-    Where ``err`` names the key already, where no such entry is found, or
-    where the search fails, ``err`` is raised as it is.
+    ``err`` is the ``RuntimeError`` of
+    ``dest.update_(source, keys_to_update=keys_to_update)``: torch names the
+    operands of the failed copy "tensor a" and "tensor b", not the key. Only
+    the entries that ``keys_to_update`` selects are searched. Where ``err``
+    names the key already, where no such entry is found, or where the search
+    fails, ``err`` is raised as it is.
     """
     found = None
     if type(err) is RuntimeError and not str(err).startswith(_UPDATE_SHAPE_ERROR):
@@ -2637,6 +2644,10 @@ def _update_shape_error(dest: TensorDictBase, source: Any, err: RuntimeError) ->
             if not _is_tensor_collection(type(source)):
                 source = _TENSORDICT_TYPE(source)
             for key, value in source.items(True, True):
+                if keys_to_update is not None:
+                    name = _unravel_key_to_tuple(key)
+                    if not any(name[: len(k)] == k for k in keys_to_update):
+                        continue
                 dest_value = dest.get(key, None)
                 if not isinstance(value, Tensor) or not isinstance(dest_value, Tensor):
                     continue
@@ -6455,7 +6466,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         except RuntimeError as err:
             # name the key and the shapes that torch's error leaves out
-            _update_shape_error(self, input_dict_or_td, err)
+            _update_shape_error(self, input_dict_or_td, err, keys_to_update)
 
     def _update_(
         self,

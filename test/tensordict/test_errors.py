@@ -175,6 +175,22 @@ class TestErrorMessage:
                 ),
             ):
                 td.update_(source)
+        # only the entries that keys_to_update selects are named
+        source = {"a": torch.zeros(4), "nested": {"b": torch.zeros(5)}}
+        for keys_to_update in ([("nested", "b")], ["nested"]):
+            with pytest.raises(
+                RuntimeError,
+                match=re.escape(
+                    "update_() cannot copy the value of shape torch.Size([5]) "
+                    "under the key ('nested', 'b') into the entry of shape "
+                    "torch.Size([3]): The size of tensor a (3) must match"
+                ),
+            ):
+                td.update_(source, keys_to_update=keys_to_update)
+        # an error that is not about shapes is raised as it is
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3, requires_grad=True))
+        with pytest.raises(RuntimeError, match="^a leaf Variable that requires grad"):
+            td.update_({"a": torch.zeros(4), "b": torch.zeros(3)}, keys_to_update=["b"])
         with pytest.raises(RuntimeError, match="must match the size of tensor"):
             td.copy_(TensorDict(a=torch.zeros(4), nested={"b": torch.zeros(3)}))
 
@@ -188,6 +204,11 @@ class TestErrorMessage:
             + re.escape(" torch.Size([3])"),
         ):
             td.set_("a", torch.zeros(4))
+        # a value that broadcasts to the entry gives no shapes
+        td = TensorDict(a=torch.zeros(3, requires_grad=True))
+        with pytest.raises(ValueError, match=r"Failed to update 'a'") as err:
+            td.set_("a", torch.zeros(1))
+        assert "does not fit" not in str(err.value)
 
     @staticmethod
     def test_lazy_stack_error_names_key():
