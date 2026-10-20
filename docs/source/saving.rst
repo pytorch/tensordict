@@ -397,13 +397,16 @@ is split on ``"."``. Pass ``device`` to load the tensors on a device.
 safetensors holds dense tensors only. ``to_safetensors`` raises an error for
 a nested or jagged tensor, for a non-tensor value that JSON cannot represent
 exactly (only ``str``, ``int``, ``float``, ``bool``, ``None``, ``list``, and
-``dict`` with string keys), and for a stack of non-tensor values. To save a
-lazy stack whose entries have different shapes, pad them first, for example
-with :func:`~tensordict.pad_sequence`. Tensors that share memory, such as
+``dict`` with string keys), for a stack of non-tensor values, and for a lazy
+stack whose entries have different keys. To save a lazy stack whose entries
+have different shapes, pad them first, for example with
+:func:`~tensordict.pad_sequence`. Tensors that share memory, such as
 tied weights, are saved as separate copies, and load as separate tensors.
 
 To load a tensorclass, import the module that defines it first.
-``from_safetensors`` never imports a module by the name in a file.
+``from_safetensors`` never imports a module by the name in a file. The class
+is matched by its full name, so a tensorclass defined in a script
+(``__main__``) loads only in a script that defines it too.
 
 torch.save and torch.load
 -------------------------

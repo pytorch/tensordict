@@ -3196,7 +3196,16 @@ class TestGeneric:
 
     @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
     @pytest.mark.parametrize(
-        "case", ["object", "tuple", "jagged", "non_tensor_stack", "same_name"]
+        "case",
+        [
+            "object",
+            "tuple",
+            "jagged",
+            "non_tensor_stack",
+            "exclusive_keys",
+            "bare_non_tensor",
+            "same_name",
+        ],
     )
     def test_safetensors_errors(self, tmp_path, case):
         # https://github.com/pytorch/tensordict/issues/3087
@@ -3214,6 +3223,17 @@ class TestGeneric:
         elif case == "non_tensor_stack":
             td = TensorDict(a=NonTensorStack.from_list(["a", "b"]))
             match = "non-tensor stack"
+        elif case == "exclusive_keys":
+            # Only the first entry has "b": items() would silently drop it.
+            stack = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(()), b=torch.zeros(())),
+                TensorDict(a=torch.zeros(())),
+            )
+            td = TensorDict(obs=stack)
+            match = "entries have different keys"
+        elif case == "bare_non_tensor":
+            td = NonTensorData("hi")
+            match = "put it in a tensordict first"
         else:
             # ("a", "b.c") and ("a.b", "c") have the same name in the file.
             td = TensorDict({"a": {"b.c": torch.zeros(())}, "a.b": {"c": 0}})

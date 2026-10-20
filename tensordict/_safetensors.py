@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
+from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection
 from tensordict.tensorclass import NonTensorStack
@@ -53,6 +54,12 @@ def _is_json_value(value) -> bool:
 def _encode_level(td, prefix: tuple, tensors: dict) -> dict:
     """Returns the JSON description of ``td`` and adds its leaves to ``tensors``."""
     inner = td._tensordict if _is_tensorclass(type(td)) else td
+    if isinstance(inner, LazyStackedTensorDict) and inner._has_exclusive_keys:
+        raise TypeError(
+            f"Cannot save the lazy stack at {prefix or 'the root'} as "
+            "safetensors: its entries have different keys. Give every entry "
+            "the same keys first."
+        )
     level = {
         "batch_size": list(td.batch_size),
         "names": list(inner.names) if inner._has_names() else None,
@@ -135,9 +142,10 @@ def to_safetensors(data: TensorDictBase, path: str | Path) -> None:
         TypeError: if a value cannot be stored in safetensors: a nested,
             jagged or sparse tensor, a non-tensor value that is not JSON
             (``str``, ``int``, ``float``, ``bool``, ``None``, ``list`` or
-            ``dict``), or a stack of non-tensor values. A lazy stack of
-            tensordicts whose entries have different shapes cannot be saved
-            either.
+            ``dict``), a stack of non-tensor values, a lazy stack whose
+            entries have different keys, or a bare non-tensor value. A lazy
+            stack of tensordicts whose entries have different shapes cannot
+            be saved either.
         ValueError: if two keys have the same name once joined with ``"."``,
             for example ``"a.b"`` and ``("a", "b")``.
 
@@ -159,6 +167,11 @@ def to_safetensors(data: TensorDictBase, path: str | Path) -> None:
     _check_safetensors()
     from safetensors.torch import save_file
 
+    if is_non_tensor(data):
+        raise TypeError(
+            "Cannot save a non-tensor value as safetensors: put it in a "
+            "tensordict first."
+        )
     tensors = {}
     root = _encode_level(data, (), tensors)
     _clone_overlapping(tensors)
