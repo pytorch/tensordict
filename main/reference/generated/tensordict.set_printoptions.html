@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6205+gd9e4d8dcf.d20261020)">
+<meta name="llm:version" content="main (0.15.0.dev6215+g77bcc362c.d20261020)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6205+gd9e4d8dcf.d20261020)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6215+g77bcc362c.d20261020)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1659,9 +1659,10 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 <code class="docutils literal notranslate"><span class="pre">show_is_shared</span></code>, <code class="docutils literal notranslate"><span class="pre">show_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">show_field_device</span></code>,
 <code class="docutils literal notranslate"><span class="pre">show_dtype</span></code>, <code class="docutils literal notranslate"><span class="pre">show_field_is_shared</span></code>, <code class="docutils literal notranslate"><span class="pre">show_grad</span></code>,
 <code class="docutils literal notranslate"><span class="pre">show_is_contiguous</span></code>, <code class="docutils literal notranslate"><span class="pre">show_is_view</span></code>, <code class="docutils literal notranslate"><span class="pre">show_storage_size</span></code>,
-<code class="docutils literal notranslate"><span class="pre">plain</span></code>, <code class="docutils literal notranslate"><span class="pre">sort_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">compact</span></code>. <code class="docutils literal notranslate"><span class="pre">compact=True</span></code> prints
-each entry on one line as its dtype and its feature dimensions
-(<code class="docutils literal notranslate"><span class="pre">f32[3]</span></code>).</p></li>
+<code class="docutils literal notranslate"><span class="pre">plain</span></code>, <code class="docutils literal notranslate"><span class="pre">sort_keys</span></code>, <code class="docutils literal notranslate"><span class="pre">compact</span></code> and <code class="docutils literal notranslate"><span class="pre">html</span></code>. <code class="docutils literal notranslate"><span class="pre">compact=True</span></code>
+prints each entry on one line as its dtype and its feature
+dimensions (<code class="docutils literal notranslate"><span class="pre">f32[3]</span></code>). <code class="docutils literal notranslate"><span class="pre">html=False</span></code> turns off the HTML display
+of notebooks.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -2038,7 +2039,7 @@ each entry on one line as its dtype and its feature dimensions
        "headline": "set_printoptions",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_printoptions",
        "url": "/reference/generated/tensordict.set_printoptions.html",
-       "articleBody": "set_printoptions# class tensordict.set_printoptions(*, verbose: bool = True, **kwargs)# Sets the options that control what the repr of a tensordict shows. Use it as a context manager or a decorator to change the options for a block of code; the previous options come back at the end of the block. Call set_printoptions(...).set() to change them for the rest of the program. The options that are not passed keep their current value. Printing and display describes every option with examples, and get_printoptions() returns the current values. Keyword Arguments: verbose (bool, optional) \u2013 if False, hides the device, dtype and is_shared attributes, unless a keyword argument sets them. Defaults to True. **kwargs \u2013 the options to set: show_batch_size, show_device, show_is_shared, show_shape, show_field_device, show_dtype, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size, plain, sort_keys and compact. compact=True prints each entry on one line as its dtype and its feature dimensions (f32[3]). Raises: TypeError \u2013 if an option is unknown. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, set_printoptions \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e with set_printoptions(verbose=False): ... print(td) TensorDict( fields={ a: Tensor(shape=torch.Size([3]))}, batch_size=torch.Size([3]))",
+       "articleBody": "set_printoptions# class tensordict.set_printoptions(*, verbose: bool = True, **kwargs)# Sets the options that control what the repr of a tensordict shows. Use it as a context manager or a decorator to change the options for a block of code; the previous options come back at the end of the block. Call set_printoptions(...).set() to change them for the rest of the program. The options that are not passed keep their current value. Printing and display describes every option with examples, and get_printoptions() returns the current values. Keyword Arguments: verbose (bool, optional) \u2013 if False, hides the device, dtype and is_shared attributes, unless a keyword argument sets them. Defaults to True. **kwargs \u2013 the options to set: show_batch_size, show_device, show_is_shared, show_shape, show_field_device, show_dtype, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size, plain, sort_keys, compact and html. compact=True prints each entry on one line as its dtype and its feature dimensions (f32[3]). html=False turns off the HTML display of notebooks. Raises: TypeError \u2013 if an option is unknown. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, set_printoptions \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e with set_printoptions(verbose=False): ... print(td) TensorDict( fields={ a: Tensor(shape=torch.Size([3]))}, batch_size=torch.Size([3]))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

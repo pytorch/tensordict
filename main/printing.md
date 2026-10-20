@@ -198,8 +198,34 @@ as `[3]`. The other options, `plain` included, are ignored.
 - The display reads no data and syncs no device: it uses only the shape,
 dtype and device of each leaf, and stacks no leaf of a lazy stack.
 - A [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and a
-[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) keep their usual display, and
+[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) keep their usual display; nested in
+another tensordict, a store prints as its class name (`TensorDictStore`),
+since its entries would read the server.
 [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string) does not read this format.
+
+### Notebook display
+
+In a notebook (Jupyter, VS Code, Colab), a tensordict or a tensorclass that
+ends a cell displays as HTML: the entries of the compact display, one on each
+line, with each nested tensordict in a block that you can fold. The header
+shows the class name, the batch size, the dim names and the device, and a
+nested tensordict shows its class name and number of entries. The display
+uses the colors of the notebook theme, so it reads in light and dark themes.
+
+- It reads the same metadata as the compact display: no data, no device
+sync, and no stacking of a lazy stack. `show_batch_size`,
+`show_device`, `show_dtype` and `sort_keys` apply.
+- It shows at most 200 entries; the rest of each block shows as
+`... and K more`.
+- A [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore), a
+[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack), a [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData),
+and any tensordict or tensorclass with its own text display (such as
+[`TensorDictParams`](reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams), or a class that defines
+`__repr__`) keep their text display, as does any tensordict whose HTML
+display fails. Nested in another tensordict, a
+[`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) shows as its class name.
+- `set_printoptions(html=False)` turns the HTML display off, and the
+notebook shows the text display instead.
 
 ### Available options
 
@@ -239,6 +265,7 @@ of the keys:
 | `plain` | `False` | Append a short value summary (mean/std for floats, min/max for ints). |
 | `sort_keys` | `"alphabetical"` | Key ordering: `"alphabetical"` (default), `"insertion"` (dict order), or a callable passed as `key` to [`sorted()`](https://docs.python.org/3/builtins/functions.html#sorted). |
 | `compact` | `False` | Print each entry as its dtype and its shape after the batch dims (`f32[3]`), on one line when it fits. See Compact display: compact=True. |
+| `html` | `True` | Display tensordicts as HTML in notebooks. See Notebook display. |
 
 ### Read the current options
 

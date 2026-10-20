@@ -20,9 +20,10 @@ Defaults to `True`.
 `show_is_shared`, `show_shape`, `show_field_device`,
 `show_dtype`, `show_field_is_shared`, `show_grad`,
 `show_is_contiguous`, `show_is_view`, `show_storage_size`,
-`plain`, `sort_keys` and `compact`. `compact=True` prints
-each entry on one line as its dtype and its feature dimensions
-(`f32[3]`).
+`plain`, `sort_keys`, `compact` and `html`. `compact=True`
+prints each entry on one line as its dtype and its feature
+dimensions (`f32[3]`). `html=False` turns off the HTML display
+of notebooks.
 
 Raises:
 

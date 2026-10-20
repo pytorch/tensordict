@@ -740,6 +740,36 @@ the class uses the `@tensorclass` decorator, so an `int` annotation names
 the method. A subclass of [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) inherits these
 methods instead. With the decorator, write `builtins.int`.
 
+A field can have a shape annotation from [jaxtyping](https://docs.kidger.site/jaxtyping/), such as
+`Float[torch.Tensor, "*batch 3"]`. The class accepts it, with every flag, and
+treats it as the array type that it wraps: `tensor_only` accepts it as a
+tensor annotation, and `autocast` casts to `torch.Tensor`. The shapes are
+not checked when the class is built or when a field is set. To check them,
+decorate a function that takes the class with `@jaxtyped`, and check the
+fields with `isinstance` in its body. The checks in one call share their
+dimension names (`n` below) with the annotations of the function:
+
+```
+>>> from beartype import beartype 
+>>> from jaxtyping import Float, jaxtyped 
+>>> class Points(TensorClass["tensor_only"]): 
+... pos: Float[torch.Tensor, "*batch 3"]
+... mass: Float[torch.Tensor, "*batch"]
+>>> @jaxtyped(typechecker=beartype) 
+... def center(points: Points) -> Float[torch.Tensor, "3"]:
+... assert isinstance(points.pos, Float[torch.Tensor, "n 3"])
+... assert isinstance(points.mass, Float[torch.Tensor, "n"])
+... return (points.pos * points.mass[:, None]).sum(0) / points.mass.sum()
+>>> points = Points(pos=torch.zeros(4, 3), mass=torch.ones(4), batch_size=[4]) 
+>>> center(points).shape 
+torch.Size([3])
+>>> wrong = Points(pos=torch.zeros(4, 2), mass=torch.ones(4), batch_size=[4]) 
+>>> center(wrong) 
+Traceback (most recent call last):
+...
+AssertionError
+```
+
 ## Legacy: the `@tensorclass` decorator
 
 The [`tensorclass()`](reference/generated/tensordict.tensorclass.html#tensordict.tensorclass) decorator is the original way to declare a
