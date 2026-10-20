@@ -291,7 +291,10 @@ and back, which pays off for small leaves only: a leaf larger than
 2 to 4 and 100 leaves of 64 floats, ``bucket_bytes=2**20`` made
 ``all_reduce`` 40 to 70 times as fast. With 10 leaves of 4 MB, it made no
 difference, and ``bucket_bytes=25 * 2**20``, which packs them, made the call 4
-to 7 times slower.
+to 7 times slower. Non-contiguous and sparse leaves, such as those of
+``td[::2]``, are never packed. Each rank builds its buckets from its own
+leaves, so every rank must hold the same keys, shapes and dtypes; if the
+layouts differ, the call can hang.
 
 all_gather, scatter, and gather_and_stack
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

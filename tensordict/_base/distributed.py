@@ -874,8 +874,12 @@ class _Distributed:
                 also copies the results back. Packing copies the leaves, so a
                 ``bucket_bytes`` below the size of the large leaves keeps
                 them out of the buckets: with ``gloo`` on CPU, packing leaves
-                of 4 MB made the call several times slower. Defaults to
-                ``None``, one reduction per leaf.
+                of 4 MB made the call several times slower. Non-contiguous
+                and sparse leaves are never packed: each is reduced on its
+                own. Every rank must hold the same keys, shapes and dtypes,
+                as the buckets are built from the local leaves; if the
+                layouts differ, the call can hang. Defaults to ``None``, one
+                reduction per leaf.
 
         Returns:
             With ``async_op=True`` and ``return_premature=True``, a list of
@@ -1120,8 +1124,12 @@ class _Distributed:
                 the results back. Packing copies the leaves, so a
                 ``bucket_bytes`` below the size of the large leaves keeps
                 them out of the buckets: with ``gloo`` on CPU, packing leaves
-                of 4 MB made the call several times slower. Defaults to
-                ``None``, one reduction per leaf.
+                of 4 MB made the call several times slower. Non-contiguous
+                and sparse leaves are never packed: each is reduced on its
+                own. Every rank must hold the same keys, shapes and dtypes,
+                as the buckets are built from the local leaves; if the
+                layouts differ, the call can hang. Defaults to ``None``, one
+                reduction per leaf.
 
         Returns:
             With ``async_op=True``, a list of ``Work`` objects (with
