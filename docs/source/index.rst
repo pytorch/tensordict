@@ -164,6 +164,7 @@ Where to go
    storage
    data_loading
    distributed
+   training_at_scale
    compile
    printing
    compatibility
