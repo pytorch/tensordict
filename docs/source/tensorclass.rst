@@ -586,7 +586,8 @@ To change a field of a frozen instance, make a copy with new values.
 ``s.replace(step=...)`` (see :meth:`~tensordict.TensorDictBase.replace`)
 writes the new values into a shallow copy. :func:`copy.replace` (Python 3.13
 and later) builds the copy with ``__init__``, as for a dataclass, and keeps
-the batch size, device and names of the instance unless you pass them.
+the batch size, device and names of the instance unless you pass them or
+``__init__`` or ``__post_init__`` sets the batch size.
 :func:`dataclasses.replace` does not go through ``__replace__`` on any Python
 version, so its result has the default batch size (``[]``), no device and no
 names: use ``s.replace(...)`` or :func:`copy.replace` instead.

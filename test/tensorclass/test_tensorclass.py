@@ -2995,6 +2995,38 @@ class TestTensorClass:
         assert out.batch_size == torch.Size([3])
         assert (out.X == 2).all()
 
+        # A batch size that __init__ or __post_init__ sets from the data wins
+        class MyDataInitBatch(TensorClass):
+            X: torch.Tensor
+
+            def __init__(self, X):
+                self.X = X
+                self.batch_size = X.shape[:1]
+
+        @tensorclass
+        class MyDataPostInitBatch:
+            X: torch.Tensor
+
+            def __post_init__(self):
+                self.batch_size = self.X.shape[:1]
+
+        class MyDataAutoBatch(TensorClass):
+            X: torch.Tensor
+
+            def __post_init__(self):
+                self.auto_batch_size_(1)
+
+        for cls in (MyDataInitBatch, MyDataPostInitBatch, MyDataAutoBatch):
+            data = cls(X=torch.zeros(3, 2))
+            assert data.batch_size == torch.Size([3])
+            assert copy.replace(data).batch_size == torch.Size([3])
+            out = copy.replace(data, X=torch.ones(5, 2))
+            assert out.batch_size == torch.Size([5])
+            assert (out.X == 1).all()
+            out = copy.replace(data, X=torch.ones(5, 2), names=["m"])
+            assert out.batch_size == torch.Size([5])
+            assert out.names == ["m"]
+
         @tensorclass
         class MyDataPostInit:
             X: torch.Tensor

@@ -3228,16 +3228,30 @@ def _deepcopy(self, memo: dict[int, Any]) -> Any:
 def _replace(self, /, **changes: Any) -> Any:
     """Implements :func:`copy.replace`: :func:`dataclasses.replace` that keeps the metadata.
 
-    The batch size, device and names of ``self`` (the names only when
-    ``batch_size`` is not in ``changes``) are the defaults of the call to
-    ``__init__``.
+    The device of ``self`` is the default of the call to ``__init__``. Without
+    ``batch_size`` in ``changes``, the copy gets the batch size and names of
+    ``self`` when ``__init__`` and ``__post_init__`` leave it the default
+    batch size, and ``names`` are set after the copy is built.
     """
-    if "batch_size" not in changes:
-        changes["batch_size"] = self.batch_size
-        if "names" not in changes and self._tensordict._has_names():
-            changes["names"] = self.names
-    changes.setdefault("device", self.device)
-    return dataclasses.replace(self, **changes)
+    td = self._tensordict
+    fields = self.__dataclass_fields__
+    if "device" not in changes and "device" not in fields:
+        changes["device"] = td.device
+    if "batch_size" in changes or "batch_size" in fields or "names" in fields:
+        return dataclasses.replace(self, **changes)
+    has_names = "names" in changes
+    names = changes.pop("names", None)
+    result = dataclasses.replace(self, **changes)
+    result_td = result._tensordict
+    if td.batch_size and not result_td.batch_size:
+        # __init__ and __post_init__ did not set the batch size
+        result_td.batch_size = td.batch_size
+        if not has_names:
+            names = td._maybe_names()
+    elif not has_names:
+        return result
+    result_td.names = names
+    return result
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
