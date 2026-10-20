@@ -5,6 +5,7 @@
 
 import argparse
 import functools
+import gc
 import importlib
 import inspect
 import io
@@ -1548,6 +1549,31 @@ class TestTensorDictStore:
 
         with pytest.raises(KeyError, match="No TensorDictStore"):
             TensorDictStore.from_store(td_id="nonexistent-uuid", **store_kwargs)
+
+    def test_from_store_closes_its_client_when_the_read_fails(self, store_kwargs):
+        """from_store closes the client it reads the metadata with, also on an error."""
+        import redis
+
+        writer = TensorDictStore(batch_size=[2], **store_kwargs)
+        try:
+            client = redis.Redis(port=store_kwargs["port"], db=store_kwargs["db"])
+            try:
+                # GET on a set fails with WRONGTYPE once the read is connected
+                key = writer._redis_key("__device__")
+                client.delete(key)
+                client.sadd(key, "not a string")
+            finally:
+                client.close()
+            gc.collect()  # garbage of earlier tests is finalized outside the check
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", ResourceWarning)
+                with pytest.raises(redis.ResponseError, match="WRONGTYPE"):
+                    TensorDictStore.from_store(td_id=writer._td_id, **store_kwargs)
+                gc.collect()
+            assert not [w for w in caught if issubclass(w.category, ResourceWarning)]
+        finally:
+            writer.clear_redis()
+            writer.close()
 
     def test_get_at_missing_key(self, store_td):
         store_td["a"] = torch.arange(10.0)
