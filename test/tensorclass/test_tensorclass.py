@@ -1698,12 +1698,14 @@ class TestTensorClass:
         assert dataclasses.is_dataclass(data)
 
     def test_default(self):
-        @tensorclass
-        class MyData:
-            X: torch.Tensor = (
-                None  # TODO: do we want to allow any default, say an integer?
-            )
-            y: torch.Tensor = torch.ones(3, 4, 5)
+        with pytest.warns(FutureWarning, match="MyData.y is shared"):
+
+            @tensorclass
+            class MyData:
+                X: torch.Tensor = (
+                    None  # TODO: do we want to allow any default, say an integer?
+                )
+                y: torch.Tensor = torch.ones(3, 4, 5)
 
         data = MyData(batch_size=[3, 4])
         assert (data.y == 1).all()
@@ -1753,6 +1755,57 @@ class TestTensorClass:
         assert not calls
         assert (MyData().X == 1).all()
         assert len(calls) == 1
+
+    def test_tensor_default_warns(self):
+        # A tensor default is shared by every instance; 0.17 copies it (#3095)
+        def messages(record):
+            return [
+                str(w.message)
+                for w in record
+                if "Starting with TensorDict 0.17" in str(w.message)
+            ]
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class Sub(TensorClass):
+                step: torch.Tensor = torch.tensor(0)
+
+            @tensorclass
+            class Deco:
+                weight: torch.Tensor = torch.nn.Parameter(torch.zeros(()))
+
+            class Child(Sub):  # the inherited field warned already
+                x: torch.Tensor = None
+
+        found = messages(record)
+        assert len(found) == 2, found
+        assert found[0].startswith("The Tensor default of the field Sub.step ")
+        assert found[1].startswith("The Parameter default of the field Deco.weight ")
+        assert "default_factory=lambda: torch.tensor(0)" in found[0]
+        (sub_warning,) = (w for w in record if str(w.message) == found[0])
+        assert sub_warning.category is FutureWarning
+        assert sub_warning.filename == __file__
+        a, b = Sub(), Sub()
+        a.step.add_(1)
+        assert b.step == 1  # unchanged until 0.17
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class Silent(TensorClass):
+                a: torch.Tensor = None
+                b: int = 1
+                c: str = "c"
+                d: torch.Tensor = dataclasses.field(
+                    default_factory=lambda: torch.tensor(0)
+                )
+                e: ClassVar[torch.Tensor] = torch.tensor(0)
+
+            Silent()
+            NonTensorData("a")
+            MetaData("a")
+        assert not messages(record)
 
     @pytest.mark.parametrize("pre_dataclass", [False, True])
     def test_defaultfactory_init_false_setattr(self, pre_dataclass):

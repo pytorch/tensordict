@@ -195,6 +195,31 @@ either:
   >>> type(x.detached()).__name__, x[0].probs.shape
   ('Logits', torch.Size([4]))
 
+Field defaults
+~~~~~~~~~~~~~~
+
+A field can have a default, as in a dataclass. A tensor default, such as
+``step: torch.Tensor = torch.tensor(0)``, is one tensor that every instance
+shares, and the class too: an in-place change on one instance, such as
+``obj.step.add_(1)``, changes the others and the default. The same holds for
+a ``TensorDict`` or tensorclass default, which Python 3.10 accepts (later
+versions refuse it, as for a ``list`` default). Creating a class
+with such a default emits a ``FutureWarning`` for each such field. Starting
+with TensorDict 0.17, the default will change to giving each instance its own
+copy (a clone) of the default. To get a copy for each instance now, use a
+default factory:
+
+  >>> import dataclasses
+  >>> class State(TensorClass):
+  ...     step: torch.Tensor = dataclasses.field(
+  ...         default_factory=lambda: torch.tensor(0)
+  ...     )
+  >>> a, b = State(), State()
+  >>> a.step.add_(1)
+  tensor(1)
+  >>> b.step
+  tensor(0)
+
 .. _tensorclass-post-init:
 
 ``__post_init__``

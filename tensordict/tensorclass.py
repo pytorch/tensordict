@@ -1313,6 +1313,28 @@ def _raise_reserved_field_name(name: str) -> None:
     )
 
 
+def _warn_shared_defaults(cls: type) -> None:
+    """Warns for each field of ``cls`` with a tensor default, which every instance shares until 0.17 (#3095)."""
+    own_names = _own_annotation_names(cls)
+    for field in dataclasses.fields(cls):
+        default = field.default
+        if field.name in own_names and (
+            isinstance(default, Tensor) or _is_tensor_collection(type(default))
+        ):
+            warnings.warn(
+                f"The {type(default).__name__} default of the field "
+                f"{cls.__name__}.{field.name} is shared by every instance of the "
+                "class: an in-place change on one instance changes the others "
+                "and the default. Starting with TensorDict 0.17, the "
+                "default will change to giving each instance its own copy "
+                "(a clone) of the default. To get a copy for each instance now, "
+                "use dataclasses.field(default_factory=...), as in "
+                "`dataclasses.field(default_factory=lambda: torch.tensor(0))`.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
+
+
 def _attribute_functions(value: Any) -> tuple[FunctionType, ...]:
     """Return the functions behind a method, classmethod, staticmethod or property."""
     if isinstance(value, FunctionType):
@@ -1520,6 +1542,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             or (field.default is not dataclasses.MISSING and field.default is not None)
         )
     )
+    if "_is_tensorclass" not in cls.__dict__:
+        # not on the second pass of a class decorated twice
+        _warn_shared_defaults(cls)
 
     if not shadow:
         for attr in expected_keys:
