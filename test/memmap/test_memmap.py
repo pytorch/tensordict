@@ -28,6 +28,8 @@ from tensordict.memmap import _is_writable, MemoryMappedTensor
 from torch import multiprocessing as mp
 
 TIMEOUT = 100
+# Windows has no os.getuid, and no root that can write to read-only files
+_IS_ROOT = hasattr(os, "getuid") and os.getuid() == 0
 
 
 @pytest.mark.parametrize(
@@ -1171,7 +1173,7 @@ class TestNestedTensor:
 
 
 class TestReadWrite:
-    @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
+    @pytest.mark.skipif(_IS_ROOT, reason="root can write to read-only files")
     def test_read_only(self, tmpdir):
         tmpdir = Path(tmpdir)
         file_path = tmpdir / "elt.mmap"
@@ -1228,7 +1230,7 @@ class TestReadWrite:
         with pytest.raises(ValueError, match="mode must be"):
             load("w")
 
-    @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
+    @pytest.mark.skipif(_IS_ROOT, reason="root can write to read-only files")
     def test_read_only_nested(self, tmpdir):
         tmpdir = Path(tmpdir)
         file_path = tmpdir / "elt.mmap"

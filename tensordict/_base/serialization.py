@@ -35,6 +35,7 @@ from tensordict._archive import (
 )
 from tensordict._deprecation import deprecated
 from tensordict._nestedkey import NestedKey
+from tensordict._td_memmap import _class_id
 from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
@@ -679,7 +680,12 @@ class _Serialization:
         write into its leaves in place, but you cannot add or remove entries.
 
         If the tensordict is already consolidated, ``self`` is returned and
-        the other arguments are ignored. A ``filename`` other than its own
+        the other arguments are ignored, except ``pin_memory=True``: a
+        storage on the CPU that is not pinned is then copied into a pinned
+        one, and a new tensordict is returned, unless ``filename``,
+        ``inplace=True``, ``return_early=True`` with ``num_threads > 1`` or a
+        ``device`` other than the CPU is given, or no accelerator is
+        available. A ``filename`` other than its own
         file writes nothing: ``td.contiguous().consolidate(filename=other)``
         writes a new file.
 
@@ -761,7 +767,20 @@ class _Serialization:
             True
 
         """
-        if self.is_consolidated():
+        if self.is_consolidated() and not (
+            # A storage that is not pinned is copied into a pinned one, as for
+            # a tensordict that is not consolidated. Without an accelerator
+            # there is no pinned memory, and self is returned as before. With
+            # return_early, a tensorclass would come back as a TensorDict.
+            pin_memory
+            and filename is None
+            and not inplace
+            and not (return_early and (num_threads or 0) > 1)
+            and (device is None or torch.device(device).type == "cpu")
+            and self._consolidated["storage"].device.type == "cpu"
+            and torch.accelerator.is_available()
+            and not self._consolidated["storage"].is_pinned()
+        ):
             self._update_consolidated_metadata()
             consolidated = self._consolidated
             if (
@@ -2062,15 +2081,25 @@ class _Serialization:
         if metadata is None:
             metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
+        # The identifier of the class, written since format version 1. Prefer
+        # it to _type, which names the private module of built-in classes.
+        class_id = metadata.get("_class")
         if device is not None:
             device = torch.device(device)
-        if type_name != str(cls):
+        if type_name != str(cls) and class_id != _class_id(cls):
             import tensordict
 
-            for other_cls in tensordict.base._ACCEPTED_CLASSES:
-                if str(other_cls) == type_name:
-                    break
-            else:
+            accepted_classes = tensordict.base._ACCEPTED_CLASSES
+            other_cls = None
+            if class_id is not None:
+                other_cls = next(
+                    (c for c in accepted_classes if _class_id(c) == class_id), None
+                )
+            if other_cls is None:
+                other_cls = next(
+                    (c for c in accepted_classes if str(c) == type_name), None
+                )
+            if other_cls is None:
                 # The saved name includes the module, which differs when the
                 # class was saved from __main__ (a script or a notebook): use
                 # the class load_memmap is called on if its qualname matches.
@@ -2372,10 +2401,10 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     try:
         from tensordict._utils_key_json import json_dumps
 
-        metadata_json = json_dumps(metadata)
+        metadata_json = json_dumps(_tensorclass_names_in_metadata(metadata))
     except TypeError as e:
         raise RuntimeError(
-            "Failed to convert the metatdata to json. "
+            "Failed to convert the metadata to json. "
             "This is usually due to a nested class that is unaccounted for by the serializer, "
             "such as custom TensorClass. "
             "If you encounter this error, please file an issue on github."
@@ -2383,6 +2412,20 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     if isinstance(metadata_json, str):
         metadata_json = metadata_json.encode("utf-8")
     return metadata_json
+
+
+def _tensorclass_names_in_metadata(metadata: dict) -> dict:
+    """Returns a copy of consolidated ``metadata`` that records each tensorclass type as ``str(cls)``, as ``meta.json`` does."""
+    result = dict(metadata)
+    cls = result["cls"]
+    if isinstance(cls, type) and _is_tensorclass(cls):
+        result["cls"] = str(cls)
+    for key, value in metadata.items():
+        if key not in ("cls_metadata", "non_tensors", "leaves") and isinstance(
+            value, dict
+        ):
+            result[key] = _tensorclass_names_in_metadata(value)
+    return result
 
 
 def _file_id(filename) -> tuple[int, int, int] | None:
