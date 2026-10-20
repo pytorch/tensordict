@@ -523,4 +523,7 @@ loop works for data with different keys. [Modules: TensorDictModule and tensordi
 and [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html).
 - The how-to guides solve one task each: [Save and load tensordicts](saving.html#saving), [Large datasets and storage backends](storage.html#storage),
 [Load data and share it between processes](data_loading.html#data-loading), [Distributed tensordicts](distributed.html#distributed), and [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile).
+- [How-to recipes](cookbook.html#cookbook) has short recipes for common tasks: batches of
+different lengths, data loaders, parameter groups, moving averages,
+checkpoints, and ensembles.
 - [API reference](reference/index.html#api-reference) lists every class and method.

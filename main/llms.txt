@@ -14,6 +14,7 @@
 - [Non-tensor data and unbatched entries](https://docs.pytorch.org/tensordict/stable/concepts/non_tensor.md)
 - [Arithmetic, apply, reductions, and gradients](https://docs.pytorch.org/tensordict/stable/concepts/operations.md)
 - [Stacking and variable-size data](https://docs.pytorch.org/tensordict/stable/concepts/stacking.md)
+- [How-to recipes](https://docs.pytorch.org/tensordict/stable/cookbook.md)
 - [Load data and share it between processes](https://docs.pytorch.org/tensordict/stable/data_loading.md)
 - [Distributed tensordicts](https://docs.pytorch.org/tensordict/stable/distributed.md)
 - [FX tracing (prototype)](https://docs.pytorch.org/tensordict/stable/fx.md)

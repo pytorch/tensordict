@@ -163,6 +163,7 @@ Where to go
    :hidden:
    :caption: How-to guides
 
+   cookbook
    saving
    saving_format
    storage
