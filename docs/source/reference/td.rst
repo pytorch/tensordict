@@ -245,6 +245,12 @@ batch dimensions. ``td["key"]`` returns an entry: see
     TensorDictBase.unbind
     TensorDictBase.narrow
 
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    group_by
+
 .. _api-methods-shape:
 
 Shape, batch dimensions, and stacking

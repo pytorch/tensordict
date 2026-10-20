@@ -96,6 +96,7 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_safe_legacy_key,
     _is_unbatched,
+    _jagged_split,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -1007,8 +1008,14 @@ class TensorDict(TensorDictBase):
                 (v,) * len(segments)
                 if _is_unbatched(v)
                 else v.chunk(chunks, dim)
-                if type(v) is Tensor or not isinstance(v, TensorDictBase)
+                if type(v) is Tensor
                 else v._chunk(chunks, dim)
+                if isinstance(v, TensorDictBase)
+                # torch.chunk drops the sequence lengths of a jagged nested
+                # tensor, and rejects one with holes or a ragged dim past dim 1
+                else _jagged_split(v, [end - start for start, end in segments])
+                if dim == 0 and getattr(v, "layout", None) is torch.jagged
+                else v.chunk(chunks, dim)
             )
             for k, v in self.items()
         }
@@ -1618,9 +1625,24 @@ class TensorDict(TensorDictBase):
             except KeyError as err:
                 raise err
             except Exception as err:
-                raise _InplaceWriteError(
-                    f"Failed to update '{key}' in tensordict {self}"
-                ) from err
+                msg = f"Failed to update '{key}' in tensordict {self}"
+                dest = self._tensordict.get(key)
+                if isinstance(dest, Tensor) and isinstance(value, Tensor):
+                    try:
+                        fits = (
+                            torch.broadcast_shapes(dest.shape, value.shape)
+                            == dest.shape
+                        )
+                    except RuntimeError:
+                        fits = False
+                else:
+                    fits = True
+                if not fits:
+                    msg += (
+                        f": the value of shape {value.shape} does not fit the "
+                        f"entry of shape {dest.shape}"
+                    )
+                raise _InplaceWriteError(msg) from err
         return self
 
     def _set_dict(
@@ -3864,6 +3886,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                     metadata_json = json_dumps(
                         {
                             "_type": str(type(self)),
+                            **_format_metadata(type(self)),
                             "index": _index_to_str(self.idx),
                         }
                     )
@@ -4345,6 +4368,7 @@ from tensordict._td_functions import (  # noqa: F401
     stack,
 )
 from tensordict._td_memmap import (
+    _format_metadata,
     _memmap_filename,
     _populate_empty,
     _populate_memmap,

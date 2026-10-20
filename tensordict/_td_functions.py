@@ -19,7 +19,11 @@ from tensordict._utils_key_json import json_dumps
 from tensordict.utils import is_non_tensor, is_tensorclass
 
 if TYPE_CHECKING:
-    from tensordict.base import T
+    from typing import TypeVar
+
+    from tensordict.tensorclass import TensorClass
+
+    T = TypeVar("T", bound="TensorCollection | TensorClass")
 
 __all__ = [
     "append_memmap",
