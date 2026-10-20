@@ -16,7 +16,13 @@ from pathlib import Path
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    tensorclass,
+    TensorDict,
+)
 from tensordict._base import serialization as td_serialization
 from tensordict.memmap import _is_writable, MemoryMappedTensor
 from torch import multiprocessing as mp
@@ -1339,6 +1345,25 @@ class TestAtomicSave:
                 assert td["a"].filename == str(path / str(i) / "a.memmap")
                 td["a"].fill_(2.0)
             assert (TensorDict.load_memmap(path)["a"] == 2).all()
+
+    @_posix_only
+    @pytest.mark.parametrize("method", ["memmap", "memmap_"])
+    def test_atomic_non_tensor(self, tmp_path, method):
+        path = tmp_path / "ckpt"
+        td = TensorDict(
+            a=torch.zeros(2),
+            s=NonTensorData("old", batch_size=[2]),
+            stack=NonTensorStack("x", "y"),
+            batch_size=[2],
+        )
+        out = getattr(td, method)(path, atomic=True)
+        # the non-tensor leaves write their files back to path
+        out.update_({"s": "new"})
+        out.get("stack")[0] = "z"
+        assert os.listdir(tmp_path) == ["ckpt"]
+        loaded = TensorDict.load_memmap(path)
+        assert loaded.get("s").data == "new"
+        assert loaded.get("stack").tolist() == ["z", "y"]
 
     @_posix_only
     def test_atomic_symlink_and_file(self, tmp_path):

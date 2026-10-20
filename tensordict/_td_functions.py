@@ -678,8 +678,8 @@ def save(
         atomic (bool, optional): if ``True``, the directory is written next
             to ``prefix`` and then renamed to it, so that an error or a crash
             during the write leaves ``prefix`` as it was. Not supported on
-            Windows. :meth:`~tensordict.TensorDictBase.memmap` gives the
-            details.
+            Windows for a directory. :meth:`~tensordict.TensorDictBase.memmap`
+            gives the details.
             Defaults to ``False``.
 
     Returns:
@@ -771,8 +771,8 @@ def memmap(
         atomic (bool, optional): if ``True``, the directory is written next
             to ``prefix`` and then renamed to it, so that an error or a crash
             during the write leaves ``prefix`` as it was. Not supported on
-            Windows. :meth:`~tensordict.TensorDictBase.memmap` gives the
-            details.
+            Windows for a directory. :meth:`~tensordict.TensorDictBase.memmap`
+            gives the details.
             Defaults to ``False``.
 
     Returns:

@@ -143,6 +143,12 @@ def _rebase_memmap_paths(data, old: Path, new: Path) -> None:
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
     from tensordict.base import _unwrap
+    from tensordict.tensorclass import NonTensorDataBase, NonTensorStack
+
+    def rebase(path):
+        if path is not None and Path(path).is_relative_to(old):
+            return new / Path(path).relative_to(old)
+        return path
 
     nodes = [data]
     while nodes:
@@ -154,13 +160,19 @@ def _rebase_memmap_paths(data, old: Path, new: Path) -> None:
             continue
         if not is_tensor_collection(node):
             continue
+        # Non-tensor leaves write their meta.json back to these paths.
+        if isinstance(node, NonTensorDataBase) and node._metadata:
+            if "memmap_prefix" in node._metadata:
+                node._metadata["memmap_prefix"] = rebase(
+                    node._metadata["memmap_prefix"]
+                )
+        elif isinstance(node, NonTensorStack) and "_path_to_memmap" in node.__dict__:
+            node.__dict__["_path_to_memmap"] = rebase(node.__dict__["_path_to_memmap"])
         node = _unwrap(node)
         if isinstance(node, LazyStackedTensorDict):
             nodes.extend(node.tensordicts)
         elif isinstance(node, TensorDict):
-            prefix = node._memmap_prefix
-            if prefix is not None and Path(prefix).is_relative_to(old):
-                node._memmap_prefix = new / Path(prefix).relative_to(old)
+            node._memmap_prefix = rebase(node._memmap_prefix)
             nodes.extend(node._tensordict.values())
 
 
@@ -1369,7 +1381,8 @@ class _Serialization:
             atomic (bool, optional): if ``True``, the directory is written
                 next to ``prefix`` and then renamed to it, so that an error or
                 a crash during the write leaves ``prefix`` as it was. Not
-                supported on Windows. An archive is always written this way.
+                supported on Windows for a directory. An archive is always
+                written this way.
                 :meth:`~.memmap` gives the details. Defaults to ``False``.
 
         Returns:
@@ -1491,10 +1504,10 @@ class _Serialization:
                 already memory-mapped to a file is copied, which needs
                 ``copy_existing=True``. The files are not synced to the disk,
                 so this guards against a killed process, not against a power
-                failure. Not supported with ``return_early=True``, nor on
-                Windows, where a directory that holds open files cannot be
-                renamed. An archive is always written this way. Defaults to
-                ``False``.
+                failure. Not supported with ``return_early=True``, nor for a
+                directory on Windows, where a directory that holds open files
+                cannot be renamed. An archive is always written this way.
+                Defaults to ``False``.
 
         Returns:
             A new memory-mapped tensordict, or a
@@ -1511,7 +1524,8 @@ class _Serialization:
             ValueError: if ``compression`` is given without an archive, or if
                 an archive or ``atomic=True`` is requested without ``prefix``.
             NotImplementedError: if ``return_early=True`` for an archive or
-                with ``atomic=True``, or ``atomic=True`` on Windows.
+                with ``atomic=True``, or ``atomic=True`` for a directory on
+                Windows.
 
         .. note::
             For an archive, the result is ``load_memmap(prefix)``: its leaves
