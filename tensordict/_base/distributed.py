@@ -80,11 +80,13 @@ class _Distributed:
 
         Every rank of the group must call it. On rank ``dst``, the tensordict must
         have one row per other rank: its first batch dimension is
-        ``world_size - 1``, and its own data is not in the result. With
-        ``gloo``, each other rank consolidates its tensordict (see
-        :meth:`~.consolidate`) and sends its storage and its pickled metadata
-        to ``dst`` with :func:`torch.distributed.gather`. With other backends,
-        the tensordicts are sent with :func:`torch.distributed.gather_object`,
+        ``world_size - 1``, and its own data is not in the result. When the
+        backend of the group is exactly ``gloo``, each other rank consolidates
+        its tensordict (see :meth:`~.consolidate`) and sends its storage and its
+        pickled metadata to ``dst`` with :func:`torch.distributed.gather`. With
+        any other backend, including a group with several backends such as
+        ``"cpu:gloo,cuda:nccl"`` or one whose backend is ``"undefined"``, the
+        tensordicts are sent with :func:`torch.distributed.gather_object`,
         which pickles them. With ``gloo``, a rank other than ``dst`` pickles its
         tensordict when it cannot be consolidated, or when it holds one of
         these:
@@ -177,6 +179,9 @@ class _Distributed:
             for chunk in chunks:
                 buffer[start : start + chunk.numel()] = chunk
                 start += chunk.numel()
+            if rank != dst:
+                # Send zeros, not uninitialized memory, in the padding
+                buffer[start:].zero_()
             gathered = (
                 [torch.empty_like(buffer) for _ in range(world_size)]
                 if rank == dst
