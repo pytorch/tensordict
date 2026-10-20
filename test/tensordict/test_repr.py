@@ -928,8 +928,8 @@ class TestCompactRepr:
         assert (repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))) == expected
 
     @pytest.mark.xfail(
-        reason="the compact repr reads the leaves of a nested store until the "
-        "HTML-repr fix (#3099) merges",
+        reason="the compact repr reads the leaves of a nested store until #3106 "
+        "(the HTML-repr PR) merges",
         strict=False,
     )
     def test_compact_default_reads_no_nested_store_leaf(self):

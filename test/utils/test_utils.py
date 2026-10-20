@@ -1332,6 +1332,7 @@ def test_parse_tensor_dict_string_lazy_exclusive_keys(exclusive, compact):
 class _ParsedMesh:
     points: torch.Tensor
     cells: torch.Tensor
+    data: TensorDict
 
 
 def _parse_inputs():
@@ -1359,6 +1360,7 @@ def _parse_inputs():
     mesh = _ParsedMesh(
         points=torch.zeros(5, 3),
         cells=torch.zeros(5, 4, dtype=torch.long),
+        data=TensorDict(pressure=torch.zeros(5, 2), batch_size=[5]),
         batch_size=[5],
     )
     return {"flat": flat, "nested": nested, "lazy": lazy, "tensorclass": mesh}

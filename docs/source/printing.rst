@@ -314,11 +314,13 @@ with any character, such as ``my-key``, and devices with an index, such as
   differs between the members (``-1``), it raises
   ``ValueError: Cannot parse the field ...``.
 - If :class:`~tensordict.set_printoptions` hid a field attribute or added one
-  (for example ``show_dtype=False`` or ``plain=True``), it raises the same
-  ``ValueError``.
-- The compact display shows the device of the tensordict and of the leaves
-  that are elsewhere, not the device of a nested tensordict: a nested
-  tensordict gets the device of its parent.
+  (for example ``show_dtype=False``, or ``plain=True`` in the detailed
+  display), it raises the same ``ValueError``.
+- The compact display does not show the device of a nested tensordict, so the
+  parser puts a nested tensordict, and the leaves without an ``@device``
+  suffix, on the device of its parent, or on the CPU. It shows an
+  :class:`~tensordict.UnbatchedTensor` by its full shape, which the parser
+  reads as the shape after the batch dims of a batched tensor.
 - It makes each tensor on the printed device. To parse the repr of a CUDA
   tensordict, run it on a machine with CUDA.
 - It does not keep ``is_shared``, and it returns a

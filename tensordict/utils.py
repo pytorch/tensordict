@@ -2103,8 +2103,10 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
 # and stacks no leaf of a lazy stack. A container is a (prefix, entries) pair,
 # an entry a (key, token or container) pair.
 _COMPACT_WIDTH = 80
+_CPU = torch.device("cpu")
 
 
+@functools.cache
 def _compact_dtype(dtype: torch.dtype) -> str:
     # f32, i64, u8, c64, bf16, bool, f8_e4m3fn
     name = str(dtype).replace("torch.", "")
@@ -2117,32 +2119,61 @@ def _compact_leaf(td, key):
     # Returns the shape after the batch dims, the dtype and the set of devices
     # of a tensor entry. In a lazy stack, a dim that differs between members
     # is -1 and the dtype is the promoted one, as the stacked tensor has.
-    from tensordict import LazyStackedTensorDict
+    from tensordict import LazyStackedTensorDict, TensorDict
     from tensordict.persistent import PersistentTensorDict
     from tensordict.typedtensordict import TypedTensorDict
 
     if isinstance(td, TypedTensorDict):
         td = td._source
     if isinstance(td, LazyStackedTensorDict):
-        metas = [_compact_leaf(sub, key) for sub in td.tensordicts]
-        shape, dtype, devices = metas[0]
-        shape, devices = list(shape), set(devices)
-        for other_shape, other_dtype, other_devices in metas[1:]:
-            if len(other_shape) != len(shape):
-                shape = [-1]
+        # The members of nested lazy stacks are walked in one loop, and the
+        # leaves of plain TensorDict members read directly: a stack can have
+        # thousands of members.
+        shapes, dtypes, devices = set(), set(), set()
+        members = list(td.tensordicts)
+        while members:
+            sub = members.pop()
+            if type(sub) is TensorDict:
+                tensor = sub._get_str(key, None)
+                shapes.add(_compact_shape(sub, tensor))
+                dtypes.add(tensor.dtype)
+                devices.add(tensor.device)
+            elif isinstance(sub, LazyStackedTensorDict):
+                members.extend(sub.tensordicts)
             else:
-                shape = [s if s == o else -1 for s, o in zip(shape, other_shape)]
-            dtype = torch.promote_types(dtype, other_dtype)
-            devices |= other_devices
-        return shape, dtype, devices
+                shape, dtype, sub_devices = _compact_leaf(sub, key)
+                shapes.add(tuple(shape))
+                dtypes.add(dtype)
+                devices |= sub_devices
+        shapes = iter(shapes)
+        shape = list(next(shapes))
+        for other in shapes:
+            if len(other) != len(shape):
+                shape = [-1]
+                break
+            shape = [s if s == o else -1 for s, o in zip(shape, other)]
+        return shape, functools.reduce(torch.promote_types, dtypes), devices
     if isinstance(td, PersistentTensorDict):
         meta = td._get_metadata(key)
         device = td.device if td.device is not None else torch.device("cpu")
         return list(meta["shape"][td.batch_dims :]), meta["dtype"], {device}
     tensor = td._get_str(key, None)
+    return _compact_shape(td, tensor), tensor.dtype, {tensor.device}
+
+
+def _compact_shape(td, tensor) -> tuple:
     # an unbatched tensor does not share the batch dims: its full shape
-    shape = _shape(tensor) if _is_unbatched(tensor) else _shape(tensor)[td.batch_dims :]
-    return list(shape), tensor.dtype, {tensor.device}
+    shape = _shape(tensor)
+    return tuple(shape if _is_unbatched(tensor) else shape[td.batch_dims :])
+
+
+def _compact_token(td, shape, dtype, devices) -> str:
+    token = f"[{','.join(map(str, shape))}]"
+    if _REPR_OPTIONS["show_dtype"]:
+        token = _compact_dtype(dtype) + token
+    if devices != {_CPU} and td.device is None:
+        token += "@" + ",".join(sorted(str(device) for device in devices))
+    return token
 
 
 def _compact_entry(td, key):
@@ -2151,6 +2182,11 @@ def _compact_entry(td, key):
     from tensordict.persistent import PersistentTensorDict
     from tensordict.typedtensordict import TypedTensorDict
 
+    if type(td) is TensorDict:
+        item = td._get_str(key, None)
+        if isinstance(item, Tensor) and not _is_tensor_collection(type(item)):
+            shape = _compact_shape(td, item)
+            return _compact_token(td, shape, item.dtype, {item.device})
     # the entry of the first member decides what the entry of a lazy stack is
     first = td
     while isinstance(first, TypedTensorDict) or (
@@ -2168,13 +2204,7 @@ def _compact_entry(td, key):
     else:
         item = first._get_str(key, None)
     if item is None or not _is_tensor_collection(type(item)):
-        shape, dtype, devices = _compact_leaf(td, key)
-        token = f"[{','.join(map(str, shape))}]"
-        if _REPR_OPTIONS["show_dtype"]:
-            token = _compact_dtype(dtype) + token
-        if td.device is None and devices != {torch.device("cpu")}:
-            token += "@" + ",".join(sorted(str(device) for device in devices))
-        return token
+        return _compact_token(td, *_compact_leaf(td, key))
     if isinstance(item, NonTensorData):
         return type(item.data).__name__
     if is_non_tensor(item):
@@ -3707,12 +3737,12 @@ def parse_tensor_dict_string(s: str):
     # Regular expression patterns. A field line is "<indent><key>: <value>", and a
     # key can contain any character.
     field_line_pattern = re.compile(r"^[ \t]*(.*?): \w+\(", re.MULTILINE)
-    # a tensorclass prints its fields as "<key>=Tensor(...)"
+    # a tensorclass prints its fields as "<key>=Tensor(...)" and "<key>=TensorDict("
     field_pattern = re.compile(
         r"^[ \t]*(.*?)(?:: |=)Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+(?::\d+)?), dtype=torch.(\w+), is_shared=(\w+)\)",
         re.MULTILINE,
     )
-    nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
+    nested_field_pattern = re.compile(r"^[ \t]*(.*?)(?:: |=)TensorDict\(", re.MULTILINE)
     # A lazy stack prints its exclusive keys in a block that is empty otherwise
     exclusive_fields_pattern = re.compile(
         r"^[ \t]*exclusive_fields=\{\n(?![ \t]*\})", re.MULTILINE
