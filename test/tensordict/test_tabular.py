@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -465,7 +466,9 @@ class TestJSON:
                 path.write_text(json.dumps(records))
             return TensorDict.from_json(path, lines=lines)
 
-        td = read([{"a": "x"}, {"a": "y", "b": "z"}, {"c": 3.5, "a": "w"}])
+        # "c" is a number field with missing values, which warns (#3069)
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            td = read([{"a": "x"}, {"a": "y", "b": "z"}, {"c": 3.5, "a": "w"}])
         assert td.batch_size == torch.Size([3])
         assert list(td.keys()) == ["a", "b", "c"]
         assert td["a"] == ["x", "y", "w"]
@@ -475,6 +478,38 @@ class TestJSON:
         assert td.batch_size == torch.Size([2])
         assert list(td.keys()) == ["b"]
         assert td["b"] == [None, "later"]
+
+    @pytest.mark.parametrize("lines", [False, True])
+    def test_from_json_without_pandas_warns_for_missing_numbers(
+        self, tmp_path, monkeypatch, lines
+    ):
+        # https://github.com/pytorch/tensordict/issues/3069
+        # Without pandas, a number field with missing or null values is a
+        # non-tensor entry with None; from TensorDict 0.17 it is a float tensor
+        # with NaN, as with pandas.
+        import tensordict._tabular
+
+        monkeypatch.setattr(tensordict._tabular, "_has_pandas", lambda: False)
+        monkeypatch.setitem(sys.modules, "pandas", None)
+
+        def read(records):
+            path = tmp_path / ("test.jsonl" if lines else "test.json")
+            if lines:
+                path.write_text("\n".join(json.dumps(r) for r in records))
+            else:
+                path.write_text(json.dumps(records))
+            return TensorDict.from_json(path, lines=lines)
+
+        with pytest.warns(FutureWarning, match="TensorDict 0.17") as record:
+            td = read([{"a": 1, "b": 2, "c": "x"}, {"a": 3, "d": None}])
+        (warning,) = [w for w in record if "TensorDict 0.17" in str(w.message)]
+        assert "'b', 'd'" in str(warning.message)
+        assert warning.filename == __file__
+        assert td["b"] == [2, None]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            read([{"a": 1}, {"a": 2.5}])
+            read([{"s": "x"}, {"t": [1]}])
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")

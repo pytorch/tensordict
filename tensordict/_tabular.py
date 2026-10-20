@@ -9,6 +9,7 @@ All external dependencies (pandas, pyarrow) are optional.
 from __future__ import annotations
 
 import importlib.util
+import warnings
 from itertools import chain
 from operator import methodcaller
 from pathlib import Path
@@ -17,7 +18,7 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict._tensorcollection import TensorCollection
-from tensordict.utils import is_non_tensor, is_tensorclass
+from tensordict.utils import _user_stacklevel, is_non_tensor, is_tensorclass
 
 
 def _has_pandas() -> bool:
@@ -26,6 +27,20 @@ def _has_pandas() -> bool:
 
 def _has_pyarrow() -> bool:
     return importlib.util.find_spec("pyarrow") is not None
+
+
+def _warn_json_missing_numbers(keys: list) -> None:
+    """Warns that ``from_json`` without pandas keeps ``None`` for the missing values of number fields, until 0.17 (#3069)."""
+    names = ", ".join(repr(key) for key in keys)
+    warnings.warn(
+        f"from_json read the field(s) {names} without pandas, so their missing "
+        "or null values are None in a non-tensor entry, where pandas gives a "
+        "float tensor with NaN. Starting with TensorDict 0.17, the default will "
+        "change to a float tensor with NaN without pandas too. Install pandas "
+        "to get that result now.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
 
 
 def _unflatten_columns(flat_dict: dict, separator: str) -> dict:
@@ -302,13 +317,22 @@ def _read_json(
         )
         columns = {key: [r.get(key) for r in records] for key in all_keys}
 
+        missing_numbers = []
         for key, vals in columns.items():
+            if None in vals and all(
+                v is None or isinstance(v, (int, float)) for v in vals
+            ):
+                # pandas reads a number field with missing or null values as a
+                # float column with NaN
+                missing_numbers.append(key)
             try:
                 arr = np.array(vals)
                 if arr.dtype.kind in ("i", "f", "u", "b"):
                     columns[key] = arr
             except (ValueError, TypeError):
                 pass
+        if missing_numbers:
+            _warn_json_missing_numbers(missing_numbers)
 
         return columns, len(records)
 
