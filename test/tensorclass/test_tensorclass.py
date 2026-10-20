@@ -1802,9 +1802,16 @@ class TestTensorClass:
                 )
                 e: ClassVar[torch.Tensor] = torch.tensor(0)
 
+            @dataclasses.dataclass
+            class Cfg:
+                x: torch.Tensor = dataclasses.field(default=torch.zeros(2))
+
             Silent()
             NonTensorData("a")
             MetaData("a")
+            # an instance's values are deep-copied: nothing changes in 0.17
+            from_dataclass(Cfg())
+            TensorDict.from_dataclass(Cfg(), as_tensorclass=True)
         assert not messages(record)
 
     @pytest.mark.parametrize("pre_dataclass", [False, True])

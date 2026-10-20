@@ -997,6 +997,8 @@ def from_dataclass(
             frozen=frozen,
             shadow=shadow,
             tensor_only=tensor_only,
+            # the result gets deep copies of the instance's values, not the defaults
+            _warn_defaults=False,
         )
         if type_hints is not None:
             _set_tensorclass_type_hints(clz, type_hints)
@@ -1374,7 +1376,9 @@ def _unchecked_copy(func: FunctionType) -> FunctionType:
 
 
 @dataclass_transform()
-def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
+def _tensorclass(
+    cls: T, *, frozen, shadow: bool, tensor_only: bool, _warn_defaults: bool = True
+) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -1542,7 +1546,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             or (field.default is not dataclasses.MISSING and field.default is not None)
         )
     )
-    if "_is_tensorclass" not in cls.__dict__:
+    if _warn_defaults and "_is_tensorclass" not in cls.__dict__:
         # not on the second pass of a class decorated twice
         _warn_shared_defaults(cls)
 
