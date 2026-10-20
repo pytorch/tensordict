@@ -664,6 +664,8 @@ interquartile range. Hatched bars are multithreaded saves.
 
 ## See also
 
+- [The on-disk format](saving_format.html#saving-format): the files that `memmap` and `save` write, for
+readers and writers outside tensordict.
 - [Large datasets and storage backends](storage.html#storage): preallocate a dataset on disk, and the HDF5, zarr, and
 Redis backends.
 - [Load data and share it between processes](data_loading.html#data-loading): read a saved dataset with a `DataLoader`, and share

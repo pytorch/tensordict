@@ -534,6 +534,7 @@
 - [TypedTensorDict](https://docs.pytorch.org/tensordict/stable/reference/ttd.md)
 - [Utilities](https://docs.pytorch.org/tensordict/stable/reference/utils.md)
 - [Save and load tensordicts](https://docs.pytorch.org/tensordict/stable/saving.md)
+- [The on-disk format](https://docs.pytorch.org/tensordict/stable/saving_format.md)
 - [Computation times](https://docs.pytorch.org/tensordict/stable/sg_execution_times.md)
 - [Large datasets and storage backends](https://docs.pytorch.org/tensordict/stable/storage.md)
 - [TensorClass](https://docs.pytorch.org/tensordict/stable/tensorclass.md)
