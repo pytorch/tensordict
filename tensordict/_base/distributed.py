@@ -13,6 +13,8 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
+import io
+import pickle
 from typing import List, TYPE_CHECKING
 
 import torch
@@ -32,21 +34,39 @@ from torch import Tensor
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
 
+# The kinds of buffer that gather_and_stack sends with gloo
+_GATHER_NOTHING, _GATHER_PICKLE, _GATHER_STORAGE = 0, 1, 2
 
-def _rebuilds_in_memory(metadata: dict) -> bool:
-    # A consolidated tensordict is rebuilt with cls._from_dict_validated. The
-    # in-memory classes (named by a string) and tensorclasses support it; h5
-    # files, stores and views of another tensordict need a file, a server or
-    # a source.
-    cls = metadata["cls"]
-    if not (isinstance(cls, str) or _is_tensorclass(cls)):
+
+def _consolidates_losslessly(td) -> bool:
+    # Whether the consolidated storage and metadata of td rebuild it on another
+    # rank. The storage keeps the values, but not the autograd history, device,
+    # layout or subclass of the leaves. The rebuild calls
+    # cls._from_dict_validated, which h5 files, stores and views of another
+    # tensordict do not support, and consolidating them would read all their
+    # data, where their pickle only names the file or server. So walk the
+    # structure without reading the data or stacking the lazy stacks.
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, LazyStackedTensorDict):
+        return all(_consolidates_losslessly(sub) for sub in td.tensordicts)
+    if type(td) is not TensorDict:
         return False
-    return all(
-        _rebuilds_in_memory(value)
-        for key, value in metadata.items()
-        if key not in ("leaves", "non_tensors", "cls_metadata")
-        and isinstance(value, dict)
-    )
+    for value in td._tensordict.values():
+        if _is_tensor_collection(type(value)):
+            if not _consolidates_losslessly(value):
+                return False
+        elif (
+            value.requires_grad
+            or value.device.type != "cpu"
+            or value.layout != torch.strided
+            or type(value) not in (Tensor, MemoryMappedTensor)
+        ):
+            return False
+    return True
 
 
 class _Distributed:
@@ -62,12 +82,12 @@ class _Distributed:
         have one row per other rank: its first batch dimension is
         ``world_size - 1``, and its own data is not in the result. With
         ``gloo``, each other rank consolidates its tensordict (see
-        :meth:`~.consolidate`), the metadata is sent to every rank with
-        :func:`torch.distributed.all_gather_object`, which pickles it, and the
-        storages with :func:`torch.distributed.gather`. With other backends, the
-        tensordicts are sent with :func:`torch.distributed.gather_object`, which
-        pickles them. So they are with ``gloo`` when a rank other than ``dst``
-        cannot be consolidated, or holds one of these:
+        :meth:`~.consolidate`) and sends its storage and its pickled metadata
+        to ``dst`` with :func:`torch.distributed.gather`. With other backends,
+        the tensordicts are sent with :func:`torch.distributed.gather_object`,
+        which pickles them. With ``gloo``, a rank other than ``dst`` pickles its
+        tensordict when it cannot be consolidated, or when it holds one of
+        these:
 
         - a leaf that requires gradients, is not on the CPU, is not a strided
           tensor, or is a tensor subclass other than
@@ -107,68 +127,77 @@ class _Distributed:
 
         world_size = dist.get_world_size(group=group)
         rank = dist.get_rank(group=group)
-        use_storage = dist.get_backend(group) == dist.Backend.GLOO
-        if use_storage:
-            # Gloo gathers CPU tensors: as in all_gather, send the consolidated
-            # storage of each rank as one tensor and pickle only its metadata.
-            # The storage keeps the values, but not the autograd history,
-            # device, layout or subclass of the leaves: those are pickled.
-            header = None
-            if rank != dst and not any(
-                v.requires_grad
-                or v.device.type != "cpu"
-                or v.layout != torch.strided
-                or type(v) not in (Tensor, MemoryMappedTensor)
-                for v in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-            ):
-                try:
-                    td_c = (
-                        self
-                        if self.is_consolidated()
-                        and self._consolidated["metadata"] is not None
-                        else self.consolidate(metadata=True)
-                    )
-                except Exception:
-                    # The pickle of gather_object may still work
-                    td_c = None
-                if td_c is not None and _rebuilds_in_memory(
-                    td_c._consolidated["metadata"]
-                ):
-                    storage = td_c._consolidated["storage"]
-                    if storage.device.type == "cpu":
-                        header = (storage.numel(), td_c._consolidated["metadata"])
-            headers = [None] * world_size
-            dist.all_gather_object(headers, header, group=group)
-            del headers[dst]
-            use_storage = bool(headers) and all(h is not None for h in headers)
-        if use_storage:
-            size = max(h[0] for h in headers)
-            if rank == dst:
-                padded = torch.empty(size, dtype=torch.uint8)
-            elif header[0] == size:
-                padded = storage
-            else:
-                padded = torch.zeros(size, dtype=torch.uint8)
-                padded[: header[0]] = storage
-            gathered = (
-                [torch.empty_like(padded) for _ in range(world_size)]
-                if rank == dst
-                else None
-            )
-            dist.gather(padded, gathered, dst=dst, group=group)
-            if rank == dst:
-                del gathered[dst]
-                output = [
-                    _rebuild_tensordict_files_consolidated(meta, buffer[:size])
-                    for (size, meta), buffer in zip(headers, gathered)
-                ]
-        else:
-            # Other backends, or a tensordict that cannot be consolidated
+        if dist.get_backend(group) != dist.Backend.GLOO:
             output = [None for _ in range(world_size)] if dst == rank else None
             dist.gather_object(self, output, dst=dst, group=group)
             if dst == rank:
                 # remove self from output
                 output = [item for i, item in enumerate(output) if i != dst]
+        else:
+            # Gloo gathers CPU tensors. As gather_object does, gather the size of
+            # a byte buffer from every rank, then the buffers padded to the
+            # largest size. A rank other than dst sends, as all_gather does, its
+            # consolidated storage followed by the pickled metadata, or else its
+            # pickled tensordict. Each rank chooses on its own: the header
+            # [kind, storage size, buffer size] tells dst how to read the buffer.
+            kind, storage_size, chunks = _GATHER_NOTHING, 0, ()
+            if rank != dst:
+                td_c = None
+                if _consolidates_losslessly(self):
+                    try:
+                        td_c = (
+                            self
+                            if self.is_consolidated()
+                            and self._consolidated["metadata"] is not None
+                            else self.consolidate(metadata=True)
+                        )
+                    except Exception:
+                        # The pickle may still work
+                        td_c = None
+                if (
+                    td_c is not None
+                    and td_c._consolidated["storage"].device.type == "cpu"
+                ):
+                    storage = td_c._consolidated["storage"]
+                    metadata = bytearray(pickle.dumps(td_c._consolidated["metadata"]))
+                    kind, storage_size = _GATHER_STORAGE, storage.numel()
+                    chunks = (storage, torch.frombuffer(metadata, dtype=torch.uint8))
+                else:
+                    f = io.BytesIO()
+                    pickle.Pickler(f).dump(self)
+                    kind = _GATHER_PICKLE
+                    chunks = (torch.frombuffer(f.getbuffer(), dtype=torch.uint8),)
+            header = torch.tensor(
+                [kind, storage_size, sum(chunk.numel() for chunk in chunks)]
+            )
+            headers = [torch.empty_like(header) for _ in range(world_size)]
+            dist.all_gather(headers, header, group=group)
+            buffer = torch.empty(max(int(h[2]) for h in headers), dtype=torch.uint8)
+            start = 0
+            for chunk in chunks:
+                buffer[start : start + chunk.numel()] = chunk
+                start += chunk.numel()
+            gathered = (
+                [torch.empty_like(buffer) for _ in range(world_size)]
+                if rank == dst
+                else None
+            )
+            dist.gather(buffer, gathered, dst=dst, group=group)
+            if rank == dst:
+                output = []
+                for i, (h, received) in enumerate(zip(headers, gathered)):
+                    if i == dst:
+                        continue
+                    kind, storage_size, size = h.tolist()
+                    if kind == _GATHER_STORAGE:
+                        metadata = pickle.loads(received[storage_size:size].numpy())
+                        output.append(
+                            _rebuild_tensordict_files_consolidated(
+                                metadata, received[:storage_size]
+                            )
+                        )
+                    else:
+                        output.append(pickle.loads(received[:size].numpy()))
         if dst == rank:
             self.update(torch.stack(output, 0), inplace=True)
             return self

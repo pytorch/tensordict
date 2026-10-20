@@ -7,6 +7,7 @@ import abc
 import argparse
 import importlib.util
 import os
+import pickle
 import sys
 from datetime import timedelta
 
@@ -330,10 +331,11 @@ class TestGather:
     def consolidated_worker(queue, rank):
         # Gloo sends the tensors as one consolidated storage per rank, and
         # pickles only the metadata
-        def gather_object(*args, **kwargs):
-            raise AssertionError("gather_object pickles the tensors")
+        def no_pickle(*args, **kwargs):
+            raise AssertionError("the tensordict is pickled")
 
-        dist.gather_object = gather_object
+        dist.gather_object = no_pickle
+        pickle.Pickler = no_pickle
         dist.init_process_group(
             "gloo",
             rank=rank,
