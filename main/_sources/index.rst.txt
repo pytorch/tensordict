@@ -147,6 +147,7 @@ Where to go
    :caption: User guide
 
    overview
+   pitfalls
    concepts/batch_size
    concepts/keys
    concepts/stacking

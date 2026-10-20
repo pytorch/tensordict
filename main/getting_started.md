@@ -517,6 +517,7 @@ loop works for data with different keys. [Modules: TensorDictModule and tensordi
 
 - The user guide explains each idea of this page in detail. Start with
 [What is TensorDict?](overview.html#overview).
+- [Common surprises](pitfalls.html#pitfalls) lists the behaviors that surprise new users most often.
 - The tutorials are scripts that you can run. Start with
 [Getting, setting, and nesting keys](tutorials/tensordict_keys.html), then [Slicing, indexing, and masking](tutorials/tensordict_slicing.html)
 and [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html).

@@ -23,6 +23,7 @@
 - [Use tensordict with other libraries](https://docs.pytorch.org/tensordict/stable/integrations.md)
 - [Modules: TensorDictModule and tensordict.nn](https://docs.pytorch.org/tensordict/stable/modules.md)
 - [What is TensorDict?](https://docs.pytorch.org/tensordict/stable/overview.md)
+- [Common surprises](https://docs.pytorch.org/tensordict/stable/pitfalls.md)
 - [Printing and display](https://docs.pytorch.org/tensordict/stable/printing.md)
 - [LazyStackedTensorDict](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.LazyStackedTensorDict.md)
 - [MemoryMappedTensor](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.MemoryMappedTensor.md)
