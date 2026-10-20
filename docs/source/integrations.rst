@@ -297,12 +297,14 @@ Models often take one tensor for each group of variables, with the variables
 as channels. ``to_array("channel")`` stacks them along a new first
 dimension, so transpose the batch dimensions in front of it:
 
-  >>> def stack(ds, variables):
-  ...     return torch.as_tensor(
-  ...         ds[variables].to_array("channel").transpose("time", "channel", ...).values
-  ...     )
+  >>> def stack(ds, variables, batch_dims):
+  ...     stacked = ds[variables].to_array("channel")
+  ...     return torch.as_tensor(stacked.transpose(*batch_dims, "channel", ...).values)
   >>> groups = TensorDict(  # doctest: +SKIP
-  ...     surface=stack(ds, ["t2m", "u10"]), upper=stack(ds, ["z"]), batch_size=[8], names=["time"]
+  ...     surface=stack(ds, ["t2m", "u10"], batch_dims),
+  ...     upper=stack(ds, ["z"], batch_dims),
+  ...     batch_size=[ds.sizes[d] for d in batch_dims],
+  ...     names=batch_dims,
   ... )
   >>> groups["surface"].shape, groups["upper"].shape  # doctest: +SKIP
   (torch.Size([8, 2, 4, 6]), torch.Size([8, 1, 3, 4, 6]))
