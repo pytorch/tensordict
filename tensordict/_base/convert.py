@@ -2861,10 +2861,21 @@ class _Conversion:
         """Converts a pandas DataFrame to a tensordict, with one entry per column.
 
         The batch size is ``[num_rows]``. Numeric and boolean columns become
-        tensors, string and object columns become non-tensor data, a
+        tensors, a string or object column becomes one
+        :class:`~tensordict.NonTensorData` that holds the whole column, a
         categorical column becomes the tensor of its codes, and a datetime
         column becomes an ``int64`` tensor of nanoseconds.
         :meth:`~.to_pandas` converts back.
+
+        .. note::
+            A string or object column is one value for the whole batch, so
+            ``td[i]["name"]`` gives the values of every row, not the value of
+            row ``i``. To get one value per row, set the column again as a
+            list: ``td["name"] = df["name"].tolist()`` stores a
+            :class:`~tensordict.NonTensorStack`, whose ``td[i]["name"]`` is
+            the value of row ``i``. It builds one object per row, about 20
+            microseconds each, so it is much slower than reading the column
+            for large frames.
 
         Args:
             dataframe (pd.DataFrame): the DataFrame to convert.
@@ -2990,7 +3001,10 @@ class _Conversion:
         Requires pandas or pyarrow: the file is read with
         :func:`pandas.read_csv` when pandas is installed, and with
         ``pyarrow.csv.read_csv`` otherwise. The columns are converted as in
-        :meth:`~.from_pandas`. :meth:`~.to_csv` writes such a file.
+        :meth:`~.from_pandas`. :meth:`~.to_csv` writes such a file. Through
+        pandas, a string column is one value for the whole batch (see the
+        note in :meth:`~.from_pandas`); through pyarrow, it is a
+        :class:`~tensordict.NonTensorStack` with one value per row.
 
         Args:
             path (str or Path): the path of the CSV file.
@@ -3126,7 +3140,10 @@ class _Conversion:
         Requires pyarrow or pandas: the file is read with
         ``pyarrow.parquet.read_table`` when pyarrow is installed, and with
         :func:`pandas.read_parquet` otherwise. The columns are converted as in
-        :meth:`~.from_pandas`. :meth:`~.to_parquet` writes such a file.
+        :meth:`~.from_pandas`. :meth:`~.to_parquet` writes such a file. Through
+        pyarrow, a string column is a :class:`~tensordict.NonTensorStack`
+        with one value per row; through pandas, it is one value for the whole
+        batch (see the note in :meth:`~.from_pandas`).
 
         Args:
             path (str or Path): the path of the Parquet file.
@@ -3265,7 +3282,11 @@ class _Conversion:
         or one record per line with ``lines=True`` (JSON Lines). Each field
         becomes an entry with one value per record. The file is read with
         :func:`pandas.read_json` when pandas is installed, and with the
-        :mod:`json` module otherwise. To convert a single JSON object, load
+        :mod:`json` module otherwise. Through pandas, a string field is one
+        value for the whole batch (see the note in :meth:`~.from_pandas`);
+        through the :mod:`json` module, it is a
+        :class:`~tensordict.NonTensorStack` with one value per record. To
+        convert a single JSON object, load
         it with :func:`json.load` and pass it to :meth:`~.from_dict`.
         :meth:`~.to_json` writes such a file.
 
