@@ -4282,9 +4282,13 @@ class _SkipRebuildPostInitTC:
         self.x = self.x * 2
 
 
-@tensorclass
-class _ConcreteDefaultTC:
-    cache: torch.Tensor = torch.zeros(3)
+with warnings.catch_warnings():
+    # a shared tensor default, which 0.17 copies for each instance (#3095)
+    warnings.filterwarnings("ignore", "The Tensor default", FutureWarning)
+
+    @tensorclass
+    class _ConcreteDefaultTC:
+        cache: torch.Tensor = torch.zeros(3)
 
 
 @tensorclass
@@ -4437,10 +4441,14 @@ class TestTCCustomInitCompile:
             def __init__(self, x):
                 self.x = x * 2
 
-        class Child(Parent):
-            y: torch.Tensor = None
-            z: torch.Tensor = torch.zeros(3)
-            w: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3))
+        with pytest.warns(FutureWarning, match="Child.z is shared"):
+
+            class Child(Parent):
+                y: torch.Tensor = None
+                z: torch.Tensor = torch.zeros(3)
+                w: torch.Tensor = dataclasses.field(
+                    default_factory=lambda: torch.ones(3)
+                )
 
         @torch.compile(backend="eager", fullgraph=True)
         def fn(x):

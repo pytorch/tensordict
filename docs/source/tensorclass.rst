@@ -195,6 +195,33 @@ either:
   >>> type(x.detached()).__name__, x[0].probs.shape
   ('Logits', torch.Size([4]))
 
+Field defaults
+~~~~~~~~~~~~~~
+
+A field can have a default, as in a dataclass. A tensor default, such as
+``step: torch.Tensor = torch.tensor(0)``, is one tensor that every instance
+shares, and the class too: an in-place change on one instance, such as
+``obj.step.add_(1)``, changes the others and the default. The same holds for
+a ``TensorDict`` or tensorclass default. Python 3.11 and later refuse most of
+these, as they refuse a ``list`` default (a ``TensorDict``, a tensorclass that
+is not frozen), but accept a frozen tensorclass or a ``TensorDictParams``
+default; Python 3.10 accepts them all. Creating a class
+with such a default emits a ``FutureWarning`` for each such field. Starting
+with TensorDict 0.17, the default will change to giving each instance its own
+copy (a clone) of the default. To get a copy for each instance now, use a
+default factory:
+
+  >>> import dataclasses
+  >>> class State(TensorClass):
+  ...     step: torch.Tensor = dataclasses.field(
+  ...         default_factory=lambda: torch.tensor(0)
+  ...     )
+  >>> a, b = State(), State()
+  >>> a.step.add_(1)
+  tensor(1)
+  >>> b.step
+  tensor(0)
+
 .. _tensorclass-post-init:
 
 ``__post_init__``
@@ -582,6 +609,18 @@ checkers read a subclass without the flag as not frozen and report it, so
 repeat ``frozen=True`` on the subclass (for mypy, see
 :ref:`tensorclass-static-typing`).
 
+To change a field of a frozen instance, make a copy with new values.
+``s.replace(step=...)`` (see :meth:`~tensordict.TensorDictBase.replace`)
+writes the new values into a shallow copy. :func:`copy.replace` (Python 3.13
+and later) builds the copy with ``__init__``, as for a dataclass, and keeps
+the batch size and names of the instance unless you pass them,
+``__init__`` or ``__post_init__`` sets the batch size, or the new values do
+not fit that batch size (the copy then has the default batch size, ``[]``);
+the device is always kept unless you pass it.
+:func:`dataclasses.replace` does not go through ``__replace__`` on any Python
+version, so its result has the default batch size (``[]``), no device and no
+names: use ``s.replace(...)`` or :func:`copy.replace` instead.
+
 Converting a dataclass
 ----------------------
 
@@ -718,6 +757,35 @@ the class uses the ``@tensorclass`` decorator, so an ``int`` annotation names
 the method. A subclass of :class:`~tensordict.TensorClass` inherits these
 methods instead. With the decorator, write ``builtins.int``.
 
+A field can have a shape annotation from `jaxtyping
+<https://docs.kidger.site/jaxtyping/>`_, such as
+``Float[torch.Tensor, "*batch 3"]``. The class accepts it, with every flag, and
+treats it as the array type that it wraps: ``tensor_only`` accepts it as a
+tensor annotation, and ``autocast`` casts to ``torch.Tensor``. The shapes are
+not checked when the class is built or when a field is set. To check them,
+decorate a function that takes the class with ``@jaxtyped``, and check the
+fields with ``isinstance`` in its body. The checks in one call share their
+dimension names (``n`` below) with the annotations of the function:
+
+  >>> from beartype import beartype  # doctest: +SKIP
+  >>> from jaxtyping import Float, jaxtyped  # doctest: +SKIP
+  >>> class Points(TensorClass["tensor_only"]):  # doctest: +SKIP
+  ...     pos: Float[torch.Tensor, "*batch 3"]
+  ...     mass: Float[torch.Tensor, "*batch"]
+  >>> @jaxtyped(typechecker=beartype)  # doctest: +SKIP
+  ... def center(points: Points) -> Float[torch.Tensor, "3"]:
+  ...     assert isinstance(points.pos, Float[torch.Tensor, "n 3"])
+  ...     assert isinstance(points.mass, Float[torch.Tensor, "n"])
+  ...     return (points.pos * points.mass[:, None]).sum(0) / points.mass.sum()
+  >>> points = Points(pos=torch.zeros(4, 3), mass=torch.ones(4), batch_size=[4])  # doctest: +SKIP
+  >>> center(points).shape  # doctest: +SKIP
+  torch.Size([3])
+  >>> wrong = Points(pos=torch.zeros(4, 2), mass=torch.ones(4), batch_size=[4])  # doctest: +SKIP
+  >>> center(wrong)  # doctest: +SKIP
+  Traceback (most recent call last):
+  ...
+  AssertionError
+
 .. _tensorclass-legacy-decorator:
 
 Legacy: the ``@tensorclass`` decorator
@@ -748,6 +816,7 @@ See also
 - :ref:`typed-tensordict-guide`: typed fields on a
   :class:`~tensordict.TensorDictBase` subclass.
 - :ref:`choosing-a-container`: which container to use.
+- :ref:`coming-from-jax`: the JAX pytree idioms in tensorclass terms.
 - :ref:`compatibility`: tensorclasses on HDF5, Redis, lazy stacks, and
   memory-mapped tensordicts.
 - The tutorials :doc:`tutorials/tensorclass_fashion` and
