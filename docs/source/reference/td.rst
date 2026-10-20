@@ -689,6 +689,8 @@ zarr, CSV, JSON, Parquet, and MDS files.
     unpack_memmap
     is_memmap_archive
     refresh_archive_checksums
+    to_safetensors
+    from_safetensors
     from_h5
     from_zarr
     from_csv

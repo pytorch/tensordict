@@ -134,7 +134,7 @@ if ${pip_only}; then
     pip install numpy cloudpickle pytest pytest-benchmark pytest-instafail \
         pytest-rerunfailures pytest-timeout pytest-xdist redis mypy
     # Optional test dependencies, which may have no wheels for this Python yet
-    for pkg in h5py orjson mosaicml-streaming "zarr>=3.0"; do
+    for pkg in h5py orjson mosaicml-streaming safetensors "zarr>=3.0"; do
         pip install "${pkg}" || echo "${pkg} not available for Python ${PYTHON_VERSION}, skipping"
     done
 else
