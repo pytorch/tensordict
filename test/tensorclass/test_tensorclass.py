@@ -109,7 +109,9 @@ pytestmark = [
 IS_FB = os.getenv("PYTORCH_TEST_FBCODE")
 
 
-_TENSORDICT_DIR = pathlib.Path(__file__).parents[2] / "tensordict"
+# The stubs of the tensordict under test: the source tree in a checkout, and the
+# installed package in the nightly wheel tests, which delete the source tree.
+_TENSORDICT_DIR = pathlib.Path(tensordict.__file__).parent
 
 
 def _get_class_attrs_from_pyi(file_path, class_name):
