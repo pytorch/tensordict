@@ -139,6 +139,7 @@ Where to go
 
    installation
    getting_started
+   coming_from_jax
 
 .. toctree::
    :hidden:
