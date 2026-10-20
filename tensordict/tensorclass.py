@@ -1251,6 +1251,9 @@ def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
         return False
     if base is object or method is default:
         return False
+    if getattr(method, "__module__", None) == "dataclasses":
+        # dataclasses.dataclass() adds __replace__ (Python 3.13+)
+        return False
     if getattr(method, "__qualname__", "").startswith("_wrap_td_method."):
         return False
     if "__dataclass_fields__" not in base.__dict__:
@@ -1488,6 +1491,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         "__or__": _or,
         "__xor__": _xor,
         "__bool__": _bool,
+        "__replace__": _replace,
     }
     own_operators = {
         name
@@ -3241,6 +3245,66 @@ def _copy(self) -> Any:
 def _deepcopy(self, memo: dict[int, Any]) -> Any:
     """Copies the tensorclass and clones its tensors, like ``self.clone()``."""
     return self.clone()
+
+
+def _replace(self, /, **changes: Any) -> Any:
+    """Implements :func:`copy.replace`: :func:`dataclasses.replace` that keeps the metadata.
+
+    The device of ``self`` is the default of the call to ``__init__``. Without
+    ``batch_size`` in ``changes``, the copy gets the batch size and names of
+    ``self`` when ``__init__`` and ``__post_init__`` leave it the default
+    batch size and its entries fit that batch size. Otherwise the copy keeps
+    the batch size that :func:`dataclasses.replace` gives it. ``names`` are
+    set on the copy with the names setter, after the sub-tensordicts that the
+    copy shares with ``changes`` or ``self`` are replaced by shallow clones.
+    """
+    td = self._tensordict
+    batch_size = td.batch_size
+    fields = self.__dataclass_fields__
+    if "device" not in changes and "device" not in fields:
+        changes["device"] = td.device
+    if "batch_size" in changes or "batch_size" in fields or "names" in fields:
+        return dataclasses.replace(self, **changes)
+    has_names = "names" in changes
+    names = changes.pop("names", None)
+    result = dataclasses.replace(self, **changes)
+    result_td = result._tensordict
+    ndim = len(batch_size)
+    # The batch_size setter expands the non-tensor entries in place: only
+    # those that the copy built itself with no batch dims may be shorter.
+    # __init__ and __post_init__ may have set the batch size.
+    fits = (
+        batch_size
+        and not result_td.batch_size
+        and all(
+            value.shape[:ndim] == batch_size
+            or (
+                is_non_tensor(value)
+                and not value.batch_size
+                and value is not changes.get(key)
+            )
+            for key, value in result_td.items()
+        )
+    )
+    if fits and not has_names:
+        names = td._maybe_names()
+        has_names = names is not None and any(name is not None for name in names)
+    if not fits and not has_names:
+        return result
+    if has_names:
+        # The names setter renames the sub-tensordicts in place: copy those
+        # that the copy shares with the caller or with self, as set() does
+        shared = {id(value) for value in changes.values()}
+        shared.update(id(value) for value in td.values())
+        result_dict = result_td._tensordict
+        for key, value in result_dict.items():
+            if id(value) in shared and _is_tensor_collection(type(value)):
+                result_dict[key] = value.clone(False)
+    if fits:
+        result_td.batch_size = batch_size
+    if has_names:
+        result_td.names = names
+    return result
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
