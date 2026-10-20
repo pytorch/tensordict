@@ -26,11 +26,27 @@ from tensordict.base import (
     T,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.utils import _int_generator
+from tensordict.utils import _int_generator, _is_tensorclass
 from torch import Tensor
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
+
+
+def _rebuilds_in_memory(metadata: dict) -> bool:
+    # A consolidated tensordict is rebuilt with cls._from_dict_validated. The
+    # in-memory classes (named by a string) and tensorclasses support it; h5
+    # files, stores and views of another tensordict need a file, a server or
+    # a source.
+    cls = metadata["cls"]
+    if not (isinstance(cls, str) or _is_tensorclass(cls)):
+        return False
+    return all(
+        _rebuilds_in_memory(value)
+        for key, value in metadata.items()
+        if key not in ("leaves", "non_tensors", "cls_metadata")
+        and isinstance(value, dict)
+    )
 
 
 class _Distributed:
@@ -48,11 +64,19 @@ class _Distributed:
         ``gloo``, each other rank consolidates its tensordict (see
         :meth:`~.consolidate`), the metadata is sent to every rank with
         :func:`torch.distributed.all_gather_object`, which pickles it, and the
-        storages with :func:`torch.distributed.gather`. With other backends, or
-        when a leaf requires gradients, is not on the CPU, or is not a strided
-        tensor, the tensordicts are sent with
-        :func:`torch.distributed.gather_object`, which pickles them. Use it only
-        with ranks you trust. See :ref:`distributed-collectives`.
+        storages with :func:`torch.distributed.gather`. With other backends, the
+        tensordicts are sent with :func:`torch.distributed.gather_object`, which
+        pickles them. So they are with ``gloo`` when a rank other than ``dst``
+        cannot be consolidated, or holds one of these:
+
+        - a leaf that requires gradients, is not on the CPU, is not a strided
+          tensor, or is a tensor subclass other than
+          :class:`~tensordict.MemoryMappedTensor`;
+        - a tensordict other than a :class:`~tensordict.TensorDict`, a
+          :class:`~tensordict.LazyStackedTensorDict` or a tensorclass, for
+          example a :class:`~tensordict.PersistentTensorDict`.
+
+        Use it only with ranks you trust. See :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the stack.
@@ -107,7 +131,9 @@ class _Distributed:
                 except Exception:
                     # The pickle of gather_object may still work
                     td_c = None
-                if td_c is not None:
+                if td_c is not None and _rebuilds_in_memory(
+                    td_c._consolidated["metadata"]
+                ):
                     storage = td_c._consolidated["storage"]
                     if storage.device.type == "cpu":
                         header = (storage.numel(), td_c._consolidated["metadata"])
