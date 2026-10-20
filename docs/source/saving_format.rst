@@ -85,7 +85,10 @@ The keys of ``meta.json`` are the keys of the tensordict. The names of the
 files and directories are the keys encoded as described in
 `Keys and file names`_. A key that is also the name of an entry of the
 tensordict, such as ``"shape"``, is lost: the entry of the tensordict
-replaces the entry of the key.
+replaces the entry of the key. The exceptions are ``"_format_version"`` and
+``"_class"``: a key of either name keeps its entry, and the ``meta.json``
+then lacks that format entry, so it reads as version 0 or its class is
+looked up by ``"_type"``.
 
 Leaves
 ------

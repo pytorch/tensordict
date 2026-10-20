@@ -6003,13 +6003,14 @@ class _CustomOpTensorDict(TensorDictBase):
                     "shape": list(data.shape),
                     "device": str(data.device),
                     "_type": str(type(data)),
-                    **_format_metadata(type(data)),
                     "custom_op": data.custom_op,
                     "inv_op": data.inv_op,
                     "custom_op_kwargs": data.custom_op_kwargs,
                     "inv_op_kwargs": data.inv_op_kwargs,
                 }
             )
+            for name, value in _format_metadata(type(data)).items():
+                metadata.setdefault(name, value)
             with open(filepath, "wb") as json_metadata:
                 from tensordict._utils_key_json import json_dumps
 

@@ -60,9 +60,12 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
             "shape": list(data.shape),
             "device": str(data.device),
             "_type": str(type(data)),
-            **_format_metadata(type(data)),
         }
     )
+    # Keep the entry of a key named like a format entry: the file then reads
+    # as version 0, or by _type.
+    for name, value in _format_metadata(type(data)).items():
+        metadata.setdefault(name, value)
     with open(filepath, "wb") as json_metadata:
         from tensordict._utils_key_json import json_dumps
 

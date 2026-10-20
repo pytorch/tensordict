@@ -1956,9 +1956,10 @@ class PersistentTensorDict(
                     "shape": list(data.shape),
                     "device": str(data.device),
                     "_type": str(type(self)),
-                    **_format_metadata(type(self)),
                 }
             )
+            for name, value in _format_metadata(type(self)).items():
+                metadata.setdefault(name, value)
             with open(filepath, "wb") as json_metadata:
                 from tensordict._utils_key_json import json_dumps
 

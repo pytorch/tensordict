@@ -9433,6 +9433,21 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="saved in the format version 2"):
             TensorDict.load_memmap(tmp_path)
 
+    @pytest.mark.parametrize("name", ["_format_version", "_class"])
+    def test_memmap_format_entry_as_key(self, name, tmp_path):
+        # A key named like a format entry keeps its entry in meta.json.
+        td = TensorDict(
+            {
+                name: torch.arange(3),
+                "n": TensorDict({name: TensorDict(x=torch.ones(3))}, [3]),
+            },
+            batch_size=[3],
+        )
+        td.memmap(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert set(loaded.keys(True, True)) == {name, ("n", name, "x")}
+        assert (loaded == td).all()
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_select_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)
