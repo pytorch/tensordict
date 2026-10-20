@@ -13,7 +13,11 @@ from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 
 if TYPE_CHECKING:
-    from tensordict.base import T
+    from typing import TypeVar
+
+    from tensordict.tensorclass import TensorClass
+
+    T = TypeVar("T", bound="TensorCollection | TensorClass")
 
 __all__ = [
     "cat",

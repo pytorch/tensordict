@@ -38,6 +38,7 @@ from tensordict._indexing import convert_ellipsis_to_idx as convert_ellipsis_to_
 from tensordict._nestedkey import NestedKey as NestedKey
 from tensordict._ucxx import TensorDictPipe
 from tensordict.memmap import MemoryMappedTensor as MemoryMappedTensor
+from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _cache_while_locked as _cache_while_locked,
     _erase_cache_first as _erase_cache_first,
@@ -1110,6 +1111,41 @@ class TensorCollection:
         device: torch.device | str | None = None,
     ) -> Self: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
+    @overload
+    def apply(
+        self,
+        fn: Callable[..., Tensor | TensorCollection | TensorClass],
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False] | None = None,
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
+    def apply(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False],
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
     def apply(
         self,
         fn: Callable,
@@ -1126,6 +1162,43 @@ class TensorCollection:
         out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
+    @overload
+    def named_apply(
+        self,
+        fn: Callable[..., Tensor | TensorCollection | TensorClass],
+        *others: T,
+        nested_keys: bool = False,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False] | None = None,
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
+    def named_apply(
+        self,
+        fn: Callable,
+        *others: T,
+        nested_keys: bool = False,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False],
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
     def named_apply(
         self,
         fn: Callable,

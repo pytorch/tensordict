@@ -68,16 +68,6 @@ class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
     __optional_keys__: ClassVar[frozenset[str]]
     __field_defaults__: ClassVar[dict[str, Any]]
 
-    def __init__(
-        self,
-        *,
-        batch_size: Sequence[int] | torch.Size | int | None = None,
-        device: DeviceType | None = None,
-        names: Sequence[str] | None = None,
-        non_blocking: bool | None = None,
-        lock: bool = False,
-        **kwargs: Any,
-    ) -> None: ...
     @classmethod
     def from_schema(
         cls,

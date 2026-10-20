@@ -530,6 +530,9 @@ DeviceType: TypeAlias = torch.device | str | int
 def __getattr__(name: str) -> Any: ...
 """
     )
+    package.joinpath("_tensorcollection.pyi").write_text(
+        "class TensorCollection: ...\n"
+    )
     package.joinpath("tensorclass.pyi").write_text(
         (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
     )
@@ -572,6 +575,27 @@ assert_type(-obs, Obs)
 assert_type(obs == obs, Obs)
 for item in obs:
     assert_type(item, Obs)
+
+# apply gives None only when fn returns None for every leaf, inplace or not,
+# and filter_empty is not False.
+def double(x: torch.Tensor) -> torch.Tensor:
+    return x
+def drop(x: torch.Tensor) -> None: ...
+def maybe_drop(x: torch.Tensor) -> torch.Tensor | None:
+    return x
+def named_double(key: str, x: torch.Tensor) -> torch.Tensor:
+    return x
+def named_drop(key: str, x: torch.Tensor) -> None: ...
+assert_type(obs.apply(double), Obs)
+assert_type(obs.apply(double, inplace=True), Obs)
+assert_type(obs.apply(drop), Obs | None)
+assert_type(obs.apply(drop, inplace=True), Obs | None)
+assert_type(obs.apply(maybe_drop), Obs | None)
+assert_type(obs.apply(drop, filter_empty=False), Obs)
+assert_type(obs.apply(double, filter_empty=True), Obs | None)
+assert_type(obs.named_apply(named_double), Obs)
+assert_type(obs.named_apply(named_drop), Obs | None)
+assert_type(obs.named_apply(named_drop, filter_empty=False), Obs)
 """
     )
     stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
@@ -687,6 +711,82 @@ TensorDict.from_dict([torch.Tensor()])
     assert len(errors) == 2, errors
     assert 'Argument 1 to "TensorDict" has incompatible type "int"' in errors[0]
     assert 'Argument 1 to "from_dict" of "TensorDict"' in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_stack_cat_source_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check the source annotations of stack, cat and lazy_stack alone: their
+    # signatures and the TYPE_CHECKING block that defines their TypeVar are
+    # copied from _td_functions.py into a stub. Mypy also searches the working
+    # directory, which must not hold the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    with open(_TENSORDICT_DIR / "_td_functions.py", "r") as f:
+        tree = ast.parse(f.read())
+    names = ("stack", "cat", "lazy_stack", "maybe_dense_stack")
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    assert len(functions) == len(names)
+    for function in functions:
+        function.body = [ast.Expr(ast.Constant(...))]
+    (type_checking,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+    )
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    package.joinpath("_tensorcollection.pyi").write_text(
+        "class TensorCollection: ...\n"
+    )
+    package.joinpath("tensorclass.pyi").write_text("class TensorClass: ...\n")
+    package.joinpath("__init__.pyi").write_text(
+        """from typing import Sequence, TYPE_CHECKING
+
+from tensordict._tensorcollection import TensorCollection as TensorCollection
+from tensordict.tensorclass import TensorClass as TensorClass
+
+"""
+        + "\n".join(map(ast.unparse, [type_checking, *functions]))
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    valid = tmp_path / "valid.py"
+    valid.write_text(
+        """from typing import assert_type
+import tensordict
+from tensordict import TensorClass, TensorCollection
+
+class Obs(TensorClass): ...
+class TD(TensorCollection): ...
+
+obs = Obs()
+td = TD()
+assert_type(tensordict.stack([obs, obs]), Obs)
+assert_type(tensordict.cat([obs, obs], dim=0), Obs)
+assert_type(tensordict.lazy_stack([obs, obs]), Obs)
+assert_type(tensordict.maybe_dense_stack([obs, obs]), Obs)
+assert_type(tensordict.stack([td, td]), TD)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+    assert status == 0, stdout + stderr
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
