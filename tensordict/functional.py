@@ -35,6 +35,7 @@ from torch.utils.data import default_collate
 __all__ = [
     "collate",
     "dense_stack_tds",
+    "group_by",
     "make_tensordict",
     "merge_tensordicts",
     "pad",
@@ -1013,6 +1014,103 @@ def unpad_sequence(
                     sample.set(key, item)
             samples.append(sample)
     return LazyStackedTensorDict(*samples, stack_dim=0)
+
+
+def group_by(
+    tensordict: T, key: NestedKey
+) -> tuple[torch.Tensor | list[Any], tuple[T, ...]]:
+    """Splits a tensordict into groups of rows that share the value of an entry.
+
+    The rows are taken along the first batch dimension. ``groups[i]`` holds
+    the rows whose entry ``key`` equals ``values[i]``, in their original
+    order, as ``tensordict[tensordict[key] == values[i]]`` would for a
+    one-dimensional entry. An entry with more dimensions than one value per
+    row is compared row by row, as :func:`torch.unique` with ``dim=0`` does.
+
+    The rows are gathered once and split into views of the gathered
+    tensordict, instead of indexing it with one mask per group.
+
+    The number of groups depends on the data, and the group sizes are read
+    on the host (``.tolist()``), which synchronizes with the device: this
+    function is meant for eager mode, not for compiled code.
+
+    Args:
+        tensordict (TensorDictBase or tensorclass instance): the tensordict to
+            split. It needs at least one batch dimension.
+        key (NestedKey): the entry to group the rows by. A tensor entry, or a
+            non-tensor entry (for example a
+            :class:`~tensordict.NonTensorStack` of strings) whose values are
+            hashable and can be sorted.
+
+    Returns:
+        A ``(values, groups)`` tuple. ``values`` holds the sorted unique values
+        of the entry: a tensor for a tensor entry, a list for a non-tensor
+        entry (of tuples if each row holds several values). ``groups`` is a
+        tuple of tensordicts of the type of ``tensordict``, one per value, in
+        the same order.
+
+    Raises:
+        ValueError: if ``tensordict`` has no batch dimension.
+        KeyError: if ``tensordict`` has no entry ``key``.
+        TypeError: if the entry is a tensordict, or a non-tensor entry whose
+            values cannot be hashed or sorted.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, group_by
+        >>> td = TensorDict(
+        ...     uid=torch.tensor([2, 0, 2, 1, 0]),
+        ...     reward=torch.arange(5.0),
+        ...     batch_size=[5],
+        ... )
+        >>> values, groups = group_by(td, "uid")
+        >>> values
+        tensor([0, 1, 2])
+        >>> [group["reward"] for group in groups]
+        [tensor([1., 4.]), tensor([3.]), tensor([0., 2.])]
+    """
+    if not tensordict.batch_dims:
+        raise ValueError(
+            "group_by groups the rows along the first batch dimension of the "
+            "tensordict, which has none."
+        )
+    # A tensorclass returns the content of its non-tensor entries, not the entries
+    source = tensordict._tensordict if is_tensorclass(tensordict) else tensordict
+    entry = source.get(key, None)
+    if entry is None:
+        raise KeyError(f"group_by: the tensordict has no entry {key!r}.")
+    if is_non_tensor(entry):
+
+        def as_hashable(row):
+            return tuple(map(as_hashable, row)) if isinstance(row, list) else row
+
+        rows = [as_hashable(row) for row in entry.tolist()]
+        try:
+            values = sorted(set(rows))
+        except TypeError as err:
+            raise TypeError(
+                f"group_by: the values of the non-tensor entry {key!r} must be "
+                "hashable and sortable."
+            ) from err
+        positions = {value: i for i, value in enumerate(values)}
+        inverse = torch.tensor([positions[row] for row in rows], dtype=torch.long)
+        counts = torch.bincount(inverse, minlength=len(values))
+    elif isinstance(entry, torch.Tensor) and not _is_tensor_collection(type(entry)):
+        values, inverse, counts = torch.unique(
+            entry,
+            sorted=True,
+            return_inverse=True,
+            return_counts=True,
+            dim=0 if entry.ndim > 1 else None,
+        )
+    else:
+        raise TypeError(
+            f"group_by needs a tensor or non-tensor entry, but {key!r} holds a "
+            f"{type(entry).__name__}."
+        )
+    order = torch.argsort(inverse, stable=True)
+    groups = tensordict[order].split(counts.tolist(), dim=0)
+    return values, tuple(groups)
 
 
 def merge_tensordicts(

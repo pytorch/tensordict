@@ -59,6 +59,7 @@ from tensordict.functional import (
     _pad_preflight,
     collate,
     dense_stack_tds,
+    group_by,
     merge_tensordicts,
     pad,
     pad_sequence,
@@ -8371,6 +8372,158 @@ class TestGeneric:
         tds = [TensorDict(a=torch.zeros(0, 3), batch_size=batch_size)] * 2
         samples = unpad_sequence(pad_sequence(tds, return_mask=True))
         self._assert_unpadded(samples, tds)
+
+    def _assert_grouped(self, td, key, values, groups):
+        assert isinstance(groups, tuple)
+        assert len(groups) == len(values)
+        index = torch.arange(td.shape[0])
+        for value, group in zip(values, groups):
+            assert type(group) is type(td)
+            mask = td.get(key) == value
+            if mask.ndim > 1:
+                mask = mask.flatten(1).all(1)
+            assert (group == td[mask]).all()
+            # rows keep their original order
+            assert (group["index"] == index[mask]).all()
+
+    def test_group_by(self):
+        # https://github.com/pytorch/tensordict/issues/3089
+        uid = torch.tensor([2, 0, 2, 1, 0, 2])
+        td = TensorDict(
+            uid=uid,
+            index=torch.arange(6),
+            obs=torch.randn(6, 4, 3),
+            nested=TensorDict(uid=uid % 2, batch_size=[6]),
+            batch_size=[6],
+        )
+        values, groups = group_by(td, "uid")
+        assert (values == torch.tensor([0, 1, 2])).all()
+        assert [group.batch_size for group in groups] == [
+            torch.Size([2]),
+            torch.Size([1]),
+            torch.Size([3]),
+        ]
+        self._assert_grouped(td, "uid", values, groups)
+        # nested keys
+        values, groups = group_by(td, ("nested", "uid"))
+        assert (values == torch.tensor([0, 1])).all()
+        assert (groups[0]["index"] == torch.tensor([0, 1, 2, 4, 5])).all()
+        assert (groups[1]["index"] == torch.tensor([3])).all()
+        # entries with trailing dims are compared row by row
+        td["pair"] = torch.tensor([[1, 0], [0, 1], [1, 0], [0, 1], [0, 0], [1, 0]])
+        values, groups = group_by(td, "pair")
+        assert (values == torch.tensor([[0, 0], [0, 1], [1, 0]])).all()
+        self._assert_grouped(td, "pair", values, groups)
+        # several batch dims: rows along the first one
+        td2 = TensorDict(
+            uid=uid.unsqueeze(-1).expand(6, 2),
+            index=torch.arange(6).unsqueeze(-1).expand(6, 2),
+            batch_size=[6, 2],
+        )
+        values, groups = group_by(td2, "uid")
+        assert (values == torch.tensor([[0, 0], [1, 1], [2, 2]])).all()
+        assert [group.batch_size for group in groups] == [
+            torch.Size([2, 2]),
+            torch.Size([1, 2]),
+            torch.Size([3, 2]),
+        ]
+        assert (groups[2]["index"][:, 0] == torch.tensor([0, 2, 5])).all()
+
+    def test_group_by_lazy_stack(self):
+        tds = [
+            TensorDict(uid=torch.tensor(i % 3), index=torch.tensor(i), x=torch.zeros(i))
+            for i in range(5)
+        ]
+        stack = lazy_stack(tds)
+        values, groups = group_by(stack, "uid")
+        assert (values == torch.tensor([0, 1, 2])).all()
+        assert all(isinstance(group, LazyStackedTensorDict) for group in groups)
+        assert (groups[0]["index"] == torch.tensor([0, 3])).all()
+        assert [td["x"].shape for td in groups[1].tensordicts] == [
+            torch.Size([1]),
+            torch.Size([4]),
+        ]
+        assert (groups[2]["index"] == torch.tensor([2])).all()
+
+    def test_group_by_tensorclass(self):
+        @tensorclass
+        class Sample:
+            uid: torch.Tensor
+            index: torch.Tensor
+            name: str
+
+        sample = Sample(
+            uid=torch.tensor([1, 0, 1]),
+            index=torch.arange(3),
+            name=NonTensorStack("b", "a", "b"),
+            batch_size=[3],
+        )
+        values, groups = group_by(sample, "uid")
+        assert (values == torch.tensor([0, 1])).all()
+        assert all(type(group) is Sample for group in groups)
+        assert (groups[0].index == torch.tensor([1])).all()
+        assert (groups[1].index == torch.tensor([0, 2])).all()
+        # a non-tensor field
+        values, groups = group_by(sample, "name")
+        assert values == ["a", "b"]
+        assert all(type(group) is Sample for group in groups)
+        assert (groups[0].index == torch.tensor([1])).all()
+        assert (groups[1].index == torch.tensor([0, 2])).all()
+
+        # a field of a nested tensorclass
+        @tensorclass
+        class Outer:
+            inner: Sample
+
+        outer = Outer(inner=sample, batch_size=[3])
+        values, groups = group_by(outer, ("inner", "name"))
+        assert values == ["a", "b"]
+        assert all(type(group) is Outer for group in groups)
+        assert (groups[1].inner.index == torch.tensor([0, 2])).all()
+        # one value for every row
+        sample.name = "x"
+        values, groups = group_by(sample, "name")
+        assert values == ["x"]
+        assert (groups[0].index == torch.arange(3)).all()
+
+    def test_group_by_non_tensor(self):
+        td = TensorDict(
+            uid=NonTensorStack("b", "a", "b", "c"),
+            index=torch.arange(4),
+            batch_size=[4],
+        )
+        values, groups = group_by(td, "uid")
+        assert values == ["a", "b", "c"]
+        assert [group["index"].tolist() for group in groups] == [[1], [0, 2], [3]]
+        assert groups[1].get("uid").tolist() == ["b", "b"]
+        # a single value for every row
+        td["same"] = NonTensorData("x", batch_size=[4])
+        values, groups = group_by(td, "same")
+        assert values == ["x"]
+        assert groups[0]["index"].tolist() == [0, 1, 2, 3]
+        td["dicts"] = NonTensorStack(*[{"a": 0}] * 4)
+        with pytest.raises(TypeError, match="hashable and sortable"):
+            group_by(td, "dicts")
+
+    @pytest.mark.parametrize("shape", [[0], [0, 3]])
+    def test_group_by_empty(self, shape):
+        td = TensorDict(uid=torch.zeros(shape, dtype=torch.long), batch_size=[0])
+        values, groups = group_by(td, "uid")
+        assert values.shape == torch.Size([0, *shape[1:]])
+        assert groups == ()
+
+    def test_group_by_errors(self):
+        td = TensorDict(
+            uid=torch.zeros(3), sub=TensorDict(batch_size=[3]), batch_size=[3]
+        )
+        with pytest.raises(KeyError, match="no entry"):
+            group_by(td, "missing")
+        with pytest.raises(KeyError, match="no entry"):
+            group_by(td, ("sub", "missing"))
+        with pytest.raises(TypeError, match="tensor or non-tensor entry"):
+            group_by(td, "sub")
+        with pytest.raises(ValueError, match="batch dimension"):
+            group_by(td[0], "uid")
 
     @pytest.mark.parametrize("count_duplicates", [False, True])
     def test_param_count(self, count_duplicates):
