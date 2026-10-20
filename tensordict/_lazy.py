@@ -512,6 +512,10 @@ _MEMBER = 0  # an int indexes the stack dim
 _STACK = 1  # a slice indexes the stack dim
 _GATHER = 2  # an advanced index indexes the stack dim
 
+# The start of the error of a stack of tensors of different shapes. TorchRL
+# matches it with re.match: keep it at the start of the message.
+_STACK_ERROR = "Failed to stack tensors within a tensordict"
+
 
 class _SplitIndex(NamedTuple):
     """An index of a lazy stack, read as indices of its members.
@@ -1496,7 +1500,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return item.shape
         except RuntimeError as err:
             if re.match(
-                r"Failed to stack tensors within a tensordict",
+                _STACK_ERROR,
                 str(err),
             ):
                 shape = None
@@ -2460,6 +2464,13 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"are intended to have a different shape, use "
                     f"get(key, as_nested_tensor=True) instead."
                 )
+            elif str(err).startswith(_STACK_ERROR):
+                shapes = list(dict.fromkeys(_shape(tensor) for tensor in tensors))
+                raise RuntimeError(
+                    f"{_STACK_ERROR} under the key {key!r}: their shapes are "
+                    f"{shapes}. To read them, pass as_padded_tensor=True, "
+                    "as_nested_tensor=True or as_list=True to get()."
+                ) from err
             else:
                 raise err
 
@@ -2601,8 +2612,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 return torch.stack(items, dim=dim, out=out)
             except RuntimeError as err:
                 raise RuntimeError(
-                    "Failed to stack tensors within a tensordict. You can use nested tensors, "
-                    "padded tensors or return lists via specialized keyword arguments. "
+                    f"{_STACK_ERROR}. To stack tensors of different shapes, pass "
+                    "as_padded_tensor=True, as_nested_tensor=True or as_list=True. "
                     "Check the TensorDict.lazy_stack documentation!"
                 ) from err
         if all(is_non_tensor(tensordict) for tensordict in items):

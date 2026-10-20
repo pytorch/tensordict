@@ -1618,9 +1618,18 @@ class TensorDict(TensorDictBase):
             except KeyError as err:
                 raise err
             except Exception as err:
-                raise _InplaceWriteError(
-                    f"Failed to update '{key}' in tensordict {self}"
-                ) from err
+                msg = f"Failed to update '{key}' in tensordict {self}"
+                dest = self._tensordict.get(key)
+                if (
+                    isinstance(dest, Tensor)
+                    and isinstance(value, Tensor)
+                    and dest.shape != value.shape
+                ):
+                    msg += (
+                        f": the value of shape {value.shape} does not fit the "
+                        f"entry of shape {dest.shape}"
+                    )
+                raise _InplaceWriteError(msg) from err
         return self
 
     def _set_dict(

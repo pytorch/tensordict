@@ -11,6 +11,7 @@ import concurrent
 import contextlib
 import ctypes
 import dataclasses
+import difflib
 import functools
 import hashlib
 import inspect
@@ -25,7 +26,7 @@ import shutil
 import sys
 import warnings
 import weakref
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -1939,6 +1940,30 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
+def _did_you_mean(name: str, fields: Iterable[str]) -> str:
+    """Returns `` Did you mean 'field'?`` for the field closest to ``name``, or ``""``."""
+    close = difflib.get_close_matches(name, list(fields), n=1)
+    return f" Did you mean {close[0]!r}?" if close else ""
+
+
+def _no_attribute_error(self, item: str) -> AttributeError:
+    """The error of reading ``item``, which is neither a field nor an attribute of ``self``.
+
+    It lists the fields and suggests the closest one. A private or dunder
+    name, which libraries probe with ``hasattr``, keeps the bare message: it
+    costs nothing to build. ``obj`` without ``name`` keeps Python from adding
+    its own suggestion to the traceback, which would repeat ours.
+    """
+    if item.startswith("_") or is_dynamo_compiling():
+        return AttributeError(item)
+    fields = sorted(type(self).__expected_keys__)
+    return AttributeError(
+        f"{type(self).__name__!r} object has no attribute or field {item!r}."
+        f"{_did_you_mean(item, fields)} Its fields are {fields}.",
+        obj=self,
+    )
+
+
 def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
     # The tensor_only path of __init__ stores the arguments that are not
     # fields. The other paths raise AttributeError for them, and this path
@@ -2269,11 +2294,27 @@ def _init_wrapper(
         missing_params = [p for p in required_params if p not in kwargs]
         if missing_params:
             n_missing = len(missing_params)
-            raise TypeError(
-                f"{type(self).__name__}.__init__() missing {n_missing} "
-                f"required positional argument{'' if n_missing == 1 else 's'}: "
+            missing = (
+                f"missing {n_missing} required positional "
+                f"argument{'' if n_missing == 1 else 's'}: "
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
+            expected_keys = self.__expected_keys__
+            unknown = [key for key in kwargs if key not in expected_keys]
+            if not unknown:
+                msg = f"{type(self).__name__}.__init__() {missing}"
+            else:
+                # a misspelled field is the likely cause: report it first
+                msg = (
+                    f"{type(self).__name__}.__init__() got an unexpected keyword "
+                    f"argument {unknown[0]!r}."
+                    f"{_did_you_mean(unknown[0], expected_keys)}"
+                    if len(unknown) == 1
+                    else f"{type(self).__name__}.__init__() got unexpected "
+                    f"keyword arguments {unknown}."
+                )
+                msg += f" Its fields are {sorted(expected_keys)}. It is also {missing}."
+            raise TypeError(msg)
 
         super(type(self), self).__setattr__(
             "_tensordict",
@@ -3243,7 +3284,7 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
         if is_non_tensor(out):
             return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
-    raise AttributeError(item)
+    raise _no_attribute_error(self, item)
 
 
 def _getattr(self, item: str, **kwargs) -> Any:
@@ -3298,7 +3339,7 @@ def _getattr(self, item: str, **kwargs) -> Any:
         if is_non_tensor(out):
             return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
-    raise AttributeError(item)
+    raise _no_attribute_error(self, item)
 
 
 # Reads a field of a tensorclass instance, as the field branch of _getattr does.
@@ -3392,6 +3433,7 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
         raise AttributeError(
             f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
             f"field. Its fields are {sorted(self.__expected_keys__)}."
+            f"{_did_you_mean(key, self.__expected_keys__)}"
         )
     out = self.set(key, value)
     if out is not self:
@@ -3450,6 +3492,7 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         raise AttributeError(
             f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
             f"field. Its fields are {sorted(self.__expected_keys__)}."
+            f"{_did_you_mean(key, self.__expected_keys__)}"
         )
     if value is None:
         # A None field is a key missing from the TensorDict, as in set(). A
@@ -4733,6 +4776,7 @@ def _set(
             raise AttributeError(
                 f"Cannot set the attribute {key!r}: {cls.__name__} has no such "
                 f"field. Its fields are {sorted(expected_keys)}."
+                f"{_did_you_mean(key, expected_keys)}"
             )
 
         self_is_non_tensor = self._is_non_tensor
