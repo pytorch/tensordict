@@ -528,8 +528,8 @@ first batches include the start of the worker processes.
 
  .. code-block:: none
 
-    train, regular DataLoader: 961 images per second, 0.23 s
-    train, tensorclass DataLoader: 2632 images per second, 0.08 s
+    train, regular DataLoader: 968 images per second, 0.23 s
+    train, tensorclass DataLoader: 2736 images per second, 0.08 s
 
 
 
@@ -560,8 +560,8 @@ loader only normalizes each batch.
 
  .. code-block:: none
 
-    val, regular DataLoader: 589 images per second, 0.22 s
-    val, tensorclass DataLoader: 12714 images per second, 0.01 s
+    val, regular DataLoader: 576 images per second, 0.22 s
+    val, tensorclass DataLoader: 13128 images per second, 0.01 s
 
 
 

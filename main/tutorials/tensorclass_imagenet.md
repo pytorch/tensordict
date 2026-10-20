@@ -352,8 +352,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 961 images per second, 0.23 s
-train, tensorclass DataLoader: 2632 images per second, 0.08 s
+train, regular DataLoader: 968 images per second, 0.23 s
+train, tensorclass DataLoader: 2736 images per second, 0.08 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -370,8 +370,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 589 images per second, 0.22 s
-val, tensorclass DataLoader: 12714 images per second, 0.01 s
+val, regular DataLoader: 576 images per second, 0.22 s
+val, tensorclass DataLoader: 13128 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on

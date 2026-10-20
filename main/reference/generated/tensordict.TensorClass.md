@@ -31,6 +31,14 @@ containers, and [TensorClass](../../tensorclass.html#tensorclass-guide) is the u
 The constructor of a subclass takes the fields, by name or in order, and
 these keyword arguments: `Foo(tensor=..., batch_size=[3])`.
 
+A field declared with [`dataclasses.field()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.field) keeps its `default`,
+`default_factory` and `metadata`. The options `init=False`,
+`repr=False`, `compare=False` and `kw_only=True` are ignored, and
+the class warns about each when it is defined, unless a method of the
+class (`__init__`, `__repr__`, `__eq__` and `__ne__`) replaces the
+one that ignores the option. The class option `kw_only` raises a
+`TypeError`.
+
 Keyword Arguments:
 
 - **batch_size** ([*Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*or*[*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the batch size of
