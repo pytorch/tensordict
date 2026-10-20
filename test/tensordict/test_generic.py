@@ -679,6 +679,53 @@ class TestGeneric:
         self._check_jagged(result["ids"], expected)
         self._check_jagged(result["sub", "ids"], expected)
 
+    @pytest.mark.parametrize("holes", [False, True])
+    @pytest.mark.parametrize("dtype", [torch.int64, torch.int32])
+    def test_jagged_shared_offsets(self, holes, dtype):
+        # Leaves that share offsets, as token ids and their attention mask do,
+        # share them after the op too: pointwise ops between them still work.
+        offsets = torch.tensor([0, 3, 8, 10, 14], dtype=dtype)
+        lengths = torch.tensor([3, 4, 2, 4], dtype=dtype) if holes else None
+
+        def jagged():
+            return torch.nested.nested_tensor_from_jagged(
+                torch.randn(14), offsets, lengths
+            )
+
+        td = TensorDict(
+            a=jagged(),
+            b=jagged(),
+            sub=TensorDict(c=jagged(), batch_size=[4]),
+            batch_size=[4],
+        )
+        for result in (
+            td[1:3],
+            td[::2],
+            td[torch.tensor([2, 0])],
+            td[torch.tensor([True, False, True, True])],
+            td.split(3)[1],
+            td.chunk(2)[0],
+            torch.cat([td, td[1:3]]),
+        ):
+            total = result["a"] + result["b"] + result["sub", "c"]
+            assert total.shape[0] == result.batch_size[0]
+            assert result["a"].offsets() is result["b"].offsets()
+            assert result["a"].offsets() is result["sub", "c"].offsets()
+            assert result["a"].offsets().dtype == dtype
+
+    @pytest.mark.parametrize("offsets", [[0, 3, 5], [2, 5, 7]])
+    def test_cat_jagged_offsets_not_spanning_values(self, offsets):
+        # offsets that do not span the values leave holes, as lengths do
+        nt = torch.nested.nested_tensor_from_jagged(
+            torch.arange(10.0), offsets=torch.tensor(offsets)
+        )
+        td = TensorDict(a=nt, batch_size=[2])
+        rows = [
+            nt.values()[offsets[0] : offsets[1]],
+            nt.values()[offsets[1] : offsets[2]],
+        ]
+        self._check_jagged(torch.cat([td, td])["a"], rows * 2)
+
     def test_jagged_grad(self):
         values = torch.randn(14, 2, requires_grad=True)
         nt = torch.nested.nested_tensor_from_jagged(

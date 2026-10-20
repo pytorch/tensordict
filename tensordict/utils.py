@@ -60,6 +60,7 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
+from torch.utils.weak import WeakIdKeyDictionary
 
 try:
     from functorch import dim as ftdim
@@ -537,6 +538,90 @@ def _jagged_sizes(lens: Tensor, *sizes: Tensor) -> list[int | None]:
     return [*(torch.stack(sizes).tolist() if sizes else ()), None, None]
 
 
+# For each offsets tensor, the last batch-dim op read from it: its key and the
+# new offsets and lengths it made. Jagged leaves that share offsets (as the
+# token ids and the attention mask of a batch of sequences often do) then
+# share the new ones, so that pointwise ops between them still work. torch
+# treats offsets and lengths as immutable: it caches the sequence lengths it
+# reads from them.
+_JAGGED_STRUCTURES = WeakIdKeyDictionary()
+
+
+def _jagged_structure(tensors: Sequence[Tensor], key, compute: Callable):
+    """Returns ``compute()``, or what it returned for the same ``key`` and the same offsets and lengths of ``tensors``.
+
+    ``key`` is a tuple, or a tensor compared by value.
+    """
+    sources = [(t.offsets(), t.lengths()) for t in tensors]
+    entry = _JAGGED_STRUCTURES.get(sources[0][0])
+    if entry is not None:
+        old_sources, old_key, result = entry
+        if (
+            (
+                old_key == key
+                if type(key) is tuple
+                else type(old_key) is not tuple
+                and old_key.shape == key.shape
+                and old_key.device == key.device
+                and torch.equal(old_key, key)
+            )
+            and len(old_sources) == len(sources)
+            and all(
+                old_offsets() is offsets
+                and (old_lengths() if old_lengths is not None else None) is lengths
+                for (old_offsets, old_lengths), (offsets, lengths) in zip(
+                    old_sources, sources
+                )
+            )
+        ):
+            return result
+    result = compute()
+    # weak references: the entry must not keep its key alive
+    _JAGGED_STRUCTURES[sources[0][0]] = (
+        [
+            (weakref.ref(offsets), None if lengths is None else weakref.ref(lengths))
+            for offsets, lengths in sources
+        ],
+        key,
+        result,
+    )
+    return result
+
+
+def _jagged_slice_structure(offsets: Tensor, lengths: Tensor | None, start, stop):
+    """The offsets, lengths, values range and min and max sequence lengths of the rows ``start:stop``."""
+    lens = (offsets.diff() if lengths is None else lengths)[start:stop]
+    if lengths is not None:
+        # a copy: a view would keep the offsets alive in _JAGGED_STRUCTURES
+        return (offsets[start : stop + 1].clone(), lens, None, *_jagged_sizes(lens))
+    begin, end, min_seqlen, max_seqlen = _jagged_sizes(
+        lens, offsets[start], offsets[stop]
+    )
+    return (
+        offsets[start : stop + 1] - begin,
+        None,
+        (begin, end - begin),
+        min_seqlen,
+        max_seqlen,
+    )
+
+
+def _jagged_narrow(tensor: Tensor, structure) -> Tensor:
+    """Builds the rows of ``tensor`` that ``_jagged_slice_structure`` describes, as a view."""
+    offsets, lengths, values_range, min_seqlen, max_seqlen = structure
+    values = tensor.values()
+    if values_range is not None:
+        values = values.narrow(tensor._ragged_idx - 1, *values_range)
+    return torch.nested.nested_tensor_from_jagged(
+        values,
+        offsets,
+        lengths,
+        jagged_dim=tensor._ragged_idx,
+        min_seqlen=min_seqlen,
+        max_seqlen=max_seqlen,
+    )
+
+
 def _jagged_getitem(tensor: Tensor, index: IndexType) -> Tensor | None:
     """Indexes a jagged nested tensor along its batch dim (dim 0), which torch does not do.
 
@@ -557,59 +642,65 @@ def _jagged_getitem(tensor: Tensor, index: IndexType) -> Tensor | None:
         return None
     offsets = tensor.offsets()
     lengths = tensor.lengths()
-    lens = offsets.diff() if lengths is None else lengths
-    values = tensor.values()
-    ragged_idx = tensor._ragged_idx
-    vdim = ragged_idx - 1
+    num_rows = offsets.numel() - 1
     if isinstance(first, slice) and first.step in (None, 1):
-        start, stop, _ = first.indices(lens.numel())
+        start, stop, _ = first.indices(num_rows)
         stop = max(start, stop)
-        lens = lens[start:stop]
-        new_offsets = offsets[start : stop + 1]
-        if lengths is None:
-            begin, end, min_seqlen, max_seqlen = _jagged_sizes(
-                lens, offsets[start], offsets[stop]
-            )
-            values = values.narrow(vdim, begin, end - begin)
-            new_offsets = new_offsets - begin
-        else:
-            min_seqlen, max_seqlen = _jagged_sizes(lens)
-            lengths = lens
+        structure = _jagged_structure(
+            [tensor],
+            ("slice", start, stop),
+            lambda: _jagged_slice_structure(offsets, lengths, start, stop),
+        )
+        result = _jagged_narrow(tensor, structure)
     else:
-        rows = torch.arange(lens.numel(), device=offsets.device)[first]
+        rows = torch.arange(num_rows, device=offsets.device)[first]
         if rows.ndim == 0:
             result = tensor[int(rows)]
             return result[rest] if rest else result
         if rows.ndim != 1:
             return None
-        lens = lens[rows]
-        new_offsets = torch.nn.functional.pad(lens.cumsum(0), (1, 0))
-        total, min_seqlen, max_seqlen = _jagged_sizes(lens, new_offsets[-1])
+
+        def compute():
+            lens = (offsets.diff() if lengths is None else lengths)[rows]
+            new_offsets = torch.nn.functional.pad(
+                lens.cumsum(0, dtype=offsets.dtype), (1, 0)
+            )
+            return (new_offsets, lens, *_jagged_sizes(lens, new_offsets[-1]))
+
+        new_offsets, lens, total, min_seqlen, max_seqlen = _jagged_structure(
+            [tensor], rows, compute
+        )
         # the position in values of each element of the selected rows
         positions = torch.repeat_interleave(
             offsets[:-1][rows] - new_offsets[:-1], lens, output_size=total
         ) + torch.arange(total, device=offsets.device)
-        values = values.index_select(vdim, positions)
-        lengths = None
-    result = torch.nested.nested_tensor_from_jagged(
-        values,
-        new_offsets,
-        lengths,
-        jagged_dim=ragged_idx,
-        min_seqlen=min_seqlen,
-        max_seqlen=max_seqlen,
-    )
+        result = torch.nested.nested_tensor_from_jagged(
+            tensor.values().index_select(tensor._ragged_idx - 1, positions),
+            new_offsets,
+            jagged_dim=tensor._ragged_idx,
+            min_seqlen=min_seqlen,
+            max_seqlen=max_seqlen,
+        )
     return result[(slice(None), *rest)] if rest else result
 
 
 def _jagged_split(tensor: Tensor, split_sizes: Sequence[int]) -> tuple[Tensor, ...]:
     """Splits a jagged nested tensor along its batch dim into views, as ``Tensor.split`` does."""
-    result = []
-    start = 0
-    for size in split_sizes:
-        result.append(_jagged_getitem(tensor, slice(start, start + size)))
-        start += size
-    return tuple(result)
+    offsets = tensor.offsets()
+    lengths = tensor.lengths()
+
+    def compute():
+        structures = []
+        start = 0
+        for size in split_sizes:
+            structures.append(
+                _jagged_slice_structure(offsets, lengths, start, start + size)
+            )
+            start += size
+        return structures
+
+    structures = _jagged_structure([tensor], ("split", *split_sizes), compute)
+    return tuple(_jagged_narrow(tensor, structure) for structure in structures)
 
 
 def _jagged_cat(tensors: Sequence[Tensor]) -> Tensor | None:
@@ -626,21 +717,46 @@ def _jagged_cat(tensors: Sequence[Tensor]) -> Tensor | None:
     ragged_idx = tensors[0]._ragged_idx
     vdim = ragged_idx - 1
     values = [t.values() for t in tensors]
-    starts, lens = [], []
-    shift = 0
-    for t, v in zip(tensors, values):
-        offsets = t.offsets()
-        lengths = t.lengths()
-        starts.append(offsets[:-1] + shift)
-        lens.append(offsets.diff() if lengths is None else lengths)
-        shift += v.shape[vdim]
-    starts.append(starts[-1].new_tensor([shift]))
-    lens = torch.cat(lens)
-    min_seqlen, max_seqlen = _jagged_sizes(lens)
+    sizes = [v.shape[vdim] for v in values]
+
+    def compute():
+        starts, lens, spans = [], [], []
+        shift = 0
+        for t, size in zip(tensors, sizes):
+            offsets = t.offsets()
+            lengths = t.lengths()
+            starts.append(offsets[:-1] + shift)
+            if lengths is None:
+                lens.append(offsets.diff())
+                # offsets that do not span the values leave holes, as lengths do
+                spans.append((offsets[0] == 0) & (offsets[-1] == size))
+            else:
+                lens.append(lengths)
+            shift += size
+        starts.append(starts[-1].new_tensor([shift]))
+        lens = torch.cat(lens)
+        has_holes = len(spans) < len(tensors)
+        if not has_holes:
+            spans_all, min_seqlen, max_seqlen = _jagged_sizes(
+                lens, torch.stack(spans).all().to(lens.dtype)
+            )
+            has_holes = not spans_all
+        else:
+            min_seqlen, max_seqlen = _jagged_sizes(lens)
+        return (
+            torch.cat(starts),
+            lens if has_holes else None,
+            min_seqlen,
+            max_seqlen,
+        )
+
+    offsets, lengths, min_seqlen, max_seqlen = _jagged_structure(
+        tensors, ("cat", *sizes), compute
+    )
     return torch.nested.nested_tensor_from_jagged(
         torch.cat(values, vdim),
-        torch.cat(starts),
-        None if all(t.lengths() is None for t in tensors) else lens,
+        offsets,
+        lengths,
         jagged_dim=ragged_idx,
         min_seqlen=min_seqlen,
         max_seqlen=max_seqlen,
