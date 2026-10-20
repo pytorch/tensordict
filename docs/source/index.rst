@@ -123,6 +123,7 @@ Where to go
 
 - :ref:`Getting started <getting-started>`: a one-hour tour, with examples
   that you can run. Start here.
+- :ref:`Coming from JAX <coming-from-jax>`: JAX pytree idioms in tensordict.
 - :ref:`User guide <overview>`: one page for each concept, from the batch
   size to TensorClass and ``tensordict.nn``.
 - :ref:`How-to guides <saving>`: one page for each task, such as saving,
