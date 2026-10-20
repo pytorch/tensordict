@@ -1327,6 +1327,100 @@ class TestAllReduce:
             assert out == "yuppie"
 
 
+class TestBucketedReduce:
+    port = "29587"
+
+    @staticmethod
+    def make_td(rank):
+        generator = torch.Generator().manual_seed(rank)
+
+        def rand(*shape, dtype=torch.float32):
+            return torch.randint(1, 4, shape, generator=generator).to(dtype)
+
+        return TensorDict(
+            {
+                "a": rand(2, 3),
+                ("b", "c"): rand(2, dtype=torch.int64),
+                ("b", "d", "e"): rand(2, 5, dtype=torch.float64),
+                "f": rand(2, 1, dtype=torch.int32),
+                "g": rand(2, 40),
+                ("b", "h"): rand(2),
+                "s": LazyStackedTensorDict(
+                    TensorDict(x=rand(4)), TensorDict(x=rand(4))
+                ),
+            },
+            batch_size=[2],
+        )
+
+    @classmethod
+    def worker(cls, queue, rank, op):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = cls.port
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=3, timeout=timedelta(seconds=60)
+        )
+
+        def run(td, dst, mode, **kwargs):
+            async_op = mode != "sync"
+            if dst is None:
+                works = td.all_reduce(op=op, async_op=async_op, **kwargs)
+            else:
+                works = td.reduce(
+                    dst,
+                    op=op,
+                    async_op=async_op,
+                    return_premature=mode == "premature",
+                    **kwargs,
+                )
+            for work in works or ():
+                work.wait()
+            return works
+
+        errors = []
+        try:
+            for bucket_bytes in (1, 64, 2**20):
+                for mode in ("sync", "async", "premature"):
+                    # dst None: all_reduce.
+                    for dst in (None, 1):
+                        case = (bucket_bytes, mode, dst)
+                        expected = cls.make_td(rank)
+                        run(expected, dst, mode)
+                        td = cls.make_td(rank)
+                        works = run(td, dst, mode, bucket_bytes=bucket_bytes)
+                        if (dst is None or rank == dst) and not (td == expected).all():
+                            errors.append((case, "result"))
+                        if bucket_bytes == 2**20 and works is not None:
+                            # One bucket per dtype.
+                            if len(works) != 4:
+                                errors.append((case, len(works)))
+        except Exception as err:
+            errors.append(repr(err))
+        queue.put(errors)
+        dist.barrier()
+        dist.destroy_process_group()
+
+    @pytest.mark.parametrize(
+        "op", [dist.ReduceOp.SUM, dist.ReduceOp.MAX, dist.ReduceOp.PRODUCT]
+    )
+    def test_bucketed_equals_per_leaf(self, set_context, op):
+        queue = mp.Queue(3)
+        workers = [
+            mp.Process(target=type(self).worker, args=(queue, rank, op))
+            for rank in range(3)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = [queue.get(timeout=TIMEOUT) for _ in workers]
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+                if w.is_alive():
+                    w.terminate()
+        assert out == [[], [], []]
+
+
 class TestBroadcast:
     port = "29508"
 

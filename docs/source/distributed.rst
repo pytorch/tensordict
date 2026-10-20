@@ -280,6 +280,19 @@ the local values after the call, clone the tensordict before it:
        if rank == 0:
            print(td["a"])  # with 2 ranks: tensor([3., 3., 3.])
 
+Both issue one collective per leaf. With many small leaves, pass
+``bucket_bytes`` to pack the leaves of each device and dtype into buckets of
+at most that many bytes, and issue one collective per bucket, as DDP does for
+gradients: ``td.all_reduce(bucket_bytes=2**20)``. With ``async_op=True``,
+the list then holds one entry per bucket, and the results are in the leaves
+once you have waited on each entry. Packing copies each leaf into its bucket
+and back, which pays off for small leaves only: a leaf larger than
+``bucket_bytes`` is reduced in place, without a copy. With ``gloo``, world size
+2 to 4 and 100 leaves of 64 floats, ``bucket_bytes=2**20`` made
+``all_reduce`` 40 to 70 times as fast. With 10 leaves of 4 MB, it made no
+difference, and ``bucket_bytes=25 * 2**20``, which packs them, made the call 4
+to 7 times slower.
+
 all_gather, scatter, and gather_and_stack
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -13,6 +13,7 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
+import functools
 from typing import List, TYPE_CHECKING
 
 import torch
@@ -826,6 +827,8 @@ class _Distributed:
         async_op=False,
         return_premature=False,
         group=None,
+        *,
+        bucket_bytes: int | None = None,
     ) -> None:
         """Reduces each leaf over all the ranks of the group, into the tensordict of rank ``dst``.
 
@@ -859,6 +862,21 @@ class _Distributed:
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
 
+        Keyword Args:
+            bucket_bytes (int, optional): if given, packs the leaves of each
+                device and dtype into buckets of at most ``bucket_bytes`` bytes
+                (a larger leaf is a bucket of its own), and runs one
+                reduction per bucket instead of one per leaf, which is faster
+                with many small leaves. Rank ``dst`` copies the results back
+                into the leaves once each reduction completes, and with
+                ``return_premature=True``, the list holds one entry per
+                bucket: a ``Work``, or a :class:`torch.futures.Future` that
+                also copies the results back. Packing copies the leaves, so a
+                ``bucket_bytes`` below the size of the large leaves keeps
+                them out of the buckets: with ``gloo`` on CPU, packing leaves
+                of 4 MB made the call several times slower. Defaults to
+                ``None``, one reduction per leaf.
+
         Returns:
             With ``async_op=True`` and ``return_premature=True``, a list of
             ``Work`` objects. Otherwise, ``None``.
@@ -880,7 +898,23 @@ class _Distributed:
 
         if op is None:
             op = dist.ReduceOp.SUM
-        return self._reduce(dst, op, async_op, return_premature, group=group)
+        if bucket_bytes is None:
+            return self._reduce(dst, op, async_op, return_premature, group=group)
+        leaves = self._reduce(
+            dst, op, async_op, _future_list=[], group=group, _bucketed=True
+        )
+        works = _bucketed_collective(
+            leaves,
+            bucket_bytes,
+            lambda flat: dist.reduce(
+                flat, dst=dst, op=op, async_op=async_op, group=group
+            ),
+            async_op,
+            copy_back=dist.get_rank() == dst,
+        )
+        if async_op and return_premature:
+            return works
+        self._finish_reduce(works, async_op)
 
     def _reduce(
         self,
@@ -890,6 +924,7 @@ class _Distributed:
         return_premature=False,
         _future_list=None,
         group=None,
+        _bucketed=False,
     ):
         """Issues the reductions of :meth:`reduce`, one per leaf, in ``sorted_keys`` order.
 
@@ -902,7 +937,9 @@ class _Distributed:
         with ``async_op=True``, and otherwise by appending a callable that the
         root runs after the last collective. Returns the list for a nested call
         or with ``return_premature=True``. Otherwise the root waits for every
-        entry with :meth:`_finish_reduce` and returns ``None``.
+        entry with :meth:`_finish_reduce` and returns ``None``. With
+        ``_bucketed=True``, issues no collective and appends a pair
+        ``(leaf, write_back)`` per leaf instead, for :func:`_bucketed_collective`.
         """
         from torch import distributed as dist
 
@@ -921,12 +958,16 @@ class _Distributed:
                     async_op=async_op,
                     _future_list=_future_list,
                     group=group,
+                    _bucketed=_bucketed,
                 )
                 continue
             elif isinstance(value, Tensor):
                 pass
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if _bucketed:
+                _future_list.append((value, None))
+                continue
             _future_list.append(
                 dist.reduce(value, dst=dst, op=op, async_op=async_op, group=group)
             )
@@ -1048,6 +1089,7 @@ class _Distributed:
         *,
         group: "torch.distributed.ProcessGroup" | None = None,
         async_op: bool = False,
+        bucket_bytes: int | None = None,
     ) -> None:
         """Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result.
 
@@ -1066,6 +1108,19 @@ class _Distributed:
             async_op (bool, optional): if ``True``, returns the list of ``Work``
                 objects of the reductions without waiting for them: call ``wait()``
                 on each one before you use the tensordict. Defaults to ``False``.
+            bucket_bytes (int, optional): if given, packs the leaves of each
+                device and dtype into buckets of at most ``bucket_bytes`` bytes
+                (a larger leaf is a bucket of its own), and runs one
+                reduction per bucket instead of one per leaf, which is faster
+                with many small leaves. The results are copied back into the
+                leaves once each reduction completes, and with
+                ``async_op=True``, the list holds one entry per bucket: a
+                ``Work``, or a :class:`torch.futures.Future` that also copies
+                the results back. Packing copies the leaves, so a
+                ``bucket_bytes`` below the size of the large leaves keeps
+                them out of the buckets: with ``gloo`` on CPU, packing leaves
+                of 4 MB made the call several times slower. Defaults to
+                ``None``, one reduction per leaf.
 
         Returns:
             With ``async_op=True``, a list of ``Work`` objects. Otherwise, ``None``.
@@ -1093,13 +1148,28 @@ class _Distributed:
                 dist.all_reduce(value, op=op, group=group, async_op=async_op)
             )
 
+        if bucket_bytes is None:
+            self._fast_apply(
+                _all_reduce,
+                is_leaf=_NESTED_TENSORS_AS_LISTS,
+            )
+            if async_op:
+                return futures
+            return
+        leaves = []
         self._fast_apply(
-            _all_reduce,
+            lambda value: leaves.append((value, None)),
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+        futures = _bucketed_collective(
+            leaves,
+            bucket_bytes,
+            lambda flat: dist.all_reduce(flat, op=op, group=group, async_op=async_op),
+            async_op,
         )
         if async_op:
             return futures
-        return
+        self._finish_reduce(futures, async_op)
 
     def all_gather(
         self,
@@ -1163,3 +1233,73 @@ class _Distributed:
             sz = m.pop("_total_bytes")
             result.append(_rebuild_tensordict_files_consolidated(m, gathered[i][:sz]))
         return result
+
+
+def _bucketed_collective(leaves, bucket_bytes, collective, async_op, copy_back=True):
+    """Runs ``collective`` once per bucket of leaves, for the ``bucket_bytes`` argument of ``all_reduce`` and ``reduce``.
+
+    ``leaves`` is a list of pairs ``(tensor, write_back)``, where
+    ``write_back`` is ``None`` or a callable to run once the result is in
+    ``tensor``. The leaves are grouped by device and dtype, in the order of
+    their first leaf, and each group is cut into buckets of at most
+    ``bucket_bytes`` bytes, a larger leaf being a bucket of its own. Every rank
+    must pass leaves of the same shapes and dtypes in the same order.
+    ``collective`` takes a flat tensor: the leaf of a bucket of one contiguous
+    leaf, and otherwise the concatenation of the leaves, copied back into them
+    if ``copy_back``. Returns one entry per bucket, for
+    ``_Distributed._finish_reduce``: with ``async_op``, the ``Work``, or a
+    ``Future`` that runs the copies and write-backs once it completes;
+    otherwise, ``None`` or a callable that runs them.
+    """
+    if bucket_bytes <= 0:
+        raise ValueError(
+            f"bucket_bytes must be a positive number of bytes, got {bucket_bytes}."
+        )
+    groups = {}
+    for leaf in leaves:
+        groups.setdefault((leaf[0].device, leaf[0].dtype), []).append(leaf)
+    buckets = []
+    for group_leaves in groups.values():
+        bucket, size = [], 0
+        for leaf in group_leaves:
+            nbytes = leaf[0].numel() * leaf[0].element_size()
+            if bucket and size + nbytes > bucket_bytes:
+                buckets.append(bucket)
+                bucket, size = [], 0
+            bucket.append(leaf)
+            size += nbytes
+        buckets.append(bucket)
+    results = []
+    for bucket in buckets:
+        tensors = [tensor for tensor, _ in bucket]
+        write_backs = [write_back for _, write_back in bucket if write_back is not None]
+        if len(tensors) == 1 and tensors[0].is_contiguous():
+            flat = tensors[0]
+            copies = ()
+        else:
+            with torch.no_grad():
+                flat = torch.cat([tensor.reshape(-1) for tensor in tensors])
+            copies = tensors if copy_back else ()
+        work = collective(flat)
+        if not copies and not write_backs:
+            results.append(work)
+            continue
+        finish = functools.partial(_finish_bucket, flat, copies, write_backs)
+        if async_op:
+            work = work.get_future().then(lambda _, finish=finish: finish())
+        else:
+            work = finish
+        results.append(work)
+    return results
+
+
+def _finish_bucket(flat, tensors, write_backs):
+    # no_grad: the leaves can require grad, and the callback of an async
+    # collective can run on a thread of the backend.
+    if tensors:
+        with torch.no_grad():
+            chunks = flat.split([tensor.numel() for tensor in tensors])
+            for tensor, chunk in zip(tensors, chunks):
+                tensor.copy_(chunk.view(tensor.shape))
+    for write_back in write_backs:
+        write_back()
