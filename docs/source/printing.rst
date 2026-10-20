@@ -192,7 +192,9 @@ The dtype codes are those of JAX and polars: ``f32`` for ``torch.float32``,
 - The display reads no data and syncs no device: it uses only the shape,
   dtype and device of each leaf, and stacks no leaf of a lazy stack.
 - A :class:`~tensordict.store.TensorDictStore` and a
-  :class:`~tensordict.NonTensorStack` keep their usual display, and
+  :class:`~tensordict.NonTensorStack` keep their usual display; nested in
+  another tensordict, a store prints as its class name (``TensorDictStore``),
+  since its entries would read the server.
   :func:`~tensordict.parse_tensor_dict_string` does not read this format.
 
 Notebook display
@@ -211,8 +213,12 @@ uses the colors of the notebook theme, so it reads in light and dark themes.
 - It shows at most 200 entries; the rest of each block shows as
   ``... and K more``.
 - A :class:`~tensordict.store.TensorDictStore`, a
-  :class:`~tensordict.NonTensorStack` or a :class:`~tensordict.NonTensorData`
-  shows its text display, as does any tensordict whose HTML display fails.
+  :class:`~tensordict.NonTensorStack`, a :class:`~tensordict.NonTensorData`,
+  and any tensordict or tensorclass with its own text display (such as
+  :class:`~tensordict.TensorDictParams`, or a class that defines
+  ``__repr__``) keep their text display, as does any tensordict whose HTML
+  display fails. Nested in another tensordict, a
+  :class:`~tensordict.store.TensorDictStore` shows as its class name.
 - ``set_printoptions(html=False)`` turns the HTML display off, and the
   notebook shows the text display instead.
 

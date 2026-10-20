@@ -829,6 +829,26 @@ class _TypedMesh(TypedTensorDict):
     cells: torch.Tensor
 
 
+class _CountingStore(TensorDict):
+    # keeps its own repr, as TensorDictStore does, and counts its leaf reads
+    reads = []
+
+    def _repr_parts(self):
+        return [f"keys={sorted(self.keys())}"]
+
+    def _get_str(self, key, *args, **kwargs):
+        type(self).reads.append(key)
+        return super()._get_str(key, *args, **kwargs)
+
+
+def _nested_store():
+    store = _CountingStore(x=torch.zeros(3, 2), y=torch.zeros(3), batch_size=[3])
+    td = TensorDict(s=store, z=torch.zeros(3), batch_size=[3])
+    assert type(td.get("s")) is _CountingStore
+    _CountingStore.reads.clear()
+    return td
+
+
 def _mesh_sample():
     return TensorDict(
         points=torch.zeros(1000, 3),
@@ -1148,6 +1168,14 @@ class TestCompactRepr:
             r == "TensorDict(batch_size=[], fields={c: f32[2], a: f32[2], b: f32[2]})"
         )
 
+    def test_compact_nested_own_repr(self):
+        # a nested store shows its class name and reads none of its leaves
+        td = _nested_store()
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert not _CountingStore.reads
+        assert r == "TensorDict(batch_size=[3], fields={s: _CountingStore, z: f32[]})"
+
     def test_compact_non_tensor_stack_keeps_repr(self):
         from tensordict import NonTensorStack
 
@@ -1263,6 +1291,29 @@ class TestHtmlRepr:
                 return "own"
 
         assert Points(x=torch.zeros(2))._repr_html_() == "own"
+
+    def test_html_tensorclass_own_repr(self):
+        @tensorclass
+        class Points:
+            x: torch.Tensor
+
+            def __repr__(self):
+                return "<own>"
+
+        @tensorclass
+        class SubPoints(Points):
+            y: torch.Tensor
+
+        assert Points(x=torch.zeros(2))._repr_html_() == "<pre>&lt;own&gt;</pre>"
+        out = SubPoints(x=torch.zeros(2), y=torch.zeros(2))._repr_html_()
+        assert out == "<pre>&lt;own&gt;</pre>"
+
+    def test_html_nested_own_repr(self):
+        td = _nested_store()
+        out = td._repr_html_()
+        assert not _CountingStore.reads
+        assert self._items(out) == ["s: _CountingStore", "z: f32[]"]
+        assert td.get("s")._repr_html_().startswith("<pre>_CountingStore(")
 
     def test_html_meta_device(self):
         # meta tensors have no data: the display reads none

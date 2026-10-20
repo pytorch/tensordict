@@ -2178,7 +2178,8 @@ def _compact_entry(td, key):
         return token
     if isinstance(item, NonTensorData):
         return type(item.data).__name__
-    if is_non_tensor(item):
+    if is_non_tensor(item) or (not is_tensorclass(item) and _keeps_own_repr(item)):
+        # a nested store shows its class name only: its leaves are on a server
         return type(item).__name__
     sub = item if first is td else td._get_str(key, None)
     prefix = "" if type(item) is TensorDict else type(item).__name__
@@ -2244,10 +2245,21 @@ def _compact_render(node, indent: str, used: int, tail: int) -> str:
     return prefix + "{\n" + ",\n".join(lines) + "}"
 
 
+def _keeps_own_repr(td) -> bool:
+    # The stores list their key names and a non-tensor stack its values: a
+    # class with its own _repr_parts keeps its repr.
+    from tensordict import LazyStackedTensorDict, TensorDictBase
+
+    return type(td)._repr_parts not in (
+        TensorDictBase._repr_parts,
+        LazyStackedTensorDict._repr_parts,
+    )
+
+
 def _compact_parts(obj):
     # Returns the header items, the entries and the exclusive fields of the
     # compact repr, or None for a class that keeps its own repr.
-    from tensordict import LazyStackedTensorDict, TensorDictBase
+    from tensordict import LazyStackedTensorDict
 
     header = []
     if is_tensorclass(obj):
@@ -2258,12 +2270,7 @@ def _compact_parts(obj):
             if obj.device is not None:
                 header.append(f"device={obj.device}")
     else:
-        # The stores list their key names and a non-tensor stack its values:
-        # a class with its own _repr_parts keeps its repr.
-        if type(obj)._repr_parts not in (
-            TensorDictBase._repr_parts,
-            LazyStackedTensorDict._repr_parts,
-        ):
+        if _keeps_own_repr(obj):
             return None
         if _REPR_OPTIONS["show_batch_size"]:
             header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
@@ -2333,13 +2340,14 @@ def _html_repr(obj) -> str | None:
     ``<pre>`` block for the classes that keep their own repr, or if it fails.
     """
     from tensordict import TensorDictBase
+    from tensordict.tensorclass import _repr
 
     if not _REPR_OPTIONS["html"]:
         return None
     try:
-        # a non-tensor class, or a class with its own repr, keeps its repr
+        # a class with its own repr (a non-tensor class among them) keeps it
         if is_tensorclass(obj):
-            parts = None if type(obj)._is_non_tensor else _compact_parts(obj)
+            parts = _compact_parts(obj) if type(obj).__repr__ is _repr else None
         elif type(obj).__repr__ is TensorDictBase.__repr__:
             parts = _compact_parts(obj)
         else:
