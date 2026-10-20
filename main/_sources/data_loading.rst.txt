@@ -8,6 +8,8 @@ A tensordict with a batch dimension is a dataset. A
 operation, and the batch is a tensordict. Processes on one node can also share
 one tensordict, in shared memory or in memory-mapped files, and see the writes
 of the other processes.
+For data from Hugging Face ``datasets`` and for training with Lightning,
+see :ref:`integrations`.
 
 Use a tensordict as a dataset
 -----------------------------

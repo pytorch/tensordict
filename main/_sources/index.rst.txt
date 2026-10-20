@@ -165,6 +165,7 @@ Where to go
    saving
    storage
    data_loading
+   integrations
    distributed
    compile
    printing

@@ -20,6 +20,7 @@
 - [Getting started](https://docs.pytorch.org/tensordict/stable/getting_started.md)
 - [TensorDict](https://docs.pytorch.org/tensordict/stable/index.md)
 - [Installation](https://docs.pytorch.org/tensordict/stable/installation.md)
+- [Use tensordict with other libraries](https://docs.pytorch.org/tensordict/stable/integrations.md)
 - [Modules: TensorDictModule and tensordict.nn](https://docs.pytorch.org/tensordict/stable/modules.md)
 - [What is TensorDict?](https://docs.pytorch.org/tensordict/stable/overview.md)
 - [Printing and display](https://docs.pytorch.org/tensordict/stable/printing.md)
