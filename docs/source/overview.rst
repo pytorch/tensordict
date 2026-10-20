@@ -193,6 +193,7 @@ The user guide explains one concept on each page:
   typed fields. :ref:`choosing-a-container` compares them.
 - :ref:`modules-guide`: :class:`~tensordict.nn.TensorDictModule` and the other
   modules that read and write tensordicts.
+- :ref:`pitfalls`: the behaviors that surprise new users most often.
 
 For saving, storage, data loading, distributed training, and
 :func:`torch.compile`, see :ref:`saving`, :ref:`storage`, :ref:`data-loading`,

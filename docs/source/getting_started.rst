@@ -485,6 +485,7 @@ Next steps
 
 - The user guide explains each idea of this page in detail. Start with
   :ref:`overview`.
+- :ref:`pitfalls` lists the behaviors that surprise new users most often.
 - The tutorials are scripts that you can run. Start with
   :doc:`tutorials/tensordict_keys`, then :doc:`tutorials/tensordict_slicing`
   and :doc:`tutorials/tensordict_shapes`.
