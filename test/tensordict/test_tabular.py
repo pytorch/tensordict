@@ -446,6 +446,36 @@ class TestJSON:
         td = from_json(path)
         assert td.batch_size == torch.Size([2])
 
+    @pytest.mark.parametrize("lines", [False, True])
+    def test_from_json_without_pandas_keeps_later_fields(
+        self, tmp_path, monkeypatch, lines
+    ):
+        # https://github.com/pytorch/tensordict/issues/3063
+        # Without pandas, the fields that the first record lacks were dropped.
+        import tensordict._tabular
+
+        monkeypatch.setattr(tensordict._tabular, "_has_pandas", lambda: False)
+        monkeypatch.setitem(sys.modules, "pandas", None)
+
+        def read(records):
+            path = tmp_path / ("test.jsonl" if lines else "test.json")
+            if lines:
+                path.write_text("\n".join(json.dumps(r) for r in records))
+            else:
+                path.write_text(json.dumps(records))
+            return TensorDict.from_json(path, lines=lines)
+
+        td = read([{"a": "x"}, {"a": "y", "b": "z"}, {"c": 3.5, "a": "w"}])
+        assert td.batch_size == torch.Size([3])
+        assert list(td.keys()) == ["a", "b", "c"]
+        assert td["a"] == ["x", "y", "w"]
+        assert td["b"] == [None, "z", None]
+        assert td["c"][2] == 3.5
+        td = read([{}, {"b": "later"}])
+        assert td.batch_size == torch.Size([2])
+        assert list(td.keys()) == ["b"]
+        assert td["b"] == [None, "later"]
+
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
 class TestFromAnyIntegration:

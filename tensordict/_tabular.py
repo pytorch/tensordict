@@ -9,6 +9,8 @@ All external dependencies (pandas, pyarrow) are optional.
 from __future__ import annotations
 
 import importlib.util
+from itertools import chain
+from operator import methodcaller
 from pathlib import Path
 from typing import Any
 
@@ -293,7 +295,11 @@ def _read_json(
         if not records:
             return {}, 0
 
-        all_keys = list(records[0].keys())
+        # The fields of all the records, in the order first seen, as pandas
+        # reads them: a field that only later records have is kept too.
+        all_keys = dict.fromkeys(
+            chain.from_iterable(map(methodcaller("keys"), records))
+        )
         columns = {key: [r.get(key) for r in records] for key in all_keys}
 
         for key, vals in columns.items():
