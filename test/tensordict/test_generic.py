@@ -1029,6 +1029,52 @@ class TestGeneric:
         with pytest.raises(NotImplementedError, match="non_blocking"):
             td.consolidate(num_threads=4, return_early=True, non_blocking=True)
 
+    def test_consolidate_pin_memory_consolidated(self, monkeypatch, tmpdir):
+        # consolidate(pin_memory=True) copies a consolidated tensordict whose
+        # storage is not pinned into a pinned buffer (#3116)
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        if not torch.accelerator.is_available():
+            # Without an accelerator there is no pinned memory: self is
+            # returned, as before
+            assert td.consolidate(pin_memory=True) is td
+        pin_memory_args = []
+        empty = torch.empty
+
+        def recording_empty(*args, pin_memory=False, **kwargs):
+            pin_memory_args.append(pin_memory)
+            return empty(*args, **kwargs)
+
+        monkeypatch.setattr(torch.accelerator, "is_available", lambda: True)
+        monkeypatch.setattr(torch, "empty", recording_empty)
+        out = td.consolidate(pin_memory=True)
+        assert out is not td
+        assert pin_memory_args == [True]
+        assert out.is_consolidated()
+        assert (out == td).all()
+        # Without pin_memory, with inplace=True, return_early=True, an
+        # accelerator device or a filename, self is still returned
+        assert td.consolidate() is td
+        assert td.consolidate(pin_memory=True, inplace=True) is td
+        assert td.consolidate(pin_memory=True, num_threads=2, return_early=True) is td
+        assert td.consolidate(pin_memory=True, device="cuda") is td
+        filename = Path(tmpdir) / "file.td"
+        td_file = td.consolidate(filename=filename)
+        assert td_file.consolidate(filename=filename, pin_memory=True) is td_file
+        # A pinned storage is returned as is
+        monkeypatch.setattr(torch.Tensor, "is_pinned", lambda self: True)
+        assert td.consolidate(pin_memory=True) is td
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_consolidate_pin_memory_consolidated_cuda(self):
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        assert not td._consolidated["storage"].is_pinned()
+        out = td.consolidate(pin_memory=True)
+        assert out is not td
+        assert out._consolidated["storage"].is_pinned()
+        assert out["b", "c"].is_pinned()
+        assert (out == td).all()
+        assert out.consolidate(pin_memory=True) is out
+
     @pytest.mark.skipif(
         not torch.cuda.is_available() and not is_npu_available(),
         reason="no cuda or npu device detected",
