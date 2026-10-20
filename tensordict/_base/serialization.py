@@ -17,6 +17,7 @@ import collections
 import concurrent.futures
 import json
 import os.path
+import threading
 from concurrent.futures import wait
 from copy import copy
 from pathlib import Path
@@ -598,7 +599,9 @@ class _Serialization:
                 leaves are views into a memory map of the file, and the
                 metadata is written after them, so that
                 :meth:`~.from_consolidated` can read the file back. Defaults to
-                ``None``, which keeps the storage in memory.
+                ``None``, which keeps the storage in memory. Without
+                ``use_buffer=True``, replacing a larger file retains its
+                capacity so that existing memory mappings stay valid.
 
         Keyword Args:
             num_threads (int, optional): the number of threads that copy the
@@ -695,7 +698,9 @@ class _Serialization:
                 _write_consolidated_metadata(
                     filename,
                     consolidated["metadata"],
-                    data_size=consolidated["storage"].numel(),
+                    data_size=consolidated.get(
+                        "file_data_size", consolidated["storage"].numel()
+                    ),
                 )
                 consolidated["file_id"] = _file_id(filename)
             return self
@@ -736,9 +741,12 @@ class _Serialization:
                 )
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
+                total_size = filesize + suffix
+                if os.path.exists(filename):
+                    total_size = max(total_size, os.path.getsize(filename))
                 total_storage = torch.from_file(
                     str(filename),
-                    size=filesize + suffix,
+                    size=total_size,
                     dtype=torch.uint8,
                     shared=True,
                     # needed when device ctx differs
@@ -750,9 +758,19 @@ class _Serialization:
                     dtype=torch.uint8,
                 )
 
-            total_storage[-8:] = len_metadata
-            total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
-            storage = total_storage[:-suffix]
+            # Keep compact metadata at physical EOF, while leaf offsets and
+            # copies cover only the current payload, not retained capacity.
+            storage = total_storage[:filesize]
+            if not use_buffer and total_size > filesize + suffix:
+                # A slice still pickles its entire underlying storage. Keep
+                # retained file capacity out of the returned payload storage.
+                storage = torch.from_file(
+                    str(filename),
+                    size=filesize,
+                    dtype=torch.uint8,
+                    shared=True,
+                    device=torch.device("cpu"),
+                )
             # assert len(storage.untyped_storage()) == filesize
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
@@ -922,6 +940,41 @@ class _Serialization:
                 self._sync_all()
             if items:
                 torch.cat(items, out=storage)
+
+        if filename is not None:
+
+            def write_metadata():
+                # The source may contain views into this file. Write the
+                # footer only after copying, so it cannot overwrite a source.
+                total_storage[-8:] = len_metadata
+                total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+
+            if not consolidate_futures:
+                write_metadata()
+            else:
+                copy_futures = consolidate_futures
+                metadata_future = concurrent.futures.Future()
+                pending = set(copy_futures)
+                metadata_lock = threading.Lock()
+
+                def write_metadata_when_ready(completed):
+                    with metadata_lock:
+                        pending.remove(completed)
+                        if pending:
+                            return
+                    try:
+                        for future in copy_futures:
+                            future.result()
+                        write_metadata()
+                    except BaseException as error:
+                        metadata_future.set_exception(error)
+                    else:
+                        metadata_future.set_result(None)
+
+                for future in copy_futures:
+                    future.add_done_callback(write_metadata_when_ready)
+                consolidate_futures = [*copy_futures, metadata_future]
+
         for v, (k, oldv) in _zip_strict(
             storage.split(flat_size), list(flat_dict.items())
         ):
@@ -991,6 +1044,7 @@ class _Serialization:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()
             result._consolidated["file_id"] = _file_id(filename)
+            result._consolidated["file_data_size"] = total_storage.numel() - suffix
             # with open(Path(filename).with_suffix(".json"), "wb") as f:
             #     metadata_dict["size"] = filesize
             #     f.write(json.dumps(metadata_dict))

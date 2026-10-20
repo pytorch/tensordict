@@ -1273,6 +1273,158 @@ class TestGeneric:
         assert pickle.loads(pickle.dumps(td))["b"].batch_size == (2, 3, 4)
 
     @pytest.mark.parametrize("use_buffer", [False, True])
+    @pytest.mark.parametrize("num_threads", [0, 4])
+    @pytest.mark.parametrize(
+        "old_count,new_count", [(100, 2), (2, 100), (2, 2), (None, 2)]
+    )
+    def test_consolidated_file_overwrite(
+        self, tmp_path, use_buffer, num_threads, old_count, new_count
+    ):
+        filename = tmp_path / "td.bin"
+        previous = None
+        if old_count is not None:
+            previous = TensorDict(
+                a=torch.arange(old_count), batch_size=[old_count]
+            ).consolidate(filename=filename, use_buffer=use_buffer)
+        old_file_size = filename.stat().st_size if filename.exists() else 0
+        expected = TensorDict(a=torch.arange(new_count) + 500, batch_size=[new_count])
+
+        saved = expected.consolidate(
+            filename=filename, use_buffer=use_buffer, num_threads=num_threads
+        )
+        loaded = TensorDict.from_consolidated(filename)
+
+        assert loaded.batch_size == expected.batch_size
+        assert_allclose_td(loaded, expected)
+        if not use_buffer:
+            assert_allclose_td(pickle.loads(pickle.dumps(saved)), expected)
+        assert_allclose_td(pickle.loads(pickle.dumps(loaded)), expected)
+        if not use_buffer and old_count is not None:
+            assert filename.stat().st_size >= old_file_size
+            # The old direct mapping remains addressable, including its tail.
+            # Its values can change when the same file is overwritten.
+            previous["a"][-1].item()
+
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_overwrite_schema(self, tmp_path, use_buffer):
+        filename = tmp_path / "td.bin"
+        TensorDict(old=torch.arange(100), batch_size=[100]).consolidate(
+            filename=filename, use_buffer=use_buffer
+        )
+        expected = TensorDict(
+            new={"x": torch.tensor([3.0, 4.0])}, batch_size=[2], names=["rows"]
+        )
+
+        expected.consolidate(filename=filename, use_buffer=use_buffer)
+        loaded = TensorDict.from_consolidated(filename)
+
+        assert set(loaded.keys(True, True)) == {("new", "x")}
+        assert loaded.batch_size == expected.batch_size
+        assert loaded.names == ["rows"]
+        assert_allclose_td(loaded, expected)
+
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_overwrite_shorter_metadata(self, tmp_path, use_buffer):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(2), batch_size=[2], names=["x" * 200]).consolidate(
+            filename=filename, use_buffer=use_buffer
+        )
+        expected = TensorDict(a=torch.tensor([500, 501]), batch_size=[2], names=["x"])
+
+        expected.consolidate(filename=filename, use_buffer=use_buffer)
+        loaded = TensorDict.from_consolidated(filename)
+
+        assert loaded.names == ["x"]
+        assert_allclose_td(loaded, expected)
+
+    @pytest.mark.parametrize(
+        "num_threads,return_early", [(0, False), (4, False), (4, True)]
+    )
+    def test_consolidated_file_overwrite_source_view(
+        self, tmp_path, num_threads, return_early
+    ):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(
+            filename=filename
+        )
+        # The longer metadata extends into the original tensor's last rows.
+        key = "renamed_" * 40
+        expected = original["a"][-2:].clone()
+        source = TensorDict({key: original["a"][-2:]}, batch_size=[2])
+
+        saved = source.consolidate(
+            filename=filename, num_threads=num_threads, return_early=return_early
+        )
+        if return_early:
+            saved = saved.result()
+        loaded = TensorDict.from_consolidated(filename)
+
+        torch.testing.assert_close(saved[key], expected)
+        torch.testing.assert_close(loaded[key], expected)
+        assert loaded.batch_size == (2,)
+
+    def test_consolidated_file_overwrite_compact_metadata_refresh(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(100_000), batch_size=[100_000]).consolidate(
+            filename=filename
+        )
+        expected = TensorDict(a=torch.tensor([500, 501]), batch_size=[2])
+        saved = expected.consolidate(
+            filename=filename, num_threads=4, return_early=True
+        )
+        saved = saved.result()
+        assert len(pickle.dumps(saved)) < 2000
+
+        for names in ([None], ["row" * 100], ["row"]):
+            saved.names = names
+            assert saved.consolidate(filename=filename) is saved
+            with open(filename, "rb") as file:
+                file.seek(-8, os.SEEK_END)
+                metadata_size = int.from_bytes(file.read(8), sys.byteorder, signed=True)
+            # Retained capacity must not become a payload-sized JSON string.
+            assert metadata_size < 2000
+            loaded = TensorDict.from_consolidated(filename)
+            assert loaded.batch_size == (2,)
+            assert loaded.names == names
+            assert_allclose_td(loaded, expected)
+
+    @pytest.mark.parametrize("existing", [False, True])
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_consolidated_file_overwrite_empty(self, tmp_path, existing, return_early):
+        filename = tmp_path / "td.bin"
+        if existing:
+            TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(
+                filename=filename
+            )
+        saved = TensorDict({}, batch_size=[]).consolidate(
+            filename=filename, num_threads=4, return_early=return_early
+        )
+        if return_early:
+            for future in saved.futures:
+                future.result(timeout=5)
+            saved = saved.result()
+
+        assert saved.is_empty()
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == ()
+        assert loaded.is_empty()
+
+    def test_consolidated_file_overwrite_async_copy_error(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        source = TensorDict(a=torch.tensor([500, 501]), batch_size=[2])
+
+        with mock.patch("torch.cat", side_effect=RuntimeError("copy failed")):
+            result = source.consolidate(
+                filename=filename, num_threads=4, return_early=True
+            )
+            for future in result.futures:
+                with pytest.raises(RuntimeError, match="copy failed"):
+                    future.result(timeout=5)
+            with pytest.raises(RuntimeError, match="copy failed"):
+                result.result()
+
+    @pytest.mark.parametrize("use_buffer", [False, True])
     def test_consolidated_file_batch_size_names_consolidate_again(
         self, tmp_path, use_buffer
     ):
