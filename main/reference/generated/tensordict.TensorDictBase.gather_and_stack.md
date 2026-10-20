@@ -6,10 +6,25 @@ Stacks the tensordicts of the other ranks into the tensordict of rank `dst`, in 
 
 Every rank of the group must call it. On rank `dst`, the tensordict must
 have one row per other rank: its first batch dimension is
-`world_size - 1`, and its own data is not in the result. The
-tensordicts are sent with [`torch.distributed.gather_object()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather_object), which
-pickles them: use it only with ranks you trust. See
-[Collectives](../../distributed.html#distributed-collectives).
+`world_size - 1`, and its own data is not in the result. When the
+backend of the group is exactly `gloo`, each other rank consolidates
+its tensordict (see [`consolidate()`](tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate)) and sends its storage and its
+pickled metadata to `dst` with [`torch.distributed.gather()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather). With
+any other backend, including a group with several backends such as
+`"cpu:gloo,cuda:nccl"` or one whose backend is `"undefined"`, the
+tensordicts are sent with [`torch.distributed.gather_object()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather_object),
+which pickles them. With `gloo`, a rank other than `dst` pickles its
+tensordict when it cannot be consolidated, or when it holds one of
+these:
+
+- a leaf that requires gradients, is not on the CPU, is not a strided
+tensor, or is a tensor subclass other than
+[`MemoryMappedTensor`](tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor);
+- a tensordict other than a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), a
+[`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) or a tensorclass, for
+example a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
+
+Use it only with ranks you trust. See [Collectives](../../distributed.html#distributed-collectives).
 
 Parameters:
 
