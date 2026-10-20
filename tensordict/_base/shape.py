@@ -1297,10 +1297,11 @@ class _ShapeOps:
         <tensordict.PackLayout.unpack>` inverts it.
 
         Packing along the last dim copies the data once, with one
-        :func:`torch.cat`. Along another dim the result can take a second
-        copy: :func:`torch.cat` keeps the channels-last strides that moving
-        the feature dim gives a 4-d or 5-d result, and the result is then made
-        contiguous.
+        :func:`torch.cat`, unless the leaves are channels-last:
+        :func:`torch.cat` keeps their strides, and making the result
+        contiguous takes a second copy. Along another dim the result can take
+        a second copy too, since moving the feature dim makes a 4-d or 5-d
+        result channels-last.
 
         All the leaves must share one dtype and one device. Non-tensor data
         cannot be packed: drop it with :meth:`filter_non_tensor_data` first.
@@ -1423,7 +1424,11 @@ class _ShapeOps:
                 if value.ndim > batch_dims
                 else value[..., None]
             )
-            tensors.append(value.movedim(-1, pos))
+            # every leaf now has batch_dims + 1 dims: along the last dim the
+            # movedim would be the identity
+            if pos != batch_dims:
+                value = value.movedim(-1, pos)
+            tensors.append(value)
         if tensors:
             # cat follows the memory format of its inputs, which movedim makes
             # channels-last for some ranks

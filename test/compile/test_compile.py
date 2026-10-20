@@ -681,6 +681,22 @@ class TestTD:
         out = pack_unpack_c(data)
         assert (out == data * 2).all()
 
+    @pytest.mark.parametrize("dim", [-1, 1])
+    def test_pack_graph_movedim(self, mode, dim):
+        # Packing along the last dim traces no movedim (#2891).
+        if mode is not None:
+            pytest.skip("checks the traced graph once")
+        data = TensorDict(
+            {"a": torch.randn(2, 4), "b": {"c": torch.randn(2, 4, 3, 2)}}, [2, 4]
+        )
+        backend = EagerAndRecordGraphs()
+        pack_c = torch.compile(
+            lambda td: td.pack(dim=dim)[0], fullgraph=True, backend=backend
+        )
+        torch.testing.assert_close(pack_c(data), data.pack(dim=dim)[0])
+        targets = [str(node.target) for g in backend.graphs for node in g.graph.nodes]
+        assert any("movedim" in target for target in targets) == (dim != -1)
+
     def test_reshape(self, mode):
         def reshape(td):
             return td.reshape(2, 2)
