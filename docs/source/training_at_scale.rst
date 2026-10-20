@@ -34,6 +34,11 @@ one:
    stream. The batch was allocated on the second stream, and this keeps its
    memory from being reused before the main stream is done with it.
 
+Step 1 pins only a batch that is not consolidated yet. A consolidated batch
+is returned as it is, and if its buffer is not pinned, the copy of step 2
+does not overlap. With this recipe, the ``collate_fn`` of the loader should
+return the batch without consolidating it.
+
 This generator yields each batch of ``loader`` on ``device``, one batch
 ahead:
 
@@ -66,8 +71,10 @@ lines need a GPU, so they are not run when this page is tested:
   >>> for batch in prefetch(loader, "cuda"):  # doctest: +SKIP
   ...     loss = model(batch)
 
-Do not also pass ``pin_memory=True`` to the ``DataLoader``.
-:meth:`~tensordict.TensorDictBase.pin_memory` pins each leaf on its own, so
+Do not also pass ``pin_memory=True`` to the ``DataLoader``. The loader then
+calls :meth:`~tensordict.TensorDictBase.pin_memory`, which pins each leaf on
+its own, and step 1 copies the batch again into a new pinned buffer: every
+batch is pinned twice. Do not replace step 1 with ``pin_memory()`` either:
 its result is not consolidated, and ``to()`` then makes one copy for each
 leaf. In one test with three leaves, the consolidated batch went to the GPU in
 one copy and the pinned batch in three.
@@ -84,9 +91,10 @@ Wrap the tensordict in a small :class:`~torch.utils.data.Dataset` before you
 pass it to ``StatefulDataLoader``. A tensordict has ``state_dict()`` and
 ``load_state_dict()`` methods, so the loader takes it for a dataset with a
 state: the state of the loader then holds every tensor of the dataset, and
-saving the state saves the dataset. With worker processes and a memory-mapped tensordict, the workers
-fail with ``OSError: [Errno 9] Bad file descriptor``. The wrapper below has
-no ``state_dict()``, and it keeps the batched reads of ``__getitems__``:
+saving the state saves the dataset. With worker processes and a
+memory-mapped tensordict, the workers fail with
+``OSError: [Errno 9] Bad file descriptor``. The wrapper below has no
+``state_dict()``, and it keeps the batched reads of ``__getitems__``:
 
   >>> from torch.utils.data import Dataset
   >>> class Rows(Dataset):
@@ -119,7 +127,10 @@ the other four:
   >>> rest = [batch["label"] for batch in batches]  # doctest: +SKIP
   >>> resumed = make_loader()  # doctest: +SKIP
   >>> resumed.load_state_dict(state)  # doctest: +SKIP
-  >>> all((a == b).all() for a, b in zip(rest, (batch["label"] for batch in resumed)))  # doctest: +SKIP
+  >>> resumed_rest = [batch["label"] for batch in resumed]  # doctest: +SKIP
+  >>> len(rest), len(resumed_rest)  # doctest: +SKIP
+  (4, 4)
+  >>> all((a == b).all() for a, b in zip(rest, resumed_rest))  # doctest: +SKIP
   True
 
 The same works with ``num_workers`` greater than 0 and with a memory-mapped
@@ -168,6 +179,7 @@ assumes so:
 :func:`torch.distributed.checkpoint.async_save` takes the same state dict. It
 returns a future: call its ``result()`` before you change the tensordict or
 start the next save.
+
 In a training job, every rank calls these functions. This example saves and
 loads on each rank of a process group. To run it, add it to the script of
 :ref:`distributed` (section "Run the examples"), with
@@ -303,7 +315,7 @@ predicates :func:`~tensordict.is_floating` and :func:`~tensordict.is_inexact`
   torch.int64
 
 A tensorclass can make a filter its default, with
-``@tensorclass(cast_filter=is_inexact)``: see :ref:`tensorclass-guide`.
+``@tensorclass(cast_filter=is_inexact)``: see :func:`~tensordict.tensorclass`.
 
 Send tensordicts to other processes
 -----------------------------------
