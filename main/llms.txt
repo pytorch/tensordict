@@ -438,6 +438,7 @@
 - [fromkeys](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.fromkeys.md)
 - [get_defaults_to_none](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.get_defaults_to_none.md)
 - [get_printoptions](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.get_printoptions.md)
+- [group_by](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.group_by.md)
 - [is_bool](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.is_bool.md)
 - [is_floating](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.is_floating.md)
 - [is_inexact](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.is_inexact.md)

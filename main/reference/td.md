@@ -201,6 +201,9 @@ Keys, values, and entries. For the rules, see [Batch size, shapes, and indexing]
 | [`TensorDictBase.unbind`](generated/tensordict.TensorDictBase.unbind.html#tensordict.TensorDictBase.unbind)(dim) | Returns a tuple of the tensordicts along a batch dimension, as [`torch.Tensor.unbind()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind) does. |
 | [`TensorDictBase.narrow`](generated/tensordict.TensorDictBase.narrow.html#tensordict.TensorDictBase.narrow)(dim, start, length) | Returns a tensordict narrowed along a batch dimension, as [`torch.Tensor.narrow()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.narrow.html#torch.Tensor.narrow) does. |
 
+| [`group_by`](generated/tensordict.group_by.html#tensordict.group_by)(tensordict, key) | Splits a tensordict into groups of rows that share the value of an entry. |
+| --- | --- |
+
 ### Shape, batch dimensions, and stacking
 
 Read and change the batch size and the dimension names, reshape and expand
