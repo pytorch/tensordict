@@ -1345,6 +1345,8 @@ class TestBucketedReduce:
                 "f": rand(2, 1, dtype=torch.int32),
                 "g": rand(2, 40),
                 ("b", "h"): rand(2),
+                # Expanded: not packed, reduced in place.
+                "x": rand(3).expand(2, 3),
                 "s": LazyStackedTensorDict(
                     TensorDict(x=rand(4)), TensorDict(x=rand(4))
                 ),
@@ -1390,8 +1392,8 @@ class TestBucketedReduce:
                         if (dst is None or rank == dst) and not (td == expected).all():
                             errors.append((case, "result"))
                         if bucket_bytes == 2**20 and works is not None:
-                            # One bucket per dtype.
-                            if len(works) != 4:
+                            # One bucket per dtype, plus one for "x".
+                            if len(works) != 5:
                                 errors.append((case, len(works)))
         except Exception as err:
             errors.append(repr(err))

@@ -879,7 +879,8 @@ class _Distributed:
 
         Returns:
             With ``async_op=True`` and ``return_premature=True``, a list of
-            ``Work`` objects. Otherwise, ``None``.
+            ``Work`` objects (with ``bucket_bytes``, ``Work`` or ``Future``
+            objects, one per bucket). Otherwise, ``None``.
 
         Examples:
             This example runs in two processes: add it to the
@@ -1123,7 +1124,9 @@ class _Distributed:
                 ``None``, one reduction per leaf.
 
         Returns:
-            With ``async_op=True``, a list of ``Work`` objects. Otherwise, ``None``.
+            With ``async_op=True``, a list of ``Work`` objects (with
+            ``bucket_bytes``, ``Work`` or ``Future`` objects, one per bucket).
+            Otherwise, ``None``.
 
         Examples:
             This example runs in two processes: add it to the
@@ -1242,10 +1245,12 @@ def _bucketed_collective(leaves, bucket_bytes, collective, async_op, copy_back=T
     ``write_back`` is ``None`` or a callable to run once the result is in
     ``tensor``. The leaves are grouped by device and dtype, in the order of
     their first leaf, and each group is cut into buckets of at most
-    ``bucket_bytes`` bytes, a larger leaf being a bucket of its own. Every rank
-    must pass leaves of the same shapes and dtypes in the same order.
-    ``collective`` takes a flat tensor: the leaf of a bucket of one contiguous
-    leaf, and otherwise the concatenation of the leaves, copied back into them
+    ``bucket_bytes`` bytes, a larger leaf being a bucket of its own. A
+    non-contiguous or non-strided leaf (expanded, sparse...) is not packed:
+    it is a bucket of its own, reduced in place as without ``bucket_bytes``.
+    Every rank must pass leaves of the same shapes, dtypes and layouts in the
+    same order. ``collective`` takes the leaf of a bucket of one leaf, and
+    otherwise the concatenation of the flattened leaves, copied back into them
     if ``copy_back``. Returns one entry per bucket, for
     ``_Distributed._finish_reduce``: with ``async_op``, the ``Work``, or a
     ``Future`` that runs the copies and write-backs once it completes;
@@ -1256,9 +1261,13 @@ def _bucketed_collective(leaves, bucket_bytes, collective, async_op, copy_back=T
             f"bucket_bytes must be a positive number of bytes, got {bucket_bytes}."
         )
     groups = {}
-    for leaf in leaves:
-        groups.setdefault((leaf[0].device, leaf[0].dtype), []).append(leaf)
     buckets = []
+    for leaf in leaves:
+        if leaf[0].layout != torch.strided or not leaf[0].is_contiguous():
+            # Packing fails for sparse leaves, and copying back for expanded ones.
+            buckets.append([leaf])
+            continue
+        groups.setdefault((leaf[0].device, leaf[0].dtype), []).append(leaf)
     for group_leaves in groups.values():
         bucket, size = [], 0
         for leaf in group_leaves:
@@ -1273,7 +1282,7 @@ def _bucketed_collective(leaves, bucket_bytes, collective, async_op, copy_back=T
     for bucket in buckets:
         tensors = [tensor for tensor, _ in bucket]
         write_backs = [write_back for _, write_back in bucket if write_back is not None]
-        if len(tensors) == 1 and tensors[0].is_contiguous():
+        if len(tensors) == 1:
             flat = tensors[0]
             copies = ()
         else:
