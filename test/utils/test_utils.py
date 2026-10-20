@@ -1404,6 +1404,33 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
 
 
+def test_import_does_not_load_dynamo():
+    # Importing torch._dynamo takes about a second (#3090), so tensordict defers
+    # its Dynamo registrations until something else imports it.
+    code = (
+        "import sys, torch\n"
+        "if 'torch._dynamo' in sys.modules:\n"
+        "    print('torch loads dynamo')\n"
+        "    sys.exit()\n"
+        "import tensordict, tensordict.nn\n"
+        "from tensordict import base, utils\n"
+        "assert 'torch._dynamo' not in sys.modules\n"
+        "from torch._dynamo import trace_rules\n"
+        "from torch._dynamo.variables import TorchInGraphFunctionVariable\n"
+        "assert utils._lock_warn._dynamo_marked_constant\n"
+        "for fn in (utils._add_batch_dim_c, base._foreach_copy_compiled):\n"
+        "    assert trace_rules.lookup_callable(fn) is TorchInGraphFunctionVariable\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
+    if result.stdout.strip() == "torch loads dynamo":
+        pytest.skip("import torch loads torch._dynamo")
+    assert result.stdout.strip() == "ok"
+
+
 def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):
     # to(device, non_blocking_pin=True) runs _pin_mem in several threads on one
     # input queue. A thread that saw an input left must stop, not wait, when

@@ -92,6 +92,7 @@ from tensordict.utils import (
     _pass_through_cls,
     _proc_init,
     _prune_selected_keys,
+    _register_with_dynamo,
     _REPR_OPTIONS,
     _set_max_batch_size,
     _shape,
@@ -143,7 +144,7 @@ __all__ = [
     "set_get_defaults_to_none",
 ]
 
-_foreach_copy_compiled = allow_in_graph(_foreach_copy_)
+_foreach_copy_compiled = _register_with_dynamo(allow_in_graph, _foreach_copy_)
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
 

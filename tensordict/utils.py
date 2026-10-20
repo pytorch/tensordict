@@ -116,6 +116,55 @@ __all__ = [
 ]
 
 
+# Decorations deferred until torch._dynamo is imported, see _register_with_dynamo.
+_PENDING_DYNAMO_REGISTRATIONS = []
+
+
+class _DynamoImportHook:
+    """Finder that applies the pending registrations once torch._dynamo is imported."""
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname != "torch._dynamo":
+            return None
+        sys.meta_path.remove(self)
+        for finder in sys.meta_path:
+            find_spec = getattr(finder, "find_spec", None)
+            spec = find_spec(fullname, path, target) if find_spec else None
+            if spec is not None:
+                break
+        else:
+            return None
+        loader = spec.loader
+        exec_module = loader.exec_module
+
+        def exec_and_register(module):
+            del loader.exec_module
+            exec_module(module)
+            while _PENDING_DYNAMO_REGISTRATIONS:
+                decorator, fn = _PENDING_DYNAMO_REGISTRATIONS.pop(0)
+                decorator(fn)
+
+        loader.exec_module = exec_and_register
+        return spec
+
+
+def _register_with_dynamo(decorator, fn):
+    """Apply ``decorator`` (``allow_in_graph`` or ``assume_constant_result``) to ``fn``.
+
+    Both register ``fn`` with Dynamo and return it unchanged, but importing
+    ``torch._dynamo`` takes about a second, so this defers the call until
+    ``torch._dynamo`` is imported, which happens before anything is compiled.
+    ``import tensordict`` thus does not load Dynamo.
+    """
+    if "torch._dynamo" in sys.modules:
+        decorator(fn)
+    else:
+        if not _PENDING_DYNAMO_REGISTRATIONS:
+            sys.meta_path.insert(0, _DynamoImportHook())
+        _PENDING_DYNAMO_REGISTRATIONS.append((decorator, fn))
+    return fn
+
+
 # Utility function to wrap C++ functorch functions for torch.compile support
 def _wrap_functorch_function(func):
     """Wrap a functorch C++ function to make it compatible with torch.compile.
@@ -130,7 +179,7 @@ def _wrap_functorch_function(func):
     Returns:
         The wrapped function
     """
-    return allow_in_graph(func)
+    return _register_with_dynamo(allow_in_graph, func)
 
 
 def _import_and_wrap_functorch(*names, wrap_names=None):
@@ -3604,7 +3653,7 @@ def _lock_warn():
     )
 
 
-_lock_warn = assume_constant_result(_lock_warn)
+_lock_warn = _register_with_dynamo(assume_constant_result, _lock_warn)
 
 
 _zip_strict = functools.partial(zip, strict=True)
