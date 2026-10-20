@@ -3203,6 +3203,7 @@ class TestGeneric:
             "jagged",
             "non_tensor_stack",
             "exclusive_keys",
+            "nested_exclusive_keys",
             "bare_non_tensor",
             "same_name",
         ],
@@ -3230,6 +3231,14 @@ class TestGeneric:
                 TensorDict(a=torch.zeros(())),
             )
             td = TensorDict(obs=stack)
+            match = "entries have different keys"
+        elif case == "nested_exclusive_keys":
+            # A stack of stacks: the inner stacks list only their shared keys.
+            inner = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3), batch_size=[3]),
+            )
+            td = TensorDict(obs=lazy_stack([inner, inner], dim=1))
             match = "entries have different keys"
         elif case == "bare_non_tensor":
             td = NonTensorData("hi")

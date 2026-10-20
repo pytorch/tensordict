@@ -51,10 +51,19 @@ def _is_json_value(value) -> bool:
     return False
 
 
+def _drops_keys(td) -> bool:
+    """Whether ``td.items()`` leaves out keys that some stacked entries have."""
+    # A lazy stack of lazy stacks: each inner stack lists only the keys its own
+    # entries share, so the outer check alone sees equal key sets.
+    return isinstance(td, LazyStackedTensorDict) and (
+        td._has_exclusive_keys or any(_drops_keys(entry) for entry in td.tensordicts)
+    )
+
+
 def _encode_level(td, prefix: tuple, tensors: dict) -> dict:
     """Returns the JSON description of ``td`` and adds its leaves to ``tensors``."""
     inner = td._tensordict if _is_tensorclass(type(td)) else td
-    if isinstance(inner, LazyStackedTensorDict) and inner._has_exclusive_keys:
+    if _drops_keys(inner):
         raise TypeError(
             f"Cannot save the lazy stack at {prefix or 'the root'} as "
             "safetensors: its entries have different keys. Give every entry "
