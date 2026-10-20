@@ -5,6 +5,7 @@
 ## Docs
 
 - [Which container should I use?](https://docs.pytorch.org/tensordict/stable/choosing_a_container.md)
+- [Coming from JAX pytrees](https://docs.pytorch.org/tensordict/stable/coming_from_jax.md)
 - [Containers on storage backends](https://docs.pytorch.org/tensordict/stable/compatibility.md)
 - [torch.compile, torch.func, torch.export, and CUDA graphs](https://docs.pytorch.org/tensordict/stable/compile.md)
 - [Batch size, shapes, and indexing](https://docs.pytorch.org/tensordict/stable/concepts/batch_size.md)

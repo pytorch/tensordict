@@ -718,6 +718,35 @@ the class uses the ``@tensorclass`` decorator, so an ``int`` annotation names
 the method. A subclass of :class:`~tensordict.TensorClass` inherits these
 methods instead. With the decorator, write ``builtins.int``.
 
+A field can have a shape annotation from `jaxtyping
+<https://docs.kidger.site/jaxtyping/>`_, such as
+``Float[torch.Tensor, "*batch 3"]``. The class accepts it, with every flag, and
+treats it as the array type that it wraps: ``tensor_only`` accepts it as a
+tensor annotation, and ``autocast`` casts to ``torch.Tensor``. The shapes are
+not checked when the class is built or when a field is set. To check them,
+decorate a function that takes the class with ``@jaxtyped``, and check the
+fields with ``isinstance`` in its body. The checks in one call share their
+dimension names (``n`` below) with the annotations of the function:
+
+  >>> from beartype import beartype  # doctest: +SKIP
+  >>> from jaxtyping import Float, jaxtyped  # doctest: +SKIP
+  >>> class Points(TensorClass["tensor_only"]):  # doctest: +SKIP
+  ...     pos: Float[torch.Tensor, "*batch 3"]
+  ...     mass: Float[torch.Tensor, "*batch"]
+  >>> @jaxtyped(typechecker=beartype)  # doctest: +SKIP
+  ... def center(points: Points) -> Float[torch.Tensor, "3"]:
+  ...     assert isinstance(points.pos, Float[torch.Tensor, "n 3"])
+  ...     assert isinstance(points.mass, Float[torch.Tensor, "n"])
+  ...     return (points.pos * points.mass[:, None]).sum(0) / points.mass.sum()
+  >>> points = Points(pos=torch.zeros(4, 3), mass=torch.ones(4), batch_size=[4])  # doctest: +SKIP
+  >>> center(points).shape  # doctest: +SKIP
+  torch.Size([3])
+  >>> wrong = Points(pos=torch.zeros(4, 2), mass=torch.ones(4), batch_size=[4])  # doctest: +SKIP
+  >>> center(wrong)  # doctest: +SKIP
+  Traceback (most recent call last):
+  ...
+  AssertionError
+
 .. _tensorclass-legacy-decorator:
 
 Legacy: the ``@tensorclass`` decorator
@@ -748,6 +777,7 @@ See also
 - :ref:`typed-tensordict-guide`: typed fields on a
   :class:`~tensordict.TensorDictBase` subclass.
 - :ref:`choosing-a-container`: which container to use.
+- :ref:`coming-from-jax`: the JAX pytree idioms in tensorclass terms.
 - :ref:`compatibility`: tensorclasses on HDF5, Redis, lazy stacks, and
   memory-mapped tensordicts.
 - The tutorials :doc:`tutorials/tensorclass_fashion` and

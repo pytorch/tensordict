@@ -122,5 +122,6 @@ containers.
 - [Stacking and variable-size data](concepts/stacking.html#stacking): lazy stacks and data of variable size.
 - [Large datasets and storage backends](storage.html#storage) and [Save and load tensordicts](saving.html#saving): the backends on disk and on servers.
 - [Containers on storage backends](compatibility.html#compatibility): the typed containers on each backend.
+- [Coming from JAX pytrees](coming_from_jax.html#coming-from-jax): the containers for users of JAX pytrees.
 - [tensordict: containers and functions](reference/td.html#api-tensordict), [tensorclass and non-tensor data](reference/tc.html#api-tensorclass), and
 [TypedTensorDict](reference/ttd.html#api-typed-tensordict): the API reference.

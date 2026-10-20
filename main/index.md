@@ -127,6 +127,7 @@ nightly builds, the optional dependencies, conda-forge, and source installs.
 
 - [Getting started](getting_started.html#getting-started): a one-hour tour, with examples
 that you can run. Start here.
+- [Coming from JAX](coming_from_jax.html#coming-from-jax): JAX pytree idioms in tensordict.
 - [User guide](overview.html#overview): one page for each concept, from the batch
 size to TensorClass and `tensordict.nn`.
 - [How-to guides](saving.html#saving): one page for each task, such as saving,
