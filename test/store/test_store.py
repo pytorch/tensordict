@@ -5,6 +5,7 @@
 
 import argparse
 import functools
+import gc
 import importlib
 import inspect
 import io
@@ -2263,8 +2264,11 @@ def test_close_swallows_errors(store_kwargs, stacked, monkeypatch):
     """close() stops the loop when closing the client fails, and __del__ never raises."""
     store = _small_store(store_kwargs, stacked)
     store.clear_redis()
+    aclose = store._client.aclose
 
     async def failing_aclose():
+        # close the connection first: the stopped loop cannot close it later
+        await aclose()
         raise ConnectionError("connection lost")
 
     def failing_close():
@@ -2276,6 +2280,14 @@ def test_close_swallows_errors(store_kwargs, stacked, monkeypatch):
     monkeypatch.delattr(store, "close")
     store.close()
     assert store._loop.is_closed()
+    # the connection is not left for the garbage collector to finalize
+    monkeypatch.undo()
+    gc.collect()  # garbage of earlier tests is finalized outside the check
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ResourceWarning)
+        del store
+        gc.collect()
+    assert not [w for w in caught if issubclass(w.category, ResourceWarning)]
 
 
 @pytest.mark.parametrize("stacked", [False, True])
