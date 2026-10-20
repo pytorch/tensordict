@@ -11,7 +11,12 @@ in one copy. The result is locked (see [Locking and temporary changes](../../con
 write into its leaves in place, but you cannot add or remove entries.
 
 If the tensordict is already consolidated, `self` is returned and
-the other arguments are ignored. A `filename` other than its own
+the other arguments are ignored, except `pin_memory=True`: a
+storage on the CPU that is not pinned is then copied into a pinned
+one, and a new tensordict is returned, unless `filename`,
+`inplace=True`, `return_early=True` with `num_threads > 1` or a
+`device` other than the CPU is given, or no accelerator is
+available. A `filename` other than its own
 file writes nothing: `td.contiguous().consolidate(filename=other)`
 writes a new file.
 
