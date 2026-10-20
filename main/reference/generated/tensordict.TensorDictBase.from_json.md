@@ -8,7 +8,11 @@ The file holds an array of records (`[{"a": 1, "b": 2.0}, ...]`),
 or one record per line with `lines=True` (JSON Lines). Each field
 becomes an entry with one value per record. The file is read with
 `pandas.read_json()` when pandas is installed, and with the
-[`json`](https://docs.python.org/3/library/json.html#module-json) module otherwise. To convert a single JSON object, load
+[`json`](https://docs.python.org/3/library/json.html#module-json) module otherwise. Through pandas, a string field is one
+value for the whole batch (see the note in [`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas));
+through the [`json`](https://docs.python.org/3/library/json.html#module-json) module, it is a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per record. To
+convert a single JSON object, load
 it with [`json.load()`](https://docs.python.org/3/library/json.html#json.load) and pass it to [`from_dict()`](tensordict.TensorDictBase.from_dict.html#tensordict.TensorDictBase.from_dict).
 [`to_json()`](tensordict.TensorDictBase.to_json.html#tensordict.TensorDictBase.to_json) writes such a file.
 

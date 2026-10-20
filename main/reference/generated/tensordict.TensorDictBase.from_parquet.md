@@ -7,7 +7,10 @@ Reads a Parquet file into a tensordict, with one entry per column.
 Requires pyarrow or pandas: the file is read with
 `pyarrow.parquet.read_table` when pyarrow is installed, and with
 `pandas.read_parquet()` otherwise. The columns are converted as in
-[`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas). [`to_parquet()`](tensordict.TensorDictBase.to_parquet.html#tensordict.TensorDictBase.to_parquet) writes such a file.
+[`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas). [`to_parquet()`](tensordict.TensorDictBase.to_parquet.html#tensordict.TensorDictBase.to_parquet) writes such a file. Through
+pyarrow, a string column is a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack)
+with one value per row; through pandas, it is one value for the whole
+batch (see the note in [`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas)).
 
 Parameters:
 
