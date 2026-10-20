@@ -685,6 +685,7 @@ zarr, CSV, JSON, Parquet, and MDS files.
     load
     memmap
     load_memmap
+    append_memmap
     pack_memmap
     unpack_memmap
     is_memmap_archive

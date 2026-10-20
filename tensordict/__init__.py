@@ -17,6 +17,7 @@ from tensordict._base.shape import PackLayout
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._td import (
+    append_memmap,
     cat,
     from_consolidated,
     from_module,
@@ -165,6 +166,7 @@ __all__ = [
     # Memory mapping
     "memmap",
     "load_memmap",
+    "append_memmap",
     # Saving and loading
     "save",
     "load",
