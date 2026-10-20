@@ -608,6 +608,18 @@ checkers read a subclass without the flag as not frozen and report it, so
 repeat `frozen=True` on the subclass (for mypy, see
 Static type checking).
 
+To change a field of a frozen instance, make a copy with new values.
+`s.replace(step=...)` (see [`replace()`](reference/generated/tensordict.TensorDictBase.replace.html#tensordict.TensorDictBase.replace))
+writes the new values into a shallow copy. [`copy.replace()`](https://docs.python.org/3/library/copy.html#copy.replace) (Python 3.13
+and later) builds the copy with `__init__`, as for a dataclass, and keeps
+the batch size and names of the instance unless you pass them,
+`__init__` or `__post_init__` sets the batch size, or the new values do
+not fit that batch size (the copy then has the default batch size, `[]`);
+the device is always kept unless you pass it.
+[`dataclasses.replace()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.replace) does not go through `__replace__` on any Python
+version, so its result has the default batch size (`[]`), no device and no
+names: use `s.replace(...)` or [`copy.replace()`](https://docs.python.org/3/library/copy.html#copy.replace) instead.
+
 ## Converting a dataclass
 
 If you have a `@dataclass`, [`from_dataclass()`](reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) makes a
