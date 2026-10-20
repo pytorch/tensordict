@@ -4138,6 +4138,8 @@ class LinkedList(list):
     only, and unlink it from the tensordict: later item assignments no longer
     write back. A :class:`LinkedList` compares equal to a list with the same
     items. If the write to the tensordict raises, the list is unchanged.
+    :meth:`tolist` returns a plain :class:`list` copy that is not linked to
+    the tensordict, as :meth:`~tensordict.NonTensorStack.tolist` does.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -4146,6 +4148,8 @@ class LinkedList(list):
         >>> values = td["names"]
         >>> values[0] = "z"
         >>> td.get("names").tolist()
+        ['z', 'b', 'c']
+        >>> values.tolist()
         ['z', 'b', 'c']
 
     """
@@ -4169,6 +4173,26 @@ class LinkedList(list):
         except Exception:
             super().__setitem__(slice(None) if is_slice else key, old)
             raise
+
+    def tolist(self) -> list:
+        """Returns a plain :class:`list` copy of the items, not linked to the tensordict.
+
+        Nested :class:`LinkedList` items, as ``td[key]`` returns for a
+        non-tensor entry with more than one batch dimension, become nested
+        lists, as with :meth:`~tensordict.NonTensorStack.tolist`. The other
+        items are not copied.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(batch_size=[2, 2])
+            >>> td["names"] = [["a", "b"], ["c", "d"]]
+            >>> td["names"].tolist()
+            [['a', 'b'], ['c', 'd']]
+
+        """
+        return [
+            item.tolist() if isinstance(item, LinkedList) else item for item in self
+        ]
 
     def append(self, object: Any) -> None:
         """Appends ``object`` to the list and unlinks the list from the tensordict."""
