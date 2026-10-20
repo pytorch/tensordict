@@ -1,9 +1,11 @@
-"""Tests for tabular data import/export (pandas, CSV, Parquet, JSON)."""
+"""Tests for tabular data import/export (pandas, CSV, Parquet, JSON, Arrow)."""
 
 from __future__ import annotations
 
+import datetime
 import importlib.util
 import json
+import subprocess
 import sys
 import warnings
 
@@ -11,6 +13,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import (
+    from_arrow,
     from_csv,
     from_json,
     from_pandas,
@@ -18,6 +21,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TensorDictBase,
+    to_arrow,
 )
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 
@@ -407,6 +411,296 @@ class TestParquet:
         pq.write_table(table, str(path))
         td = from_parquet(path)
         assert td.batch_size == torch.Size([2])
+
+
+def _arrow_table():
+    import pyarrow as pa
+
+    n = 5
+    values = pa.array(np.arange(9, dtype=np.float32))
+    offsets = pa.array(np.array([0, 1, 3, 3, 6, 9], dtype=np.int64))
+    ragged = pa.LargeListArray.from_arrays(offsets, values)
+    return pa.table(
+        {
+            "f": pa.array(np.arange(n, dtype=np.float32)),
+            "u": pa.array(np.arange(n, dtype=np.uint8)),
+            "b": pa.array([True, False, True, True, False]),
+            "ragged": ragged,
+            "ragged32": pa.array(
+                [[1], [2, 3], [], [4, 5, 6], [7]], type=pa.list_(pa.int32())
+            ),
+            "fsl": pa.array(
+                [[i, i + 1] for i in range(n)], type=pa.list_(pa.int64(), 2)
+            ),
+            "fst": pa.FixedShapeTensorArray.from_numpy_ndarray(
+                np.arange(n * 6, dtype=np.float32).reshape(n, 2, 3)
+            ),
+            "st": pa.StructArray.from_arrays(
+                [pa.array(np.arange(n)), ragged], names=["x", "z"]
+            ),
+            "s": pa.array(["a", "bb", "ccc", "d", "e"]),
+            "strings": pa.array([["a"], [], ["b", "c"], ["d"], []]),
+            "date": pa.array([datetime.date(2024, 1, i + 1) for i in range(n)]),
+        }
+    )
+
+
+@pytest.mark.skipif(not _has_pyarrow, reason="pyarrow not found")
+@pytest.mark.filterwarnings("error::DeprecationWarning")
+class TestArrow:
+    def test_from_arrow_types(self):
+        td = from_arrow(_arrow_table())
+        assert td.batch_size == torch.Size([5])
+        assert torch.equal(td["f"], torch.arange(5, dtype=torch.float32))
+        assert torch.equal(td["u"], torch.arange(5, dtype=torch.uint8))
+        assert torch.equal(td["b"], torch.tensor([True, False, True, True, False]))
+        assert td["ragged"].is_nested and td["ragged"].layout is torch.jagged
+        assert [x.tolist() for x in td["ragged"].unbind(0)] == [
+            [0.0],
+            [1.0, 2.0],
+            [],
+            [3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0],
+        ]
+        assert td["ragged32"].dtype == torch.int32
+        assert [x.tolist() for x in td["ragged32"].unbind(0)] == [
+            [1],
+            [2, 3],
+            [],
+            [4, 5, 6],
+            [7],
+        ]
+        assert torch.equal(td["fsl"], torch.arange(5)[:, None] + torch.arange(2))
+        assert torch.equal(
+            td["fst"], torch.arange(30, dtype=torch.float32).view(5, 2, 3)
+        )
+        assert isinstance(td["st"], TensorDict)
+        assert torch.equal(td["st", "x"], torch.arange(5))
+        assert td["st", "z"].is_nested
+        assert isinstance(td.get("s"), NonTensorStack)
+        assert td.get("s").tolist() == ["a", "bb", "ccc", "d", "e"]
+        assert td.get("strings").tolist() == [["a"], [], ["b", "c"], ["d"], []]
+        assert td.get("date").tolist()[1] == datetime.date(2024, 1, 2)
+
+    def test_from_arrow_views(self):
+        table = _arrow_table()
+
+        def address(name):
+            return table.column(name).chunk(0).buffers()[1].address
+
+        td = from_arrow(table)
+        assert td["f"].data_ptr() == address("f")
+        ragged = table.column("ragged").chunk(0)
+        assert td["ragged"].values().data_ptr() == ragged.values.buffers()[1].address
+        assert td["ragged"].offsets().data_ptr() == ragged.offsets.buffers()[1].address
+        assert td["st", "x"].data_ptr() == (
+            table.column("st").chunk(0).field(0).buffers()[1].address
+        )
+        fst = table.column("fst").chunk(0).storage.values
+        assert td["fst"].data_ptr() == fst.buffers()[1].address
+        td = from_arrow(table, copy=True)
+        assert td["f"].data_ptr() != address("f")
+        assert td["ragged"].values().data_ptr() != ragged.values.buffers()[1].address
+        assert torch.equal(td["f"], torch.arange(5, dtype=torch.float32))
+
+    def test_from_arrow_sliced(self):
+        table = _arrow_table()
+        full = from_arrow(table)
+        td = from_arrow(table.slice(1, 3))
+        assert td.batch_size == torch.Size([3])
+        for key in ("f", "u", "b", "fsl", "fst", ("st", "x")):
+            assert torch.equal(td[key], full[key][1:4]), key
+        assert td["f"].data_ptr() == full["f"].data_ptr() + 4
+        for key in ("ragged", "ragged32", ("st", "z")):
+            assert [x.tolist() for x in td[key].unbind(0)] == [
+                x.tolist() for x in full[key].unbind(0)[1:4]
+            ], key
+        assert td.get("s").tolist() == ["bb", "ccc", "d"]
+
+    def test_from_arrow_chunked(self):
+        import pyarrow as pa
+
+        table = pa.table(
+            {
+                "x": pa.chunked_array([[1.0, 2.0], [3.0]]),
+                "ids": pa.chunked_array([[[1], [2, 3]], [[4, 5, 6]]]),
+            }
+        )
+        td = from_arrow(table)
+        assert torch.equal(td["x"], torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64))
+        assert [x.tolist() for x in td["ids"].unbind(0)] == [[1], [2, 3], [4, 5, 6]]
+        empty = from_arrow(pa.table({"x": pa.chunked_array([], type=pa.float32())}))
+        assert empty.batch_size == torch.Size([0])
+        assert empty["x"].shape == torch.Size([0])
+
+    def test_from_arrow_inputs(self):
+        import pyarrow as pa
+
+        table = pa.table({"x": [1, 2, 3]})
+
+        class Stream:
+            def __arrow_c_stream__(self, requested_schema=None):
+                return table.__arrow_c_stream__(requested_schema)
+
+        for data in (table.to_batches()[0], Stream()):
+            td = from_arrow(data, device="cpu")
+            assert td.device == torch.device("cpu")
+            assert torch.equal(td["x"], torch.tensor([1, 2, 3]))
+
+    def test_from_arrow_permuted_tensor(self):
+        array = np.arange(24).reshape(2, 3, 4).transpose(0, 2, 1)
+        import pyarrow as pa
+
+        column = pa.FixedShapeTensorArray.from_numpy_ndarray(array)
+        assert column.type.permutation == [1, 0]
+        td = from_arrow(pa.table({"t": column}))
+        assert torch.equal(td["t"], torch.from_numpy(np.ascontiguousarray(array)))
+
+    def _null_table(self):
+        import pyarrow as pa
+
+        return pa.table(
+            {
+                "f": pa.array([1.0, None, 3.0]),
+                "i": pa.array([None, 2, 3]),
+                "b": pa.array([True, None, True]),
+                "ragged": pa.array([[1.0], None, [2.0, 3.0]]),
+                "fsl": pa.array([[1, 2], None, [5, 6]], type=pa.list_(pa.int64(), 2)),
+                "st": pa.array([{"x": 1, "y": 2.0}, None, {"x": 3, "y": None}]),
+                "s": pa.array(["a", None, "c"]),
+                "full": pa.array([1, 2, 3]),
+            }
+        )
+
+    def test_from_arrow_nulls_raise(self):
+        import pyarrow as pa
+
+        with pytest.raises(ValueError, match=r"\('f',\) has 1 null value"):
+            from_arrow(self._null_table())
+        with pytest.raises(ValueError, match="nulls must be one of"):
+            from_arrow(self._null_table(), nulls="drop")
+        with pytest.raises(ValueError, match=r"\('l',\) has 1 null"):
+            from_arrow(pa.table({"l": pa.array([[1.0, None], [2.0]])}))
+        with pytest.raises(ValueError, match=r"\('st', 'x'\) has 1 null"):
+            from_arrow(pa.table({"st": pa.array([{"x": 1}, None])}))
+
+    @pytest.mark.parametrize("nulls", ["fill", "mask"])
+    def test_from_arrow_nulls(self, nulls):
+        import pyarrow as pa
+
+        td = from_arrow(self._null_table(), nulls=nulls)
+        nan = float("nan")
+        torch.testing.assert_close(
+            td["f"], torch.tensor([1.0, nan, 3.0], dtype=torch.float64), equal_nan=True
+        )
+        assert torch.equal(td["i"], torch.tensor([0, 2, 3]))
+        assert torch.equal(td["b"], torch.tensor([True, False, True]))
+        assert [x.tolist() for x in td["ragged"].unbind(0)] == [[1.0], [], [2.0, 3.0]]
+        assert torch.equal(td["fsl"], torch.tensor([[1, 2], [0, 0], [5, 6]]))
+        assert torch.equal(td["st", "x"], torch.tensor([1, 0, 3]))
+        torch.testing.assert_close(
+            td["st", "y"],
+            torch.tensor([2.0, nan, nan], dtype=torch.float64),
+            equal_nan=True,
+        )
+        assert td.get("s").tolist() == ["a", None, "c"]
+        if nulls == "fill":
+            assert "_mask" not in td.keys()
+        else:
+            assert set(td["_mask"].keys(include_nested=True, leaves_only=True)) == {
+                "f",
+                "i",
+                "b",
+                "ragged",
+                "fsl",
+                ("st", "x"),
+                ("st", "y"),
+                "s",
+            }
+            assert torch.equal(td["_mask", "f"], torch.tensor([True, False, True]))
+            assert torch.equal(td["_mask", "i"], torch.tensor([False, True, True]))
+            assert torch.equal(
+                td["_mask", "st", "y"], torch.tensor([True, False, False])
+            )
+            with pytest.raises(ValueError, match="under the key '_mask'"):
+                from_arrow(pa.table({"_mask": [1]}), nulls="mask")
+        # Nulls inside a list are filled.
+        td = from_arrow(pa.table({"l": pa.array([[1, None], [2]])}), nulls=nulls)
+        assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2]]
+
+    def test_from_arrow_memory_map(self, tmp_path):
+        # An in-place write into a view of a memory-mapped file kills the
+        # process, so run it in a subprocess.
+        import pyarrow as pa
+
+        path = tmp_path / "table.arrow"
+        table = pa.table(
+            {"x": pa.array(np.arange(5)), "l": pa.array([[1], [2, 3]] * 2 + [[]])}
+        )
+        with pa.OSFile(str(path), "wb") as sink:
+            with pa.ipc.new_file(sink, table.schema) as writer:
+                writer.write_table(table)
+        code = (
+            "import sys, pyarrow as pa\n"
+            "from tensordict import from_arrow\n"
+            f"table = pa.ipc.open_file(pa.memory_map({str(path)!r})).read_all()\n"
+            "address = table.column('x').chunk(0).buffers()[1].address\n"
+            "td = from_arrow(table, copy=False)\n"
+            "assert td['x'].data_ptr() == address\n"
+            "td = from_arrow(table)\n"
+            "assert td['x'].data_ptr() != address\n"
+            "td['x'].add_(1)\n"
+            "td['l'].values().add_(1)\n"
+            "assert table.column('x').to_pylist() == [0, 1, 2, 3, 4]\n"
+            "assert table.column('l').to_pylist()[1] == [2, 3]\n"
+            "print('ok')\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "ok"
+
+    def test_to_arrow_roundtrip(self):
+        ragged = torch.nested.nested_tensor_from_jagged(
+            torch.arange(5.0), torch.tensor([0, 1, 3, 5])
+        )
+        ragged_2d = torch.nested.nested_tensor_from_jagged(
+            torch.arange(10.0).view(5, 2), torch.tensor([0, 2, 2, 5])
+        )
+        td = TensorDict(
+            f=torch.arange(3, dtype=torch.float32),
+            b=torch.tensor([True, False, True]),
+            image=torch.arange(18).view(3, 2, 3),
+            ragged=ragged,
+            ragged_2d=ragged_2d,
+            obs=TensorDict(x=torch.tensor([4, 5, 6]), batch_size=[3]),
+            empty=TensorDict(batch_size=[3]),
+            s=NonTensorStack("x", "y", "z"),
+            batch_size=[3],
+        )
+        table = to_arrow(td)
+        assert table.num_rows == 3
+        assert table.column("f").chunk(0).buffers()[1].address == td["f"].data_ptr()
+        assert str(table.schema.field("image").type).startswith(
+            "extension<arrow.fixed_shape_tensor"
+        )
+        td2 = from_arrow(table)
+        assert set(td2.keys(True, True)) == set(td.keys(True, True))
+        for key in ("f", "b", "image", ("obs", "x")):
+            assert torch.equal(td2[key], td[key]), key
+            assert td2[key].dtype == td[key].dtype
+        for key in ("ragged", "ragged_2d"):
+            assert td2[key].shape[0] == 3
+            for x, y in zip(td2[key].unbind(0), td[key].unbind(0)):
+                assert torch.equal(x, y), key
+        assert td2.get("s").tolist() == ["x", "y", "z"]
+
+    def test_to_arrow_batch_dims(self):
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
+        with pytest.raises(ValueError, match="one batch dimension"):
+            to_arrow(td)
+        assert to_arrow(td.reshape(-1)).num_rows == 6
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")

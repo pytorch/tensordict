@@ -635,7 +635,8 @@ Saving, loading, and file formats
 
 Save a tensordict to disk and load it again, and write its entries to
 memory-mapped files. Other methods read and write key-value stores, and HDF5,
-zarr, CSV, JSON, Parquet, and MDS files.
+zarr, CSV, JSON, Parquet, and MDS files, and convert to and from Arrow
+tables.
 ``memmap(return_early=True)`` returns a
 :class:`~tensordict.utils.TensorDictFuture`. See :ref:`saving` and
 :ref:`storage`.
@@ -694,6 +695,8 @@ zarr, CSV, JSON, Parquet, and MDS files.
     from_csv
     from_json
     from_parquet
+    from_arrow
+    to_arrow
 
 .. _api-methods-locking:
 

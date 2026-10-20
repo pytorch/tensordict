@@ -13,6 +13,7 @@ from tensordict._archive import (
     refresh_archive_checksums,
     unpack_memmap,
 )
+from tensordict._arrow import from_arrow, to_arrow
 from tensordict._base.shape import PackLayout
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
@@ -141,6 +142,8 @@ __all__ = [
     "from_csv",
     "from_dict",
     "from_any",
+    "from_arrow",
+    "to_arrow",
     "from_h5",
     "from_zarr",
     "from_json",

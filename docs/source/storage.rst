@@ -509,6 +509,48 @@ size when it creates the tensordict:
   >>> td.is_shared(), td.is_locked
   (True, True)
 
+Arrow tables
+------------
+
+:func:`~tensordict.from_arrow` converts an Arrow table to a tensordict, and
+:func:`~tensordict.to_arrow` converts a tensordict back. Numeric columns
+become tensors that view the Arrow memory, list columns become jagged nested
+tensors, struct columns become nested tensordicts, and strings become a
+:class:`~tensordict.NonTensorStack`:
+
+  >>> import pyarrow as pa
+  >>> from tensordict import from_arrow, to_arrow
+  >>> table = pa.table(
+  ...     {
+  ...         "reward": pa.array([0.5, 1.0, 0.0]),
+  ...         "tokens": pa.array([[1, 2], [3], [4, 5, 6]]),
+  ...         "prompt": pa.array(["a", "b", "c"]),
+  ...     }
+  ... )
+  >>> td = from_arrow(table)
+  >>> td["tokens"].unbind(0)[2]
+  tensor([4, 5, 6])
+  >>> to_arrow(td).column_names
+  ['reward', 'tokens', 'prompt']
+
+Hugging Face ``datasets`` and Polars hold their data in Arrow tables:
+
+  >>> import datasets  # doctest: +SKIP
+  >>> ds = datasets.load_from_disk("my_dataset")  # doctest: +SKIP
+  >>> td = from_arrow(ds.data.table)  # doctest: +SKIP
+  >>> import polars as pl  # doctest: +SKIP
+  >>> td = from_arrow(pl.DataFrame({"x": [1.0, 2.0]}).to_arrow())  # doctest: +SKIP
+
+A dataset loaded from disk is memory-mapped, and its memory is read-only.
+``from_arrow`` copies such columns, because an in-place write into a view of
+read-only memory crashes the process. ``copy=False`` views them anyway: then
+do not write into the tensors. A column with null values raises an error,
+unless you pass ``nulls="fill"`` or ``nulls="mask"``. ``memmap`` does not
+take jagged tensors: pad them first, with :func:`torch.nested.to_padded_tensor`.
+:meth:`~tensordict.TensorDict.from_parquet` keeps its own conversion, which
+reads list and struct columns as Python objects. To convert a Parquet file
+as ``from_arrow`` does, read it with ``pyarrow.parquet.read_table``.
+
 Typed wrappers
 --------------
 
