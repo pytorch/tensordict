@@ -160,6 +160,7 @@ Where to go
    :hidden:
    :caption: How-to guides
 
+   cookbook
    saving
    storage
    data_loading
