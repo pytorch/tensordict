@@ -1747,6 +1747,79 @@ class TestTensorClass:
         MyData = tensorclass(MyData)
         torch.testing.assert_close(MyData().X, torch.ones(3))
 
+    def test_ignored_field_options_warn(self):
+        # Tensorclasses ignore these field options: the class warns once for
+        # each, at the class statement (#3073).
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class MyData(TensorClass):
+                x: torch.Tensor
+                y: torch.Tensor = dataclasses.field(default=None, init=False)
+                z: torch.Tensor = dataclasses.field(
+                    default=None, repr=False, compare=False
+                )
+                w: torch.Tensor = dataclasses.field(default=None, kw_only=True)
+
+            # A subclass does not warn again for the inherited fields
+            class MyChild(MyData):
+                v: torch.Tensor = None
+
+        record = [w for w in record if "tensorclasses ignore" in str(w.message)]
+        assert all(w.category is UserWarning for w in record)
+        assert all(w.filename == __file__ for w in record)
+        messages = [str(w.message) for w in record]
+        assert sorted(messages) == sorted(
+            f"MyData.{name}: tensorclasses ignore the field option {option}"
+            for name, option in [
+                ("y", "init=False: __init__ still takes the field as an argument."),
+                ("z", "repr=False: repr() still shows the field."),
+                ("z", "compare=False: == and != still compare the field."),
+                (
+                    "w",
+                    "kw_only=True: __init__ still takes the field as a positional "
+                    "argument.",
+                ),
+            ]
+        )
+
+        # No warning where the class's own methods replace the ones that
+        # ignore the options, or where the options take their default.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class MyOwnMethods(TensorClass):
+                x: torch.Tensor = dataclasses.field(
+                    default=None, init=False, repr=False, compare=False, kw_only=True
+                )
+
+                def __init__(self, x):
+                    self.x = x
+
+                def __repr__(self):
+                    return "MyOwnMethods"
+
+                def __eq__(self, other):
+                    return True
+
+                def __ne__(self, other):
+                    return False
+
+            class MyDefaults(TensorClass):
+                x: torch.Tensor = dataclasses.field(
+                    default=None, init=True, repr=True, compare=True, kw_only=False
+                )
+
+        assert not [w for w in record if "tensorclasses ignore" in str(w.message)]
+
+    def test_class_kw_only_raises(self):
+        with pytest.raises(
+            TypeError, match="tensorclasses do not support the class option kw_only"
+        ):
+
+            class MyData(TensorClass, kw_only=True):
+                x: torch.Tensor
+
     def test_del_returns_self(self):
         @tensorclass
         class MyClass:
@@ -2259,14 +2332,16 @@ class TestTensorClass:
             )
             b: torch.Tensor = dataclasses.field(default=None, kw_only=True)
 
-        if conversion == "from_dataclass":
-            cls = from_dataclass(MyFieldsDataClass)
-        elif conversion == "inplace":
-            cls = from_dataclass(MyFieldsDataClass, inplace=True)
-        elif conversion == "from_instance":
-            cls = type(from_dataclass(MyFieldsDataClass()))
-        else:
-            cls = tensorclass(MyFieldsDataClass)
+        # The tensorclass ignores repr=False and kw_only=True (#3073)
+        with pytest.warns(UserWarning, match="tensorclasses ignore the field option"):
+            if conversion == "from_dataclass":
+                cls = from_dataclass(MyFieldsDataClass)
+            elif conversion == "inplace":
+                cls = from_dataclass(MyFieldsDataClass, inplace=True)
+            elif conversion == "from_instance":
+                cls = type(from_dataclass(MyFieldsDataClass()))
+            else:
+                cls = tensorclass(MyFieldsDataClass)
 
         data0, data1 = cls(), cls()
         torch.testing.assert_close(data0.a, torch.ones(3))
