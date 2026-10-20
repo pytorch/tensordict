@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import dis
 import enum
+import functools
 import gc
 import importlib.util
 import inspect
@@ -7964,6 +7965,40 @@ class TestGeneric:
         else:
             assert "masks" not in padded_td.keys()
 
+    @pytest.mark.parametrize("return_mask", [True, False])
+    def test_pad_sequence_padding_value_mapping(self, return_mask):
+        list_td = [
+            TensorDict(
+                {
+                    "ids": torch.ones(n, dtype=torch.long),
+                    ("b", "labels"): torch.ones(n, 2),
+                    "other": torch.ones(n),
+                }
+            )
+            for n in (2, 3)
+        ]
+        padded = pad_sequence(
+            list_td,
+            padding_value={"ids": 7, ("b", "labels"): -100, ("other",): 0.5},
+            return_mask=return_mask,
+        )
+        assert padded["ids"].tolist() == [[1, 1, 7], [1, 1, 1]]
+        assert (padded["b", "labels"][0, 2] == -100).all()
+        assert padded["other"].tolist() == [[1, 1, 0.5], [1, 1, 1]]
+        if return_mask:
+            assert padded["masks", "ids"].tolist() == [
+                [True, True, False],
+                [True, True, True],
+            ]
+        # keys the mapping does not name are padded with 0
+        padded = pad_sequence(list_td, padding_value={"ids": 7})
+        assert padded["other"].tolist() == [[1, 1, 0], [1, 1, 1]]
+        assert (padded["b", "labels"][0, 2] == 0).all()
+        with pytest.raises(KeyError, match="name no entry"):
+            pad_sequence(list_td, padding_value={"ids": 7, "missing": 1})
+        with pytest.raises(KeyError, match="name no entry"):
+            pad_sequence(list_td, padding_value={"b": 1})
+
     @pytest.mark.parametrize("make_mask", [True, False])
     def test_pad_sequence_pad_dim1(self, make_mask):
         pad_dim = 1
@@ -8075,6 +8110,71 @@ class TestGeneric:
         td = TensorDict(a=torch.zeros(4), batch_size=[4])
         assert collate(td) is td
         assert collate([]) == []
+
+    def test_collate_keys(self):
+        @tensorclass
+        class Sample:
+            ids: torch.Tensor
+            score: torch.Tensor
+            mask: TensorDict = None
+
+        def load(samples, **kwargs):
+            dl = torch.utils.data.DataLoader(  # noqa: TOR401
+                samples, batch_size=3, collate_fn=functools.partial(collate, **kwargs)
+            )
+            return next(iter(dl))
+
+        lengths = (2, 4, 3)
+        tds = [
+            TensorDict(
+                ids=torch.ones(n, dtype=torch.long),
+                nested=TensorDict(labels=torch.ones(n, 2)),
+                points=torch.ones(n + 1, 3),
+                score=torch.tensor(float(n)),
+            )
+            for n in lengths
+        ]
+        batch = load(
+            tds,
+            pad_keys={"ids": 7, ("nested", "labels"): -100},
+            nested_keys=["points"],
+            mask_key=("valid", "mask"),
+        )
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (3,)
+        assert (batch["score"] == torch.tensor([2.0, 4.0, 3.0])).all()
+        assert batch["ids"].tolist() == [[1, 1, 7, 7], [1, 1, 1, 1], [1, 1, 1, 7]]
+        assert batch["nested", "labels"].shape == (3, 4, 2)
+        assert (batch["nested", "labels"][0, 2:] == -100).all()
+        assert batch["valid", "mask", "ids"].sum(-1).tolist() == list(lengths)
+        assert set(batch["valid", "mask"].keys(True, True)) == {
+            "ids",
+            ("nested", "labels"),
+        }
+        assert batch["points"].is_nested
+        assert [p.shape for p in batch["points"].unbind()] == [
+            (n + 1, 3) for n in lengths
+        ]
+        # samples in tuples, and tensorclasses, which keep their type
+        samples = [
+            (Sample(ids=torch.ones(n, dtype=torch.long), score=torch.tensor(n)), n)
+            for n in lengths
+        ]
+        batch, label = load(samples, pad_keys={"ids": 5}, mask_key="mask")
+        assert type(batch) is Sample
+        assert batch.ids.tolist() == [[1, 1, 5, 5], [1, 1, 1, 1], [1, 1, 1, 5]]
+        assert batch.mask["ids"].sum(-1).tolist() == list(lengths)
+        assert (label == torch.tensor(lengths)).all()
+        batch, _ = load(samples, nested_keys=["ids"])
+        assert type(batch) is Sample
+        assert batch.ids.is_nested
+        # errors
+        with pytest.raises(KeyError, match="lacks"):
+            collate(tds, pad_keys={"missing": 0})
+        with pytest.raises(KeyError, match="lacks"):
+            collate(tds, nested_keys=["missing"])
+        with pytest.raises(ValueError, match="mask_key"):
+            collate(tds, mask_key="mask")
 
     @pytest.mark.parametrize("batch_dims", [1, 2])
     @pytest.mark.parametrize("pad_dim", [2, -2])
