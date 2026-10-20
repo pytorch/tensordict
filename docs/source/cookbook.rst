@@ -191,8 +191,8 @@ Save and resume training
 
 Put the parameters, the moving average, and the step counter in one
 tensordict, and save it with :meth:`~tensordict.TensorDictBase.save`.
-The state dict of an optimizer holds Python values, such as ``None`` and
-strings, that a tensordict does not store as tensors: save it with
+A tensordict cannot hold the state dict of an optimizer: its keys are
+integers, and its ``param_groups`` hold lists of Python values. Save it with
 :func:`torch.save`:
 
   >>> state = TensorDict({"model": params, "ema": ema, "step": step})
@@ -217,10 +217,10 @@ average from the files into memory:
 Train an ensemble with torch.vmap
 ---------------------------------
 
-:meth:`~tensordict.TensorDict.from_modules` stacks the parameters of several
+:meth:`~tensordict.TensorDictBase.from_modules` stacks the parameters of several
 models with the same structure, along a new first dimension. With
 ``as_module=True``, the result is a
-:class:`~tensordict.nn.TensorDictParams`, a module whose parameters an
+:class:`~tensordict.TensorDictParams`, a module whose parameters an
 optimizer can take. :func:`torch.vmap` then calls one model with each set of
 parameters, and one backward pass gives the gradients of all the models:
 
