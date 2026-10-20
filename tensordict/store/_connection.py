@@ -130,12 +130,14 @@ def _read_stored_metadata(
     client = aioredis.Redis(**connect_kwargs)
 
     async def _read():
-        pipe = client.pipeline()
-        for suffix in suffixes:
-            pipe.get(_server_key(namespace, td_id, suffix))
-        results = await pipe.execute()
-        await client.aclose()
-        return results
+        try:
+            pipe = client.pipeline()
+            for suffix in suffixes:
+                pipe.get(_server_key(namespace, td_id, suffix))
+            return await pipe.execute()
+        finally:
+            # also when the read fails: the loop closes after this coroutine
+            await client.aclose()
 
     loop = asyncio.new_event_loop()
     try:
