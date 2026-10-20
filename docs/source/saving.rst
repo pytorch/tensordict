@@ -740,6 +740,8 @@ documentation is built. Download its script to measure your own machine.
 See also
 --------
 
+- :ref:`saving-format`: the files that ``memmap`` and ``save`` write, for
+  readers and writers outside tensordict.
 - :ref:`storage`: preallocate a dataset on disk, and the HDF5, zarr, and
   Redis backends.
 - :ref:`data-loading`: read a saved dataset with a ``DataLoader``, and share

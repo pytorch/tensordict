@@ -2442,12 +2442,12 @@ class TestNonTensorData:
             if json_serializable:
                 assert (
                     f.read()
-                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":[[0,1],[0,1],[0,1]]}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","_format_version":1,"_class":"tensordict:NonTensorStack","stack_dim":0,"device":{device_str},"data":[[0,1],[0,1],[0,1]]}}'
                 )
             else:
                 assert (
                     f.read()
-                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","_format_version":1,"_class":"tensordict:NonTensorStack","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
                 )
         if not json_serializable:
             with pytest.raises(RuntimeError, match="allow_pickle=True"):
@@ -3277,6 +3277,30 @@ class TestNonTensorData:
         # naive super().__str__() would bounce back to LinkedList.__repr__.
         assert str(td["a"]) == "LinkedList(['foo', 'bar'])"
         assert repr(td["a"]) == "LinkedList(['foo', 'bar'])"
+
+    @pytest.mark.parametrize(
+        "batch_size,data",
+        [((2,), ["foo", "bar"]), ((2, 2), [["a", "b"], ["c", "d"]])],
+    )
+    def test_linked_list_tolist(self, batch_size, data):
+        # Regression test for #3077: td[key].tolist() gives the plain list
+        # that td.get(key).tolist() gives, and the copy is not linked.
+        td = TensorDict(batch_size=batch_size)
+        td["a"] = data
+        values = td["a"]
+        result = values.tolist()
+        assert result == td.get("a").tolist() == data
+
+        def check_plain(x):
+            assert type(x) is list
+            for item in x:
+                if isinstance(item, list):
+                    check_plain(item)
+
+        check_plain(result)
+        result[0] = "z"
+        assert td["a"] == data
+        assert values._td() is td.get("a")
 
     def test_nontensorstack_boolean_mask(self):
         td = TensorDict(

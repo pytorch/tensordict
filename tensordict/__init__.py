@@ -57,6 +57,7 @@ from tensordict.base import (
 from tensordict.functional import (
     collate,
     dense_stack_tds,
+    group_by,
     make_tensordict,
     merge_tensordicts,
     pad,
@@ -175,11 +176,12 @@ __all__ = [
     "refresh_archive_checksums",
     "to_safetensors",
     "from_safetensors",
-    # Merging and padding
+    # Merging, padding, and grouping
     "merge_tensordicts",
     "pad",
     "pad_sequence",
     "unpad_sequence",
+    "group_by",
     # Data loading
     "collate",
     # Utility functions

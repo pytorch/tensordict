@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import dis
 import enum
+import functools
 import gc
 import importlib.util
 import inspect
@@ -59,6 +60,7 @@ from tensordict.functional import (
     _pad_preflight,
     collate,
     dense_stack_tds,
+    group_by,
     merge_tensordicts,
     pad,
     pad_sequence,
@@ -572,6 +574,188 @@ class TestGeneric:
         td_chunks = rmpad_batch.chunk(2)  # should work now
         assert len(td_chunks) == 2
 
+    @staticmethod
+    def _jagged(kind):
+        # 6 rows of lengths 3, 5, 2, 4, 1, 6
+        lengths = (3, 5, 2, 4, 1, 6)
+        if kind == "ragged_dim_1":
+            return torch.nested.nested_tensor(
+                [torch.randn(n, 2) for n in lengths], layout=torch.jagged
+            )
+        if kind == "ragged_dim_2":
+            # (B, 3, j, 2): the ragged dim is not next to the batch dim
+            return torch.nested.nested_tensor(
+                [torch.randn(3, n, 2) for n in lengths], layout=torch.jagged
+            )
+        # with holes: the rows do not cover the values
+        return torch.nested.nested_tensor_from_jagged(
+            torch.randn(40, 2),
+            offsets=torch.tensor([0, 5, 12, 15, 22, 30, 33]),
+            lengths=torch.tensor(lengths),
+        )
+
+    @staticmethod
+    def _check_jagged(result, rows):
+        assert result.layout is torch.jagged
+        got = result.unbind()
+        assert len(got) == len(rows)
+        for g, r in zip(got, rows):
+            assert torch.equal(g, r)
+        if rows:
+            seqlens = [r.shape[result._ragged_idx - 1] for r in rows]
+            assert result._maybe_max_seqlen == max(seqlens)
+            assert result._maybe_min_seqlen == min(seqlens)
+
+    @pytest.mark.parametrize("kind", ["ragged_dim_1", "ragged_dim_2", "holes"])
+    @pytest.mark.parametrize(
+        "index",
+        [
+            slice(1, 4),
+            slice(-3, None),
+            slice(4, 1),
+            slice(None, None, 2),
+            slice(1, 6, 3),
+            torch.tensor([5, 0, 0]),
+            torch.tensor([], dtype=torch.long),
+            [1, 3],
+            torch.tensor([True, False, True, False, False, True]),
+            torch.tensor(3),
+            -1,
+        ],
+    )
+    def test_index_jagged(self, kind, index):
+        nt = self._jagged(kind)
+        rows = nt.unbind()
+        td = TensorDict(
+            ids=nt,
+            x=torch.arange(6),
+            sub=TensorDict(ids=nt, batch_size=[6]),
+            batch_size=[6],
+        )
+        result = td[index]
+        selected = torch.arange(6)[index]
+        assert result.batch_size == selected.shape
+        assert (result["x"] == selected).all()
+        if not selected.ndim:
+            assert torch.equal(result["ids"], rows[selected])
+            return
+        selected = selected.tolist()
+        self._check_jagged(result["ids"], [rows[i] for i in selected])
+        self._check_jagged(result["sub", "ids"], [rows[i] for i in selected])
+
+    @pytest.mark.parametrize("kind", ["ragged_dim_1", "ragged_dim_2", "holes"])
+    def test_split_cat_jagged(self, kind):
+        nt = self._jagged(kind)
+        rows = nt.unbind()
+        td = TensorDict(ids=nt, sub=TensorDict(ids=nt, batch_size=[6]), batch_size=[6])
+        for pieces in (
+            td.split(4),
+            td.split([1, 0, 5]),
+            torch.split(td, 2),
+            td.chunk(4),
+            td.tensor_split([1, 3]),
+            td.unbind(0),
+        ):
+            start = 0
+            for piece in pieces:
+                if not piece.batch_dims:
+                    assert torch.equal(piece["ids"], rows[start])
+                    start += 1
+                    continue
+                end = start + piece.batch_size[0]
+                self._check_jagged(piece["ids"], rows[start:end])
+                self._check_jagged(piece["sub", "ids"], rows[start:end])
+                start = end
+            assert start == 6
+
+        # A slice of step 1 and a split share the values of the tensordict
+        def storage(nt):
+            return nt.values().untyped_storage().data_ptr()
+
+        assert storage(td[1:3]["ids"]) == storage(nt)
+        assert storage(td.split(2)[1]["ids"]) == storage(nt)
+        assert storage(td[::2]["ids"]) != storage(nt)
+
+        result = torch.cat([td, td[:2], td[torch.tensor([3, 1])]])
+        expected = [*rows, *rows[:2], rows[3], rows[1]]
+        assert result.batch_size == (10,)
+        self._check_jagged(result["ids"], expected)
+        self._check_jagged(result["sub", "ids"], expected)
+
+    @pytest.mark.parametrize("holes", [False, True])
+    @pytest.mark.parametrize("dtype", [torch.int64, torch.int32])
+    def test_jagged_shared_offsets(self, holes, dtype):
+        # Leaves that share offsets, as token ids and their attention mask do,
+        # share them after the op too: pointwise ops between them still work.
+        offsets = torch.tensor([0, 3, 8, 10, 14], dtype=dtype)
+        lengths = torch.tensor([3, 4, 2, 4], dtype=dtype) if holes else None
+
+        def jagged():
+            return torch.nested.nested_tensor_from_jagged(
+                torch.randn(14), offsets, lengths
+            )
+
+        td = TensorDict(
+            a=jagged(),
+            b=jagged(),
+            sub=TensorDict(c=jagged(), batch_size=[4]),
+            batch_size=[4],
+        )
+        for result in (
+            td[1:3],
+            td[::2],
+            td[torch.tensor([2, 0])],
+            td[torch.tensor([True, False, True, True])],
+            td.split(3)[1],
+            td.chunk(2)[0],
+            torch.cat([td, td[1:3]]),
+        ):
+            total = result["a"] + result["b"] + result["sub", "c"]
+            assert total.shape[0] == result.batch_size[0]
+            assert result["a"].offsets() is result["b"].offsets()
+            assert result["a"].offsets() is result["sub", "c"].offsets()
+            assert result["a"].offsets().dtype == dtype
+
+    @pytest.mark.parametrize("offsets", [[0, 3, 5], [2, 5, 7]])
+    def test_cat_jagged_offsets_not_spanning_values(self, offsets):
+        # offsets that do not span the values leave holes, as lengths do
+        nt = torch.nested.nested_tensor_from_jagged(
+            torch.arange(10.0), offsets=torch.tensor(offsets)
+        )
+        td = TensorDict(a=nt, batch_size=[2])
+        rows = [
+            nt.values()[offsets[0] : offsets[1]],
+            nt.values()[offsets[1] : offsets[2]],
+        ]
+        self._check_jagged(torch.cat([td, td])["a"], rows * 2)
+
+    def test_jagged_grad(self):
+        values = torch.randn(14, 2, requires_grad=True)
+        nt = torch.nested.nested_tensor_from_jagged(
+            values, offsets=torch.tensor([0, 3, 8, 10, 14])
+        )
+        td = TensorDict(ids=nt, batch_size=[4])
+        loss = (
+            td[torch.tensor([3, 0])]["ids"].values().sum() * 2
+            + td[1:3]["ids"].values().sum()
+            + torch.cat([td, td])["ids"].values().sum()
+            + td.split(3)[1]["ids"].values().sum()
+        )
+        loss.backward()
+        # rows 0 and 3 are indexed (2) and concatenated twice (2), row 3 is split (1);
+        # rows 1 and 2 are sliced (1) and concatenated twice (2)
+        expected = torch.tensor([4.0] * 3 + [3.0] * 7 + [5.0] * 4)
+        assert (values.grad == expected[:, None]).all()
+
+    def test_stack_jagged_raises(self):
+        td = TensorDict(ids=self._jagged("ragged_dim_1"), batch_size=[6])
+        with pytest.raises(RuntimeError, match="second ragged dim"):
+            torch.stack([td, td])
+        # a lazy stack keeps the tensordicts apart
+        stacked = lazy_stack([td, td])
+        assert stacked[:, 1:3].batch_size == (2, 2)
+        assert stacked[1, torch.tensor([0, 2])]["ids"].offsets().tolist() == [0, 3, 5]
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone_empty(self, recurse):
         td = TensorDict()
@@ -846,6 +1030,52 @@ class TestGeneric:
             )
         with pytest.raises(NotImplementedError, match="non_blocking"):
             td.consolidate(num_threads=4, return_early=True, non_blocking=True)
+
+    def test_consolidate_pin_memory_consolidated(self, monkeypatch, tmpdir):
+        # consolidate(pin_memory=True) copies a consolidated tensordict whose
+        # storage is not pinned into a pinned buffer (#3116)
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        if not torch.accelerator.is_available():
+            # Without an accelerator there is no pinned memory: self is
+            # returned, as before
+            assert td.consolidate(pin_memory=True) is td
+        pin_memory_args = []
+        empty = torch.empty
+
+        def recording_empty(*args, pin_memory=False, **kwargs):
+            pin_memory_args.append(pin_memory)
+            return empty(*args, **kwargs)
+
+        monkeypatch.setattr(torch.accelerator, "is_available", lambda: True)
+        monkeypatch.setattr(torch, "empty", recording_empty)
+        out = td.consolidate(pin_memory=True)
+        assert out is not td
+        assert pin_memory_args == [True]
+        assert out.is_consolidated()
+        assert (out == td).all()
+        # Without pin_memory, with inplace=True, return_early=True, an
+        # accelerator device or a filename, self is still returned
+        assert td.consolidate() is td
+        assert td.consolidate(pin_memory=True, inplace=True) is td
+        assert td.consolidate(pin_memory=True, num_threads=2, return_early=True) is td
+        assert td.consolidate(pin_memory=True, device="cuda") is td
+        filename = Path(tmpdir) / "file.td"
+        td_file = td.consolidate(filename=filename)
+        assert td_file.consolidate(filename=filename, pin_memory=True) is td_file
+        # A pinned storage is returned as is
+        monkeypatch.setattr(torch.Tensor, "is_pinned", lambda self: True)
+        assert td.consolidate(pin_memory=True) is td
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_consolidate_pin_memory_consolidated_cuda(self):
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        assert not td._consolidated["storage"].is_pinned()
+        out = td.consolidate(pin_memory=True)
+        assert out is not td
+        assert out._consolidated["storage"].is_pinned()
+        assert out["b", "c"].is_pinned()
+        assert (out == td).all()
+        assert out.consolidate(pin_memory=True) is out
 
     @pytest.mark.skipif(
         not torch.cuda.is_available() and not is_npu_available(),
@@ -8122,6 +8352,40 @@ class TestGeneric:
         else:
             assert "masks" not in padded_td.keys()
 
+    @pytest.mark.parametrize("return_mask", [True, False])
+    def test_pad_sequence_padding_value_mapping(self, return_mask):
+        list_td = [
+            TensorDict(
+                {
+                    "ids": torch.ones(n, dtype=torch.long),
+                    ("b", "labels"): torch.ones(n, 2),
+                    "other": torch.ones(n),
+                }
+            )
+            for n in (2, 3)
+        ]
+        padded = pad_sequence(
+            list_td,
+            padding_value={"ids": 7, ("b", "labels"): -100, ("other",): 0.5},
+            return_mask=return_mask,
+        )
+        assert padded["ids"].tolist() == [[1, 1, 7], [1, 1, 1]]
+        assert (padded["b", "labels"][0, 2] == -100).all()
+        assert padded["other"].tolist() == [[1, 1, 0.5], [1, 1, 1]]
+        if return_mask:
+            assert padded["masks", "ids"].tolist() == [
+                [True, True, False],
+                [True, True, True],
+            ]
+        # keys the mapping does not name are padded with 0
+        padded = pad_sequence(list_td, padding_value={"ids": 7})
+        assert padded["other"].tolist() == [[1, 1, 0], [1, 1, 1]]
+        assert (padded["b", "labels"][0, 2] == 0).all()
+        with pytest.raises(KeyError, match="name no entry"):
+            pad_sequence(list_td, padding_value={"ids": 7, "missing": 1})
+        with pytest.raises(KeyError, match="name no entry"):
+            pad_sequence(list_td, padding_value={"b": 1})
+
     @pytest.mark.parametrize("make_mask", [True, False])
     def test_pad_sequence_pad_dim1(self, make_mask):
         pad_dim = 1
@@ -8233,6 +8497,89 @@ class TestGeneric:
         td = TensorDict(a=torch.zeros(4), batch_size=[4])
         assert collate(td) is td
         assert collate([]) == []
+
+    def test_collate_keys(self):
+        @tensorclass
+        class Sample:
+            ids: torch.Tensor
+            score: torch.Tensor
+            mask: TensorDict = None
+
+        def load(samples, **kwargs):
+            dl = torch.utils.data.DataLoader(  # noqa: TOR401
+                samples, batch_size=3, collate_fn=functools.partial(collate, **kwargs)
+            )
+            return next(iter(dl))
+
+        lengths = (2, 4, 3)
+        tds = [
+            TensorDict(
+                ids=torch.ones(n, dtype=torch.long),
+                nested=TensorDict(labels=torch.ones(n, 2)),
+                points=torch.ones(n + 1, 3),
+                score=torch.tensor(float(n)),
+            )
+            for n in lengths
+        ]
+        batch = load(
+            tds,
+            pad_keys={"ids": 7, ("nested", "labels"): -100},
+            nested_keys=["points"],
+            mask_key=("valid", "mask"),
+        )
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (3,)
+        assert (batch["score"] == torch.tensor([2.0, 4.0, 3.0])).all()
+        assert batch["ids"].tolist() == [[1, 1, 7, 7], [1, 1, 1, 1], [1, 1, 1, 7]]
+        assert batch["nested", "labels"].shape == (3, 4, 2)
+        assert (batch["nested", "labels"][0, 2:] == -100).all()
+        assert batch["valid", "mask", "ids"].sum(-1).tolist() == list(lengths)
+        assert set(batch["valid", "mask"].keys(True, True)) == {
+            "ids",
+            ("nested", "labels"),
+        }
+        assert batch["points"].is_nested
+        assert [p.shape for p in batch["points"].unbind()] == [
+            (n + 1, 3) for n in lengths
+        ]
+        # samples in tuples, and tensorclasses, which keep their type
+        samples = [
+            (Sample(ids=torch.ones(n, dtype=torch.long), score=torch.tensor(n)), n)
+            for n in lengths
+        ]
+        batch, label = load(samples, pad_keys={"ids": 5}, mask_key="mask")
+        assert type(batch) is Sample
+        assert batch.ids.tolist() == [[1, 1, 5, 5], [1, 1, 1, 1], [1, 1, 1, 5]]
+        assert batch.mask["ids"].sum(-1).tolist() == list(lengths)
+        assert (label == torch.tensor(lengths)).all()
+        batch, _ = load(samples, nested_keys=["ids"])
+        assert type(batch) is Sample
+        assert batch.ids.is_nested
+        # errors
+        with pytest.raises(KeyError, match="lacks"):
+            collate(tds, pad_keys={"missing": 0})
+        with pytest.raises(KeyError, match="lacks"):
+            collate(tds, nested_keys=["missing"])
+        with pytest.raises(ValueError, match="mask_key"):
+            collate(tds, mask_key="mask")
+        # the mask key must not be an entry of the samples
+        for mask_key in ("score", "nested", ("nested", "labels")):
+            with pytest.raises(ValueError, match="entry of a sample"):
+                collate(tds, pad_keys={"ids": 0}, mask_key=mask_key)
+        with pytest.raises(ValueError, match=r"\['ids'\] in both"):
+            collate(tds, pad_keys={"ids": 0}, nested_keys=[("ids",)])
+        # padding along a batch dim of the samples
+        batched = [
+            TensorDict(ids=torch.ones(n), x=torch.ones(n, 2), batch_size=[n])
+            for n in lengths
+        ]
+        with pytest.raises(ValueError, match="batch dim of these samples"):
+            collate(batched, pad_keys={"ids": 0, "x": 0})
+        # an unnamed entry that varies in length stacks lazily
+        with pytest.raises(ValueError, match="Name the entries that vary"):
+            collate(tds, nested_keys=["points"])
+        batch = collate(tds, nested_keys=["points", "ids", ("nested", "labels")])
+        assert batch["ids"].is_nested
 
     @pytest.mark.parametrize("batch_dims", [1, 2])
     @pytest.mark.parametrize("pad_dim", [2, -2])
@@ -8529,6 +8876,158 @@ class TestGeneric:
         tds = [TensorDict(a=torch.zeros(0, 3), batch_size=batch_size)] * 2
         samples = unpad_sequence(pad_sequence(tds, return_mask=True))
         self._assert_unpadded(samples, tds)
+
+    def _assert_grouped(self, td, key, values, groups):
+        assert isinstance(groups, tuple)
+        assert len(groups) == len(values)
+        index = torch.arange(td.shape[0])
+        for value, group in zip(values, groups):
+            assert type(group) is type(td)
+            mask = td.get(key) == value
+            if mask.ndim > 1:
+                mask = mask.flatten(1).all(1)
+            assert (group == td[mask]).all()
+            # rows keep their original order
+            assert (group["index"] == index[mask]).all()
+
+    def test_group_by(self):
+        # https://github.com/pytorch/tensordict/issues/3089
+        uid = torch.tensor([2, 0, 2, 1, 0, 2])
+        td = TensorDict(
+            uid=uid,
+            index=torch.arange(6),
+            obs=torch.randn(6, 4, 3),
+            nested=TensorDict(uid=uid % 2, batch_size=[6]),
+            batch_size=[6],
+        )
+        values, groups = group_by(td, "uid")
+        assert (values == torch.tensor([0, 1, 2])).all()
+        assert [group.batch_size for group in groups] == [
+            torch.Size([2]),
+            torch.Size([1]),
+            torch.Size([3]),
+        ]
+        self._assert_grouped(td, "uid", values, groups)
+        # nested keys
+        values, groups = group_by(td, ("nested", "uid"))
+        assert (values == torch.tensor([0, 1])).all()
+        assert (groups[0]["index"] == torch.tensor([0, 1, 2, 4, 5])).all()
+        assert (groups[1]["index"] == torch.tensor([3])).all()
+        # entries with trailing dims are compared row by row
+        td["pair"] = torch.tensor([[1, 0], [0, 1], [1, 0], [0, 1], [0, 0], [1, 0]])
+        values, groups = group_by(td, "pair")
+        assert (values == torch.tensor([[0, 0], [0, 1], [1, 0]])).all()
+        self._assert_grouped(td, "pair", values, groups)
+        # several batch dims: rows along the first one
+        td2 = TensorDict(
+            uid=uid.unsqueeze(-1).expand(6, 2),
+            index=torch.arange(6).unsqueeze(-1).expand(6, 2),
+            batch_size=[6, 2],
+        )
+        values, groups = group_by(td2, "uid")
+        assert (values == torch.tensor([[0, 0], [1, 1], [2, 2]])).all()
+        assert [group.batch_size for group in groups] == [
+            torch.Size([2, 2]),
+            torch.Size([1, 2]),
+            torch.Size([3, 2]),
+        ]
+        assert (groups[2]["index"][:, 0] == torch.tensor([0, 2, 5])).all()
+
+    def test_group_by_lazy_stack(self):
+        tds = [
+            TensorDict(uid=torch.tensor(i % 3), index=torch.tensor(i), x=torch.zeros(i))
+            for i in range(5)
+        ]
+        stack = lazy_stack(tds)
+        values, groups = group_by(stack, "uid")
+        assert (values == torch.tensor([0, 1, 2])).all()
+        assert all(isinstance(group, LazyStackedTensorDict) for group in groups)
+        assert (groups[0]["index"] == torch.tensor([0, 3])).all()
+        assert [td["x"].shape for td in groups[1].tensordicts] == [
+            torch.Size([1]),
+            torch.Size([4]),
+        ]
+        assert (groups[2]["index"] == torch.tensor([2])).all()
+
+    def test_group_by_tensorclass(self):
+        @tensorclass
+        class Sample:
+            uid: torch.Tensor
+            index: torch.Tensor
+            name: str
+
+        sample = Sample(
+            uid=torch.tensor([1, 0, 1]),
+            index=torch.arange(3),
+            name=NonTensorStack("b", "a", "b"),
+            batch_size=[3],
+        )
+        values, groups = group_by(sample, "uid")
+        assert (values == torch.tensor([0, 1])).all()
+        assert all(type(group) is Sample for group in groups)
+        assert (groups[0].index == torch.tensor([1])).all()
+        assert (groups[1].index == torch.tensor([0, 2])).all()
+        # a non-tensor field
+        values, groups = group_by(sample, "name")
+        assert values == ["a", "b"]
+        assert all(type(group) is Sample for group in groups)
+        assert (groups[0].index == torch.tensor([1])).all()
+        assert (groups[1].index == torch.tensor([0, 2])).all()
+
+        # a field of a nested tensorclass
+        @tensorclass
+        class Outer:
+            inner: Sample
+
+        outer = Outer(inner=sample, batch_size=[3])
+        values, groups = group_by(outer, ("inner", "name"))
+        assert values == ["a", "b"]
+        assert all(type(group) is Outer for group in groups)
+        assert (groups[1].inner.index == torch.tensor([0, 2])).all()
+        # one value for every row
+        sample.name = "x"
+        values, groups = group_by(sample, "name")
+        assert values == ["x"]
+        assert (groups[0].index == torch.arange(3)).all()
+
+    def test_group_by_non_tensor(self):
+        td = TensorDict(
+            uid=NonTensorStack("b", "a", "b", "c"),
+            index=torch.arange(4),
+            batch_size=[4],
+        )
+        values, groups = group_by(td, "uid")
+        assert values == ["a", "b", "c"]
+        assert [group["index"].tolist() for group in groups] == [[1], [0, 2], [3]]
+        assert groups[1].get("uid").tolist() == ["b", "b"]
+        # a single value for every row
+        td["same"] = NonTensorData("x", batch_size=[4])
+        values, groups = group_by(td, "same")
+        assert values == ["x"]
+        assert groups[0]["index"].tolist() == [0, 1, 2, 3]
+        td["dicts"] = NonTensorStack(*[{"a": 0}] * 4)
+        with pytest.raises(TypeError, match="hashable and sortable"):
+            group_by(td, "dicts")
+
+    @pytest.mark.parametrize("shape", [[0], [0, 3]])
+    def test_group_by_empty(self, shape):
+        td = TensorDict(uid=torch.zeros(shape, dtype=torch.long), batch_size=[0])
+        values, groups = group_by(td, "uid")
+        assert values.shape == torch.Size([0, *shape[1:]])
+        assert groups == ()
+
+    def test_group_by_errors(self):
+        td = TensorDict(
+            uid=torch.zeros(3), sub=TensorDict(batch_size=[3]), batch_size=[3]
+        )
+        with pytest.raises(KeyError, match="no entry"):
+            group_by(td, "missing")
+        with pytest.raises(KeyError, match="no entry"):
+            group_by(td, ("sub", "missing"))
+        with pytest.raises(TypeError, match="tensor or non-tensor entry"):
+            group_by(td, "sub")
+        with pytest.raises(ValueError, match="batch dimension"):
+            group_by(td[0], "uid")
 
     @pytest.mark.parametrize("count_duplicates", [False, True])
     def test_param_count(self, count_duplicates):
@@ -9556,6 +10055,55 @@ class TestGeneric:
             assert (d2[:, 0] == a.zero_()).all()
         else:
             assert (d2[:, 0] == a).all()
+
+    def test_memmap_format_version(self, tmp_path):
+        td = TensorDict(
+            a=torch.zeros(3),
+            s=LazyStackedTensorDict(*TensorDict(b=torch.ones(3, 2), batch_size=[3])),
+            batch_size=[3],
+        )
+        td.memmap(tmp_path)
+        metadata = json.loads((tmp_path / "meta.json").read_text())
+        # _type stays for the readers that have no version.
+        assert metadata["_type"] == str(TensorDict)
+        assert metadata["_format_version"] == 1
+        assert metadata["_class"] == "tensordict:TensorDict"
+        stack_metadata = json.loads((tmp_path / "s" / "meta.json").read_text())
+        assert stack_metadata["_format_version"] == 1
+        assert stack_metadata["_class"] == "tensordict:LazyStackedTensorDict"
+
+        # The class identifier is read before _type, which names the private
+        # module that defines a class.
+        stack_metadata["_type"] = "<class 'tensordict._moved.LazyStackedTensorDict'>"
+        (tmp_path / "s" / "meta.json").write_text(json.dumps(stack_metadata))
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert isinstance(loaded["s"], LazyStackedTensorDict)
+        assert (loaded == td).all()
+
+        # A file without a version is version 0.
+        del metadata["_format_version"], metadata["_class"]
+        (tmp_path / "meta.json").write_text(json.dumps(metadata))
+        assert (TensorDict.load_memmap(tmp_path) == td).all()
+
+        metadata["_format_version"] = 2
+        (tmp_path / "meta.json").write_text(json.dumps(metadata))
+        with pytest.raises(RuntimeError, match="saved in the format version 2"):
+            TensorDict.load_memmap(tmp_path)
+
+    @pytest.mark.parametrize("name", ["_format_version", "_class"])
+    def test_memmap_format_entry_as_key(self, name, tmp_path):
+        # A key named like a format entry keeps its entry in meta.json.
+        td = TensorDict(
+            {
+                name: torch.arange(3),
+                "n": TensorDict({name: TensorDict(x=torch.ones(3))}, [3]),
+            },
+            batch_size=[3],
+        )
+        td.memmap(tmp_path)
+        loaded = TensorDict.load_memmap(tmp_path)
+        assert set(loaded.keys(True, True)) == {name, ("n", name, "x")}
+        assert (loaded == td).all()
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_select_nested(self, inplace):
