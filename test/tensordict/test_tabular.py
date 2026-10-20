@@ -418,6 +418,22 @@ class TestParquet:
         assert td["t"].dtype == torch.float32
         assert (td["t"] == torch.from_numpy(values)).all()
 
+    def test_from_parquet_fixed_shape_tensor_bool(self, tmp_path):
+        # to_numpy_ndarray() rejects bool, so these still come back flat.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if not hasattr(pa, "FixedShapeTensorArray"):
+            pytest.skip("pyarrow has no fixed_shape_tensor type")
+        values = np.arange(12).reshape(3, 2, 2) % 3 == 0
+        path = tmp_path / "mask.parquet"
+        table = pa.table({"m": pa.FixedShapeTensorArray.from_numpy_ndarray(values)})
+        pq.write_table(table, str(path))
+
+        td = TensorDict.from_parquet(path)
+        assert td["m"].dtype == torch.bool
+        assert (td["m"] == torch.from_numpy(values).reshape(3, 4)).all()
+
     def test_from_parquet_fixed_size_list(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq

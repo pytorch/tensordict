@@ -205,8 +205,14 @@ def _pyarrow_table_to_columns(table) -> tuple[dict[str, np.ndarray | list], int]
             columns[col_name] = column.to_numpy(zero_copy_only=False)
         elif pa.types.is_timestamp(column.type):
             columns[col_name] = column.to_numpy(zero_copy_only=False)
-        elif getattr(column.type, "extension_name", None) == "arrow.fixed_shape_tensor":
+        elif getattr(
+            column.type, "extension_name", None
+        ) == "arrow.fixed_shape_tensor" and (
+            pa.types.is_integer(column.type.value_type)
+            or pa.types.is_floating(column.type.value_type)
+        ):
             # Keep the per-row tensor shape, which to_pylist() flattens.
+            # to_numpy_ndarray() rejects other value types, such as bool.
             columns[col_name] = column.combine_chunks().to_numpy_ndarray()
         else:
             columns[col_name] = column.to_pylist()
