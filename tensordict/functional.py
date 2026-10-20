@@ -1045,8 +1045,9 @@ def group_by(
     Returns:
         A ``(values, groups)`` tuple. ``values`` holds the sorted unique values
         of the entry: a tensor for a tensor entry, a list for a non-tensor
-        entry (of tuples if each row holds several values). ``groups`` is a tuple of tensordicts of the type of
-        ``tensordict``, one per value, in the same order.
+        entry (of tuples if each row holds several values). ``groups`` is a
+        tuple of tensordicts of the type of ``tensordict``, one per value, in
+        the same order.
 
     Raises:
         ValueError: if ``tensordict`` has no batch dimension.
@@ -1073,7 +1074,9 @@ def group_by(
             "group_by groups the rows along the first batch dimension of the "
             "tensordict, which has none."
         )
-    entry = tensordict.get(key, None)
+    # A tensorclass returns the content of its non-tensor entries, not the entries
+    source = tensordict._tensordict if is_tensorclass(tensordict) else tensordict
+    entry = source.get(key, None)
     if entry is None:
         raise KeyError(f"group_by: the tensordict has no entry {key!r}.")
     if is_non_tensor(entry):

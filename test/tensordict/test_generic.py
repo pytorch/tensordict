@@ -8450,15 +8450,41 @@ class TestGeneric:
         class Sample:
             uid: torch.Tensor
             index: torch.Tensor
+            name: str
 
         sample = Sample(
-            uid=torch.tensor([1, 0, 1]), index=torch.arange(3), batch_size=[3]
+            uid=torch.tensor([1, 0, 1]),
+            index=torch.arange(3),
+            name=NonTensorStack("b", "a", "b"),
+            batch_size=[3],
         )
         values, groups = group_by(sample, "uid")
         assert (values == torch.tensor([0, 1])).all()
         assert all(type(group) is Sample for group in groups)
         assert (groups[0].index == torch.tensor([1])).all()
         assert (groups[1].index == torch.tensor([0, 2])).all()
+        # a non-tensor field
+        values, groups = group_by(sample, "name")
+        assert values == ["a", "b"]
+        assert all(type(group) is Sample for group in groups)
+        assert (groups[0].index == torch.tensor([1])).all()
+        assert (groups[1].index == torch.tensor([0, 2])).all()
+
+        # a field of a nested tensorclass
+        @tensorclass
+        class Outer:
+            inner: Sample
+
+        outer = Outer(inner=sample, batch_size=[3])
+        values, groups = group_by(outer, ("inner", "name"))
+        assert values == ["a", "b"]
+        assert all(type(group) is Outer for group in groups)
+        assert (groups[1].inner.index == torch.tensor([0, 2])).all()
+        # one value for every row
+        sample.name = "x"
+        values, groups = group_by(sample, "name")
+        assert values == ["x"]
+        assert (groups[0].index == torch.arange(3)).all()
 
     def test_group_by_non_tensor(self):
         td = TensorDict(
