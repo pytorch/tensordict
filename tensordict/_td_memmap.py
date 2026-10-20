@@ -14,6 +14,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 
 __all__ = [
+    "_format_metadata",
     "_memmap_filename",
     "_populate_empty",
     "_populate_memmap",
@@ -22,6 +23,31 @@ __all__ = [
     "_update_metadata",
     "_warn_if_existing_file_smaller",
 ]
+
+
+# The version of the layout that memmap writes. A meta.json without a
+# "_format_version" entry was written before the format had a version: version 0.
+_FORMAT_VERSION = 1
+
+
+def _class_id(cls: type) -> str:
+    """Returns the identifier of ``cls`` that a meta.json stores under ``"_class"``.
+
+    The identifier is ``"module:qualname"``, with the public ``tensordict``
+    module for the classes that ``tensordict`` exports, so that it does not
+    depend on the private module that defines them.
+    """
+    import tensordict
+
+    module = cls.__module__
+    if getattr(tensordict, cls.__qualname__, None) is cls:
+        module = "tensordict"
+    return f"{module}:{cls.__qualname__}"
+
+
+def _format_metadata(cls: type) -> dict:
+    """Returns the format version and the class identifier of a meta.json for ``cls``."""
+    return {"_format_version": _FORMAT_VERSION, "_class": _class_id(cls)}
 
 
 def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
@@ -34,6 +60,7 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
             "shape": list(data.shape),
             "device": str(data.device),
             "_type": str(type(data)),
+            **_format_metadata(type(data)),
         }
     )
     with open(filepath, "wb") as json_metadata:

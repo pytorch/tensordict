@@ -3864,6 +3864,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                     metadata_json = json_dumps(
                         {
                             "_type": str(type(self)),
+                            **_format_metadata(type(self)),
                             "index": _index_to_str(self.idx),
                         }
                     )
@@ -4344,6 +4345,7 @@ from tensordict._td_functions import (  # noqa: F401
     stack,
 )
 from tensordict._td_memmap import (
+    _format_metadata,
     _memmap_filename,
     _populate_empty,
     _populate_memmap,

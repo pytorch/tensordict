@@ -56,6 +56,7 @@ from tensordict._lazy import _GATHER, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
+from tensordict._td_memmap import _format_metadata
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import _POINTWISE_FUNCTIONS, TD_HANDLED_FUNCTIONS
 from tensordict._utils_options import _set_capture_non_tensor_stack
@@ -7796,6 +7797,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     os.makedirs(prefix, exist_ok=True)
                 jsondict = {
                     "_type": str(type(self)),
+                    **_format_metadata(type(self)),
                     "stack_dim": self.stack_dim,
                     "device": device,
                 }

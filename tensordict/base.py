@@ -60,6 +60,7 @@ from tensordict._indexing import (
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
+from tensordict._td_memmap import _FORMAT_VERSION
 from tensordict._tensorcollection import TensorCollection
 from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.memmap import MemoryMappedTensor
@@ -1500,6 +1501,15 @@ def _load_metadata(prefix: Path):
     # through the same code path as regular files.
     with filepath.open("rb") as json_metadata:
         metadata = json.loads(json_metadata.read())
+    version = metadata.get("_format_version", 0)
+    # A leaf saved under the name "_format_version" by a writer that had no
+    # version is a dict.
+    if isinstance(version, int) and version > _FORMAT_VERSION:
+        raise RuntimeError(
+            f"{filepath} was saved in the format version {version}, but this "
+            f"version of tensordict reads the format versions up to "
+            f"{_FORMAT_VERSION}. Upgrade tensordict to load it."
+        )
     return metadata
 
 

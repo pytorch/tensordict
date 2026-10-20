@@ -32,6 +32,7 @@ from tensordict._archive import (
 )
 from tensordict._deprecation import deprecated
 from tensordict._nestedkey import NestedKey
+from tensordict._td_memmap import _class_id
 from tensordict.base import (
     _is_tensor_collection,
     _load_metadata,
@@ -1871,15 +1872,25 @@ class _Serialization:
         if metadata is None:
             metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
+        # The identifier of the class, written since format version 1. Prefer
+        # it to _type, which names the private module of built-in classes.
+        class_id = metadata.get("_class")
         if device is not None:
             device = torch.device(device)
-        if type_name != str(cls):
+        if type_name != str(cls) and class_id != _class_id(cls):
             import tensordict
 
-            for other_cls in tensordict.base._ACCEPTED_CLASSES:
-                if str(other_cls) == type_name:
-                    break
-            else:
+            accepted_classes = tensordict.base._ACCEPTED_CLASSES
+            other_cls = None
+            if class_id is not None:
+                other_cls = next(
+                    (c for c in accepted_classes if _class_id(c) == class_id), None
+                )
+            if other_cls is None:
+                other_cls = next(
+                    (c for c in accepted_classes if str(c) == type_name), None
+                )
+            if other_cls is None:
                 # The saved name includes the module, which differs when the
                 # class was saved from __main__ (a script or a notebook): use
                 # the class load_memmap is called on if its qualname matches.

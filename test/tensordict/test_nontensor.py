@@ -2442,12 +2442,12 @@ class TestNonTensorData:
             if json_serializable:
                 assert (
                     f.read()
-                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":[[0,1],[0,1],[0,1]]}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","_format_version":1,"_class":"tensordict:NonTensorStack","stack_dim":0,"device":{device_str},"data":[[0,1],[0,1],[0,1]]}}'
                 )
             else:
                 assert (
                     f.read()
-                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","_format_version":1,"_class":"tensordict:NonTensorStack","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
                 )
         if not json_serializable:
             with pytest.raises(RuntimeError, match="allow_pickle=True"):
