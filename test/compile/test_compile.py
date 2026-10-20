@@ -466,6 +466,24 @@ def test_construction_empty_then_full_source(device):
     assert (result["b", "c"] == x).all()
 
 
+def test_pack_last_dim_skips_identity_movedim():
+    td = TensorDict(a=torch.randn(4, 3), batch_size=[4])
+    _, layout = td.pack()
+
+    def fn(td):
+        return td.pack(layout=layout)[0]
+
+    backend = EagerAndRecordGraphs()
+    compiled = torch.compile(fn, backend=backend, fullgraph=True, dynamic=True)
+    assert_close(compiled(td), fn(td))
+    assert backend.graphs
+    assert not any(
+        node.target == "movedim"
+        for graph in backend.graphs
+        for node in graph.graph.nodes
+    )
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):

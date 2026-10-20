@@ -1423,10 +1423,17 @@ class _ShapeOps:
                 if value.ndim > batch_dims
                 else value[..., None]
             )
-            tensors.append(value.movedim(-1, pos))
+            # movedim(-1, pos) is an identity when pos is the last dimension,
+            # which is dim=-1 and dim=batch_dims, including an empty batch.
+            # Skipping it keeps that op out of the compiled graph.
+            if pos == batch_dims:
+                tensors.append(value)
+            else:
+                tensors.append(value.movedim(-1, pos))
         if tensors:
-            # cat follows the memory format of its inputs, which movedim makes
-            # channels-last for some ranks
+            # cat follows the memory format of its inputs. movedim makes that
+            # channels-last for some ranks, and a channels-last leaf does the
+            # same when the packed dimension is already last.
             flat = torch.cat(tensors, pos).contiguous()
         else:
             flat = torch.empty(
