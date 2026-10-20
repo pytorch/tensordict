@@ -161,6 +161,7 @@ Where to go
    :caption: How-to guides
 
    saving
+   saving_format
    storage
    data_loading
    distributed
