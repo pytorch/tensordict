@@ -1688,6 +1688,40 @@ class TestTensorClass:
         torch.testing.assert_close(td_load["adj"].indices, adj.indices)
         torch.testing.assert_close(td_load["x"], td["x"])
 
+    def test_consolidate_file_nested(self, tmp_path, monkeypatch):
+        # A tensordict that holds a tensorclass can be written to a file and
+        # read back with the nested tensorclass (#3117)
+        data = MyData2(
+            torch.ones((2,)), torch.ones((2, 3)) * 2, "a string!", batch_size=[2]
+        )
+        td = TensorDict(tc=data, x=torch.zeros(2), batch_size=[2])
+        filename = tmp_path / "file.mmap"
+        td_c = td.consolidate(filename=filename)
+        assert isinstance(td_c["tc"], MyData2)
+        # the in-memory metadata still holds the class itself
+        assert td_c._consolidated["metadata"]["tc"]["cls"] is MyData2
+
+        loaded = tensordict.from_consolidated(filename)
+        assert loaded.is_consolidated()
+        assert isinstance(loaded["tc"], MyData2)
+        # the loaded metadata holds the class too, so pickles of it name it
+        assert loaded._consolidated["metadata"]["tc"]["cls"] is MyData2
+        assert loaded["tc"].z == "a string!"
+        assert (loaded == td).all()
+        loaded = pickle.loads(pickle.dumps(loaded))
+        assert isinstance(loaded["tc"], MyData2)
+        assert (loaded == td).all()
+
+        # A tensorclass that is not defined where the file is read cannot be
+        # found by name
+        monkeypatch.setattr(
+            tensordict.base,
+            "_ACCEPTED_CLASSES",
+            tuple(c for c in tensordict.base._ACCEPTED_CLASSES if c is not MyData2),
+        )
+        with pytest.raises(RuntimeError, match="Could not find the class .*MyData2"):
+            tensordict.from_consolidated(filename)
+
     def test_dataclass(self):
         data = MyData(
             X=torch.ones(3, 4, 5),

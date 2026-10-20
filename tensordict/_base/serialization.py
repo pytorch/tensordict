@@ -2210,10 +2210,10 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     try:
         from tensordict._utils_key_json import json_dumps
 
-        metadata_json = json_dumps(metadata)
+        metadata_json = json_dumps(_tensorclass_names_in_metadata(metadata))
     except TypeError as e:
         raise RuntimeError(
-            "Failed to convert the metatdata to json. "
+            "Failed to convert the metadata to json. "
             "This is usually due to a nested class that is unaccounted for by the serializer, "
             "such as custom TensorClass. "
             "If you encounter this error, please file an issue on github."
@@ -2221,6 +2221,20 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     if isinstance(metadata_json, str):
         metadata_json = metadata_json.encode("utf-8")
     return metadata_json
+
+
+def _tensorclass_names_in_metadata(metadata: dict) -> dict:
+    """Returns a copy of consolidated ``metadata`` that records each tensorclass type as ``str(cls)``, as ``meta.json`` does."""
+    result = dict(metadata)
+    cls = result["cls"]
+    if isinstance(cls, type) and _is_tensorclass(cls):
+        result["cls"] = str(cls)
+    for key, value in metadata.items():
+        if key not in ("cls_metadata", "non_tensors", "leaves") and isinstance(
+            value, dict
+        ):
+            result[key] = _tensorclass_names_in_metadata(value)
+    return result
 
 
 def _file_id(filename) -> tuple[int, int, int] | None:
