@@ -397,6 +397,39 @@ class TestParquet:
         assert (td2[(*prefix, "inner", "x")] == tc.inner.x).all()
         assert (td2[(*prefix, "inner", "y")] == tc.inner.y).all()
 
+    @pytest.mark.parametrize("row_group_size", [None, 3])
+    def test_from_parquet_fixed_shape_tensor(self, tmp_path, row_group_size):
+        # A fixed_shape_tensor column keeps its per-row shape (#3101).
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if not hasattr(pa, "FixedShapeTensorArray"):
+            pytest.skip("pyarrow has no fixed_shape_tensor type")
+        values = np.arange(48, dtype=np.float32).reshape(8, 2, 3)
+        path = tmp_path / "tensor.parquet"
+        table = pa.table({"t": pa.FixedShapeTensorArray.from_numpy_ndarray(values)})
+        pq.write_table(table, str(path), row_group_size=row_group_size)
+        if row_group_size is not None:
+            assert pq.read_table(str(path)).column("t").num_chunks > 1
+
+        td = TensorDict.from_parquet(path)
+        assert td.batch_size == torch.Size([8])
+        assert td["t"].shape == torch.Size([8, 2, 3])
+        assert td["t"].dtype == torch.float32
+        assert (td["t"] == torch.from_numpy(values)).all()
+
+    def test_from_parquet_fixed_size_list(self, tmp_path):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        path = tmp_path / "list.parquet"
+        column = pa.array([[1, 2, 3], [4, 5, 6]], type=pa.list_(pa.int32(), 3))
+        pq.write_table(pa.table({"f": column}), str(path))
+
+        td = TensorDict.from_parquet(path)
+        assert td["f"].dtype == torch.int64
+        assert (td["f"] == torch.tensor([[1, 2, 3], [4, 5, 6]])).all()
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq

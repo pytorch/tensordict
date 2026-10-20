@@ -205,6 +205,9 @@ def _pyarrow_table_to_columns(table) -> tuple[dict[str, np.ndarray | list], int]
             columns[col_name] = column.to_numpy(zero_copy_only=False)
         elif pa.types.is_timestamp(column.type):
             columns[col_name] = column.to_numpy(zero_copy_only=False)
+        elif getattr(column.type, "extension_name", None) == "arrow.fixed_shape_tensor":
+            # Keep the per-row tensor shape, which to_pylist() flattens.
+            columns[col_name] = column.combine_chunks().to_numpy_ndarray()
         else:
             columns[col_name] = column.to_pylist()
 
