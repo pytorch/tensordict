@@ -1239,6 +1239,33 @@ def _own_annotation_names(cls: type) -> list[str]:
     return list(annotations)
 
 
+# The dataclasses.field options that tensorclasses ignore: the value that a
+# plain dataclass honours, and what the tensorclass does instead (#3073).
+_IGNORED_FIELD_OPTIONS = {
+    "init": (False, "__init__ still takes the field as an argument"),
+    "repr": (False, "repr() still shows the field"),
+    "compare": (False, "== and != still compare the field"),
+    "kw_only": (True, "__init__ still takes the field as a positional argument"),
+}
+
+
+def _warn_ignored_field_options(cls: type, options: list[str]) -> None:
+    """Warns once for each of ``options`` that a field declared in ``cls`` sets, as the tensorclass ignores it."""
+    own_names = set(_own_annotation_names(cls))
+    for field in dataclasses.fields(cls):
+        if field.name not in own_names:
+            continue
+        for option in options:
+            value, effect = _IGNORED_FIELD_OPTIONS[option]
+            if getattr(field, option) is value:
+                warnings.warn(
+                    f"{cls.__name__}.{field.name}: tensorclasses ignore the "
+                    f"field option {option}={value}: {effect}.",
+                    UserWarning,
+                    stacklevel=_user_stacklevel(),
+                )
+
+
 def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
     """Whether ``cls`` defines the method ``name``, in its body or in a parent.
 
@@ -1621,6 +1648,19 @@ def _tensorclass(
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
     if "_is_tensorclass" not in cls.__dict__:
+        # Warn about the field options that the class ignores, except where
+        # a method of the user's replaces the one that ignores them.
+        ignored_options = []
+        if user_init is None:
+            if not _has_custom_setattr:
+                # the dataclass __init__ sets the fields: it honours init
+                ignored_options.append("init")
+            ignored_options.append("kw_only")
+        if "__repr__" not in own_operators and not _is_non_tensor:
+            ignored_options.append("repr")
+        if not {"__eq__", "__ne__"} <= own_operators:
+            ignored_options.append("compare")
+        _warn_ignored_field_options(cls, ignored_options)
         # A class that was decorated before (e.g. @tensorclass on a
         # TensorClass subclass) keeps the __init__ wrapper it got then.
         cls.__init__ = _init_wrapper(
@@ -5900,6 +5940,11 @@ class _TensorClassMeta(abc.ABCMeta):
         cast_filter=NO_DEFAULT,
         **kwargs,
     ):
+        if "kw_only" in kwargs:
+            raise TypeError(
+                f"{name}: tensorclasses do not support the class option kw_only. "
+                "Their __init__ takes every field by name or in order."
+            )
         # Create the class using the ABCMeta's __new__ method
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
@@ -6020,6 +6065,14 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
 
     The constructor of a subclass takes the fields, by name or in order, and
     these keyword arguments: ``Foo(tensor=..., batch_size=[3])``.
+
+    A field declared with :func:`dataclasses.field` keeps its ``default``,
+    ``default_factory`` and ``metadata``. The options ``init=False``,
+    ``repr=False``, ``compare=False`` and ``kw_only=True`` are ignored, and
+    the class warns about each when it is defined, unless a method of the
+    class (``__init__``, ``__repr__``, ``__eq__`` and ``__ne__``) replaces the
+    one that ignores the option. The class option ``kw_only`` raises a
+    ``TypeError``.
 
     Keyword Args:
         batch_size (torch.Size or list of int, optional): the batch size of
