@@ -94,6 +94,7 @@ classifiers = [
     # does not document its thread safety yet: "2 - Beta" in the levels of
     # https://py-free-threading.github.io/porting/
     "Programming Language :: Python :: Free Threading :: 2 - Beta",
+    "Typing :: Typed",
     "Development Status :: 4 - Beta"
 ]
 dependencies = [
