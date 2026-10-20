@@ -798,6 +798,7 @@ class _ShapedTensor:
     # class that names the array type it wraps in ``array_type`` and that
     # cannot be instantiated.
     array_type = torch.Tensor
+    dim_str = "*batch 3"
 
     def __new__(cls, *args, **kwargs):
         raise RuntimeError("jaxtyping annotations cannot be instantiated")
@@ -805,6 +806,12 @@ class _ShapedTensor:
 
 class _ShapedArray(_ShapedTensor):
     array_type = np.ndarray
+
+
+class _WithArrayType(TensorClass):
+    # An attribute named ``array_type`` alone does not make a shape annotation.
+    array_type: ClassVar[type] = np.ndarray
+    x: torch.Tensor
 
 
 _MESH_POST_INIT_CALLS = []
@@ -6043,6 +6050,15 @@ class TestAutoCasting:
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, np.ndarray)
 
+        # A tensorclass with an ``array_type`` attribute is not unwrapped.
+        class Outer(TensorClass["autocast"]):
+            inner: _WithArrayType
+
+        y = Outer(
+            inner=_WithArrayType(x=torch.zeros(2), batch_size=[2]), batch_size=[2]
+        )
+        assert isinstance(y.inner, _WithArrayType)
+
     def test_autocast_simple(self):
         obj = AutoCastTensor(
             tensor=1,
@@ -8093,6 +8109,16 @@ class TestTensorOnly:
 
             class ShapedArray(TensorClass["tensor_only"]):
                 a: _ShapedArray
+
+    def test_tensor_only_array_type_attribute(self):
+        # A tensorclass with an ``array_type`` attribute is not unwrapped.
+        class Outer(TensorClass["tensor_only"]):
+            inner: _WithArrayType
+
+        x = Outer(
+            inner=_WithArrayType(x=torch.zeros(2), batch_size=[2]), batch_size=[2]
+        )
+        assert isinstance(x.inner, _WithArrayType)
 
     @pytest.mark.skipif(not _has_jaxtyping, reason="jaxtyping not installed")
     @pytest.mark.parametrize("flag", ["tensor_only", "autocast"])

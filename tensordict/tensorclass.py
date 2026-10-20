@@ -2538,9 +2538,12 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
 def _unwrap_array_annotation(type_hint: Any) -> Any:
     """Return the array type that a shape annotation such as jaxtyping's ``Float[Tensor, "3"]`` wraps.
 
-    jaxtyping stores it as ``array_type``; other annotations are returned as is.
+    jaxtyping stores it as ``array_type`` and the shape as ``dim_str``; other
+    annotations are returned as is.
     """
-    if isinstance(type_hint, type):
+    if isinstance(type_hint, type) and isinstance(
+        getattr(type_hint, "dim_str", None), str
+    ):
         array_type = getattr(type_hint, "array_type", None)
         if isinstance(array_type, type):
             return array_type
