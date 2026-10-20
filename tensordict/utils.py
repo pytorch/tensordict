@@ -121,31 +121,44 @@ _PENDING_DYNAMO_REGISTRATIONS = []
 
 
 class _DynamoImportHook:
-    """Finder that applies the pending registrations once torch._dynamo is imported."""
+    """Finder that applies the pending registrations once torch._dynamo is imported.
+
+    It stays on ``sys.meta_path`` until ``torch._dynamo`` is executed, so a
+    lookup that does not import it, such as ``importlib.util.find_spec``, does
+    not lose the registrations.
+    """
 
     def find_spec(self, fullname, path=None, target=None):
         if fullname != "torch._dynamo":
             return None
-        sys.meta_path.remove(self)
         for finder in sys.meta_path:
             find_spec = getattr(finder, "find_spec", None)
-            spec = find_spec(fullname, path, target) if find_spec else None
+            if finder is self or find_spec is None:
+                continue
+            spec = find_spec(fullname, path, target)
             if spec is not None:
                 break
         else:
             return None
         loader = spec.loader
-        exec_module = loader.exec_module
+        exec_module = getattr(loader, "exec_module", None)
+        if exec_module is None or not hasattr(loader, "__dict__"):
+            return None
 
         def exec_and_register(module):
-            del loader.exec_module
+            vars(loader).pop("exec_module", None)
             exec_module(module)
+            if self in sys.meta_path:
+                sys.meta_path.remove(self)
             while _PENDING_DYNAMO_REGISTRATIONS:
                 decorator, fn = _PENDING_DYNAMO_REGISTRATIONS.pop(0)
                 decorator(fn)
 
         loader.exec_module = exec_and_register
         return spec
+
+
+_DYNAMO_IMPORT_HOOK = _DynamoImportHook()
 
 
 def _register_with_dynamo(decorator, fn):
@@ -159,8 +172,8 @@ def _register_with_dynamo(decorator, fn):
     if "torch._dynamo" in sys.modules:
         decorator(fn)
     else:
-        if not _PENDING_DYNAMO_REGISTRATIONS:
-            sys.meta_path.insert(0, _DynamoImportHook())
+        if _DYNAMO_IMPORT_HOOK not in sys.meta_path:
+            sys.meta_path.insert(0, _DYNAMO_IMPORT_HOOK)
         _PENDING_DYNAMO_REGISTRATIONS.append((decorator, fn))
     return fn
 
