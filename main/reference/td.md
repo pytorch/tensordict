@@ -276,7 +276,7 @@ Functions
 | [`pad`](generated/tensordict.pad.html#tensordict.pad)(tensordict, pad_size[, value, inplace, safe]) | Pads all tensors in a tensordict along the batch dimensions with a constant value. |
 | [`pad_sequence`](generated/tensordict.pad_sequence.html#tensordict.pad_sequence)(list_of_tensordicts[, pad_dim, ...]) | Pads tensordicts to a common size along one dimension and stacks them densely. |
 | [`unpad_sequence`](generated/tensordict.unpad_sequence.html#tensordict.unpad_sequence)(padded[, mask, pad_dim]) | Splits a padded batch back into its variable-length samples. |
-| [`collate`](generated/tensordict.collate.html#tensordict.collate)(batch) | Collates a list of samples into a batch, for [`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). |
+| [`collate`](generated/tensordict.collate.html#tensordict.collate)(batch, *[, pad_keys, nested_keys, ...]) | Collates a list of samples into a batch, for [`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). |
 
 ### Device, dtype, and memory
 

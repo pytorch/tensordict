@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6239+gc76e913d6.d20261020)">
+<meta name="llm:version" content="main (0.15.0.dev6242+gb2b2f5d11.d20261020)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6239+gc76e913d6.d20261020)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6242+gb2b2f5d11.d20261020)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1717,7 +1717,9 @@ The methods that change the length of the list (<code class="docutils literal no
 <code class="docutils literal notranslate"><span class="pre">insert</span></code>, <code class="docutils literal notranslate"><span class="pre">pop</span></code>, <code class="docutils literal notranslate"><span class="pre">remove</span></code>, <code class="docutils literal notranslate"><span class="pre">clear</span></code> and <code class="docutils literal notranslate"><span class="pre">del</span></code>) change the list
 only, and unlink it from the tensordict: later item assignments no longer
 write back. A <a class="reference internal" href="#tensordict.utils.LinkedList" title="tensordict.utils.LinkedList"><code class="xref py py-class docutils literal notranslate"><span class="pre">LinkedList</span></code></a> compares equal to a list with the same
-items. If the write to the tensordict raises, the list is unchanged.</p>
+items. If the write to the tensordict raises, the list is unchanged.
+<a class="reference internal" href="#tensordict.utils.LinkedList.tolist" title="tensordict.utils.LinkedList.tolist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tolist()</span></code></a> returns a plain <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a> copy that is not linked to
+the tensordict, as <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist" title="tensordict.NonTensorStack.tolist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tolist()</span></code></a> does.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
@@ -1725,6 +1727,8 @@ items. If the write to the tensordict raises, the list is unchanged.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">values</span> <span class="o">=</span> <span class="n">td</span><span class="p">[</span><span class="s2">"names"</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"z"</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"names"</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="go">['z', 'b', 'c']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">values</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
 <span class="go">['z', 'b', 'c']</span>
 </pre></div>
 </div>
@@ -1762,6 +1766,24 @@ items. If the write to the tensordict raises, the list is unchanged.</p>
 <dt class="sig sig-object py" id="tensordict.utils.LinkedList.remove">
 <span class="sig-name descname"><span class="pre">remove</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.remove" title="Link to this definition">#</a></dt>
 <dd><p>Removes the first item equal to <code class="docutils literal notranslate"><span class="pre">value</span></code> and unlinks the list from the tensordict.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.utils.LinkedList.tolist">
+<span class="sig-name descname"><span class="pre">tolist</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a></span></span><a class="headerlink" href="#tensordict.utils.LinkedList.tolist" title="Link to this definition">#</a></dt>
+<dd><p>Returns a plain <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a> copy of the items, not linked to the tensordict.</p>
+<p>Nested <a class="reference internal" href="#tensordict.utils.LinkedList" title="tensordict.utils.LinkedList"><code class="xref py py-class docutils literal notranslate"><span class="pre">LinkedList</span></code></a> items, as <code class="docutils literal notranslate"><span class="pre">td[key]</span></code> returns for a
+non-tensor entry with more than one batch dimension, become nested
+lists, as with <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist" title="tensordict.NonTensorStack.tolist"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tolist()</span></code></a>. The other
+items are not copied.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"names"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">],</span> <span class="p">[</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">]]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"names"</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="go">[['a', 'b'], ['c', 'd']]</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </dd></dl>
@@ -1892,6 +1914,7 @@ items. If the write to the tensordict raises, the list is unchanged.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.utils.LinkedList.insert"><code class="docutils literal notranslate"><span class="pre">LinkedList.insert()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.utils.LinkedList.pop"><code class="docutils literal notranslate"><span class="pre">LinkedList.pop()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.utils.LinkedList.remove"><code class="docutils literal notranslate"><span class="pre">LinkedList.remove()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.utils.LinkedList.tolist"><code class="docutils literal notranslate"><span class="pre">LinkedList.tolist()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -2130,7 +2153,7 @@ items. If the write to the tensordict raises, the list is unchanged.</p>
        "headline": "LinkedList",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - LinkedList",
        "url": "/reference/generated/tensordict.utils.LinkedList.html",
-       "articleBody": "LinkedList# class tensordict.utils.LinkedList(*args, td: TensorDictBase, **kwargs)# Bases: list A list of the values of a non-tensor entry that writes item assignments back to the tensordict. td[key] returns a LinkedList when the entry is a NonTensorStack, and so does tolist() with as_linked_list=True. Setting an item (values[0] = \"z\") writes the value to the tensordict. The methods that change the length of the list (append, extend, insert, pop, remove, clear and del) change the list only, and unlink it from the tensordict: later item assignments no longer write back. A LinkedList compares equal to a list with the same items. If the write to the tensordict raises, the list is unchanged. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[3]) \u003e\u003e\u003e td[\"names\"] = [\"a\", \"b\", \"c\"] \u003e\u003e\u003e values = td[\"names\"] \u003e\u003e\u003e values[0] = \"z\" \u003e\u003e\u003e td.get(\"names\").tolist() [\u0027z\u0027, \u0027b\u0027, \u0027c\u0027] append(object: Any) \u2192 None# Appends object to the list and unlinks the list from the tensordict. clear() \u2192 None# Removes every item and unlinks the list from the tensordict. extend(object: Any) \u2192 None# Extends the list with the items of object and unlinks it from the tensordict. insert(index: int, object: Any) \u2192 None# Inserts object before index and unlinks the list from the tensordict. pop(index: int = -1) \u2192 Any# Removes and returns the item at index and unlinks the list from the tensordict. remove(value: Any) \u2192 None# Removes the first item equal to value and unlinks the list from the tensordict.",
+       "articleBody": "LinkedList# class tensordict.utils.LinkedList(*args, td: TensorDictBase, **kwargs)# Bases: list A list of the values of a non-tensor entry that writes item assignments back to the tensordict. td[key] returns a LinkedList when the entry is a NonTensorStack, and so does tolist() with as_linked_list=True. Setting an item (values[0] = \"z\") writes the value to the tensordict. The methods that change the length of the list (append, extend, insert, pop, remove, clear and del) change the list only, and unlink it from the tensordict: later item assignments no longer write back. A LinkedList compares equal to a list with the same items. If the write to the tensordict raises, the list is unchanged. tolist() returns a plain list copy that is not linked to the tensordict, as tolist() does. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[3]) \u003e\u003e\u003e td[\"names\"] = [\"a\", \"b\", \"c\"] \u003e\u003e\u003e values = td[\"names\"] \u003e\u003e\u003e values[0] = \"z\" \u003e\u003e\u003e td.get(\"names\").tolist() [\u0027z\u0027, \u0027b\u0027, \u0027c\u0027] \u003e\u003e\u003e values.tolist() [\u0027z\u0027, \u0027b\u0027, \u0027c\u0027] append(object: Any) \u2192 None# Appends object to the list and unlinks the list from the tensordict. clear() \u2192 None# Removes every item and unlinks the list from the tensordict. extend(object: Any) \u2192 None# Extends the list with the items of object and unlinks it from the tensordict. insert(index: int, object: Any) \u2192 None# Inserts object before index and unlinks the list from the tensordict. pop(index: int = -1) \u2192 Any# Removes and returns the item at index and unlinks the list from the tensordict. remove(value: Any) \u2192 None# Removes the first item equal to value and unlinks the list from the tensordict. tolist() \u2192 list# Returns a plain list copy of the items, not linked to the tensordict. Nested LinkedList items, as td[key] returns for a non-tensor entry with more than one batch dimension, become nested lists, as with tolist(). The other items are not copied. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(batch_size=[2, 2]) \u003e\u003e\u003e td[\"names\"] = [[\"a\", \"b\"], [\"c\", \"d\"]] \u003e\u003e\u003e td[\"names\"].tolist() [[\u0027a\u0027, \u0027b\u0027], [\u0027c\u0027, \u0027d\u0027]]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

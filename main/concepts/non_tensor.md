@@ -255,8 +255,8 @@ TensorDict(
 
 For a stack, `td["seq"]` returns a `tensordict.utils.LinkedList`. It is a
 subclass of [`list`](https://docs.python.org/3/builtins/stdtypes.html#list), and an assignment to one of its items writes into
-the tensordict. [`tolist()`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist) returns a plain
-[`list`](https://docs.python.org/3/builtins/stdtypes.html#list):
+the tensordict. [`tolist()`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist) and
+[`tolist()`](../reference/generated/tensordict.utils.LinkedList.html#tensordict.utils.LinkedList.tolist) return a plain [`list`](https://docs.python.org/3/builtins/stdtypes.html#list):
 
 ```
 >>> values = td["seq"]
@@ -266,6 +266,8 @@ True
 >>> td[1]["seq"]
 'CCGG'
 >>> td.get("seq").tolist()
+['ACGT', 'CCGG', 'TTAG']
+>>> td["seq"].tolist()
 ['ACGT', 'CCGG', 'TTAG']
 ```
 

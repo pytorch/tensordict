@@ -101,6 +101,20 @@ pairs, which `torch.stack` cannot stack:
 'LazyStackedTensorDict'
 ```
 
+To pad some entries instead, each with its own value, or to stack them as
+jagged nested tensors, pass the keyword arguments of
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) with [`functools.partial()`](https://docs.python.org/3/library/functools.html#functools.partial). The other
+entries are collated as above:
+
+```
+>>> from functools import partial
+>>> tokens = [TensorDict({"ids": torch.ones(n, dtype=torch.long), "points": torch.randn(n, 3)}) for n in (2, 4, 3)]
+>>> collate_fn = partial(collate, pad_keys={"ids": 7}, nested_keys=["points"], mask_key="mask")
+>>> batch = next(iter(DataLoader(tokens, batch_size=3, collate_fn=collate_fn)))
+>>> batch["ids"].shape, batch["mask", "ids"].sum(-1), batch["points"].is_nested
+(torch.Size([3, 4]), tensor([2, 4, 3]), True)
+```
+
 ## Batch samplers
 
 A batch sampler gives the indices of a whole batch. Pass it as `sampler`,
