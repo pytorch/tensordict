@@ -122,7 +122,7 @@ An operator with a Python number or with another tensordict compiles:
   >>> torch.compile(lambda td, t: td * t, fullgraph=True)(td, t)
   Traceback (most recent call last):
   ...
-  torch._dynamo.exc.Unsupported: All __torch_function__ overrides returned NotImplemented...
+  torch._dynamo.exc.Unsupported: ...
 
 :ref:`compile` lists the other patterns that break the graph.
 
@@ -182,13 +182,20 @@ original. A mask or a tensor of indices gives copies:
 
 :meth:`~tensordict.TensorDict.expand` allocates no memory. All the elements
 along a new dimension are the same memory, so a write into one of them
-writes into all. Call ``clone()`` first to get separate copies:
+writes into all. An assignment to an index, such as ``e[0] = 1``, writes
+every row. An in-place operation on an entry, such as ``e["a"].add_(1)``,
+raises a ``RuntimeError`` instead, as :ref:`batch-size` says. Call
+``clone()`` first to get separate copies:
 
   >>> e = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).expand(2, 3)
   >>> e[0] = 1
   >>> e["a"]
   tensor([[1., 1., 1.],
           [1., 1., 1.]])
+  >>> e["a"].add_(1)
+  Traceback (most recent call last):
+  ...
+  RuntimeError: unsupported operation: ...
   >>> e = e.clone()
   >>> e[0] = 0
   >>> e["a"]
