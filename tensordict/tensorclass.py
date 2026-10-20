@@ -3233,7 +3233,8 @@ def _replace(self, /, **changes: Any) -> Any:
     ``self`` when ``__init__`` and ``__post_init__`` leave it the default
     batch size and its entries fit that batch size. Otherwise the copy keeps
     the batch size that :func:`dataclasses.replace` gives it. ``names`` are
-    set on the copy with the names setter.
+    set on the copy with the names setter, after the sub-tensordicts that the
+    copy shares with ``changes`` or ``self`` are replaced by shallow clones.
     """
     td = self._tensordict
     batch_size = td.batch_size
@@ -3248,23 +3249,38 @@ def _replace(self, /, **changes: Any) -> Any:
     result_td = result._tensordict
     ndim = len(batch_size)
     # The batch_size setter expands the non-tensor entries in place: only
-    # those that the copy built itself may be shorter
-    if (
+    # those that the copy built itself with no batch dims may be shorter.
+    # __init__ and __post_init__ may have set the batch size.
+    fits = (
         batch_size
         and not result_td.batch_size
         and all(
             value.shape[:ndim] == batch_size
-            or (is_non_tensor(value) and value is not changes.get(key))
+            or (
+                is_non_tensor(value)
+                and not value.batch_size
+                and value is not changes.get(key)
+            )
             for key, value in result_td.items()
         )
-    ):
-        # __init__ and __post_init__ did not set the batch size
-        result_td.batch_size = batch_size
-        if not has_names:
-            names = td._maybe_names()
-    elif not has_names:
+    )
+    if fits and not has_names:
+        names = td._maybe_names()
+        has_names = names is not None and any(name is not None for name in names)
+    if not fits and not has_names:
         return result
-    result_td.names = names
+    # The setters change the sub-tensordicts in place: copy those that the
+    # copy shares with the caller or with self, as set() does
+    shared = {id(value) for value in changes.values()}
+    shared.update(id(value) for value in td.values())
+    result_dict = result_td._tensordict
+    for key, value in result_dict.items():
+        if id(value) in shared and _is_tensor_collection(type(value)):
+            result_dict[key] = value.clone(False)
+    if fits:
+        result_td.batch_size = batch_size
+    if has_names:
+        result_td.names = names
     return result
 
 

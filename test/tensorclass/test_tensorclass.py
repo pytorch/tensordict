@@ -3085,6 +3085,47 @@ class TestTensorClass:
         with pytest.raises(ValueError, match="dimension names"):
             copy.replace(data, names=["m", "k"])
 
+        # Non-tensor values with other batch dims do not fit either
+        z = NonTensorData("a", batch_size=[5])
+        out = copy.replace(data, z=z)
+        assert out.batch_size == torch.Size([])
+        assert z.batch_size == torch.Size([5])
+        out = copy.replace(data, z=["a"] * 5)
+        assert out.z == ["a"] * 5
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_shared(self):
+        # The sub-tensordicts of the caller and of the instance keep their
+        # batch size and names
+        class MyDataShared(TensorClass):
+            X: torch.Tensor
+            z: Any = None
+
+        named = MyDataShared(X=torch.zeros(3), batch_size=[3], names=["n"])
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        z = NonTensorData("a", batch_size=[3])
+        for value in (td, z):
+            out = copy.replace(named, z=value)
+            assert out.names == ["n"]
+            assert value.batch_size == torch.Size([3])
+            assert value.names == [None]
+
+        data = MyDataShared(X=torch.zeros(3), batch_size=[3])
+        td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["k"])
+        out = copy.replace(data, z=td)
+        assert out.batch_size == torch.Size([3])
+        assert td.names == ["k"]
+
+        sub = TensorDict(a=torch.zeros(3), batch_size=[3])
+        data = MyDataShared(X=torch.zeros(3), z=sub, batch_size=[3])
+        out = copy.replace(data, names=["q"])
+        assert out.names == ["q"]
+        assert out.z.names == ["q"]
+        assert data.z.names == [None]
+        assert sub.names == [None]
+
     @pytest.mark.skipif(
         sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
     )
