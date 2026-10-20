@@ -11,6 +11,7 @@ import concurrent
 import contextlib
 import ctypes
 import dataclasses
+import difflib
 import functools
 import hashlib
 import inspect
@@ -25,7 +26,7 @@ import shutil
 import sys
 import warnings
 import weakref
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,6 +57,7 @@ from tensordict._lazy import _GATHER, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
+from tensordict._td_memmap import _format_metadata
 from tensordict._tensorcollection import TensorCollection
 from tensordict._torch_func import _POINTWISE_FUNCTIONS, TD_HANDLED_FUNCTIONS
 from tensordict._utils_options import _set_capture_non_tensor_stack
@@ -78,6 +80,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _expands_to,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _html_repr,
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
@@ -188,7 +191,7 @@ _TensorTypes = (
     torch.Tensor,  # The base tensor class
 )
 _TENSOR_ONLY_TYPE_ERR = TypeError(
-    "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
+    "tensor_only requires types to be Tensor, Tensor-subtypes or None."
 )
 # raised when an indexed write gives a NonTensorData another value
 _NON_TENSOR_ONE_VALUE_MSG = (
@@ -996,6 +999,8 @@ def from_dataclass(
             frozen=frozen,
             shadow=shadow,
             tensor_only=tensor_only,
+            # the result gets deep copies of the instance's values, not the defaults
+            _warn_defaults=False,
         )
         if type_hints is not None:
             _set_tensorclass_type_hints(clz, type_hints)
@@ -1234,6 +1239,33 @@ def _own_annotation_names(cls: type) -> list[str]:
     return list(annotations)
 
 
+# The dataclasses.field options that tensorclasses ignore: the value that a
+# plain dataclass honours, and what the tensorclass does instead (#3073).
+_IGNORED_FIELD_OPTIONS = {
+    "init": (False, "__init__ still takes the field as an argument"),
+    "repr": (False, "repr() still shows the field"),
+    "compare": (False, "== and != still compare the field"),
+    "kw_only": (True, "__init__ still takes the field as a positional argument"),
+}
+
+
+def _warn_ignored_field_options(cls: type, options: list[str]) -> None:
+    """Warns once for each of ``options`` that a field declared in ``cls`` sets, as the tensorclass ignores it."""
+    own_names = set(_own_annotation_names(cls))
+    for field in dataclasses.fields(cls):
+        if field.name not in own_names:
+            continue
+        for option in options:
+            value, effect = _IGNORED_FIELD_OPTIONS[option]
+            if getattr(field, option) is value:
+                warnings.warn(
+                    f"{cls.__name__}.{field.name}: tensorclasses ignore the "
+                    f"field option {option}={value}: {effect}.",
+                    UserWarning,
+                    stacklevel=_user_stacklevel(),
+                )
+
+
 def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
     """Whether ``cls`` defines the method ``name``, in its body or in a parent.
 
@@ -1248,6 +1280,9 @@ def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
     else:
         return False
     if base is object or method is default:
+        return False
+    if getattr(method, "__module__", None) == "dataclasses":
+        # dataclasses.dataclass() adds __replace__ (Python 3.13+)
         return False
     if getattr(method, "__qualname__", "").startswith("_wrap_td_method."):
         return False
@@ -1312,6 +1347,28 @@ def _raise_reserved_field_name(name: str) -> None:
     )
 
 
+def _warn_shared_defaults(cls: type) -> None:
+    """Warns for each field of ``cls`` with a tensor default, which every instance shares until 0.17 (#3095)."""
+    own_names = _own_annotation_names(cls)
+    for field in dataclasses.fields(cls):
+        default = field.default
+        if field.name in own_names and (
+            isinstance(default, Tensor) or _is_tensor_collection(type(default))
+        ):
+            warnings.warn(
+                f"The {type(default).__name__} default of the field "
+                f"{cls.__name__}.{field.name} is shared by every instance of the "
+                "class: an in-place change on one instance changes the others "
+                "and the default. Starting with TensorDict 0.17, the "
+                "default will change to giving each instance its own copy "
+                "(a clone) of the default. To get a copy for each instance now, "
+                "use dataclasses.field(default_factory=...), as in "
+                "`dataclasses.field(default_factory=lambda: torch.tensor(0))`.",
+                FutureWarning,
+                stacklevel=_user_stacklevel(),
+            )
+
+
 def _attribute_functions(value: Any) -> tuple[FunctionType, ...]:
     """Return the functions behind a method, classmethod, staticmethod or property."""
     if isinstance(value, FunctionType):
@@ -1351,7 +1408,9 @@ def _unchecked_copy(func: FunctionType) -> FunctionType:
 
 
 @dataclass_transform()
-def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
+def _tensorclass(
+    cls: T, *, frozen, shadow: bool, tensor_only: bool, _warn_defaults: bool = True
+) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -1486,6 +1545,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         "__or__": _or,
         "__xor__": _xor,
         "__bool__": _bool,
+        "__replace__": _replace,
     }
     own_operators = {
         name
@@ -1519,6 +1579,9 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
             or (field.default is not dataclasses.MISSING and field.default is not None)
         )
     )
+    if _warn_defaults and "_is_tensorclass" not in cls.__dict__:
+        # not on the second pass of a class decorated twice
+        _warn_shared_defaults(cls)
 
     if not shadow:
         for attr in expected_keys:
@@ -1585,6 +1648,19 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
     if "_is_tensorclass" not in cls.__dict__:
+        # Warn about the field options that the class ignores, except where
+        # a method of the user's replaces the one that ignores them.
+        ignored_options = []
+        if user_init is None:
+            if not _has_custom_setattr:
+                # the dataclass __init__ sets the fields: it honours init
+                ignored_options.append("init")
+            ignored_options.append("kw_only")
+        if "__repr__" not in own_operators and not _is_non_tensor:
+            ignored_options.append("repr")
+        if not {"__eq__", "__ne__"} <= own_operators:
+            ignored_options.append("compare")
+        _warn_ignored_field_options(cls, ignored_options)
         # A class that was decorated before (e.g. @tensorclass on a
         # TensorClass subclass) keeps the __init__ wrapper it got then.
         cls.__init__ = _init_wrapper(
@@ -1629,6 +1705,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     for name, method in operators.items():
         if name not in own_operators and not (_is_non_tensor and name == "__repr__"):
             setattr(cls, name, method)
+    if not hasattr(cls, "_repr_html_"):
+        cls._repr_html_ = _repr_html
     if _is_non_tensor and hasattr(cls, "_patch_operators"):
         # NonTensorDataBase patches its comparison operators
         cls._patch_operators()
@@ -1936,6 +2014,32 @@ def _from_tensordict_with_none(tc, tensordict):
     return type(tc)._from_tensordict(
         tensordict=tensordict,
         non_tensordict={key: None for key in tc._non_tensordict},
+    )
+
+
+def _did_you_mean(name: str, fields: Iterable[str]) -> str:
+    """Returns `` Did you mean 'field'?`` for the field closest to ``name``, or ``""``."""
+    close = difflib.get_close_matches(name, list(fields), n=1)
+    return f" Did you mean {close[0]!r}?" if close else ""
+
+
+def _no_attribute_error(self, item: str) -> AttributeError:
+    """The error of reading ``item``, which is neither a field nor an attribute of ``self``.
+
+    It lists the public fields and suggests the closest one. A private or dunder
+    name, which libraries probe with ``hasattr``, keeps the bare message: it
+    costs nothing to build. ``obj`` without ``name`` keeps Python from adding
+    its own suggestion to the traceback, which would repeat ours.
+    """
+    if item.startswith("_") or is_dynamo_compiling():
+        return AttributeError(item)
+    fields = sorted(
+        key for key in type(self).__expected_keys__ if not key.startswith("_")
+    )
+    return AttributeError(
+        f"{type(self).__name__!r} object has no attribute or field {item!r}."
+        f"{_did_you_mean(item, fields)} Its fields are {fields}.",
+        obj=self,
     )
 
 
@@ -2269,11 +2373,27 @@ def _init_wrapper(
         missing_params = [p for p in required_params if p not in kwargs]
         if missing_params:
             n_missing = len(missing_params)
-            raise TypeError(
-                f"{type(self).__name__}.__init__() missing {n_missing} "
-                f"required positional argument{'' if n_missing == 1 else 's'}: "
+            missing = (
+                f"missing {n_missing} required positional "
+                f"argument{'' if n_missing == 1 else 's'}: "
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
+            expected_keys = self.__expected_keys__
+            unknown = [key for key in kwargs if key not in expected_keys]
+            if not unknown:
+                msg = f"{type(self).__name__}.__init__() {missing}"
+            else:
+                # a misspelled field is the likely cause: report it first
+                msg = (
+                    f"{type(self).__name__}.__init__() got an unexpected keyword "
+                    f"argument {unknown[0]!r}."
+                    f"{_did_you_mean(unknown[0], expected_keys)}"
+                    if len(unknown) == 1
+                    else f"{type(self).__name__}.__init__() got unexpected "
+                    f"keyword arguments {unknown}."
+                )
+                msg += f" Its fields are {sorted(expected_keys)}. It is also {missing}."
+            raise TypeError(msg)
 
         super(type(self), self).__setattr__(
             "_tensordict",
@@ -2463,6 +2583,7 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
         if tensor_only:
 
             def is_tensor_or_optional_tensor(type_hint):
+                type_hint = _unwrap_array_annotation(type_hint)
                 # Check if the type hint is exactly torch.Tensor
                 if isinstance(type_hint, type):
                     return issubclass(type_hint, _TensorTypes) or _is_tensor_collection(
@@ -2534,6 +2655,21 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
         cls._type_hints = None
 
 
+def _unwrap_array_annotation(type_hint: Any) -> Any:
+    """Return the array type that a shape annotation such as jaxtyping's ``Float[Tensor, "3"]`` wraps.
+
+    jaxtyping stores it as ``array_type`` and the shape as ``dim_str``; other
+    annotations are returned as is.
+    """
+    if isinstance(type_hint, type) and isinstance(
+        getattr(type_hint, "dim_str", None), str
+    ):
+        array_type = getattr(type_hint, "array_type", None)
+        if isinstance(array_type, type):
+            return array_type
+    return type_hint
+
+
 def _is_tensordict_annotation(type_hint: Any) -> bool:
     """Return whether an annotation contains a TensorDictBase type."""
     origin = get_origin(type_hint)
@@ -2591,7 +2727,9 @@ def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
         if tensorclass_type is not None:
             tensorclass_fields[key] = tensorclass_type
     cls._tensorclass_fields = tensorclass_fields
-    cls._type_hints = type_hints
+    cls._type_hints = {
+        key: _unwrap_array_annotation(val) for key, val in type_hints.items()
+    }
 
 
 def _normalize_nested_mapping(
@@ -3221,6 +3359,66 @@ def _deepcopy(self, memo: dict[int, Any]) -> Any:
     return self.clone()
 
 
+def _replace(self, /, **changes: Any) -> Any:
+    """Implements :func:`copy.replace`: :func:`dataclasses.replace` that keeps the metadata.
+
+    The device of ``self`` is the default of the call to ``__init__``. Without
+    ``batch_size`` in ``changes``, the copy gets the batch size and names of
+    ``self`` when ``__init__`` and ``__post_init__`` leave it the default
+    batch size and its entries fit that batch size. Otherwise the copy keeps
+    the batch size that :func:`dataclasses.replace` gives it. ``names`` are
+    set on the copy with the names setter, after the sub-tensordicts that the
+    copy shares with ``changes`` or ``self`` are replaced by shallow clones.
+    """
+    td = self._tensordict
+    batch_size = td.batch_size
+    fields = self.__dataclass_fields__
+    if "device" not in changes and "device" not in fields:
+        changes["device"] = td.device
+    if "batch_size" in changes or "batch_size" in fields or "names" in fields:
+        return dataclasses.replace(self, **changes)
+    has_names = "names" in changes
+    names = changes.pop("names", None)
+    result = dataclasses.replace(self, **changes)
+    result_td = result._tensordict
+    ndim = len(batch_size)
+    # The batch_size setter expands the non-tensor entries in place: only
+    # those that the copy built itself with no batch dims may be shorter.
+    # __init__ and __post_init__ may have set the batch size.
+    fits = (
+        batch_size
+        and not result_td.batch_size
+        and all(
+            value.shape[:ndim] == batch_size
+            or (
+                is_non_tensor(value)
+                and not value.batch_size
+                and value is not changes.get(key)
+            )
+            for key, value in result_td.items()
+        )
+    )
+    if fits and not has_names:
+        names = td._maybe_names()
+        has_names = names is not None and any(name is not None for name in names)
+    if not fits and not has_names:
+        return result
+    if has_names:
+        # The names setter renames the sub-tensordicts in place: copy those
+        # that the copy shares with the caller or with self, as set() does
+        shared = {id(value) for value in changes.values()}
+        shared.update(id(value) for value in td.values())
+        result_dict = result_td._tensordict
+        for key, value in result_dict.items():
+            if id(value) in shared and _is_tensor_collection(type(value)):
+                result_dict[key] = value.clone(False)
+    if fits:
+        result_td.batch_size = batch_size
+    if has_names:
+        result_td.names = names
+    return result
+
+
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
     # Guard against infinite recursion when _tensordict/_non_tensordict are
     # not yet set (e.g. during Dynamo tracing of the constructor or pytree
@@ -3243,7 +3441,7 @@ def _getattr_tensor_only(self, item: str, **kwargs) -> Any:
         if is_non_tensor(out):
             return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
-    raise AttributeError(item)
+    raise _no_attribute_error(self, item)
 
 
 def _getattr(self, item: str, **kwargs) -> Any:
@@ -3298,7 +3496,7 @@ def _getattr(self, item: str, **kwargs) -> Any:
         if is_non_tensor(out):
             return out.data if hasattr(out, "data") else out.tolist(as_linked_list=True)
         return _wrap_method(self, item, out)
-    raise AttributeError(item)
+    raise _no_attribute_error(self, item)
 
 
 # Reads a field of a tensorclass instance, as the field branch of _getattr does.
@@ -3392,6 +3590,7 @@ def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
         raise AttributeError(
             f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
             f"field. Its fields are {sorted(self.__expected_keys__)}."
+            f"{_did_you_mean(key, self.__expected_keys__)}"
         )
     out = self.set(key, value)
     if out is not self:
@@ -3450,6 +3649,7 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
         raise AttributeError(
             f"Cannot set the attribute {key!r}: {type(self).__name__} has no such "
             f"field. Its fields are {sorted(self.__expected_keys__)}."
+            f"{_did_you_mean(key, self.__expected_keys__)}"
         )
     if value is None:
         # A None field is a key missing from the TensorDict, as in set(). A
@@ -4299,6 +4499,10 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         self._tensordict[item] = value
 
 
+def _repr_html(self) -> str | None:
+    return _html_repr(self)
+
+
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
     if _REPR_OPTIONS["compact"]:
@@ -4733,6 +4937,7 @@ def _set(
             raise AttributeError(
                 f"Cannot set the attribute {key!r}: {cls.__name__} has no such "
                 f"field. Its fields are {sorted(expected_keys)}."
+                f"{_did_you_mean(key, expected_keys)}"
             )
 
         self_is_non_tensor = self._is_non_tensor
@@ -5735,6 +5940,11 @@ class _TensorClassMeta(abc.ABCMeta):
         cast_filter=NO_DEFAULT,
         **kwargs,
     ):
+        if "kw_only" in kwargs:
+            raise TypeError(
+                f"{name}: tensorclasses do not support the class option kw_only. "
+                "Their __init__ takes every field by name or in order."
+            )
         # Create the class using the ABCMeta's __new__ method
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
@@ -5855,6 +6065,14 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
 
     The constructor of a subclass takes the fields, by name or in order, and
     these keyword arguments: ``Foo(tensor=..., batch_size=[3])``.
+
+    A field declared with :func:`dataclasses.field` keeps its ``default``,
+    ``default_factory`` and ``metadata``. The options ``init=False``,
+    ``repr=False``, ``compare=False`` and ``kw_only=True`` are ignored, and
+    the class warns about each when it is defined, unless a method of the
+    class (``__init__``, ``__repr__``, ``__eq__`` and ``__ne__``) replaces the
+    one that ignores the option. The class option ``kw_only`` raises a
+    ``TypeError``.
 
     Keyword Args:
         batch_size (torch.Size or list of int, optional): the batch size of
@@ -7796,6 +8014,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     os.makedirs(prefix, exist_ok=True)
                 jsondict = {
                     "_type": str(type(self)),
+                    **_format_metadata(type(self)),
                     "stack_dim": self.stack_dim,
                     "device": device,
                 }

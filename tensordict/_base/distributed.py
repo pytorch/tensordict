@@ -14,6 +14,8 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 from __future__ import annotations
 
 import functools
+import io
+import pickle
 from typing import List, TYPE_CHECKING
 
 import torch
@@ -26,11 +28,46 @@ from tensordict.base import (
     Self,
     T,
 )
-from tensordict.utils import _int_generator
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import _int_generator, _is_tensorclass
 from torch import Tensor
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
+
+# The kinds of buffer that gather_and_stack sends with gloo
+_GATHER_NOTHING, _GATHER_PICKLE, _GATHER_STORAGE = 0, 1, 2
+
+
+def _consolidates_losslessly(td) -> bool:
+    # Whether the consolidated storage and metadata of td rebuild it on another
+    # rank. The storage keeps the values, but not the autograd history, device,
+    # layout or subclass of the leaves. The rebuild calls
+    # cls._from_dict_validated, which h5 files, stores and views of another
+    # tensordict do not support, and consolidating them would read all their
+    # data, where their pickle only names the file or server. So walk the
+    # structure without reading the data or stacking the lazy stacks.
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+
+    if _is_tensorclass(type(td)):
+        td = td._tensordict
+    if isinstance(td, LazyStackedTensorDict):
+        return all(_consolidates_losslessly(sub) for sub in td.tensordicts)
+    if type(td) is not TensorDict:
+        return False
+    for value in td._tensordict.values():
+        if _is_tensor_collection(type(value)):
+            if not _consolidates_losslessly(value):
+                return False
+        elif (
+            value.requires_grad
+            or value.device.type != "cpu"
+            or value.layout != torch.strided
+            or type(value) not in (Tensor, MemoryMappedTensor)
+        ):
+            return False
+    return True
 
 
 class _Distributed:
@@ -44,10 +81,25 @@ class _Distributed:
 
         Every rank of the group must call it. On rank ``dst``, the tensordict must
         have one row per other rank: its first batch dimension is
-        ``world_size - 1``, and its own data is not in the result. The
-        tensordicts are sent with :func:`torch.distributed.gather_object`, which
-        pickles them: use it only with ranks you trust. See
-        :ref:`distributed-collectives`.
+        ``world_size - 1``, and its own data is not in the result. When the
+        backend of the group is exactly ``gloo``, each other rank consolidates
+        its tensordict (see :meth:`~.consolidate`) and sends its storage and its
+        pickled metadata to ``dst`` with :func:`torch.distributed.gather`. With
+        any other backend, including a group with several backends such as
+        ``"cpu:gloo,cuda:nccl"`` or one whose backend is ``"undefined"``, the
+        tensordicts are sent with :func:`torch.distributed.gather_object`,
+        which pickles them. With ``gloo``, a rank other than ``dst`` pickles its
+        tensordict when it cannot be consolidated, or when it holds one of
+        these:
+
+        - a leaf that requires gradients, is not on the CPU, is not a strided
+          tensor, or is a tensor subclass other than
+          :class:`~tensordict.MemoryMappedTensor`;
+        - a tensordict other than a :class:`~tensordict.TensorDict`, a
+          :class:`~tensordict.LazyStackedTensorDict` or a tensorclass, for
+          example a :class:`~tensordict.PersistentTensorDict`.
+
+        Use it only with ranks you trust. See :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the stack.
@@ -73,17 +125,86 @@ class _Distributed:
                         td = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
                         td.gather_and_stack(dst=0)
         """
+        from tensordict._reductions import _rebuild_tensordict_files_consolidated
         from torch import distributed as dist
 
-        output = (
-            [None for _ in range(dist.get_world_size(group=group))]
-            if dst == dist.get_rank(group=group)
-            else None
-        )
-        dist.gather_object(self, output, dst=dst, group=group)
-        if dst == dist.get_rank(group=group):
-            # remove self from output
-            output = [item for i, item in enumerate(output) if i != dst]
+        world_size = dist.get_world_size(group=group)
+        rank = dist.get_rank(group=group)
+        if dist.get_backend(group) != dist.Backend.GLOO:
+            output = [None for _ in range(world_size)] if dst == rank else None
+            dist.gather_object(self, output, dst=dst, group=group)
+            if dst == rank:
+                # remove self from output
+                output = [item for i, item in enumerate(output) if i != dst]
+        else:
+            # Gloo gathers CPU tensors. As gather_object does, gather the size of
+            # a byte buffer from every rank, then the buffers padded to the
+            # largest size. A rank other than dst sends, as all_gather does, its
+            # consolidated storage followed by the pickled metadata, or else its
+            # pickled tensordict. Each rank chooses on its own: the header
+            # [kind, storage size, buffer size] tells dst how to read the buffer.
+            kind, storage_size, chunks = _GATHER_NOTHING, 0, ()
+            if rank != dst:
+                td_c = None
+                if _consolidates_losslessly(self):
+                    try:
+                        td_c = (
+                            self
+                            if self.is_consolidated()
+                            and self._consolidated["metadata"] is not None
+                            else self.consolidate(metadata=True)
+                        )
+                    except Exception:
+                        # The pickle may still work
+                        td_c = None
+                if (
+                    td_c is not None
+                    and td_c._consolidated["storage"].device.type == "cpu"
+                ):
+                    storage = td_c._consolidated["storage"]
+                    metadata = bytearray(pickle.dumps(td_c._consolidated["metadata"]))
+                    kind, storage_size = _GATHER_STORAGE, storage.numel()
+                    chunks = (storage, torch.frombuffer(metadata, dtype=torch.uint8))
+                else:
+                    f = io.BytesIO()
+                    pickle.Pickler(f).dump(self)
+                    kind = _GATHER_PICKLE
+                    chunks = (torch.frombuffer(f.getbuffer(), dtype=torch.uint8),)
+            header = torch.tensor(
+                [kind, storage_size, sum(chunk.numel() for chunk in chunks)]
+            )
+            headers = [torch.empty_like(header) for _ in range(world_size)]
+            dist.all_gather(headers, header, group=group)
+            buffer = torch.empty(max(int(h[2]) for h in headers), dtype=torch.uint8)
+            start = 0
+            for chunk in chunks:
+                buffer[start : start + chunk.numel()] = chunk
+                start += chunk.numel()
+            if rank != dst:
+                # Send zeros, not uninitialized memory, in the padding
+                buffer[start:].zero_()
+            gathered = (
+                [torch.empty_like(buffer) for _ in range(world_size)]
+                if rank == dst
+                else None
+            )
+            dist.gather(buffer, gathered, dst=dst, group=group)
+            if rank == dst:
+                output = []
+                for i, (h, received) in enumerate(zip(headers, gathered)):
+                    if i == dst:
+                        continue
+                    kind, storage_size, size = h.tolist()
+                    if kind == _GATHER_STORAGE:
+                        metadata = pickle.loads(received[storage_size:size].numpy())
+                        output.append(
+                            _rebuild_tensordict_files_consolidated(
+                                metadata, received[:storage_size]
+                            )
+                        )
+                    else:
+                        output.append(pickle.loads(received[:size].numpy()))
+        if dst == rank:
             self.update(torch.stack(output, 0), inplace=True)
             return self
         return None

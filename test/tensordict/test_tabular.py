@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -397,6 +398,55 @@ class TestParquet:
         assert (td2[(*prefix, "inner", "x")] == tc.inner.x).all()
         assert (td2[(*prefix, "inner", "y")] == tc.inner.y).all()
 
+    @pytest.mark.parametrize("row_group_size", [None, 3])
+    def test_from_parquet_fixed_shape_tensor(self, tmp_path, row_group_size):
+        # A fixed_shape_tensor column keeps its per-row shape (#3101).
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if not hasattr(pa, "FixedShapeTensorArray"):
+            pytest.skip("pyarrow has no fixed_shape_tensor type")
+        values = np.arange(48, dtype=np.float32).reshape(8, 2, 3)
+        path = tmp_path / "tensor.parquet"
+        table = pa.table({"t": pa.FixedShapeTensorArray.from_numpy_ndarray(values)})
+        pq.write_table(table, str(path), row_group_size=row_group_size)
+        if row_group_size is not None:
+            assert pq.read_table(str(path)).column("t").num_chunks > 1
+
+        td = TensorDict.from_parquet(path)
+        assert td.batch_size == torch.Size([8])
+        assert td["t"].shape == torch.Size([8, 2, 3])
+        assert td["t"].dtype == torch.float32
+        assert (td["t"] == torch.from_numpy(values)).all()
+
+    def test_from_parquet_fixed_shape_tensor_bool(self, tmp_path):
+        # to_numpy_ndarray() rejects bool, so these still come back flat.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if not hasattr(pa, "FixedShapeTensorArray"):
+            pytest.skip("pyarrow has no fixed_shape_tensor type")
+        values = np.arange(12).reshape(3, 2, 2) % 3 == 0
+        path = tmp_path / "mask.parquet"
+        table = pa.table({"m": pa.FixedShapeTensorArray.from_numpy_ndarray(values)})
+        pq.write_table(table, str(path))
+
+        td = TensorDict.from_parquet(path)
+        assert td["m"].dtype == torch.bool
+        assert (td["m"] == torch.from_numpy(values).reshape(3, 4)).all()
+
+    def test_from_parquet_fixed_size_list(self, tmp_path):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        path = tmp_path / "list.parquet"
+        column = pa.array([[1, 2, 3], [4, 5, 6]], type=pa.list_(pa.int32(), 3))
+        pq.write_table(pa.table({"f": column}), str(path))
+
+        td = TensorDict.from_parquet(path)
+        assert td["f"].dtype == torch.int64
+        assert (td["f"] == torch.tensor([[1, 2, 3], [4, 5, 6]])).all()
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -465,7 +515,9 @@ class TestJSON:
                 path.write_text(json.dumps(records))
             return TensorDict.from_json(path, lines=lines)
 
-        td = read([{"a": "x"}, {"a": "y", "b": "z"}, {"c": 3.5, "a": "w"}])
+        # "c" is a number field with missing values, which warns (#3069)
+        with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+            td = read([{"a": "x"}, {"a": "y", "b": "z"}, {"c": 3.5, "a": "w"}])
         assert td.batch_size == torch.Size([3])
         assert list(td.keys()) == ["a", "b", "c"]
         assert td["a"] == ["x", "y", "w"]
@@ -475,6 +527,38 @@ class TestJSON:
         assert td.batch_size == torch.Size([2])
         assert list(td.keys()) == ["b"]
         assert td["b"] == [None, "later"]
+
+    @pytest.mark.parametrize("lines", [False, True])
+    def test_from_json_without_pandas_warns_for_missing_numbers(
+        self, tmp_path, monkeypatch, lines
+    ):
+        # https://github.com/pytorch/tensordict/issues/3069
+        # Without pandas, a number field with missing or null values is a
+        # non-tensor entry with None; from TensorDict 0.17 it is a float tensor
+        # with NaN, as with pandas.
+        import tensordict._tabular
+
+        monkeypatch.setattr(tensordict._tabular, "_has_pandas", lambda: False)
+        monkeypatch.setitem(sys.modules, "pandas", None)
+
+        def read(records):
+            path = tmp_path / ("test.jsonl" if lines else "test.json")
+            if lines:
+                path.write_text("\n".join(json.dumps(r) for r in records))
+            else:
+                path.write_text(json.dumps(records))
+            return TensorDict.from_json(path, lines=lines)
+
+        with pytest.warns(FutureWarning, match="TensorDict 0.17") as record:
+            td = read([{"a": 1, "b": 2, "c": "x"}, {"a": 3, "d": None}])
+        (warning,) = [w for w in record if "TensorDict 0.17" in str(w.message)]
+        assert "'b', 'd'" in str(warning.message)
+        assert warning.filename == __file__
+        assert td["b"] == [2, None]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            read([{"a": 1}, {"a": 2.5}])
+            read([{"s": "x"}, {"t": [1]}])
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")

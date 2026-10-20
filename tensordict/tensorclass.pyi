@@ -1161,6 +1161,41 @@ class TensorClass(_TensorClassInitArgs):
         device: torch.device | str | None = None,
     ) -> Self: ...
     def apply_(self, fn: Callable, *others, **kwargs) -> Self: ...
+    @overload
+    def apply(
+        self,
+        fn: Callable[..., Tensor | TensorCollection | TensorClass],
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False] | None = None,
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
+    def apply(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False],
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
     def apply(
         self,
         fn: Callable,
@@ -1177,6 +1212,43 @@ class TensorClass(_TensorClassInitArgs):
         out: TensorCollection | None = None,
         **constructor_kwargs,
     ) -> Self | None: ...
+    @overload
+    def named_apply(
+        self,
+        fn: Callable[..., Tensor | TensorCollection | TensorClass],
+        *others: T,
+        nested_keys: bool = False,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False] | None = None,
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
+    def named_apply(
+        self,
+        fn: Callable,
+        *others: T,
+        nested_keys: bool = False,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = ...,
+        names: Sequence[str] | None = ...,
+        inplace: bool = False,
+        default: Any = ...,
+        filter_empty: Literal[False],
+        propagate_lock: bool = False,
+        call_on_nested: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        out: TensorCollection | None = None,
+        **constructor_kwargs,
+    ) -> Self: ...
+    @overload
     def named_apply(
         self,
         fn: Callable,
