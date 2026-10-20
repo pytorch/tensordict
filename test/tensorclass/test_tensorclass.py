@@ -1682,6 +1682,8 @@ class TestTensorClass:
         loaded = tensordict.from_consolidated(filename)
         assert loaded.is_consolidated()
         assert isinstance(loaded["tc"], MyData2)
+        # the loaded metadata holds the class too, so pickles of it name it
+        assert loaded._consolidated["metadata"]["tc"]["cls"] is MyData2
         assert loaded["tc"].z == "a string!"
         assert (loaded == td).all()
         loaded = pickle.loads(pickle.dumps(loaded))

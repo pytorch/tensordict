@@ -159,6 +159,10 @@ def _rebuild_tensordict_files_consolidated(
             )
         if isinstance(cls, str):
             cls = _consolidated_cls(cls)
+            if _is_tensorclass(cls):
+                # Hold the class, as in memory, so that a pickle of the result
+                # names it by reference rather than by a string to look up
+                consolidated["metadata"]["cls"] = cls
         result = cls._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()
