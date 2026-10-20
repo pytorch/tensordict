@@ -571,6 +571,141 @@ class TestGeneric:
         td_chunks = rmpad_batch.chunk(2)  # should work now
         assert len(td_chunks) == 2
 
+    @staticmethod
+    def _jagged(kind):
+        # 6 rows of lengths 3, 5, 2, 4, 1, 6
+        lengths = (3, 5, 2, 4, 1, 6)
+        if kind == "ragged_dim_1":
+            return torch.nested.nested_tensor(
+                [torch.randn(n, 2) for n in lengths], layout=torch.jagged
+            )
+        if kind == "ragged_dim_2":
+            # (B, 3, j, 2): the ragged dim is not next to the batch dim
+            return torch.nested.nested_tensor(
+                [torch.randn(3, n, 2) for n in lengths], layout=torch.jagged
+            )
+        # with holes: the rows do not cover the values
+        return torch.nested.nested_tensor_from_jagged(
+            torch.randn(40, 2),
+            offsets=torch.tensor([0, 5, 12, 15, 22, 30, 33]),
+            lengths=torch.tensor(lengths),
+        )
+
+    @staticmethod
+    def _check_jagged(result, rows):
+        assert result.layout is torch.jagged
+        got = result.unbind()
+        assert len(got) == len(rows)
+        for g, r in zip(got, rows):
+            assert torch.equal(g, r)
+        if rows:
+            seqlens = [r.shape[result._ragged_idx - 1] for r in rows]
+            assert result._maybe_max_seqlen == max(seqlens)
+            assert result._maybe_min_seqlen == min(seqlens)
+
+    @pytest.mark.parametrize("kind", ["ragged_dim_1", "ragged_dim_2", "holes"])
+    @pytest.mark.parametrize(
+        "index",
+        [
+            slice(1, 4),
+            slice(-3, None),
+            slice(4, 1),
+            slice(None, None, 2),
+            slice(1, 6, 3),
+            torch.tensor([5, 0, 0]),
+            torch.tensor([], dtype=torch.long),
+            [1, 3],
+            torch.tensor([True, False, True, False, False, True]),
+            torch.tensor(3),
+            -1,
+        ],
+    )
+    def test_index_jagged(self, kind, index):
+        nt = self._jagged(kind)
+        rows = nt.unbind()
+        td = TensorDict(
+            ids=nt,
+            x=torch.arange(6),
+            sub=TensorDict(ids=nt, batch_size=[6]),
+            batch_size=[6],
+        )
+        result = td[index]
+        selected = torch.arange(6)[index]
+        assert result.batch_size == selected.shape
+        assert (result["x"] == selected).all()
+        if not selected.ndim:
+            assert torch.equal(result["ids"], rows[selected])
+            return
+        selected = selected.tolist()
+        self._check_jagged(result["ids"], [rows[i] for i in selected])
+        self._check_jagged(result["sub", "ids"], [rows[i] for i in selected])
+
+    @pytest.mark.parametrize("kind", ["ragged_dim_1", "ragged_dim_2", "holes"])
+    def test_split_cat_jagged(self, kind):
+        nt = self._jagged(kind)
+        rows = nt.unbind()
+        td = TensorDict(ids=nt, sub=TensorDict(ids=nt, batch_size=[6]), batch_size=[6])
+        for pieces in (
+            td.split(4),
+            td.split([1, 0, 5]),
+            torch.split(td, 2),
+            td.chunk(4),
+            td.tensor_split([1, 3]),
+            td.unbind(0),
+        ):
+            start = 0
+            for piece in pieces:
+                if not piece.batch_dims:
+                    assert torch.equal(piece["ids"], rows[start])
+                    start += 1
+                    continue
+                end = start + piece.batch_size[0]
+                self._check_jagged(piece["ids"], rows[start:end])
+                self._check_jagged(piece["sub", "ids"], rows[start:end])
+                start = end
+            assert start == 6
+
+        # A slice of step 1 and a split share the values of the tensordict
+        def storage(nt):
+            return nt.values().untyped_storage().data_ptr()
+
+        assert storage(td[1:3]["ids"]) == storage(nt)
+        assert storage(td.split(2)[1]["ids"]) == storage(nt)
+        assert storage(td[::2]["ids"]) != storage(nt)
+
+        result = torch.cat([td, td[:2], td[torch.tensor([3, 1])]])
+        expected = [*rows, *rows[:2], rows[3], rows[1]]
+        assert result.batch_size == (10,)
+        self._check_jagged(result["ids"], expected)
+        self._check_jagged(result["sub", "ids"], expected)
+
+    def test_jagged_grad(self):
+        values = torch.randn(14, 2, requires_grad=True)
+        nt = torch.nested.nested_tensor_from_jagged(
+            values, offsets=torch.tensor([0, 3, 8, 10, 14])
+        )
+        td = TensorDict(ids=nt, batch_size=[4])
+        loss = (
+            td[torch.tensor([3, 0])]["ids"].values().sum() * 2
+            + td[1:3]["ids"].values().sum()
+            + torch.cat([td, td])["ids"].values().sum()
+            + td.split(3)[1]["ids"].values().sum()
+        )
+        loss.backward()
+        # rows 0 and 3 are indexed (2) and concatenated twice (2), row 3 is split (1);
+        # rows 1 and 2 are sliced (1) and concatenated twice (2)
+        expected = torch.tensor([4.0] * 3 + [3.0] * 7 + [5.0] * 4)
+        assert (values.grad == expected[:, None]).all()
+
+    def test_stack_jagged_raises(self):
+        td = TensorDict(ids=self._jagged("ragged_dim_1"), batch_size=[6])
+        with pytest.raises(RuntimeError, match="second ragged dim"):
+            torch.stack([td, td])
+        # a lazy stack keeps the tensordicts apart
+        stacked = lazy_stack([td, td])
+        assert stacked[:, 1:3].batch_size == (2, 2)
+        assert stacked[1, torch.tensor([0, 2])]["ids"].offsets().tolist() == [0, 3, 5]
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone_empty(self, recurse):
         td = TensorDict()

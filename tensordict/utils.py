@@ -517,6 +517,134 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
                 )
             return tensor[index]
         raise err
+    except (RuntimeError, NotImplementedError, ValueError):
+        # torch does not index a jagged nested tensor along its batch dim
+        if isinstance(tensor, Tensor) and tensor.layout is torch.jagged:
+            result = _jagged_getitem(tensor, index)
+            if result is not None:
+                return result
+        raise
+
+
+def _jagged_sizes(lens: Tensor, *sizes: Tensor) -> list[int | None]:
+    """Reads the 0-d tensors ``sizes`` and the min and max of ``lens`` in one device sync.
+
+    Returns ``[*sizes, min(lens), max(lens)]`` as ints, with ``None`` for the
+    min and max of an empty ``lens``.
+    """
+    if lens.numel():
+        return torch.stack([*sizes, lens.min(), lens.max()]).tolist()
+    return [*(torch.stack(sizes).tolist() if sizes else ()), None, None]
+
+
+def _jagged_getitem(tensor: Tensor, index: IndexType) -> Tensor | None:
+    """Indexes a jagged nested tensor along its batch dim (dim 0), which torch does not do.
+
+    A slice of step 1 returns a view; any other index of the batch dim
+    copies the selected rows. The result keeps the ragged dim and has its min
+    and max sequence lengths set. Returns ``None`` for the indices it does
+    not handle (a ``None``, or a tensor index of the other dims), so that the
+    caller raises the error of torch.
+    """
+    if not isinstance(index, tuple):
+        index = (index,)
+    first, rest = index[0], index[1:]
+    if (
+        first is None
+        or isinstance(first, bool)
+        or not all(type(idx) in (int, slice) for idx in rest)
+    ):
+        return None
+    offsets = tensor.offsets()
+    lengths = tensor.lengths()
+    lens = offsets.diff() if lengths is None else lengths
+    values = tensor.values()
+    ragged_idx = tensor._ragged_idx
+    vdim = ragged_idx - 1
+    if isinstance(first, slice) and first.step in (None, 1):
+        start, stop, _ = first.indices(lens.numel())
+        stop = max(start, stop)
+        lens = lens[start:stop]
+        new_offsets = offsets[start : stop + 1]
+        if lengths is None:
+            begin, end, min_seqlen, max_seqlen = _jagged_sizes(
+                lens, offsets[start], offsets[stop]
+            )
+            values = values.narrow(vdim, begin, end - begin)
+            new_offsets = new_offsets - begin
+        else:
+            min_seqlen, max_seqlen = _jagged_sizes(lens)
+            lengths = lens
+    else:
+        rows = torch.arange(lens.numel(), device=offsets.device)[first]
+        if rows.ndim == 0:
+            result = tensor[int(rows)]
+            return result[rest] if rest else result
+        if rows.ndim != 1:
+            return None
+        lens = lens[rows]
+        new_offsets = torch.nn.functional.pad(lens.cumsum(0), (1, 0))
+        total, min_seqlen, max_seqlen = _jagged_sizes(lens, new_offsets[-1])
+        # the position in values of each element of the selected rows
+        positions = torch.repeat_interleave(
+            offsets[:-1][rows] - new_offsets[:-1], lens, output_size=total
+        ) + torch.arange(total, device=offsets.device)
+        values = values.index_select(vdim, positions)
+        lengths = None
+    result = torch.nested.nested_tensor_from_jagged(
+        values,
+        new_offsets,
+        lengths,
+        jagged_dim=ragged_idx,
+        min_seqlen=min_seqlen,
+        max_seqlen=max_seqlen,
+    )
+    return result[(slice(None), *rest)] if rest else result
+
+
+def _jagged_split(tensor: Tensor, split_sizes: Sequence[int]) -> tuple[Tensor, ...]:
+    """Splits a jagged nested tensor along its batch dim into views, as ``Tensor.split`` does."""
+    result = []
+    start = 0
+    for size in split_sizes:
+        result.append(_jagged_getitem(tensor, slice(start, start + size)))
+        start += size
+    return tuple(result)
+
+
+def _jagged_cat(tensors: Sequence[Tensor]) -> Tensor | None:
+    """Concatenates jagged nested tensors along their batch dim, which ``torch.cat`` does not do.
+
+    Returns ``None`` unless every tensor is a jagged nested tensor with the
+    same ragged dim, so that the caller raises the error of torch.
+    """
+    if (
+        not all(isinstance(t, Tensor) and t.layout is torch.jagged for t in tensors)
+        or len({t._ragged_idx for t in tensors}) != 1
+    ):
+        return None
+    ragged_idx = tensors[0]._ragged_idx
+    vdim = ragged_idx - 1
+    values = [t.values() for t in tensors]
+    starts, lens = [], []
+    shift = 0
+    for t, v in zip(tensors, values):
+        offsets = t.offsets()
+        lengths = t.lengths()
+        starts.append(offsets[:-1] + shift)
+        lens.append(offsets.diff() if lengths is None else lengths)
+        shift += v.shape[vdim]
+    starts.append(starts[-1].new_tensor([shift]))
+    lens = torch.cat(lens)
+    min_seqlen, max_seqlen = _jagged_sizes(lens)
+    return torch.nested.nested_tensor_from_jagged(
+        torch.cat(values, vdim),
+        torch.cat(starts),
+        None if all(t.lengths() is None for t in tensors) else lens,
+        jagged_dim=ragged_idx,
+        min_seqlen=min_seqlen,
+        max_seqlen=max_seqlen,
+    )
 
 
 def _cast_scalar(value, tensor):
