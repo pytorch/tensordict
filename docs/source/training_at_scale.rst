@@ -64,7 +64,10 @@ lines need a GPU, so they are not run when this page is tested:
 
   >>> from torch.utils.data import DataLoader
   >>> data = TensorDict(
-  ...     {"image": torch.randn(1_000, 3, 32, 32), "label": torch.arange(1_000)},
+  ...     {
+  ...         "image": torch.randn(1_000, 3, 32, 32),
+  ...         "label": torch.arange(1_000),
+  ...     },
   ...     batch_size=[1_000],
   ... )
   >>> loader = DataLoader(data, batch_size=100, shuffle=True, collate_fn=lambda x: x)
@@ -165,8 +168,11 @@ assumes so:
   >>> ema = EMA(step=torch.tensor(10), value=torch.full((4,), 0.5))
   >>> path = tempfile.mkdtemp()
   >>> with warnings.catch_warnings():
-  ...     warnings.simplefilter("ignore")  # "torch.distributed is ... uninitialized"
-  ...     _ = dcp.save({"buffers": buffers, "ema": ema, "epoch": 3}, checkpoint_id=path)
+  ...     # "torch.distributed is ... uninitialized"
+  ...     warnings.simplefilter("ignore")
+  ...     _ = dcp.save(
+  ...         {"buffers": buffers, "ema": ema, "epoch": 3}, checkpoint_id=path
+  ...     )
   ...     state = {
   ...         "buffers": buffers.apply(torch.zeros_like),
   ...         "ema": EMA(step=torch.tensor(0), value=torch.zeros(4)),
@@ -222,7 +228,8 @@ tensordict from two processes, then loads all of it in the main process:
        os.environ["MASTER_PORT"] = str(port)
        dist.init_process_group("gloo", rank=rank, world_size=world_size)
        mesh = init_device_mesh("cpu", (world_size,))
-       weight = distribute_tensor(torch.arange(16.0).reshape(8, 2), mesh, [Shard(0)])
+       weight = torch.arange(16.0).reshape(8, 2)
+       weight = distribute_tensor(weight, mesh, [Shard(0)])
        params = TensorDict({"weight": weight})
        print(rank, params["weight"].to_local().shape)  # torch.Size([4, 2])
        dcp.save({"params": params}, checkpoint_id=path)
@@ -237,7 +244,8 @@ tensordict from two processes, then loads all of it in the main process:
        mp.spawn(save_sharded, args=(2, port, path), nprocs=2)
        params = TensorDict({"weight": torch.zeros(8, 2)})
        dcp.load({"params": params}, checkpoint_id=path)
-       print(params["weight"][:, 0])  # tensor([ 0.,  2.,  4.,  6.,  8., 10., 12., 14.])
+       # tensor([ 0.,  2.,  4.,  6.,  8., 10., 12., 14.])
+       print(params["weight"][:, 0])
 
 DCP checkpoints are directories of files that other DCP jobs read. To save a
 tensordict for other uses, such as a dataset or a file that you open without
@@ -283,9 +291,11 @@ ranks with the script of :ref:`distributed`, with
 
    def dtensor_leaves(rank, world_size):
        mesh = init_device_mesh("cpu", (world_size,))
-       weight = distribute_tensor(torch.arange(8.0).reshape(4, 2), mesh, [Shard(0)])
+       weight = torch.arange(8.0).reshape(4, 2)
+       weight = distribute_tensor(weight, mesh, [Shard(0)])
        params = TensorDict({"weight": weight}, batch_size=[4])
-       print(params[1:3]["weight"].full_tensor())  # tensor([[2., 3.], [4., 5.]])
+       # tensor([[2., 3.], [4., 5.]])
+       print(params[1:3]["weight"].full_tensor())
        print(torch.stack([params, params]).batch_size)  # torch.Size([2, 4])
        local = params.apply(lambda x: x.to_local(), batch_size=[])
        print(rank, local["weight"].shape)  # torch.Size([2, 2]) on each rank

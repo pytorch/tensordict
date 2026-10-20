@@ -6,7 +6,9 @@
 import abc
 import argparse
 import os
+import socket
 import sys
+import warnings
 from datetime import timedelta
 
 import pytest
@@ -16,11 +18,13 @@ from _utils_internal import is_npu_available
 from tensordict import LazyStackedTensorDict, MemoryMappedTensor, TensorDict
 from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
+from torch.distributed import checkpoint as dcp
 from torch.distributed._tensor import (
     DeviceMesh,
     distribute_module,
     distribute_tensor,
     # init_device_mesh,
+    Replicate,
     Shard,
 )
 from torch.distributed.fsdp import (
@@ -253,6 +257,84 @@ class TestDTensor:
         finally:
             server_worker.join()
             client_worker.join()
+
+
+class TestDCPDTensor:
+    """Save a tensordict of sharded DTensors with DCP and load it resharded."""
+
+    @staticmethod
+    def make_tensordict(mesh, placements, fill=None):
+        weight = torch.arange(16.0).reshape(8, 2)
+        bias = torch.arange(8.0)
+        if fill is not None:
+            weight, bias = weight.fill_(fill), bias.fill_(fill)
+        return TensorDict(
+            {
+                "weight": distribute_tensor(weight, mesh, placements),
+                "nested": {"bias": distribute_tensor(bias, mesh, placements)},
+            },
+            batch_size=[8],
+        )
+
+    @classmethod
+    def worker(cls, rank, port, path, queue):
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=2, init_method=f"tcp://localhost:{port}"
+        )
+        try:
+            mesh = DeviceMesh("cpu", torch.arange(2))
+            expected = cls.make_tensordict(mesh, [Shard(0)])
+            dcp.save({"td": expected}, checkpoint_id=path)
+            # Same sharding
+            sharded = cls.make_tensordict(mesh, [Shard(0)], fill=-1)
+            dcp.load({"td": sharded}, checkpoint_id=path)
+            # Resharded: every rank holds the full tensors
+            replicated = cls.make_tensordict(mesh, [Replicate()], fill=-1)
+            dcp.load({"td": replicated}, checkpoint_id=path)
+            for key in (("weight",), ("nested", "bias")):
+                full = expected[key].full_tensor()
+                assert sharded[key].placements == (Shard(0),)
+                torch.testing.assert_close(sharded[key].to_local(), full.chunk(2)[rank])
+                assert replicated[key].placements == (Replicate(),)
+                torch.testing.assert_close(replicated[key].to_local(), full)
+            queue.put("ok")
+        except Exception as err:
+            queue.put(repr(err))
+        finally:
+            dist.destroy_process_group()
+
+    def test_dcp_save_load_resharded(self, tmp_path):
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            tdlogger.info("start method already set to %s", mp.get_start_method())
+        with socket.socket() as sock:
+            sock.bind(("localhost", 0))
+            port = sock.getsockname()[1]
+        path = str(tmp_path)
+        queues = [mp.Queue(1) for _ in range(2)]
+        procs = [
+            mp.Process(target=self.worker, args=(rank, port, path, queues[rank]))
+            for rank in range(2)
+        ]
+        for proc in procs:
+            proc.start()
+        try:
+            for queue in queues:
+                assert queue.get(timeout=TIMEOUT) == "ok"
+        finally:
+            for proc in procs:
+                proc.join(TIMEOUT)
+        # Resharded: plain tensors in one process, without a process group
+        restored = TensorDict(
+            {"weight": torch.zeros(8, 2), "nested": {"bias": torch.zeros(8)}},
+            batch_size=[8],
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # no process group: single-process load
+            dcp.load({"td": restored}, checkpoint_id=path)
+        torch.testing.assert_close(restored["weight"], torch.arange(16.0).reshape(8, 2))
+        torch.testing.assert_close(restored["nested", "bias"], torch.arange(8.0))
 
 
 class TestGather:
