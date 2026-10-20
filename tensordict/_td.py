@@ -96,6 +96,7 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_safe_legacy_key,
     _is_unbatched,
+    _jagged_split,
     _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
@@ -1007,8 +1008,14 @@ class TensorDict(TensorDictBase):
                 (v,) * len(segments)
                 if _is_unbatched(v)
                 else v.chunk(chunks, dim)
-                if type(v) is Tensor or not isinstance(v, TensorDictBase)
+                if type(v) is Tensor
                 else v._chunk(chunks, dim)
+                if isinstance(v, TensorDictBase)
+                # torch.chunk drops the sequence lengths of a jagged nested
+                # tensor, and rejects one with holes or a ragged dim past dim 1
+                else _jagged_split(v, [end - start for start, end in segments])
+                if dim == 0 and getattr(v, "layout", None) is torch.jagged
+                else v.chunk(chunks, dim)
             )
             for k, v in self.items()
         }
