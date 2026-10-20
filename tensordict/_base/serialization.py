@@ -17,6 +17,8 @@ import collections
 import concurrent.futures
 import json
 import os.path
+import shutil
+import tempfile
 from concurrent.futures import wait
 from copy import copy
 from pathlib import Path
@@ -78,6 +80,81 @@ def _is_saved_tensorclass(prefix: Path) -> bool:
         str(cls) == type_name and _is_tensorclass(cls)
         for cls in tensordict.base._ACCEPTED_CLASSES
     )
+
+
+def _memmap_atomically(prefix: Path | None, write, *, existsok: bool):
+    """Calls ``write`` on a new sibling directory of ``prefix``, then moves it to ``prefix``.
+
+    ``write(path)`` writes the tensordict to ``path`` and returns the result.
+    An existing directory at ``prefix`` is replaced only once the new one is
+    complete, and the result is rebased onto the files at ``prefix``.
+    """
+    if prefix is None:
+        raise ValueError("atomic=True needs a prefix to write the directory to.")
+    prefix = Path(prefix)
+    # Follow a symlink, so that the directory it points to is replaced.
+    target = prefix.resolve()
+    if target.exists():
+        if not target.is_dir():
+            raise NotADirectoryError(f"{prefix} exists and is not a directory.")
+        if any(target.iterdir()):
+            if not existsok:
+                raise RuntimeError(f"{prefix} is not empty and existsok=False.")
+            if not (target / "meta.json").exists():
+                # Do not delete a directory that is not a saved tensordict.
+                raise RuntimeError(
+                    f"Refusing to replace {prefix} with atomic=True: it is not "
+                    f"empty and holds no saved tensordict (no meta.json)."
+                )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # A sibling is on the same file system, so a rename moves it into place.
+    work = Path(tempfile.mkdtemp(prefix=".tdtmp-", dir=target.parent))
+    new, old = work / "new", work / "old"
+    try:
+        new.mkdir()
+        result = write(new)
+        if target.exists():
+            shutil.copymode(target, new)
+            os.rename(target, old)
+            try:
+                os.rename(new, target)
+            except BaseException:
+                os.rename(old, target)
+                raise
+        else:
+            os.rename(new, target)
+    finally:
+        # Keep the old directory if it could not be moved back.
+        if target.exists() or not old.exists():
+            shutil.rmtree(work, ignore_errors=True)
+    _rebase_memmap_paths(result, new, prefix)
+    return result
+
+
+def _rebase_memmap_paths(data, old: Path, new: Path) -> None:
+    """Points the files and directories of ``data`` under ``old`` to the same paths under ``new``."""
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+    from tensordict.base import _unwrap
+
+    nodes = [data]
+    while nodes:
+        node = nodes.pop()
+        if isinstance(node, MemoryMappedTensor):
+            filename = node._filename
+            if filename is not None and Path(filename).is_relative_to(old):
+                node._filename = str(new.absolute() / Path(filename).relative_to(old))
+            continue
+        if not is_tensor_collection(node):
+            continue
+        node = _unwrap(node)
+        if isinstance(node, LazyStackedTensorDict):
+            nodes.extend(node.tensordicts)
+        elif isinstance(node, TensorDict):
+            prefix = node._memmap_prefix
+            if prefix is not None and Path(prefix).is_relative_to(old):
+                node._memmap_prefix = new / Path(prefix).relative_to(old)
+            nodes.extend(node._tensordict.values())
 
 
 def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
@@ -1072,6 +1149,7 @@ class _Serialization:
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self:
         """Writes every leaf to a memory-mapped file in place, and returns ``self``.
 
@@ -1119,6 +1197,22 @@ class _Serialization:
                 If ``False``, keys are used as file names unchanged, as in the
                 legacy layout: do not use it with keys you do not trust.
                 ``None`` is the same as ``True``. Defaults to ``True``.
+            atomic (bool, optional): if ``True``, the files are written to a
+                new directory next to ``prefix``, which is then renamed to
+                ``prefix``, so that an error or a crash during the write
+                leaves ``prefix`` as it was. The new directory is removed if
+                the write fails (but not after a crash). An existing directory
+                at ``prefix`` is replaced as a whole once the new one is
+                complete, so files that the tensordict does not write are
+                removed: it must be empty or hold a saved tensordict (a
+                ``meta.json`` file). Readers see the old or the new directory,
+                except for the short time between two renames, during which
+                ``prefix`` is missing. The write needs about twice the disk
+                space of the tensordict while it runs, and a leaf that is
+                already memory-mapped to a file is copied, which needs
+                ``copy_existing=True``. The files are not synced to the disk,
+                so this guards against a killed process, not against a power
+                failure. Not supported with ``return_early=True``. Defaults to ``False``.
 
         Returns:
             ``self``, or a :class:`~tensordict.utils.TensorDictFuture` of it if
@@ -1134,6 +1228,10 @@ class _Serialization:
                 :class:`~tensordict.store.LazyStackedTensorDictStore` or one of
                 their elements. Use :meth:`~.memmap` to make a memory-mapped
                 copy of those.
+            ValueError: if ``atomic=True`` and there is no directory to write
+                to.
+            NotImplementedError: if ``return_early=True`` with
+                ``atomic=True``.
 
         Examples:
             >>> import tempfile
@@ -1152,6 +1250,23 @@ class _Serialization:
                 "Converting a sub-tensordict values to memmap cannot be done."
             )
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
+        if atomic:
+            if return_early:
+                raise NotImplementedError(
+                    "return_early is not supported with atomic=True."
+                )
+            return _memmap_atomically(
+                prefix,
+                lambda path: self.memmap_(
+                    path,
+                    copy_existing=copy_existing,
+                    num_threads=num_threads,
+                    share_non_tensor=share_non_tensor,
+                    existsok=existsok,
+                    robust_key=robust_key,
+                ),
+                existsok=existsok,
+            )
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)
             futures = []
@@ -1196,6 +1311,7 @@ class _Serialization:
         robust_key: bool | None = True,
         archive: bool | None = None,
         compression: str | int | None = None,
+        atomic: bool = False,
     ) -> Self:
         """Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -1236,6 +1352,10 @@ class _Serialization:
             compression (str or int, optional): the compression of the
                 archive entries. Defaults to ``None``, which stores them
                 uncompressed.
+            atomic (bool, optional): if ``True``, the directory is written
+                next to ``prefix`` and then renamed to it, so that an error or
+                a crash during the write leaves ``prefix`` as it was. An
+                archive is always written this way. Defaults to ``False``.
 
         Returns:
             A new memory-mapped tensordict, as :meth:`~.memmap` returns.
@@ -1260,6 +1380,7 @@ class _Serialization:
             robust_key=robust_key,
             archive=archive,
             compression=compression,
+            atomic=atomic,
         )
 
     dumps = save
@@ -1276,6 +1397,7 @@ class _Serialization:
         robust_key: bool | None = True,
         archive: bool | None = None,
         compression: str | int | None = None,
+        atomic: bool = False,
     ) -> Self:
         """Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -1339,6 +1461,23 @@ class _Serialization:
                 decompressed in memory when it is loaded, instead of being
                 memory-mapped. Only valid for an archive. Defaults to ``None``,
                 which stores the entries uncompressed.
+            atomic (bool, optional): if ``True``, the files are written to a
+                new directory next to ``prefix``, which is then renamed to
+                ``prefix``, so that an error or a crash during the write
+                leaves ``prefix`` as it was. The new directory is removed if
+                the write fails (but not after a crash). An existing directory
+                at ``prefix`` is replaced as a whole once the new one is
+                complete, so files that the tensordict does not write are
+                removed: it must be empty or hold a saved tensordict (a
+                ``meta.json`` file). Readers see the old or the new directory,
+                except for the short time between two renames, during which
+                ``prefix`` is missing. The write needs about twice the disk
+                space of the tensordict while it runs, and a leaf that is
+                already memory-mapped to a file is copied, which needs
+                ``copy_existing=True``. The files are not synced to the disk,
+                so this guards against a killed process, not against a power
+                failure. Not supported with ``return_early=True``. An
+                archive is always written this way. Defaults to ``False``.
 
         Returns:
             A new memory-mapped tensordict, or a
@@ -1347,11 +1486,13 @@ class _Serialization:
 
         Raises:
             RuntimeError: if a leaf already has a file elsewhere and
-                ``copy_existing=False``, or if a file exists and
-                ``existsok=False``.
+                ``copy_existing=False``, if a file exists and
+                ``existsok=False``, or with ``atomic=True``, if ``prefix`` is
+                a non-empty directory that holds no saved tensordict.
             ValueError: if ``compression`` is given without an archive, or if
-                an archive is requested without ``prefix``.
-            NotImplementedError: if ``return_early=True`` for an archive.
+                an archive or ``atomic=True`` is requested without ``prefix``.
+            NotImplementedError: if ``return_early=True`` for an archive or
+                with ``atomic=True``.
 
         .. note::
             For an archive, the result is ``load_memmap(prefix)``: its leaves
@@ -1416,6 +1557,23 @@ class _Serialization:
                 "(pass archive=True or use a '.tdz' prefix)."
             )
         prefix = Path(prefix) if prefix is not None else self._memmap_prefix
+        if atomic:
+            if return_early:
+                raise NotImplementedError(
+                    "return_early is not supported with atomic=True."
+                )
+            return _memmap_atomically(
+                prefix,
+                lambda path: self.memmap(
+                    path,
+                    copy_existing=copy_existing,
+                    num_threads=num_threads,
+                    share_non_tensor=share_non_tensor,
+                    existsok=existsok,
+                    robust_key=robust_key,
+                ),
+                existsok=existsok,
+            )
 
         if num_threads > 1:
             executor = _get_shared_executor(num_threads)

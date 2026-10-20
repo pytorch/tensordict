@@ -1264,6 +1264,88 @@ class TestReadWrite:
         # assert (mmap1[1].view(-1) == 0).all()
 
 
+class TestAtomicSave:
+    @staticmethod
+    def _td(value):
+        return TensorDict(
+            a=torch.full((3,), value),
+            nested=TensorDict(b=torch.full((3, 2), value), batch_size=[3]),
+            batch_size=[3],
+        )
+
+    @pytest.mark.parametrize("method", ["memmap", "memmap_", "save"])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_atomic(self, tmp_path, method, num_threads, existing):
+        path = tmp_path / "ckpt"
+        if existing:
+            old = self._td(0.0)
+            old["stale"] = torch.zeros(3)
+            old.memmap(path)
+        td = self._td(1.0)
+        out = getattr(td, method)(path, num_threads=num_threads, atomic=True)
+        assert (out is td) == (method == "memmap_")
+        # the directory was replaced, and no temporary directory is left
+        assert os.listdir(tmp_path) == ["ckpt"]
+        assert not (path / "stale.memmap").exists()
+        assert out.is_locked
+        assert out.saved_path == path
+        assert out["nested"].saved_path == path / "nested"
+        assert out["a"].filename == str(path / "a.memmap")
+        assert out["nested", "b"].filename == str(path / "nested" / "b.memmap")
+        # writes reach the files at path
+        out["nested", "b"].fill_(2.0)
+        loaded = TensorDict.load_memmap(path)
+        assert (loaded["a"] == 1).all()
+        assert (loaded["nested", "b"] == 2).all()
+
+    @pytest.mark.parametrize("method", ["memmap", "memmap_"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_atomic_failure(self, tmp_path, monkeypatch, method, existing):
+        path = tmp_path / "ckpt"
+        if existing:
+            self._td(0.0).memmap(path)
+            before = sorted(p.relative_to(path) for p in path.rglob("*"))
+        td = self._td(1.0)
+        td["nested", "boom"] = torch.zeros(3)
+        from_tensor = MemoryMappedTensor.from_tensor.__func__
+
+        def failing_from_tensor(cls, input, *, filename=None, **kwargs):
+            if filename is not None and Path(filename).name == "boom.memmap":
+                raise OSError("simulated failure")
+            return from_tensor(cls, input, filename=filename, **kwargs)
+
+        monkeypatch.setattr(
+            MemoryMappedTensor, "from_tensor", classmethod(failing_from_tensor)
+        )
+        with pytest.raises(OSError, match="simulated failure"):
+            getattr(td, method)(path, atomic=True)
+        if existing:
+            # the old directory is untouched
+            assert os.listdir(tmp_path) == ["ckpt"]
+            assert sorted(p.relative_to(path) for p in path.rglob("*")) == before
+            assert (TensorDict.load_memmap(path)["nested", "b"] == 0).all()
+        else:
+            assert os.listdir(tmp_path) == []
+
+    def test_atomic_errors(self, tmp_path):
+        td = self._td(1.0)
+        with pytest.raises(ValueError, match="needs a prefix"):
+            td.memmap(atomic=True)
+        with pytest.raises(NotImplementedError, match="return_early"):
+            td.memmap(tmp_path / "ckpt", num_threads=2, return_early=True, atomic=True)
+        td.memmap(tmp_path / "ckpt")
+        with pytest.raises(RuntimeError, match="existsok=False"):
+            td.memmap(tmp_path / "ckpt", existsok=False, atomic=True)
+        # a directory that holds no saved tensordict is not replaced
+        (tmp_path / "other").mkdir()
+        (tmp_path / "other" / "notes.txt").write_text("keep")
+        with pytest.raises(RuntimeError, match="no meta.json"):
+            td.memmap(tmp_path / "other", atomic=True)
+        assert os.listdir(tmp_path / "other") == ["notes.txt"]
+        assert sorted(os.listdir(tmp_path)) == ["ckpt", "other"]
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
