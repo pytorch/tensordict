@@ -188,7 +188,7 @@ _TensorTypes = (
     torch.Tensor,  # The base tensor class
 )
 _TENSOR_ONLY_TYPE_ERR = TypeError(
-    "tensor_only requires types to be Tensor, Tensor-subtrypes or None."
+    "tensor_only requires types to be Tensor, Tensor-subtypes or None."
 )
 # raised when an indexed write gives a NonTensorData another value
 _NON_TENSOR_ONE_VALUE_MSG = (
@@ -2463,6 +2463,7 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
         if tensor_only:
 
             def is_tensor_or_optional_tensor(type_hint):
+                type_hint = _unwrap_array_annotation(type_hint)
                 # Check if the type hint is exactly torch.Tensor
                 if isinstance(type_hint, type):
                     return issubclass(type_hint, _TensorTypes) or _is_tensor_collection(
@@ -2534,6 +2535,18 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
         cls._type_hints = None
 
 
+def _unwrap_array_annotation(type_hint: Any) -> Any:
+    """Return the array type that a shape annotation such as jaxtyping's ``Float[Tensor, "3"]`` wraps.
+
+    jaxtyping stores it as ``array_type``; other annotations are returned as is.
+    """
+    if isinstance(type_hint, type):
+        array_type = getattr(type_hint, "array_type", None)
+        if isinstance(array_type, type):
+            return array_type
+    return type_hint
+
+
 def _is_tensordict_annotation(type_hint: Any) -> bool:
     """Return whether an annotation contains a TensorDictBase type."""
     origin = get_origin(type_hint)
@@ -2591,7 +2604,9 @@ def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
         if tensorclass_type is not None:
             tensorclass_fields[key] = tensorclass_type
     cls._tensorclass_fields = tensorclass_fields
-    cls._type_hints = type_hints
+    cls._type_hints = {
+        key: _unwrap_array_annotation(val) for key, val in type_hints.items()
+    }
 
 
 def _normalize_nested_mapping(
