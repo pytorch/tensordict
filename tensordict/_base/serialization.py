@@ -18,6 +18,7 @@ import concurrent.futures
 import json
 import os.path
 import shutil
+import sys
 import tempfile
 from concurrent.futures import wait
 from copy import copy
@@ -82,6 +83,10 @@ def _is_saved_tensorclass(prefix: Path) -> bool:
     )
 
 
+# Windows cannot rename a directory that holds open (memory-mapped) files.
+_IS_WINDOWS = sys.platform == "win32"
+
+
 def _memmap_atomically(prefix: Path | None, write, *, existsok: bool):
     """Calls ``write`` on a new sibling directory of ``prefix``, then moves it to ``prefix``.
 
@@ -89,6 +94,8 @@ def _memmap_atomically(prefix: Path | None, write, *, existsok: bool):
     An existing directory at ``prefix`` is replaced only once the new one is
     complete, and the result is rebased onto the files at ``prefix``.
     """
+    if _IS_WINDOWS:
+        raise NotImplementedError("atomic=True is not supported on Windows.")
     if prefix is None:
         raise ValueError("atomic=True needs a prefix to write the directory to.")
     prefix = Path(prefix)
@@ -1212,7 +1219,11 @@ class _Serialization:
                 already memory-mapped to a file is copied, which needs
                 ``copy_existing=True``. The files are not synced to the disk,
                 so this guards against a killed process, not against a power
-                failure. Not supported with ``return_early=True``. Defaults to ``False``.
+                failure. If the write fails, the leaves already converted map
+                deleted files, so a retry needs ``copy_existing=True``. Not
+                supported with ``return_early=True``, nor on Windows, where a
+                directory that holds open files cannot be renamed. Defaults
+                to ``False``.
 
         Returns:
             ``self``, or a :class:`~tensordict.utils.TensorDictFuture` of it if
@@ -1227,11 +1238,14 @@ class _Serialization:
                 :class:`~tensordict.store.TensorDictStore`, a
                 :class:`~tensordict.store.LazyStackedTensorDictStore` or one of
                 their elements. Use :meth:`~.memmap` to make a memory-mapped
-                copy of those.
+                copy of those. With ``atomic=True``, also if ``prefix`` is a
+                non-empty directory and ``existsok=False``, or if it holds no
+                saved tensordict.
+            NotADirectoryError: if ``atomic=True`` and ``prefix`` is a file.
             ValueError: if ``atomic=True`` and there is no directory to write
                 to.
             NotImplementedError: if ``return_early=True`` with
-                ``atomic=True``.
+                ``atomic=True``, or ``atomic=True`` on Windows.
 
         Examples:
             >>> import tempfile
@@ -1354,8 +1368,9 @@ class _Serialization:
                 uncompressed.
             atomic (bool, optional): if ``True``, the directory is written
                 next to ``prefix`` and then renamed to it, so that an error or
-                a crash during the write leaves ``prefix`` as it was. An
-                archive is always written this way. Defaults to ``False``.
+                a crash during the write leaves ``prefix`` as it was. Not
+                supported on Windows. An archive is always written this way.
+                :meth:`~.memmap` gives the details. Defaults to ``False``.
 
         Returns:
             A new memory-mapped tensordict, as :meth:`~.memmap` returns.
@@ -1476,8 +1491,10 @@ class _Serialization:
                 already memory-mapped to a file is copied, which needs
                 ``copy_existing=True``. The files are not synced to the disk,
                 so this guards against a killed process, not against a power
-                failure. Not supported with ``return_early=True``. An
-                archive is always written this way. Defaults to ``False``.
+                failure. Not supported with ``return_early=True``, nor on
+                Windows, where a directory that holds open files cannot be
+                renamed. An archive is always written this way. Defaults to
+                ``False``.
 
         Returns:
             A new memory-mapped tensordict, or a
@@ -1488,11 +1505,13 @@ class _Serialization:
             RuntimeError: if a leaf already has a file elsewhere and
                 ``copy_existing=False``, if a file exists and
                 ``existsok=False``, or with ``atomic=True``, if ``prefix`` is
-                a non-empty directory that holds no saved tensordict.
+                a non-empty directory and ``existsok=False``, or if it holds
+                no saved tensordict.
+            NotADirectoryError: if ``atomic=True`` and ``prefix`` is a file.
             ValueError: if ``compression`` is given without an archive, or if
                 an archive or ``atomic=True`` is requested without ``prefix``.
             NotImplementedError: if ``return_early=True`` for an archive or
-                with ``atomic=True``.
+                with ``atomic=True``, or ``atomic=True`` on Windows.
 
         .. note::
             For an archive, the result is ``load_memmap(prefix)``: its leaves

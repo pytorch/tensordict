@@ -143,8 +143,11 @@ A job that is killed while it saves to a directory leaves some files new,
 some old, and some truncated. To avoid this, pass ``atomic=True``: the files
 are written to a new directory next to the path, which then replaces the old
 one in two renames. Readers see the old or the new directory, except between
-the two renames, when the path is missing. The save needs about twice the
-disk space while it runs. A ``.tdz`` archive is always written this way.
+the two renames, when the path is missing: if the job is killed then, the
+old directory is in ``.tdtmp-*/old`` next to the path. The save needs about
+twice the disk space while it runs. It is not supported on Windows, which
+cannot rename a directory that holds open files. A ``.tdz`` archive is always
+written this way.
 
   >>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "ckpt", atomic=True)
   >>> TensorDict.load_memmap(root / "ckpt")["a"]

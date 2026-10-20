@@ -677,8 +677,9 @@ def save(
             entries load without a copy.
         atomic (bool, optional): if ``True``, the directory is written next
             to ``prefix`` and then renamed to it, so that an error or a crash
-            during the write leaves ``prefix`` as it was.
-            :meth:`~tensordict.TensorDictBase.memmap` gives the details.
+            during the write leaves ``prefix`` as it was. Not supported on
+            Windows. :meth:`~tensordict.TensorDictBase.memmap` gives the
+            details.
             Defaults to ``False``.
 
     Returns:
@@ -769,8 +770,9 @@ def memmap(
             entries load without a copy.
         atomic (bool, optional): if ``True``, the directory is written next
             to ``prefix`` and then renamed to it, so that an error or a crash
-            during the write leaves ``prefix`` as it was.
-            :meth:`~tensordict.TensorDictBase.memmap` gives the details.
+            during the write leaves ``prefix`` as it was. Not supported on
+            Windows. :meth:`~tensordict.TensorDictBase.memmap` gives the
+            details.
             Defaults to ``False``.
 
     Returns:

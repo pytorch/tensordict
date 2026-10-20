@@ -8,6 +8,7 @@ import io
 import os
 import pickle
 import stat
+import sys
 from contextlib import nullcontext
 from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
@@ -15,7 +16,8 @@ from pathlib import Path
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from tensordict import TensorDict
+from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
+from tensordict._base import serialization as td_serialization
 from tensordict.memmap import _is_writable, MemoryMappedTensor
 from torch import multiprocessing as mp
 
@@ -1264,6 +1266,16 @@ class TestReadWrite:
         # assert (mmap1[1].view(-1) == 0).all()
 
 
+@tensorclass
+class _AtomicTC:
+    x: torch.Tensor
+
+
+_posix_only = pytest.mark.skipif(
+    sys.platform == "win32", reason="atomic=True is not supported on Windows"
+)
+
+
 class TestAtomicSave:
     @staticmethod
     def _td(value):
@@ -1273,6 +1285,7 @@ class TestAtomicSave:
             batch_size=[3],
         )
 
+    @_posix_only
     @pytest.mark.parametrize("method", ["memmap", "memmap_", "save"])
     @pytest.mark.parametrize("num_threads", [0, 2])
     @pytest.mark.parametrize("existing", [False, True])
@@ -1299,6 +1312,58 @@ class TestAtomicSave:
         assert (loaded["a"] == 1).all()
         assert (loaded["nested", "b"] == 2).all()
 
+    @_posix_only
+    @pytest.mark.parametrize("kind", ["tensorclass", "lazy_stack"])
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_atomic_containers(self, tmp_path, kind, existing):
+        def make(value):
+            if kind == "tensorclass":
+                return _AtomicTC(x=torch.full((3,), value), batch_size=[3])
+            return LazyStackedTensorDict(
+                *[TensorDict(a=torch.full((3,), value)) for _ in range(2)],
+                stack_dim=0,
+            )
+
+        path = tmp_path / "ckpt"
+        if existing:
+            make(0.0).memmap(path)
+        out = make(1.0).memmap(path, atomic=True)
+        assert os.listdir(tmp_path) == ["ckpt"]
+        if kind == "tensorclass":
+            assert out.x.filename == str(path / "_tensordict" / "x.memmap")
+            out.x.fill_(2.0)
+            assert (TensorDict.load_memmap(path).x == 2).all()
+        else:
+            for i, td in enumerate(out.tensordicts):
+                assert td.saved_path == path / str(i)
+                assert td["a"].filename == str(path / str(i) / "a.memmap")
+                td["a"].fill_(2.0)
+            assert (TensorDict.load_memmap(path)["a"] == 2).all()
+
+    @_posix_only
+    def test_atomic_symlink_and_file(self, tmp_path):
+        real = tmp_path / "real"
+        self._td(0.0).memmap(real)
+        link = tmp_path / "link"
+        link.symlink_to(real)
+        self._td(1.0).memmap(link, atomic=True)
+        # the directory the link points to is replaced, and the link is kept
+        assert link.is_symlink()
+        assert sorted(os.listdir(tmp_path)) == ["link", "real"]
+        assert (TensorDict.load_memmap(real)["a"] == 1).all()
+        (tmp_path / "file").write_text("keep")
+        with pytest.raises(NotADirectoryError):
+            self._td(1.0).memmap(tmp_path / "file", atomic=True)
+        assert (tmp_path / "file").read_text() == "keep"
+
+    def test_atomic_windows(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(td_serialization, "_IS_WINDOWS", True)
+        for method in ("memmap", "memmap_", "save"):
+            with pytest.raises(NotImplementedError, match="Windows"):
+                getattr(self._td(1.0), method)(tmp_path / "ckpt", atomic=True)
+        assert os.listdir(tmp_path) == []
+
+    @_posix_only
     @pytest.mark.parametrize("method", ["memmap", "memmap_"])
     @pytest.mark.parametrize("existing", [False, True])
     def test_atomic_failure(self, tmp_path, monkeypatch, method, existing):
@@ -1328,6 +1393,7 @@ class TestAtomicSave:
         else:
             assert os.listdir(tmp_path) == []
 
+    @_posix_only
     def test_atomic_errors(self, tmp_path):
         td = self._td(1.0)
         with pytest.raises(ValueError, match="needs a prefix"):
