@@ -18,6 +18,7 @@ import concurrent.futures
 import json
 import os.path
 from concurrent.futures import wait
+from contextlib import contextmanager
 from copy import copy
 from pathlib import Path
 from typing import Any, OrderedDict, TYPE_CHECKING
@@ -94,6 +95,70 @@ def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
     return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
 
+def _check_state_dict_keys(td, prefix):
+    """Reject ambiguous flat paths before writing any leaves or metadata."""
+    leaves = set()
+    nodes = set()
+    pending = [(td, prefix)]
+    while pending:
+        node, node_prefix = pending.pop()
+        metadata_key = node_prefix[:-1] if node_prefix.endswith(".") else node_prefix
+        if metadata_key in nodes:
+            raise KeyError(
+                f"Flattening state_dict metadata keys causes {metadata_key!r} to "
+                "collide. Use flatten=False to preserve nested keys."
+            )
+        nodes.add(metadata_key)
+        # Tensorclasses store non-tensor fields in metadata, not as leaves.
+        tensorclass = _is_tensorclass(type(node))
+        if tensorclass:
+            node = super(type(node), node).__getattribute__("_tensordict")
+        for key, item in node.items():
+            if tensorclass and _is_non_tensor(type(item)):
+                continue
+            path = node_prefix + key
+            if _is_tensor_collection(type(item)):
+                pending.append((item, path + "."))
+            elif path in leaves:
+                raise KeyError(
+                    f"Flattening state_dict keys causes {path!r} to collide. "
+                    "Use flatten=False to preserve nested keys."
+                )
+            else:
+                leaves.add(path)
+
+
+_STATE_DICT_VALIDATED = object()
+_STATE_DICT_UNSET = object()
+
+
+@contextmanager
+def _state_dict_destination(td, destination, prefix, flatten):
+    # Recursive public state_dict calls share the destination, including calls
+    # through tensorclass and TensorDictParams overrides.
+    previous = getattr(
+        destination, "_tensordict_state_dict_validation", _STATE_DICT_UNSET
+    )
+    validate = flatten and previous is not _STATE_DICT_VALIDATED
+    if validate:
+        _check_state_dict_keys(td, prefix)
+    if destination is None:
+        destination = collections.OrderedDict()
+        destination._metadata = collections.OrderedDict()
+    elif not hasattr(destination, "_metadata"):
+        destination._metadata = collections.OrderedDict()
+    if validate:
+        destination._tensordict_state_dict_validation = _STATE_DICT_VALIDATED
+    try:
+        yield destination
+    finally:
+        if validate:
+            if previous is _STATE_DICT_UNSET:
+                del destination._tensordict_state_dict_validation
+            else:
+                destination._tensordict_state_dict_validation = previous
+
+
 class _Serialization:
     """TensorDict's own storage formats: memory-mapping, saving, loading, consolidation and state dicts."""
 
@@ -134,6 +199,10 @@ class _Serialization:
                 ``"."``. If ``False``, nested tensordicts become nested
                 ``OrderedDict`` instances. Defaults to ``True``.
 
+        Raises:
+            KeyError: If flattening joins distinct leaf or metadata paths into
+                the same key. Use ``flatten=False`` to preserve these paths.
+
         Returns:
             ``destination``, or a new ``OrderedDict``.
 
@@ -149,37 +218,32 @@ class _Serialization:
         """
         if self._has_exclusive_keys:
             _raise_on_exclusive_keys("state_dict")
-        if destination is None:
-            destination = collections.OrderedDict()
-            destination._metadata = collections.OrderedDict()
-        elif not hasattr(destination, "_metadata"):
-            destination._metadata = collections.OrderedDict()
+        with _state_dict_destination(self, destination, prefix, flatten) as destination:
+            metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+            destination._metadata[metadata_key] = {
+                "batch_size": self.batch_size,
+                "device": self.device,
+            }
 
-        metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
-        destination._metadata[metadata_key] = {
-            "batch_size": self.batch_size,
-            "device": self.device,
-        }
-
-        for key, item in self.items():
-            if not _is_tensor_collection(type(item)):
-                if not keep_vars:
-                    destination[prefix + key] = item.detach()
+            for key, item in self.items():
+                if not _is_tensor_collection(type(item)):
+                    if not keep_vars:
+                        destination[prefix + key] = item.detach()
+                    else:
+                        destination[prefix + key] = item
+                elif flatten:
+                    item.state_dict(
+                        destination=destination,
+                        prefix=prefix + key + ".",
+                        keep_vars=keep_vars,
+                        flatten=True,
+                    )
                 else:
-                    destination[prefix + key] = item
-            elif flatten:
-                item.state_dict(
-                    destination=destination,
-                    prefix=prefix + key + ".",
-                    keep_vars=keep_vars,
-                    flatten=True,
-                )
-            else:
-                destination[prefix + key] = item.state_dict(
-                    keep_vars=keep_vars, flatten=False
-                )
+                    destination[prefix + key] = item.state_dict(
+                        keep_vars=keep_vars, flatten=False
+                    )
 
-        return destination
+            return destination
 
     def load_state_dict(
         self,

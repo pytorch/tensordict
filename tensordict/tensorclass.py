@@ -52,6 +52,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict import base as _td_base
+from tensordict._base.serialization import _state_dict_destination
 from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._lazy import _GATHER, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
@@ -5384,51 +5385,44 @@ def _state_dict(
         >>> sd._metadata[""]["_non_tensor"]
         {'name': 'a'}
     """
-    import collections
+    with _state_dict_destination(self, destination, prefix, flatten) as destination:
+        td = super(type(self), self).__getattribute__("_tensordict")
+        _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
 
-    if destination is None:
-        destination = collections.OrderedDict()
-        destination._metadata = collections.OrderedDict()
-    elif not hasattr(destination, "_metadata"):
-        destination._metadata = collections.OrderedDict()
-
-    td = super(type(self), self).__getattribute__("_tensordict")
-    _non_tensordict = super(type(self), self).__getattribute__("_non_tensordict")
-
-    non_tensor = dict(_non_tensordict)
-    if not type(self)._is_non_tensor:
-        non_tensor.update(dict.fromkeys(_none_fields(self)))
-    for key, item in td.items():
-        if is_non_tensor(item):
-            non_tensor[key] = item.data
-        elif not _is_tensor_collection(type(item)):
-            if not keep_vars:
-                destination[prefix + key] = item.detach()
+        non_tensor = dict(_non_tensordict)
+        if not type(self)._is_non_tensor:
+            non_tensor.update(dict.fromkeys(_none_fields(self)))
+        for key, item in td.items():
+            if is_non_tensor(item):
+                non_tensor[key] = item.data
+            elif not _is_tensor_collection(type(item)):
+                if not keep_vars:
+                    destination[prefix + key] = item.detach()
+                else:
+                    destination[prefix + key] = item
+            elif flatten:
+                item.state_dict(
+                    destination=destination,
+                    prefix=prefix + key + ".",
+                    keep_vars=keep_vars,
+                    flatten=True,
+                )
             else:
-                destination[prefix + key] = item
-        elif flatten:
-            item.state_dict(
-                destination=destination,
-                prefix=prefix + key + ".",
-                keep_vars=keep_vars,
-                flatten=True,
-            )
-        else:
-            destination[prefix + key] = item.state_dict(
-                keep_vars=keep_vars, flatten=False
-            )
+                destination[prefix + key] = item.state_dict(
+                    keep_vars=keep_vars, flatten=False
+                )
 
-    metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
-    # Read the metadata from the TensorDict: with shadow=True,
-    # self.batch_size and self.device can be fields.
-    destination._metadata[metadata_key] = {
-        "batch_size": td.batch_size,
-        "device": td.device,
-        "_type": type(self).__qualname__,
-        "_non_tensor": non_tensor,
-    }
+        metadata_key = prefix[:-1] if prefix.endswith(".") else prefix
+        # Read the metadata from the TensorDict: with shadow=True,
+        # self.batch_size and self.device can be fields.
+        destination._metadata[metadata_key] = {
+            "batch_size": td.batch_size,
+            "device": td.device,
+            "_type": type(self).__qualname__,
+            "_non_tensor": non_tensor,
+        }
 
-    return destination
+        return destination
 
 
 def _load_state_dict(

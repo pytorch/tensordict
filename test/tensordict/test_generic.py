@@ -6040,6 +6040,95 @@ class TestGeneric:
         td_zero.load_state_dict(sd)
         assert (td_zero == td).all()
 
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("kind", ["leaf", "metadata", "empty"])
+    def test_state_dict_flat_collision(self, reverse, kind):
+        if kind == "leaf":
+            items = [("a.b", torch.tensor(11)), ("a", {"b": torch.tensor(22)})]
+        else:
+            left = {} if kind == "empty" else {"x": torch.ones(2)}
+            right = {} if kind == "empty" else {"y": torch.ones(3)}
+            items = [
+                ("a.b", TensorDict(left, [2])),
+                ("a", {"b": TensorDict(right, [3])}),
+            ]
+        if reverse:
+            items.reverse()
+        td = TensorDict(dict(items), [])
+        destination = OrderedDict(sentinel=torch.tensor(7))
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict(destination=destination, prefix="model.")
+        assert list(destination) == ["sentinel"]
+        assert not hasattr(destination, "_metadata")
+        nested = td.state_dict(flatten=False)
+        restored = td.clone().zero_()
+        restored.load_state_dict(nested, from_flatten=False)
+        assert (restored == td).all()
+        if kind != "leaf":
+            assert restored["a.b"].batch_size == torch.Size([2])
+            assert restored["a", "b"].batch_size == torch.Size([3])
+
+    def test_state_dict_flat_empty_key_metadata_collision(self):
+        td = TensorDict({"": TensorDict({}, [2])}, [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict()
+
+    def test_state_dict_flat_destination_and_dotted_keys(self):
+        td = TensorDict({"layer.weight": torch.tensor(11.0, requires_grad=True)}, [])
+        destination = OrderedDict({"model.layer.weight": torch.tensor(0), "other": 9})
+        destination._metadata = OrderedDict({"other": {"batch_size": torch.Size([5])}})
+        result = td.state_dict(destination=destination, prefix="model.", keep_vars=True)
+        assert result is destination
+        assert result["model.layer.weight"] is td["layer.weight"]
+        assert result["other"] == 9
+        assert result._metadata["other"]["batch_size"] == torch.Size([5])
+        assert result._metadata["model"]["batch_size"] == torch.Size([])
+
+    @pytest.mark.parametrize("wrap", [False, True])
+    def test_state_dict_tensorclass_collision(self, wrap):
+        @tensorclass
+        class Checkpoint:
+            state: TensorDict
+            label: str
+
+        checkpoint = Checkpoint(
+            state=TensorDict({"a.b": 11, "a": {"b": 22}}, []),
+            label="checkpoint",
+            batch_size=[],
+        )
+        value = TensorDict({"checkpoint": checkpoint}, []) if wrap else checkpoint
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            value.state_dict()
+        nested = value.state_dict(flatten=False)
+        restored = value.clone()
+        restored.load_state_dict(nested, from_flatten=False)
+        checkpoint = restored["checkpoint"] if wrap else restored
+        assert checkpoint.label == "checkpoint"
+        assert checkpoint.state["a.b"] == 11
+        assert checkpoint.state["a", "b"] == 22
+
+    @pytest.mark.parametrize("previous", [False, True])
+    @pytest.mark.parametrize("fail", [False, True])
+    def test_state_dict_validation_context_cleanup(self, previous, fail):
+        td = TensorDict({"a": {"b": torch.tensor(1)}}, [])
+        destination = OrderedDict()
+        marker = object()
+        if previous:
+            destination._tensordict_state_dict_validation = marker
+        if fail:
+            with mock.patch.object(
+                torch.Tensor, "detach", side_effect=RuntimeError("detach failed")
+            ):
+                with pytest.raises(RuntimeError, match="detach failed"):
+                    td.state_dict(destination=destination)
+        else:
+            td.state_dict(destination=destination)
+            assert destination["a.b"] == 1
+        if previous:
+            assert destination._tensordict_state_dict_validation is marker
+        else:
+            assert not hasattr(destination, "_tensordict_state_dict_validation")
+
     def test_state_dict_nested_roundtrip(self):
         td = TensorDict({"a": 1, "b": {"c": 2, "d": {"e": 3}}}, [])
         sd = td.state_dict(flatten=False)
