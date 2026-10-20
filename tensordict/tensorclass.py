@@ -3231,9 +3231,12 @@ def _replace(self, /, **changes: Any) -> Any:
     The device of ``self`` is the default of the call to ``__init__``. Without
     ``batch_size`` in ``changes``, the copy gets the batch size and names of
     ``self`` when ``__init__`` and ``__post_init__`` leave it the default
-    batch size, and ``names`` are set after the copy is built.
+    batch size and its entries fit that batch size. Otherwise the copy keeps
+    the batch size that :func:`dataclasses.replace` gives it. ``names`` are
+    set on the copy with the names setter.
     """
     td = self._tensordict
+    batch_size = td.batch_size
     fields = self.__dataclass_fields__
     if "device" not in changes and "device" not in fields:
         changes["device"] = td.device
@@ -3243,9 +3246,20 @@ def _replace(self, /, **changes: Any) -> Any:
     names = changes.pop("names", None)
     result = dataclasses.replace(self, **changes)
     result_td = result._tensordict
-    if td.batch_size and not result_td.batch_size:
+    ndim = len(batch_size)
+    # The batch_size setter expands the non-tensor entries in place: only
+    # those that the copy built itself may be shorter
+    if (
+        batch_size
+        and not result_td.batch_size
+        and all(
+            value.shape[:ndim] == batch_size
+            or (is_non_tensor(value) and value is not changes.get(key))
+            for key, value in result_td.items()
+        )
+    ):
         # __init__ and __post_init__ did not set the batch size
-        result_td.batch_size = td.batch_size
+        result_td.batch_size = batch_size
         if not has_names:
             names = td._maybe_names()
     elif not has_names:

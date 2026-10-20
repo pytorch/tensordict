@@ -3048,6 +3048,46 @@ class TestTensorClass:
     @pytest.mark.skipif(
         sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
     )
+    def test_copy_replace_no_fit(self):
+        # Without batch dims to keep, or when the new values do not fit them,
+        # the copy keeps the batch size that dataclasses.replace gives it
+        class MyDataNoFit(TensorClass):
+            X: torch.Tensor
+            z: str = "z"
+
+        data = MyDataNoFit(X=torch.zeros(3), batch_size=[3], names=["n"])
+        out = copy.replace(data, X=torch.zeros(5))
+        assert out.batch_size == torch.Size([])
+        assert out.names == []
+        assert out.X.shape == torch.Size([5])
+        z = NonTensorData("other")
+        out = copy.replace(data, z=z)
+        assert out.batch_size == torch.Size([])
+        assert z.batch_size == torch.Size([])
+
+        # names= goes through the names setter of the copy
+        for source, changes in (
+            (MyDataNoFit(X=torch.zeros(3)), {}),
+            (data, {"X": torch.zeros(5)}),
+        ):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                out = copy.replace(source, names=["m"], **changes)
+            assert any(
+                "Got the dimension names" in str(w.message)
+                and w.category is FutureWarning
+                for w in record
+            )
+            assert out.batch_size == torch.Size([])
+            assert out.names == []
+
+        # Names that do not match the batch dims raise
+        with pytest.raises(ValueError, match="dimension names"):
+            copy.replace(data, names=["m", "k"])
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
     def test_copy_replace_named_replace(self):
         # __replace__ reserves no field or method name
         @tensorclass(shadow=True)
