@@ -29,6 +29,7 @@ from tensordict import (
     NonTensorData,
     NonTensorStack,
     PersistentTensorDict,
+    set_printoptions,
     TensorClass,
     TensorDict,
     TypedTensorDict,
@@ -439,6 +440,7 @@ class TestLazyStackedTensorDict:
         assert (same_keys.to_dict()["a"] == torch.tensor([0.0, 1.0])).all()
         assert list(same_keys.state_dict()) == ["a"]
 
+    @set_printoptions(compact=False)
     def test_repr_exact(self):
         td = lazy_stack(
             [
@@ -462,6 +464,7 @@ class TestLazyStackedTensorDict:
             "    stack_dim=1)"
         )
 
+    @set_printoptions(compact=False)
     def test_repr_does_not_stack(self):
         # Printing reads the entries' shapes and dtypes from the members.
         td = lazy_stack(
@@ -498,6 +501,7 @@ class TestLazyStackedTensorDict:
         assert "b: Tensor(shape=torch.Size([2, 3, 2, -1])" in text
         assert "c: Tensor(shape=torch.Size([2, 3, 2])," in text
 
+    @set_printoptions(compact=False)
     def test_repr_promoted_dtype(self):
         # The dtype is the one that td[key] has: torch.stack promotes it.
         td = lazy_stack(

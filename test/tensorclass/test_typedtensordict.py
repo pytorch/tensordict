@@ -22,6 +22,7 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     PersistentTensorDict,
+    set_printoptions,
     tensorclass,
     TensorDict,
     TypedTensorDict,
@@ -905,6 +906,7 @@ class TestFromTensordict:
         assert state.batch_size == torch.Size([2])
         assert state.eta.shape == (2, 3)
 
+    @set_printoptions(compact=False)
     def test_from_tensordict_lazy_stack_repr_does_not_stack(self, monkeypatch):
         # #2800: printing reads the shapes and dtypes from the members, as the
         # lazy stack's own repr does
@@ -931,6 +933,7 @@ class TestFromTensordict:
             "dtype=torch.float32, is_shared=False)" in text
         )
 
+    @set_printoptions(compact=False)
     def test_from_tensordict_lazy_stack_repr_ragged(self):
         # the entries whose shapes differ print with -1, as in the lazy stack
         tds = [self._make_td() for _ in range(2)]

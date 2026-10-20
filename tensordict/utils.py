@@ -3667,9 +3667,13 @@ def parse_tensor_dict_string(s: str):
     reproduce a tensordict from a log. The values are not in the repr, so
     every tensor of the result is filled with zeros.
 
+    It reads both the compact repr, the default, and the one printed with
+    ``set_printoptions(compact=False)``.
+
     Args:
         s (str): the repr of a tensordict, as printed with the default print
-            options (see :func:`~tensordict.set_printoptions`).
+            options or with ``compact=False`` (see
+            :func:`~tensordict.set_printoptions`).
 
     Returns:
         A new :class:`~tensordict.TensorDict`.
@@ -3696,11 +3700,16 @@ def parse_tensor_dict_string(s: str):
     """
     from tensordict import TensorDict
 
+    header = _COMPACT_HEADER.search(s)
+    if header is not None:
+        return _parse_compact_repr(s, header)
+
     # Regular expression patterns. A field line is "<indent><key>: <value>", and a
     # key can contain any character.
     field_line_pattern = re.compile(r"^[ \t]*(.*?): \w+\(", re.MULTILINE)
+    # a tensorclass prints its fields as "<key>=Tensor(...)"
     field_pattern = re.compile(
-        r"^[ \t]*(.*?): Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+(?::\d+)?), dtype=torch.(\w+), is_shared=(\w+)\)",
+        r"^[ \t]*(.*?)(?:: |=)Tensor\(shape=torch.Size\((\[(.*?)\])\), device=(\w+(?::\d+)?), dtype=torch.(\w+), is_shared=(\w+)\)",
         re.MULTILINE,
     )
     nested_field_pattern = re.compile(r"^[ \t]*(.*?): TensorDict\(", re.MULTILINE)
@@ -3796,6 +3805,77 @@ def parse_tensor_dict_string(s: str):
         raise ValueError("Device not found in the string")
     tensor_dict = TensorDict(fields, batch_size=torch.Size(batch_size), device=device)
     return tensor_dict
+
+
+# The compact repr: "Name(batch_size=[3], device=cpu, fields={a: f32[4], b: {...}})"
+_COMPACT_HEADER = re.compile(
+    r"\w+\((?:batch_size=\[([\d,]*)\], )?(?:device=([\w:]+), )?(?:stack_dim=\d+, )?fields=(?=\{)"
+)
+# "f32[4]", "f32[4]@cuda:0", "[5]" (a nested batch dim), "Mesh", "str"
+_COMPACT_VALUE = re.compile(r"(\w*)(?:\[([-\d,]*)\])?(?:@([\w:]+(?:,[\w:]+)*))?")
+
+
+def _compact_dims(dims: str) -> list[int]:
+    return [int(x) for x in dims.split(",")] if dims else []
+
+
+def _parse_compact_repr(s: str, header: re.Match):
+    batch_size, device = header.groups()
+    if batch_size is None:
+        raise ValueError("Batch size not found in the string")
+    device = torch.device(device) if device is not None else None
+    td, pos = _parse_compact_fields(s, header.end(), _compact_dims(batch_size), device)
+    if s.startswith(", exclusive_fields=", pos):
+        raise ValueError(
+            "Cannot parse the exclusive_fields of a lazy stack: "
+            "parse_tensor_dict_string does not rebuild lazy stacks with exclusive keys."
+        )
+    return td
+
+
+def _parse_compact_fields(s: str, pos: int, batch_size: list, device):
+    # Reads the "{key: value, ...}" block at s[pos] and returns the TensorDict
+    # it describes and the position after it.
+    from tensordict import TensorDict
+
+    dtypes = {
+        _compact_dtype(v): v for v in vars(torch).values() if isinstance(v, torch.dtype)
+    }
+    fields = {}
+    pos = len(s) - len(s[pos + 1 :].lstrip())
+    while not s.startswith("}", pos):
+        colon = s.find(": ", pos)
+        if colon < 0:
+            raise ValueError(f"Cannot parse the fields {s[pos:]!r}.")
+        key, key_start = s[pos:colon], pos
+        value = _COMPACT_VALUE.match(s, colon + 2)
+        name, dims, devices = value.groups()
+        pos = value.end()
+        if s.startswith("{", pos) and not name and not devices:
+            sub_batch_size = batch_size + _compact_dims(dims)
+            fields[key], pos = _parse_compact_fields(s, pos, sub_batch_size, device)
+        elif (
+            dims is None
+            or "-1" in dims.split(",")
+            or name not in dtypes
+            or "," in (devices or "")
+        ):
+            raise ValueError(
+                f"Cannot parse the field {s[key_start:pos]!r}: "
+                "parse_tensor_dict_string reads Tensor and TensorDict fields "
+                "printed with the default print options."
+            )
+        else:
+            fields[key] = torch.zeros(
+                batch_size + _compact_dims(dims),
+                dtype=dtypes[name],
+                device=torch.device(devices or device or "cpu"),
+            )
+        if s.startswith(",", pos):
+            pos = len(s) - len(s[pos + 1 :].lstrip())
+        elif not s.startswith("}", pos):
+            raise ValueError(f"Cannot parse the fields {s[key_start:]!r}.")
+    return TensorDict(fields, batch_size=batch_size, device=device), pos + 1
 
 
 def _rebuild_njt_from_njt(x, values, offsets, lengths):

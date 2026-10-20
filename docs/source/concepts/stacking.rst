@@ -272,15 +272,7 @@ node:
   >>> _ = torch.manual_seed(0)
   >>> graphs = lazy_stack([TensorDict({"nodes": torch.randn(n, 2)}) for n in [2, 3, 1]])
   >>> graphs
-  LazyStackedTensorDict(
-      fields={
-          nodes: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
-      exclusive_fields={
-      },
-      batch_size=torch.Size([3]),
-      device=None,
-      is_shared=False,
-      stack_dim=0)
+  LazyStackedTensorDict(batch_size=[3], stack_dim=0, fields={nodes: f32[-1,2]})
   >>> [t.shape for t in graphs.get("nodes", as_list=True)]
   [torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])]
   >>> graphs.get("nodes", as_padded_tensor=True).shape

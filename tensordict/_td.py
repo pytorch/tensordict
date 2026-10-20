@@ -3764,33 +3764,18 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
             >>> data = TensorDict({"a": torch.arange(4).reshape(2, 2,)}, batch_size=[2, 2])
             >>> sub_data = data._get_sub_tensordict([0,])
             >>> print(sub_data)
-            _SubTensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)
+            _SubTensorDict(batch_size=[2], fields={a: i64[]})
             >>> # the data of both subtensordict is the same
             >>> data.get("a").data_ptr() == sub_data.get("a").data_ptr()
             True
             >>> sub_data_clone = sub_data.clone(recurse=True)
             >>> print(sub_data_clone)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)
+            TensorDict(batch_size=[2], fields={a: i64[]})
             >>> sub_data_clone.get("a").data_ptr() == sub_data.get("a").data_ptr()
             False
             >>> sub_data_clone = sub_data.clone(recurse=False)
             >>> print(sub_data_clone)
-            _SubTensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)
+            _SubTensorDict(batch_size=[2], fields={a: i64[]})
             >>> sub_data_clone.get("a").data_ptr() == sub_data.get("a").data_ptr()
             True
         """
