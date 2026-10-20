@@ -293,7 +293,7 @@ def _read_json(
         if not records:
             return {}, 0
 
-        all_keys = list(records[0].keys())
+        all_keys = dict.fromkeys(key for record in records for key in record)
         columns = {key: [r.get(key) for r in records] for key in all_keys}
 
         for key, vals in columns.items():

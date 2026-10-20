@@ -8,6 +8,7 @@ import sys
 
 import numpy as np
 import pytest
+import tensordict._tabular as tabular
 import torch
 from tensordict import (
     from_csv,
@@ -406,6 +407,43 @@ class TestParquet:
         pq.write_table(table, str(path))
         td = from_parquet(path)
         assert td.batch_size == torch.Size([2])
+
+
+@pytest.mark.parametrize("lines", [False, True])
+@pytest.mark.parametrize(
+    "records, expected",
+    [
+        (
+            [{"a": "first"}, {"a": "second", "b": "later"}],
+            {"a": ["first", "second"], "b": [None, "later"]},
+        ),
+        ([{}, {"b": "later"}], {"b": [None, "later"]}),
+        (
+            [{"a": "first"}, {"b": "second"}, {"c": "third"}],
+            {
+                "a": ["first", None, None],
+                "b": [None, "second", None],
+                "c": [None, None, "third"],
+            },
+        ),
+    ],
+)
+def test_from_json_fallback_late_fields(
+    tmp_path, monkeypatch, lines, records, expected
+):
+    monkeypatch.setattr(tabular, "_has_pandas", lambda: False)
+    path = tmp_path / "records.json"
+    path.write_text(
+        "\n".join(json.dumps(record) for record in records)
+        if lines
+        else json.dumps(records)
+    )
+
+    td = TensorDict.from_json(path, lines=lines)
+
+    assert td.batch_size == torch.Size([len(records)])
+    assert list(td.keys()) == list(expected)
+    assert td.to_dict() == expected
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
