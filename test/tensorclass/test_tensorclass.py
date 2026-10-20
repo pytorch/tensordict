@@ -2520,6 +2520,68 @@ class TestTensorClass:
             assert isinstance(lazy.get("X", as_list=True), list)
             assert lazy.get("X", as_nested_tensor=True).is_nested
 
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_field_typo_suggests_field(self, tensor_only):
+        # #3079: a misspelled field names the fields and the closest one
+        @tensorclass(tensor_only=tensor_only)
+        class Data:
+            obs: torch.Tensor
+            reward: torch.Tensor
+
+        x = torch.zeros(3)
+        data = Data(obs=x, reward=x, batch_size=[3])
+        fields = re.escape("Its fields are ['obs', 'reward'].")
+        with pytest.raises(
+            AttributeError,
+            match=re.escape(
+                "'Data' object has no attribute or field 'rewrd'. "
+                "Did you mean 'reward'? "
+            )
+            + fields,
+        ):
+            data.rewrd
+        assert not hasattr(data, "rewrd")
+        assert getattr(data, "rewrd", None) is None
+        # a private name keeps the bare message
+        with pytest.raises(AttributeError, match="^_rewrd$"):
+            data._rewrd
+        # the unknown keyword comes before the missing field
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "Data.__init__() got an unexpected keyword argument 'rewrd'. "
+                "Did you mean 'reward'? Its fields are ['obs', 'reward']. It is "
+                "also missing 1 required positional argument: 'reward'."
+            ),
+        ):
+            Data(obs=x, rewrd=x, batch_size=[3])
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "Data.__init__() got unexpected keyword arguments ['rewrd', 'ob']."
+            ),
+        ):
+            Data(rewrd=x, ob=x, batch_size=[3])
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "Data.__init__() missing 1 required positional argument: 'reward'"
+            ),
+        ):
+            Data(obs=x, batch_size=[3])
+        if not tensor_only:
+            with pytest.raises(
+                AttributeError, match=fields + re.escape(" Did you mean 'reward'?")
+            ):
+                Data(obs=x, reward=x, rewrd=x, batch_size=[3])
+        with pytest.raises(
+            AttributeError, match=fields + re.escape(" Did you mean 'reward'?")
+        ):
+            data.rewrd = x
+        # the private fields are not listed
+        with pytest.raises(AttributeError, match=re.escape("Its fields are ['data'].")):
+            NonTensorData("a").foo
+
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_getattr(self, any_to_td):
         @tensorclass

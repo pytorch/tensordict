@@ -2634,6 +2634,57 @@ def _warn_update_skipped(skipped: list) -> None:
     )
 
 
+def _update_shape_error(
+    dest: TensorDictBase,
+    source: Any,
+    err: RuntimeError,
+    keys_to_update: list[tuple[str, ...]] | None,
+) -> None:
+    """Raises ``err`` again, with the key and the shapes of the first entry of ``source`` that does not fit ``dest``.
+
+    ``err`` is the ``RuntimeError`` of
+    ``dest.update_(source, keys_to_update=keys_to_update)``: torch names the
+    operands of the failed copy "tensor a" and "tensor b", not the key. Only
+    the entries that ``keys_to_update`` selects are searched. Where ``err``
+    names the key already, where no such entry is found, or where the search
+    fails, ``err`` is raised as it is.
+    """
+    found = None
+    if type(err) is RuntimeError and not str(err).startswith(_UPDATE_SHAPE_ERROR):
+        try:
+            if not _is_tensor_collection(type(source)):
+                source = _TENSORDICT_TYPE(source)
+            for key, value in source.items(True, True):
+                if keys_to_update is not None:
+                    name = _unravel_key_to_tuple(key)
+                    if not any(name[: len(k)] == k for k in keys_to_update):
+                        continue
+                dest_value = dest.get(key, None)
+                if not isinstance(value, Tensor) or not isinstance(dest_value, Tensor):
+                    continue
+                try:
+                    fits = torch.broadcast_shapes(dest_value.shape, value.shape) == (
+                        dest_value.shape
+                    )
+                except RuntimeError:
+                    fits = False
+                if not fits:
+                    found = key, value.shape, dest_value.shape
+                    break
+        except Exception:
+            found = None
+    if found is None:
+        raise err
+    key, shape, dest_shape = found
+    raise RuntimeError(
+        f"{_UPDATE_SHAPE_ERROR} of shape {shape} under the key {key!r} into the "
+        f"entry of shape {dest_shape}: {err}"
+    ) from err
+
+
+_UPDATE_SHAPE_ERROR = "update_() cannot copy the value"
+
+
 class _NestedReadsCopies(Exception):
     """Raised by a lazy stack whose members read copies when an in-place method lists the leaves of a tensordict that holds it.
 
@@ -6421,12 +6472,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
-        return self._update_(
-            input_dict_or_td,
-            clone=clone,
-            non_blocking=non_blocking,
-            keys_to_update=keys_to_update,
-        )
+        try:
+            return self._update_(
+                input_dict_or_td,
+                clone=clone,
+                non_blocking=non_blocking,
+                keys_to_update=keys_to_update,
+            )
+        except RuntimeError as err:
+            # name the key and the shapes that torch's error leaves out
+            _update_shape_error(self, input_dict_or_td, err, keys_to_update)
 
     def _update_(
         self,
@@ -7628,12 +7683,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is_leaf=is_leaf,
                 collapse=collapse,
             )
-            if is_compiling():
-                key_to_index = {key: i for i, key in enumerate(keys)}
-                return [vals[key_to_index[key]] for key in sorting_keys]
-            else:
-                source = dict(zip(keys, vals))
-                return [source[key] for key in sorting_keys]
+            try:
+                if is_compiling():
+                    key_to_index = {key: i for i, key in enumerate(keys)}
+                    return [vals[key_to_index[key]] for key in sorting_keys]
+                else:
+                    source = dict(zip(keys, vals))
+                    return [source[key] for key in sorting_keys]
+            except KeyError:
+                pass
+            # name the keys missing on each side, not only the first one
+            _mismatch_keys(sorting_keys, keys)
 
     @_cache_while_locked  # noqa: B019
     def _items_list(
@@ -7659,16 +7719,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return list(keys), list(vals)
         if default is None:
             # TODO: check that lists are identical
-            if is_compiling():
-                key_to_index = {key: i for i, key in enumerate(keys)}
-                new_vals = [vals[key_to_index[key]] for key in sorting_keys]
-                if len(new_vals) < len(vals):
-                    raise KeyError(
-                        f"Some keys were not found: {set(sorting_keys).symmetric_difference(keys)}."
-                    )
-            else:
-                source = dict(zip(keys, vals))
-                new_vals = [source[key] for key in sorting_keys]
+            try:
+                if is_compiling():
+                    key_to_index = {key: i for i, key in enumerate(keys)}
+                    new_vals = [vals[key_to_index[key]] for key in sorting_keys]
+                else:
+                    source = dict(zip(keys, vals))
+                    new_vals = [source[key] for key in sorting_keys]
+            except KeyError:
+                new_vals = None
+            if new_vals is None:
+                # name the keys missing on each side, not only the first one
+                _mismatch_keys(sorting_keys, keys)
             if len(new_vals) < len(vals):
                 raise KeyError(
                     f"Some keys were not found: {set(sorting_keys).symmetric_difference(keys)}."

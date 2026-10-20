@@ -139,6 +139,107 @@ class TestErrorMessage:
             td.update_({"a": torch.zeros(3, 5)})
 
     @staticmethod
+    def test_binary_op_names_missing_keys():
+        # #3079: the error lists the keys missing on each side, not only one
+        td0 = TensorDict(a=torch.zeros(1), c=torch.zeros(1))
+        td1 = TensorDict(b=torch.zeros(1), c=torch.zeros(1))
+        match = re.escape(
+            "keys in tensordicts mismatch. The first TD has keys {'a'} that the "
+            "second does not have. The second TD has keys {'b'} that the first "
+            "does not have."
+        )
+        for op in (
+            lambda: td0 + td1,
+            lambda: td0 * td1,
+            lambda: td0 & td1,
+            lambda: td0.clone().add_(td1),
+        ):
+            with pytest.raises(KeyError, match=match):
+                op()
+
+    @staticmethod
+    def test_update_shape_error_names_key():
+        # #3079: torch's error names "tensor a" and "tensor b", not the key
+        td = TensorDict(a=torch.zeros(3), nested=TensorDict(b=torch.zeros(3)))
+        for source, key in (
+            ({"a": torch.zeros(4)}, "'a'"),
+            (TensorDict(a=torch.zeros(4), nested={"b": torch.zeros(3)}), "'a'"),
+            ({"nested": {"b": torch.zeros(4)}}, "('nested', 'b')"),
+        ):
+            with pytest.raises(
+                RuntimeError,
+                match=re.escape(
+                    "update_() cannot copy the value of shape torch.Size([4]) "
+                    f"under the key {key} into the entry of shape "
+                    "torch.Size([3]): The size of tensor a (3) must match"
+                ),
+            ):
+                td.update_(source)
+        # only the entries that keys_to_update selects are named
+        source = {"a": torch.zeros(4), "nested": {"b": torch.zeros(5)}}
+        for keys_to_update in ([("nested", "b")], ["nested"]):
+            with pytest.raises(
+                RuntimeError,
+                match=re.escape(
+                    "update_() cannot copy the value of shape torch.Size([5]) "
+                    "under the key ('nested', 'b') into the entry of shape "
+                    "torch.Size([3]): The size of tensor a (3) must match"
+                ),
+            ):
+                td.update_(source, keys_to_update=keys_to_update)
+        # an error that is not about shapes is raised as it is
+        td = TensorDict(a=torch.zeros(3), b=torch.zeros(3, requires_grad=True))
+        with pytest.raises(RuntimeError, match="^a leaf Variable that requires grad"):
+            td.update_({"a": torch.zeros(4), "b": torch.zeros(3)}, keys_to_update=["b"])
+        with pytest.raises(RuntimeError, match="must match the size of tensor"):
+            td.copy_(TensorDict(a=torch.zeros(4), nested={"b": torch.zeros(3)}))
+
+    @staticmethod
+    def test_set_shape_error_names_shapes():
+        td = TensorDict(a=torch.zeros(3))
+        with pytest.raises(
+            ValueError,
+            match=r"Failed to update 'a' in tensordict (.|\n)*: the value of "
+            + re.escape("shape torch.Size([4]) does not fit the entry of shape")
+            + re.escape(" torch.Size([3])"),
+        ):
+            td.set_("a", torch.zeros(4))
+        # a value that broadcasts to the entry gives no shapes
+        td = TensorDict(a=torch.zeros(3, requires_grad=True))
+        with pytest.raises(ValueError, match=r"Failed to update 'a'") as err:
+            td.set_("a", torch.zeros(1))
+        assert "does not fit" not in str(err.value)
+
+    @staticmethod
+    def test_lazy_stack_error_names_key():
+        td = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(x=torch.zeros(2)), TensorDict(x=torch.zeros(3))]
+        )
+        # TorchRL matches the start of the message with re.match
+        with pytest.raises(
+            RuntimeError,
+            match="^"
+            + re.escape(
+                "Failed to stack tensors within a tensordict under the key 'x': "
+                "their shapes are [torch.Size([2]), torch.Size([3])]. To read them, "
+                "pass as_padded_tensor=True, as_nested_tensor=True or as_list=True "
+                "to get()."
+            ),
+        ):
+            td["x"]
+        with pytest.raises(
+            RuntimeError,
+            match="^"
+            + re.escape(
+                "Failed to stack tensors within a tensordict. To stack tensors of "
+                "different shapes, pass as_padded_tensor=True, "
+                "as_nested_tensor=True or as_list=True."
+            ),
+        ):
+            LazyStackedTensorDict.lazy_stack([torch.zeros(2), torch.zeros(3)])
+        assert td.get_item_shape("x") == torch.Size([2, -1])
+
+    @staticmethod
     @pytest.mark.parametrize("key", [1, None, (1, "a")])
     def test_non_str_key(key):
         err = re.escape(_GENERIC_NESTED_ERR.format(key))
