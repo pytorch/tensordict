@@ -583,7 +583,12 @@ class _Serialization:
         write into its leaves in place, but you cannot add or remove entries.
 
         If the tensordict is already consolidated, ``self`` is returned and
-        the other arguments are ignored. A ``filename`` other than its own
+        the other arguments are ignored, except ``pin_memory=True``: a
+        storage on the CPU that is not pinned is then copied into a pinned
+        one, and a new tensordict is returned, unless ``filename``,
+        ``inplace=True``, ``return_early=True`` with ``num_threads > 1`` or a
+        ``device`` other than the CPU is given, or no accelerator is
+        available. A ``filename`` other than its own
         file writes nothing: ``td.contiguous().consolidate(filename=other)``
         writes a new file.
 
@@ -665,7 +670,20 @@ class _Serialization:
             True
 
         """
-        if self.is_consolidated():
+        if self.is_consolidated() and not (
+            # A storage that is not pinned is copied into a pinned one, as for
+            # a tensordict that is not consolidated. Without an accelerator
+            # there is no pinned memory, and self is returned as before. With
+            # return_early, a tensorclass would come back as a TensorDict.
+            pin_memory
+            and filename is None
+            and not inplace
+            and not (return_early and (num_threads or 0) > 1)
+            and (device is None or torch.device(device).type == "cpu")
+            and self._consolidated["storage"].device.type == "cpu"
+            and torch.accelerator.is_available()
+            and not self._consolidated["storage"].is_pinned()
+        ):
             self._update_consolidated_metadata()
             consolidated = self._consolidated
             if (
