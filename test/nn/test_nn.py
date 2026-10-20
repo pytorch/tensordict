@@ -7797,6 +7797,62 @@ class TestToModule:
         assert module.bias is bias
         assert not swap._last_op_queue
 
+    def test_to_module_context_manager_keeps_source_leaves(self, as_module):
+        # The with block does not leave the nn.Parameter wrappers it builds
+        # for the module in the tensordict (#3115)
+        module = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
+        module[0].bias.requires_grad_(False)
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.detach().clone()
+        if not as_module:
+            params["0", "bias"] = nn.Parameter(params["0", "bias"])
+            params["1", "weight"].requires_grad_()
+            params["1", "running_mean"] = nn.Parameter(
+                params["1", "running_mean"], requires_grad=False
+            )
+        leaves = dict(params.items(include_nested=True, leaves_only=True))
+        types = {key: type(leaf) for key, leaf in leaves.items()}
+        requires_grad = {key: leaf.requires_grad for key, leaf in leaves.items()}
+        with params.to_module(module):
+            assert isinstance(module[0].weight, nn.Parameter)
+            assert module[0].bias.requires_grad is False
+            assert "running_mean" in module[1]._buffers
+            module(torch.randn(2, 3))
+        for key, leaf in params.items(include_nested=True, leaves_only=True):
+            assert leaf is leaves[key], key
+            assert type(leaf) is types[key], key
+            assert leaf.requires_grad is requires_grad[key], key
+
+        # A value that the block assigns is written back, even when it views
+        # the storage of the leaf it replaces
+        linear = nn.Linear(4, 4)
+        flat = torch.randn(4, 8)
+        params = TensorDict(weight=flat[:, :4], bias=torch.zeros(4))
+        with params.to_module(linear):
+            linear.weight = nn.Parameter(flat[:, 4:])
+        assert (params["weight"] == flat[:, 4:]).all()
+        with params.to_module(linear):
+            linear.weight = nn.Parameter(params["weight"].t())
+        assert (params["weight"] == flat[:, 4:].t()).all()
+
+        # The wrapper of a leaf that requires grad is written back, so the
+        # gradient that lands on it is not lost
+        module = nn.Module()
+        module.register_buffer("scale", torch.ones(3))
+        params = TensorDict(scale=nn.Parameter(torch.ones(3)))
+        with params.to_module(module):
+            (module.scale * 2).sum().backward()
+        assert params["scale"].grad is not None
+
+        # The parameters that a lazy module materializes in the block still
+        # land in the tensordict
+        lazy = nn.LazyLinear(4)
+        params = TensorDict.from_module(lazy, as_module=as_module)
+        with params.to_module(lazy):
+            lazy(torch.randn(2, 3))
+        assert params["weight"].shape == (4, 3)
+        assert not isinstance(params["weight"], nn.UninitializedParameter)
+
     def test_to_module_context_manager_keeps_source_locked(self, as_module):
         # The exit of the block unlocks the source only to write back the
         # tensors that the block replaced, so the source keeps its lock and

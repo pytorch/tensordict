@@ -8,6 +8,7 @@ import collections
 import concurrent.futures
 import contextvars
 import functools
+import html
 import itertools
 import logging
 import math
@@ -60,6 +61,7 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
+from torch.utils.weak import WeakIdKeyDictionary
 
 try:
     from functorch import dim as ftdim
@@ -579,6 +581,249 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
                 )
             return tensor[index]
         raise err
+    except (RuntimeError, NotImplementedError, ValueError):
+        # torch does not index a jagged nested tensor along its batch dim
+        if isinstance(tensor, Tensor) and tensor.layout is torch.jagged:
+            result = _jagged_getitem(tensor, index)
+            if result is not None:
+                return result
+        raise
+
+
+def _jagged_sizes(lens: Tensor, *sizes: Tensor) -> list[int | None]:
+    """Reads the 0-d tensors ``sizes`` and the min and max of ``lens`` in one device sync.
+
+    Returns ``[*sizes, min(lens), max(lens)]`` as ints, with ``None`` for the
+    min and max of an empty ``lens``.
+    """
+    if lens.numel():
+        return torch.stack([*sizes, lens.min(), lens.max()]).tolist()
+    return [*(torch.stack(sizes).tolist() if sizes else ()), None, None]
+
+
+# For each offsets tensor, the last batch-dim op read from it: its key and the
+# new offsets and lengths it made. Jagged leaves that share offsets (as the
+# token ids and the attention mask of a batch of sequences often do) then
+# share the new ones, so that pointwise ops between them still work. torch
+# treats offsets and lengths as immutable: it caches the sequence lengths it
+# reads from them.
+_JAGGED_STRUCTURES = WeakIdKeyDictionary()
+
+
+def _jagged_structure(tensors: Sequence[Tensor], key, compute: Callable):
+    """Returns ``compute()``, or what it returned for the same ``key`` and the same offsets and lengths of ``tensors``.
+
+    ``key`` is a tuple, or a tensor compared by value.
+    """
+    sources = [(t.offsets(), t.lengths()) for t in tensors]
+    entry = _JAGGED_STRUCTURES.get(sources[0][0])
+    if entry is not None:
+        old_sources, old_key, result = entry
+        if (
+            (
+                old_key == key
+                if type(key) is tuple
+                else type(old_key) is not tuple
+                and old_key.shape == key.shape
+                and old_key.device == key.device
+                and torch.equal(old_key, key)
+            )
+            and len(old_sources) == len(sources)
+            and all(
+                old_offsets() is offsets
+                and (old_lengths() if old_lengths is not None else None) is lengths
+                for (old_offsets, old_lengths), (offsets, lengths) in zip(
+                    old_sources, sources
+                )
+            )
+        ):
+            return result
+    result = compute()
+    # weak references: the entry must not keep its key alive
+    _JAGGED_STRUCTURES[sources[0][0]] = (
+        [
+            (weakref.ref(offsets), None if lengths is None else weakref.ref(lengths))
+            for offsets, lengths in sources
+        ],
+        key,
+        result,
+    )
+    return result
+
+
+def _jagged_slice_structure(offsets: Tensor, lengths: Tensor | None, start, stop):
+    """The offsets, lengths, values range and min and max sequence lengths of the rows ``start:stop``."""
+    lens = (offsets.diff() if lengths is None else lengths)[start:stop]
+    if lengths is not None:
+        # a copy: a view would keep the offsets alive in _JAGGED_STRUCTURES
+        return (offsets[start : stop + 1].clone(), lens, None, *_jagged_sizes(lens))
+    begin, end, min_seqlen, max_seqlen = _jagged_sizes(
+        lens, offsets[start], offsets[stop]
+    )
+    return (
+        offsets[start : stop + 1] - begin,
+        None,
+        (begin, end - begin),
+        min_seqlen,
+        max_seqlen,
+    )
+
+
+def _jagged_narrow(tensor: Tensor, structure) -> Tensor:
+    """Builds the rows of ``tensor`` that ``_jagged_slice_structure`` describes, as a view."""
+    offsets, lengths, values_range, min_seqlen, max_seqlen = structure
+    values = tensor.values()
+    if values_range is not None:
+        values = values.narrow(tensor._ragged_idx - 1, *values_range)
+    return torch.nested.nested_tensor_from_jagged(
+        values,
+        offsets,
+        lengths,
+        jagged_dim=tensor._ragged_idx,
+        min_seqlen=min_seqlen,
+        max_seqlen=max_seqlen,
+    )
+
+
+def _jagged_getitem(tensor: Tensor, index: IndexType) -> Tensor | None:
+    """Indexes a jagged nested tensor along its batch dim (dim 0), which torch does not do.
+
+    A slice of step 1 returns a view; any other index of the batch dim
+    copies the selected rows. The result keeps the ragged dim and has its min
+    and max sequence lengths set. Returns ``None`` for the indices it does
+    not handle (a ``None``, or a tensor index of the other dims), so that the
+    caller raises the error of torch.
+    """
+    if not isinstance(index, tuple):
+        index = (index,)
+    first, rest = index[0], index[1:]
+    if (
+        first is None
+        or isinstance(first, bool)
+        or not all(type(idx) in (int, slice) for idx in rest)
+    ):
+        return None
+    offsets = tensor.offsets()
+    lengths = tensor.lengths()
+    num_rows = offsets.numel() - 1
+    if isinstance(first, slice) and first.step in (None, 1):
+        start, stop, _ = first.indices(num_rows)
+        stop = max(start, stop)
+        structure = _jagged_structure(
+            [tensor],
+            ("slice", start, stop),
+            lambda: _jagged_slice_structure(offsets, lengths, start, stop),
+        )
+        result = _jagged_narrow(tensor, structure)
+    else:
+        rows = torch.arange(num_rows, device=offsets.device)[first]
+        if rows.ndim == 0:
+            result = tensor[int(rows)]
+            return result[rest] if rest else result
+        if rows.ndim != 1:
+            return None
+
+        def compute():
+            lens = (offsets.diff() if lengths is None else lengths)[rows]
+            new_offsets = torch.nn.functional.pad(
+                lens.cumsum(0, dtype=offsets.dtype), (1, 0)
+            )
+            return (new_offsets, lens, *_jagged_sizes(lens, new_offsets[-1]))
+
+        new_offsets, lens, total, min_seqlen, max_seqlen = _jagged_structure(
+            [tensor], rows, compute
+        )
+        # the position in values of each element of the selected rows
+        positions = torch.repeat_interleave(
+            offsets[:-1][rows] - new_offsets[:-1], lens, output_size=total
+        ) + torch.arange(total, device=offsets.device)
+        result = torch.nested.nested_tensor_from_jagged(
+            tensor.values().index_select(tensor._ragged_idx - 1, positions),
+            new_offsets,
+            jagged_dim=tensor._ragged_idx,
+            min_seqlen=min_seqlen,
+            max_seqlen=max_seqlen,
+        )
+    return result[(slice(None), *rest)] if rest else result
+
+
+def _jagged_split(tensor: Tensor, split_sizes: Sequence[int]) -> tuple[Tensor, ...]:
+    """Splits a jagged nested tensor along its batch dim into views, as ``Tensor.split`` does."""
+    offsets = tensor.offsets()
+    lengths = tensor.lengths()
+
+    def compute():
+        structures = []
+        start = 0
+        for size in split_sizes:
+            structures.append(
+                _jagged_slice_structure(offsets, lengths, start, start + size)
+            )
+            start += size
+        return structures
+
+    structures = _jagged_structure([tensor], ("split", *split_sizes), compute)
+    return tuple(_jagged_narrow(tensor, structure) for structure in structures)
+
+
+def _jagged_cat(tensors: Sequence[Tensor]) -> Tensor | None:
+    """Concatenates jagged nested tensors along their batch dim, which ``torch.cat`` does not do.
+
+    Returns ``None`` unless every tensor is a jagged nested tensor with the
+    same ragged dim, so that the caller raises the error of torch.
+    """
+    if (
+        not all(isinstance(t, Tensor) and t.layout is torch.jagged for t in tensors)
+        or len({t._ragged_idx for t in tensors}) != 1
+    ):
+        return None
+    ragged_idx = tensors[0]._ragged_idx
+    vdim = ragged_idx - 1
+    values = [t.values() for t in tensors]
+    sizes = [v.shape[vdim] for v in values]
+
+    def compute():
+        starts, lens, spans = [], [], []
+        shift = 0
+        for t, size in zip(tensors, sizes):
+            offsets = t.offsets()
+            lengths = t.lengths()
+            starts.append(offsets[:-1] + shift)
+            if lengths is None:
+                lens.append(offsets.diff())
+                # offsets that do not span the values leave holes, as lengths do
+                spans.append((offsets[0] == 0) & (offsets[-1] == size))
+            else:
+                lens.append(lengths)
+            shift += size
+        starts.append(starts[-1].new_tensor([shift]))
+        lens = torch.cat(lens)
+        has_holes = len(spans) < len(tensors)
+        if not has_holes:
+            spans_all, min_seqlen, max_seqlen = _jagged_sizes(
+                lens, torch.stack(spans).all().to(lens.dtype)
+            )
+            has_holes = not spans_all
+        else:
+            min_seqlen, max_seqlen = _jagged_sizes(lens)
+        return (
+            torch.cat(starts),
+            lens if has_holes else None,
+            min_seqlen,
+            max_seqlen,
+        )
+
+    offsets, lengths, min_seqlen, max_seqlen = _jagged_structure(
+        tensors, ("cat", *sizes), compute
+    )
+    return torch.nested.nested_tensor_from_jagged(
+        torch.cat(values, vdim),
+        offsets,
+        lengths,
+        jagged_dim=ragged_idx,
+        min_seqlen=min_seqlen,
+        max_seqlen=max_seqlen,
+    )
 
 
 def _cast_scalar(value, tensor):
@@ -2239,7 +2484,8 @@ def _compact_entry(td, key):
         return token
     if isinstance(item, NonTensorData):
         return type(item.data).__name__
-    if is_non_tensor(item):
+    if is_non_tensor(item) or (not is_tensorclass(item) and _keeps_own_repr(item)):
+        # a nested store shows its class name only: its leaves are on a server
         return type(item).__name__
     sub = item if first is td else td._get_str(key, None)
     prefix = "" if type(item) is TensorDict else type(item).__name__
@@ -2305,9 +2551,21 @@ def _compact_render(node, indent: str, used: int, tail: int) -> str:
     return prefix + "{\n" + ",\n".join(lines) + "}"
 
 
-def _compact_repr(obj) -> str | None:
-    """Returns the repr of ``set_printoptions(compact=True)``, or ``None`` for a class that keeps its own."""
+def _keeps_own_repr(td) -> bool:
+    # The stores list their key names and a non-tensor stack its values: a
+    # class with its own _repr_parts keeps its repr.
     from tensordict import LazyStackedTensorDict, TensorDictBase
+
+    return type(td)._repr_parts not in (
+        TensorDictBase._repr_parts,
+        LazyStackedTensorDict._repr_parts,
+    )
+
+
+def _compact_parts(obj):
+    # Returns the header items, the entries and the exclusive fields of the
+    # compact repr, or None for a class that keeps its own repr.
+    from tensordict import LazyStackedTensorDict
 
     header = []
     if is_tensorclass(obj):
@@ -2318,12 +2576,7 @@ def _compact_repr(obj) -> str | None:
             if obj.device is not None:
                 header.append(f"device={obj.device}")
     else:
-        # The stores list their key names and a non-tensor stack its values:
-        # a class with its own _repr_parts keeps its repr.
-        if type(obj)._repr_parts not in (
-            TensorDictBase._repr_parts,
-            LazyStackedTensorDict._repr_parts,
-        ):
+        if _keeps_own_repr(obj):
             return None
         if _REPR_OPTIONS["show_batch_size"]:
             header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
@@ -2337,14 +2590,97 @@ def _compact_repr(obj) -> str | None:
             own = [key for key in member.keys() if key not in keys]
             if own:
                 exclusive.append((str(i), ("", _compact_entries(member, own))))
+    return header, _compact_body(obj), exclusive
+
+
+def _compact_repr(obj) -> str | None:
+    """Returns the repr of ``set_printoptions(compact=True)``, or ``None`` for a class that keeps its own."""
+    parts = _compact_parts(obj)
+    if parts is None:
+        return None
+    header, body, exclusive = parts
     head = f"{type(obj).__name__}(" + "".join(f"{h}, " for h in header) + "fields="
     # on the last line of the fields come the exclusive fields, if any
     tail = 1 + len(", exclusive_fields={") if exclusive else 1
-    out = head + _compact_render(("", _compact_body(obj)), "", len(head), tail)
+    out = head + _compact_render(("", body), "", len(head), tail)
     if exclusive:
         used = len(out.rsplit("\n", 1)[-1]) + len(", exclusive_fields=")
         out += ", exclusive_fields=" + _compact_render(("", exclusive), "", used, 1)
     return out + ")"
+
+
+# The HTML repr of notebooks (_repr_html_): the entries of the compact repr in
+# nested <details> blocks, with inherited colors so that it reads in light and
+# dark themes. It shows at most _HTML_MAX_ENTRIES entries.
+_HTML_MAX_ENTRIES = 200
+_HTML_LIST = "list-style:none;margin:0;padding-left:1.5em"
+_HTML_DIM = "opacity:0.7"
+
+
+def _html_entries(entries, budget: list) -> str:
+    items = []
+    for i, (key, value) in enumerate(entries):
+        if budget[0] <= 0:
+            items.append(f"<li>... and {len(entries) - i} more</li>")
+            break
+        budget[0] -= 1
+        key = html.escape(str(key))
+        if isinstance(value, str):
+            value = html.escape(value)
+            items.append(f'<li>{key}: <span style="{_HTML_DIM}">{value}</span></li>')
+            continue
+        prefix, sub = value
+        label = html.escape(f"{prefix} " if prefix else "")
+        label += f"{len(sub)} {'entry' if len(sub) == 1 else 'entries'}"
+        items.append(
+            f'<li><details open><summary>{key}: <span style="{_HTML_DIM}">{label}'
+            f"</span></summary>{_html_entries(sub, budget)}</details></li>"
+        )
+    return f'<ul style="{_HTML_LIST}">' + "".join(items) + "</ul>"
+
+
+def _html_repr(obj) -> str | None:
+    """Returns the ``_repr_html_`` of a tensordict or a tensorclass.
+
+    It reads what the compact repr reads, and falls back to the text repr in a
+    ``<pre>`` block for the classes that keep their own repr, or if it fails.
+    """
+    from tensordict import TensorDictBase
+    from tensordict.tensorclass import _repr
+
+    if not _REPR_OPTIONS["html"]:
+        return None
+    try:
+        # a class with its own repr (a non-tensor class among them) keeps it
+        if is_tensorclass(obj):
+            parts = _compact_parts(obj) if type(obj).__repr__ is _repr else None
+        elif type(obj).__repr__ is TensorDictBase.__repr__:
+            parts = _compact_parts(obj)
+        else:
+            parts = None
+        if parts is not None:
+            header, body, exclusive = parts
+            names = obj._maybe_names() if _REPR_OPTIONS["show_batch_size"] else None
+            if names is not None and any(name is not None for name in names):
+                at = 1 if header and header[0].startswith("batch_size=") else 0
+                header.insert(at, f"names=[{','.join(map(str, names))}]")
+            budget = [_HTML_MAX_ENTRIES]
+            out = (
+                '<div style="font-family:monospace;line-height:1.4">'
+                f"<details open><summary><b>{html.escape(type(obj).__name__)}</b> "
+                f'<span style="{_HTML_DIM}">{html.escape(", ".join(header))}</span>'
+                f"</summary>{_html_entries(body, budget)}"
+            )
+            if exclusive:
+                out += (
+                    '<details open style="padding-left:1.5em"><summary>'
+                    f'<i style="{_HTML_DIM}">exclusive_fields</i></summary>'
+                    f"{_html_entries(exclusive, budget)}</details>"
+                )
+            return out + "</details></div>"
+    except Exception:
+        pass
+    return f"<pre>{html.escape(repr(obj))}</pre>"
 
 
 def _check_keys(
@@ -4200,6 +4536,8 @@ class LinkedList(list):
     only, and unlink it from the tensordict: later item assignments no longer
     write back. A :class:`LinkedList` compares equal to a list with the same
     items. If the write to the tensordict raises, the list is unchanged.
+    :meth:`tolist` returns a plain :class:`list` copy that is not linked to
+    the tensordict, as :meth:`~tensordict.NonTensorStack.tolist` does.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -4208,6 +4546,8 @@ class LinkedList(list):
         >>> values = td["names"]
         >>> values[0] = "z"
         >>> td.get("names").tolist()
+        ['z', 'b', 'c']
+        >>> values.tolist()
         ['z', 'b', 'c']
 
     """
@@ -4231,6 +4571,26 @@ class LinkedList(list):
         except Exception:
             super().__setitem__(slice(None) if is_slice else key, old)
             raise
+
+    def tolist(self) -> list:
+        """Returns a plain :class:`list` copy of the items, not linked to the tensordict.
+
+        Nested :class:`LinkedList` items, as ``td[key]`` returns for a
+        non-tensor entry with more than one batch dimension, become nested
+        lists, as with :meth:`~tensordict.NonTensorStack.tolist`. The other
+        items are not copied.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict(batch_size=[2, 2])
+            >>> td["names"] = [["a", "b"], ["c", "d"]]
+            >>> td["names"].tolist()
+            [['a', 'b'], ['c', 'd']]
+
+        """
+        return [
+            item.tolist() if isinstance(item, LinkedList) else item for item in self
+        ]
 
     def append(self, object: Any) -> None:
         """Appends ``object`` to the list and unlinks the list from the tensordict."""
