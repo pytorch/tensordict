@@ -1277,6 +1277,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "_frozen",
         "_is_tensorclass",
         "_nocast",
+        "_scalar_fields",
         "_set_dict_warn_msg",
         "_shadow",
         "_skip_post_init_on_rebuild",
@@ -2453,6 +2454,7 @@ def _get_type_hints(cls, with_locals=False, tensor_only=False):
 
     cls._tensordict_fields = frozenset()
     cls._tensorclass_fields = {}
+    cls._scalar_fields = {}
     try:
         type_hints = get_type_hints(
             cls,
@@ -2576,21 +2578,60 @@ def _fits_tensorclass(tensorclass_type: type, entry: Any) -> bool:
     return all(key in expected_keys for key in entry.keys())
 
 
+def _scalar_annotation_types(type_hint: Any) -> tuple[type, ...] | None:
+    """Return the scalar types that an ``int``, ``float`` or ``bool`` annotation (or a union of these, optional or not) accepts, else ``None``."""
+    if get_origin(type_hint) in (Union, UnionType):
+        args = [arg for arg in get_args(type_hint) if arg is not NoneType]
+    else:
+        args = [type_hint]
+    types = set()
+    for arg in args:
+        if arg is bool:
+            types.add(bool)
+        elif arg is int:
+            types.add(int)
+        elif arg is float:
+            # an int is a valid float (PEP 484)
+            types.update((int, float))
+        else:
+            return None
+    return tuple(types) or None
+
+
+def _warn_scalar_field(cls: type, key: str, value: Any) -> None:
+    """Warns that ``value``, given to the int, float or bool field ``key``, becomes a 0-d tensor today."""
+    warnings.warn(
+        f"The {type(value).__name__} given to the field {key!r} of "
+        f"{cls.__name__} is stored as a 0-d tensor today. Starting with "
+        "TensorDict 0.17, the default will change to "
+        "keeping the Python value of fields annotated int/float/bool, as "
+        "NonTensorData. Annotate the field torch.Tensor to keep the tensor, or "
+        "use the nocast class option to keep the Python value now.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _set_tensorclass_type_hints(cls: type, type_hints: dict[str, Any]) -> None:
-    """Store resolved hints and cache the TensorDict- and tensorclass-annotated fields."""
+    """Store resolved hints and cache the TensorDict-, tensorclass- and scalar-annotated fields."""
     cls._tensordict_fields = frozenset(
         key
         for key, val in type_hints.items()
         if key in cls.__expected_keys__ and _is_tensordict_annotation(val)
     )
     tensorclass_fields = {}
+    scalar_fields = {}
     for key, val in type_hints.items():
         if key not in cls.__expected_keys__:
             continue
         tensorclass_type = _tensorclass_annotation(val)
         if tensorclass_type is not None:
             tensorclass_fields[key] = tensorclass_type
+        scalar_types = _scalar_annotation_types(val)
+        if scalar_types is not None:
+            scalar_fields[key] = scalar_types
     cls._tensorclass_fields = tensorclass_fields
+    cls._scalar_fields = scalar_fields
     cls._type_hints = type_hints
 
 
@@ -4820,14 +4861,21 @@ def _set(
             non_tensor = not (
                 _is_accepted_class(value_type) or _is_tensor_collection(value_type)
             )
-        elif (
-            issubclass(value_type, torch.Tensor)
-            or _is_tensor_collection(value_type)
-            or (
-                not cls._nocast
-                and issubclass(value_type, (int, float, bool, np.ndarray))
-            )
-        ):
+        elif issubclass(value_type, torch.Tensor) or _is_tensor_collection(value_type):
+            return set_tensor()
+        elif not cls._nocast and issubclass(value_type, (int, float, bool, np.ndarray)):
+            scalar_types = cls._scalar_fields.get(key)
+            if (
+                scalar_types is not None
+                and not self_is_non_tensor
+                and isinstance(value, scalar_types)
+            ):
+                if self._tensordict.batch_dims:
+                    # A 0-d tensor would not fit the batch size and raise:
+                    # keep the Python value, as all batch sizes will from 0.17.
+                    return set_tensor(non_tensor=True)
+                if not is_dynamo_compiling():
+                    _warn_scalar_field(cls, key, value)
             return set_tensor()
         elif issubclass(value_type, list) and list_to_stack():
             # set() will take care of casting to non tensor
@@ -5898,9 +5946,16 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
       :class:`~tensordict.NonTensorData`.
 
           >>> class Foo(TensorClass):
-          ...     x: int
+          ...     x: torch.Tensor
           >>> Foo(x=1).x
           tensor(1)
+
+      A Python scalar given to a field annotated ``int``, ``float`` or
+      ``bool`` (or an optional or union of these) is cast too, with a
+      ``FutureWarning``: starting with TensorDict 0.17, the default will
+      change to keeping the Python value of fields annotated int/float/bool,
+      as :class:`~tensordict.NonTensorData`. With a non-empty batch size,
+      where a 0-d tensor does not fit, the value is kept already.
 
     - ``autocast``: when a field is set, the value is converted to the
       annotated type. For example, an ``int`` field set to

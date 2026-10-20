@@ -2186,10 +2186,11 @@ class TestTensorClass:
             from_dataclass(Tensors, tensor_only=True)
             # The flags are not used with dest_cls or for a tensorclass type.
             dest_cls = from_dataclass(MyDataClass)
-            assert isinstance(
-                from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
-                dest_cls,
-            )
+            with pytest.warns(FutureWarning, match="keeping the Python value"):
+                assert isinstance(
+                    from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
+                    dest_cls,
+                )
             assert from_dataclass(dest_cls, tensor_only=True, autocast=True) is dest_cls
             # Inputs that are not dataclasses raise as before.
             with pytest.raises(TypeError, match="Expected a obj input"):
@@ -2218,18 +2219,21 @@ class TestTensorClass:
         assert isinstance(x.b, int)
         assert isinstance(x.c, int)
 
-        x = MyTensorClass(a=0, b=0, c=0)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = MyTensorClass(a=0, b=0, c=0)
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
         assert isinstance(x.c, torch.Tensor)
 
-        x = TensorDict.from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = TensorDict.from_dataclass(MyTensorClass(a=0, b=0, c=0))
         assert isinstance(x, TensorDict)
         assert isinstance(x["a"], torch.Tensor)
         assert isinstance(x["b"], torch.Tensor)
         assert isinstance(x["c"], torch.Tensor)
 
-        x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
         assert is_tensorclass(x)
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
@@ -2242,7 +2246,8 @@ class TestTensorClass:
             c: int = 0
 
         cls = from_dataclass(MyOtherDataClass)
-        x = from_dataclass(MyOtherDataClass(), dest_cls=cls)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = from_dataclass(MyOtherDataClass(), dest_cls=cls)
         assert is_tensorclass(x)
         assert type(x) is cls
         assert isinstance(x.a, torch.Tensor)
@@ -5232,14 +5237,15 @@ class TestMemmap:
         class MyOtherClass:
             Y: torch.Tensor
 
-        data = MyClass(
-            X=torch.randn(10, 3),
-            td=TensorDict({"y": torch.randn(10)}, batch_size=[10]),
-            integer=3,
-            string="a string",
-            dictionary={"some_data": "a"},
-            batch_size=[],
-        )
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            data = MyClass(
+                X=torch.randn(10, 3),
+                td=TensorDict({"y": torch.randn(10)}, batch_size=[10]),
+                integer=3,
+                string="a string",
+                dictionary={"some_data": "a"},
+                batch_size=[],
+            )
 
         data.memmap_(tmpdir)
         data2 = MyClass.load_memmap(tmpdir)
@@ -5824,7 +5830,8 @@ class TestNoCasting:
         class X:
             a: int  # type is irrelevant
 
-        assert isinstance(X(1).a, torch.Tensor)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            assert isinstance(X(1).a, torch.Tensor)
 
         @tensorclass(nocast=True)
         class X:
@@ -5850,7 +5857,8 @@ class TestNoCasting:
         class X:
             a: int  # type is irrelevant
 
-        assert isinstance(X(True).a, torch.Tensor)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            assert isinstance(X(True).a, torch.Tensor)
 
         @tensorclass(nocast=True)
         class X:
@@ -6750,6 +6758,74 @@ class TestDeprecations:
             c.update_at_({"a": torch.ones(())}, 0)
             assert (c.b == 3).all()
 
+    @pytest.mark.parametrize(
+        "annotation,value",
+        [
+            (int, 3),
+            (int, True),
+            (float, 1.5),
+            (float, 1),
+            pytest.param(float, np.float64(1.5), id="float-np.float64"),
+            (bool, False),
+            (Optional[int], 3),
+            (Union[int, float], 1.5),
+        ],
+    )
+    def test_scalar_field(self, annotation, value):
+        MyClass = type(
+            "MyClass", (TensorClass,), {"__annotations__": {"a": annotation}}
+        )
+        match = r"Starting with TensorDict 0\.17, the default will change to keeping"
+        with pytest.warns(FutureWarning, match=match) as record:
+            c = MyClass(a=value)
+        assert record[0].filename == __file__
+        assert c.a.shape == () and c.a == value
+        with pytest.warns(FutureWarning, match=match) as record:
+            c.a = value
+        assert record[0].filename == __file__
+
+        # with a non-empty batch size, where a 0-d tensor raises, the value is
+        # kept already
+        c = MyClass(a=value, batch_size=[2])
+        assert type(c.a) is type(value) and c.a == value
+        assert isinstance(c._tensordict.get("a"), NonTensorData)
+        c.a = value
+        assert type(c[1].a) is type(value) and c[1].a == value
+
+    def test_scalar_field_default(self):
+        class MyClass(TensorClass):
+            x: torch.Tensor
+            n: int = 3
+
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert MyClass(x=torch.zeros(())).n == torch.tensor(3)
+        assert MyClass(x=torch.zeros(4), batch_size=[4]).n == 3
+
+    def test_scalar_field_unchanged(self):
+        # no warning and no change: a value of another type, a field that is not
+        # annotated int, float or bool, and the classes that cast by annotation
+        class MyClass(TensorClass):
+            b: bool = 1
+            t: torch.Tensor = 1
+            x: Any = 1
+            o: Optional[int] = None
+
+        class NoCast(TensorClass["nocast"]):
+            a: int = 1
+
+        class AutoCast(TensorClass["autocast"]):
+            a: int = 1
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            c = MyClass()
+            assert all(isinstance(getattr(c, k), torch.Tensor) for k in "btx")
+            assert c.o is None
+            assert NoCast().a == 1 and AutoCast().a == 1
+            assert NoCast(batch_size=[2]).a == 1 and AutoCast(batch_size=[2]).a == 1
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                MyClass(t=torch.zeros(2), x=torch.zeros(2), batch_size=[2])
+
     # The library code that builds and converts tensorclasses does not call the
     # deprecated members.
     @pytest.mark.parametrize(
@@ -6932,10 +7008,12 @@ class TestSubClassing:
         assert not SubClass._autocast
         assert not SubClass._nocast
         assert issubclass(SubClass, TensorClass)
-        obj = SubClass(a=0)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            obj = SubClass(a=0)
         assert is_called
         is_called = False
-        obj.a = 1
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            obj.a = 1
         assert obj.a == 1
         assert is_called
 
