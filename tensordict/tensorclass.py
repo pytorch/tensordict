@@ -1249,6 +1249,9 @@ def _defines_method(cls: type, name: str, default: Callable | None) -> bool:
         return False
     if base is object or method is default:
         return False
+    if getattr(method, "__module__", None) == "dataclasses":
+        # dataclasses.dataclass() adds __replace__ (Python 3.13+)
+        return False
     if getattr(method, "__qualname__", "").startswith("_wrap_td_method."):
         return False
     if "__dataclass_fields__" not in base.__dict__:
@@ -1486,6 +1489,7 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
         "__or__": _or,
         "__xor__": _xor,
         "__bool__": _bool,
+        "__replace__": _replace,
     }
     own_operators = {
         name
@@ -3219,6 +3223,21 @@ def _copy(self) -> Any:
 def _deepcopy(self, memo: dict[int, Any]) -> Any:
     """Copies the tensorclass and clones its tensors, like ``self.clone()``."""
     return self.clone()
+
+
+def _replace(self, /, **changes: Any) -> Any:
+    """Implements :func:`copy.replace`: :func:`dataclasses.replace` that keeps the metadata.
+
+    The batch size, device and names of ``self`` (the names only when
+    ``batch_size`` is not in ``changes``) are the defaults of the call to
+    ``__init__``.
+    """
+    if "batch_size" not in changes:
+        changes["batch_size"] = self.batch_size
+        if "names" not in changes and self._tensordict._has_names():
+            changes["names"] = self.names
+    changes.setdefault("device", self.device)
+    return dataclasses.replace(self, **changes)
 
 
 def _getattr_tensor_only(self, item: str, **kwargs) -> Any:

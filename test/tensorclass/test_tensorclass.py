@@ -2930,6 +2930,128 @@ class TestTensorClass:
             assert copy.copy(data) == "copy"
             assert copy.deepcopy(data) == "deepcopy"
 
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    @pytest.mark.parametrize("spelling", ["decorator", "subclass"])
+    def test_copy_replace(self, spelling):
+        # copy.replace keeps the batch size, device and names (#3072)
+        if spelling == "decorator":
+
+            @tensorclass
+            class MyDataReplace:
+                X: torch.Tensor
+                z: str = "z"
+                y: MyDataReplace = None
+
+        else:
+
+            class MyDataReplace(TensorClass):
+                X: torch.Tensor
+                z: str = "z"
+                y: MyDataReplace = None
+
+        nested = MyDataReplace(X=torch.zeros(3, 2), batch_size=[3])
+        data = MyDataReplace(
+            X=torch.zeros(3, 2), y=nested, batch_size=[3], names=["n"], device="cpu"
+        )
+        for changes in ({}, {"X": torch.ones(3, 2)}, {"z": "other"}):
+            out = copy.replace(data, **changes)
+            assert type(out) is MyDataReplace
+            assert out is not data
+            assert out.batch_size == torch.Size([3])
+            assert out.names == ["n"]
+            assert out.device == torch.device("cpu")
+            assert type(out.y) is MyDataReplace
+            assert out.y.batch_size == torch.Size([3])
+        assert (out.X == 0).all()
+        assert out.z == "other"
+        assert data.z == "z"
+        assert (copy.replace(data, X=torch.ones(3, 2)).X == 1).all()
+
+        # The metadata can still be passed, as to __init__
+        out = copy.replace(data, names=["m"], y=None)
+        assert out.batch_size == torch.Size([3])
+        assert out.names == ["m"]
+        out = copy.replace(data, batch_size=[3, 2], y=None)
+        assert out.batch_size == torch.Size([3, 2])
+        assert out.names == [None, None]
+        with pytest.raises(AttributeError, match="no such field"):
+            copy.replace(data, other=1)
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_init(self):
+        # copy.replace builds the copy with __init__, as dataclasses.replace
+        class MyDataInit(TensorClass):
+            X: torch.Tensor
+
+            def __init__(self, X, scale=1.0):
+                self.X = X * scale
+
+        data = MyDataInit(torch.ones(3), batch_size=[3])
+        out = copy.replace(data, scale=2.0)
+        assert out.batch_size == torch.Size([3])
+        assert (out.X == 2).all()
+
+        @tensorclass
+        class MyDataPostInit:
+            X: torch.Tensor
+
+            def __post_init__(self):
+                self.X = self.X.float()
+
+        data = MyDataPostInit(X=torch.zeros(3), batch_size=[3])
+        out = copy.replace(data, X=torch.ones(3, dtype=torch.long))
+        assert out.batch_size == torch.Size([3])
+        assert out.X.dtype == torch.float32
+
+        data = NonTensorData("a", batch_size=[3])
+        out = copy.replace(data, data="b")
+        assert type(out) is NonTensorData
+        assert out.batch_size == torch.Size([3])
+        assert out.data == "b"
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_named_replace(self):
+        # __replace__ reserves no field or method name
+        @tensorclass(shadow=True)
+        class MyDataField:
+            X: torch.Tensor
+            replace: torch.Tensor
+
+        data = MyDataField(X=torch.zeros(3), replace=torch.zeros(3), batch_size=[3])
+        out = copy.replace(data, replace=torch.ones(3))
+        assert out.batch_size == torch.Size([3])
+        assert (out.replace == 1).all()
+
+        class MyDataMethod(TensorClass):
+            X: torch.Tensor
+
+            def replace(self, **kwargs):
+                return "replace"
+
+        data = MyDataMethod(X=torch.zeros(3), batch_size=[3])
+        assert data.replace() == "replace"
+        out = copy.replace(data, X=torch.ones(3))
+        assert out.batch_size == torch.Size([3])
+        assert (out.X == 1).all()
+
+        class MyDataOwn(TensorClass):
+            X: torch.Tensor
+
+            def __replace__(self, **changes):
+                return "own"
+
+        class MyDataOwnChild(MyDataOwn):
+            y: torch.Tensor = None
+
+        for cls in (MyDataOwn, MyDataOwnChild):
+            assert copy.replace(cls(X=torch.zeros(3), batch_size=[3])) == "own"
+
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
         with set_capture_non_tensor_stack(False):
