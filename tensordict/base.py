@@ -77,6 +77,7 @@ from tensordict.utils import (
     _foreach,
     _GENERIC_NESTED_ERR,
     _get_item,
+    _html_repr,
     _index_preserve_data_ptr,
     _is_non_tensor,
     _is_tensorclass,
@@ -3096,6 +3097,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             #  we simply default to '...' when trying to print the TD content.
             string = "..."
         return f"{type(self).__name__}(\n{string})"
+
+    def _repr_html_(self) -> str | None:
+        # The display of notebooks: see "Notebook display" in printing.rst.
+        return _html_repr(self)
 
     def _repr_parts(self) -> list[str]:
         """Returns the lines that :meth:`__repr__` joins inside ``ClassName(...)``.

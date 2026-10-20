@@ -78,6 +78,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _expands_to,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _html_repr,
     _is_dataclass as is_dataclass,
     _is_json_serializable,
     _is_tensorclass,
@@ -1629,6 +1630,8 @@ def _tensorclass(cls: T, *, frozen, shadow: bool, tensor_only: bool) -> T:
     for name, method in operators.items():
         if name not in own_operators and not (_is_non_tensor and name == "__repr__"):
             setattr(cls, name, method)
+    if not hasattr(cls, "_repr_html_"):
+        cls._repr_html_ = _repr_html
     if _is_non_tensor and hasattr(cls, "_patch_operators"):
         # NonTensorDataBase patches its comparison operators
         cls._patch_operators()
@@ -4297,6 +4300,10 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
                     _warn_non_field_keys(self, unknown, "__setitem__")
         # int, float etc.
         self._tensordict[item] = value
+
+
+def _repr_html(self) -> str | None:
+    return _html_repr(self)
 
 
 def _repr(self) -> str:
