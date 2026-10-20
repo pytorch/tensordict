@@ -491,4 +491,7 @@ Next steps
   and :doc:`tutorials/tensordict_shapes`.
 - The how-to guides solve one task each: :ref:`saving`, :ref:`storage`,
   :ref:`data-loading`, :ref:`distributed`, and :ref:`compile`.
+- :ref:`cookbook` has short recipes for common tasks: batches of
+  different lengths, data loaders, parameter groups, moving averages,
+  checkpoints, and ensembles.
 - :ref:`api-reference` lists every class and method.
