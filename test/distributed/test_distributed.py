@@ -318,6 +318,66 @@ class TestGather:
             main_worker.join()
             secondary_worker.join()
 
+    @staticmethod
+    def consolidated_worker(queue, rank):
+        # Gloo sends the tensors as one consolidated storage per rank, and
+        # pickles only the metadata
+        def gather_object(*args, **kwargs):
+            raise AssertionError("gather_object pickles the tensors")
+
+        dist.gather_object = gather_object
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=3,
+            init_method="tcp://localhost:29534",
+        )
+        if rank == 0:
+            td = TensorDict(
+                {
+                    ("a", "b"): torch.zeros(2, 3),
+                    "c": torch.zeros(2, 3, dtype=torch.int64),
+                },
+                [2, 3],
+            )
+        else:
+            td = TensorDict(
+                {
+                    ("a", "b"): torch.full((3,), float(rank)),
+                    "c": torch.arange(3) + rank,
+                    "s": f"rank {rank}",
+                },
+                [3],
+            )
+        try:
+            result = td.gather_and_stack(0)
+            if rank == 0:
+                assert result is td
+                assert (td["a", "b"] == torch.tensor([[1.0], [2.0]])).all()
+                assert (td["c"] == torch.arange(3) + torch.tensor([[1], [2]])).all()
+                assert td.get("s").tolist() == [["rank 1"] * 3, ["rank 2"] * 3]
+            else:
+                assert result is None
+            queue.put("yuppie")
+        except Exception as err:
+            queue.put(repr(err))
+            raise
+
+    def test_gather_consolidated(self, set_context):
+        queue = mp.Queue(3)
+        workers = [
+            mp.Process(target=type(self).consolidated_worker, args=(queue, rank))
+            for rank in range(3)
+        ]
+        for worker in workers:
+            worker.start()
+        try:
+            for _ in workers:
+                assert queue.get(timeout=TIMEOUT) == "yuppie"
+        finally:
+            for worker in workers:
+                worker.join(timeout=TIMEOUT)
+
 
 @pytest.mark.skipif(
     sys.version_info.minor <= 7,

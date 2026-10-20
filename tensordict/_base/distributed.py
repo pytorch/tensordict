@@ -25,6 +25,7 @@ from tensordict.base import (
     Self,
     T,
 )
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _int_generator
 from torch import Tensor
 
@@ -43,10 +44,15 @@ class _Distributed:
 
         Every rank of the group must call it. On rank ``dst``, the tensordict must
         have one row per other rank: its first batch dimension is
-        ``world_size - 1``, and its own data is not in the result. The
-        tensordicts are sent with :func:`torch.distributed.gather_object`, which
-        pickles them: use it only with ranks you trust. See
-        :ref:`distributed-collectives`.
+        ``world_size - 1``, and its own data is not in the result. With
+        ``gloo``, each other rank consolidates its tensordict (see
+        :meth:`~.consolidate`), the metadata is sent to every rank with
+        :func:`torch.distributed.all_gather_object`, which pickles it, and the
+        storages with :func:`torch.distributed.gather`. With other backends, or
+        when a leaf requires gradients, is not on the CPU, or is not a strided
+        tensor, the tensordicts are sent with
+        :func:`torch.distributed.gather_object`, which pickles them. Use it only
+        with ranks you trust. See :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the stack.
@@ -72,17 +78,72 @@ class _Distributed:
                         td = TensorDict(a=torch.full((3,), float(rank)), batch_size=[3])
                         td.gather_and_stack(dst=0)
         """
+        from tensordict._reductions import _rebuild_tensordict_files_consolidated
         from torch import distributed as dist
 
-        output = (
-            [None for _ in range(dist.get_world_size(group=group))]
-            if dst == dist.get_rank(group=group)
-            else None
-        )
-        dist.gather_object(self, output, dst=dst, group=group)
-        if dst == dist.get_rank(group=group):
-            # remove self from output
-            output = [item for i, item in enumerate(output) if i != dst]
+        world_size = dist.get_world_size(group=group)
+        rank = dist.get_rank(group=group)
+        use_storage = dist.get_backend(group) == dist.Backend.GLOO
+        if use_storage:
+            # Gloo gathers CPU tensors: as in all_gather, send the consolidated
+            # storage of each rank as one tensor and pickle only its metadata.
+            # The storage keeps the values, but not the autograd history,
+            # device, layout or subclass of the leaves: those are pickled.
+            header = None
+            if rank != dst and not any(
+                v.requires_grad
+                or v.device.type != "cpu"
+                or v.layout != torch.strided
+                or type(v) not in (Tensor, MemoryMappedTensor)
+                for v in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            ):
+                try:
+                    td_c = (
+                        self
+                        if self.is_consolidated()
+                        and self._consolidated["metadata"] is not None
+                        else self.consolidate(metadata=True)
+                    )
+                except Exception:
+                    # The pickle of gather_object may still work
+                    td_c = None
+                if td_c is not None:
+                    storage = td_c._consolidated["storage"]
+                    if storage.device.type == "cpu":
+                        header = (storage.numel(), td_c._consolidated["metadata"])
+            headers = [None] * world_size
+            dist.all_gather_object(headers, header, group=group)
+            del headers[dst]
+            use_storage = bool(headers) and all(h is not None for h in headers)
+        if use_storage:
+            size = max(h[0] for h in headers)
+            if rank == dst:
+                padded = torch.empty(size, dtype=torch.uint8)
+            elif header[0] == size:
+                padded = storage
+            else:
+                padded = torch.zeros(size, dtype=torch.uint8)
+                padded[: header[0]] = storage
+            gathered = (
+                [torch.empty_like(padded) for _ in range(world_size)]
+                if rank == dst
+                else None
+            )
+            dist.gather(padded, gathered, dst=dst, group=group)
+            if rank == dst:
+                del gathered[dst]
+                output = [
+                    _rebuild_tensordict_files_consolidated(meta, buffer[:size])
+                    for (size, meta), buffer in zip(headers, gathered)
+                ]
+        else:
+            # Other backends, or a tensordict that cannot be consolidated
+            output = [None for _ in range(world_size)] if dst == rank else None
+            dist.gather_object(self, output, dst=dst, group=group)
+            if dst == rank:
+                # remove self from output
+                output = [item for i, item in enumerate(output) if i != dst]
+        if dst == rank:
             self.update(torch.stack(output, 0), inplace=True)
             return self
         return None
