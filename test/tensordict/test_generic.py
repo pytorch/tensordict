@@ -8175,6 +8175,24 @@ class TestGeneric:
             collate(tds, nested_keys=["missing"])
         with pytest.raises(ValueError, match="mask_key"):
             collate(tds, mask_key="mask")
+        # the mask key must not be an entry of the samples
+        for mask_key in ("score", "nested", ("nested", "labels")):
+            with pytest.raises(ValueError, match="entry of a sample"):
+                collate(tds, pad_keys={"ids": 0}, mask_key=mask_key)
+        with pytest.raises(ValueError, match=r"\['ids'\] in both"):
+            collate(tds, pad_keys={"ids": 0}, nested_keys=[("ids",)])
+        # padding along a batch dim of the samples
+        batched = [
+            TensorDict(ids=torch.ones(n), x=torch.ones(n, 2), batch_size=[n])
+            for n in lengths
+        ]
+        with pytest.raises(ValueError, match="batch dim of these samples"):
+            collate(batched, pad_keys={"ids": 0, "x": 0})
+        # an unnamed entry that varies in length stacks lazily
+        with pytest.raises(ValueError, match="Name the entries that vary"):
+            collate(tds, nested_keys=["points"])
+        batch = collate(tds, nested_keys=["points", "ids", ("nested", "labels")])
+        assert batch["ids"].is_nested
 
     @pytest.mark.parametrize("batch_dims", [1, 2])
     @pytest.mark.parametrize("pad_dim", [2, -2])

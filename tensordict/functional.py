@@ -584,13 +584,20 @@ def collate(
             :func:`~tensordict.pad_sequence` does. Defaults to ``None``.
         nested_keys (sequence of NestedKey, optional): the entries to stack
             into nested tensors with the ``torch.jagged`` layout, whose first
-            dimension is ragged. Defaults to ``None``.
+            dimension is ragged. The other entries must then stack densely:
+            name every entry that varies in length in ``pad_keys`` or
+            ``nested_keys``. Defaults to ``None``.
         mask_key (NestedKey, optional): where to store the masks of the
             ``pad_keys`` entries: a tensordict with an entry for each of them
             that is ``True`` at the valid positions, as
-            :func:`~tensordict.pad_sequence` builds with ``return_mask``. A
-            tensorclass needs a field of that name. Requires ``pad_keys``.
-            Defaults to ``None``, for no masks.
+            :func:`~tensordict.pad_sequence` builds with ``return_mask``. It
+            must not be an entry of the samples. A tensorclass needs a field
+            of that name. Requires ``pad_keys``. Defaults to ``None``, for no
+            masks.
+
+    With ``pad_keys``, the samples must have an empty batch size. These
+    options do not support :class:`~tensordict.PersistentTensorDict` (h5)
+    samples: call :meth:`~tensordict.TensorDictBase.to_tensordict` first.
 
     Returns:
         The collated batch.
@@ -598,7 +605,11 @@ def collate(
     Raises:
         KeyError: if a sample has no entry for a key of ``pad_keys`` or
             ``nested_keys``.
-        ValueError: if ``mask_key`` is given without ``pad_keys``.
+        ValueError: if ``mask_key`` is given without ``pad_keys`` or names
+            an entry of a sample, if a key is in both ``pad_keys`` and
+            ``nested_keys``, if ``pad_keys`` is given for samples with batch
+            dimensions, or if ``nested_keys`` is given and the other entries
+            do not stack densely.
 
     Examples:
         >>> import torch
@@ -676,13 +687,40 @@ def _collate_keys(
     nested_keys = [unravel_key(key) for key in nested_keys or ()]
     if mask_key is not None and not pad_keys:
         raise ValueError("collate got a mask_key but no pad_keys to mask.")
-    for key in (*pad_keys, *nested_keys):
-        for sample in batch:
-            if key not in sample.keys(include_nested=True):
+    both = [key for key in nested_keys if key in pad_keys]
+    if both:
+        raise ValueError(
+            f"collate got the keys {both} in both pad_keys and nested_keys."
+        )
+    if pad_keys and batch[0].batch_dims:
+        raise ValueError(
+            "collate(pad_keys=...) pads the first dim of each entry, which is a "
+            f"batch dim of these samples (batch_size={batch[0].batch_size}). "
+            "Give the samples an empty batch size, or call pad_sequence."
+        )
+    if mask_key is not None:
+        mask_key = unravel_key(mask_key)
+    for sample in batch:
+        keys = sample.keys(include_nested=True)
+        for key in (*pad_keys, *nested_keys):
+            if key not in keys:
                 raise KeyError(f"collate got the key {key!r}, which a sample lacks.")
+        if mask_key is not None and mask_key in keys:
+            raise ValueError(
+                f"collate got mask_key={mask_key!r}, which is an entry of a sample."
+            )
     out = LazyStackedTensorDict.maybe_dense_stack(
         [sample.exclude(*pad_keys, *nested_keys) for sample in batch]
     )
+    if nested_keys and isinstance(
+        out._tensordict if is_tensorclass(out) else out, LazyStackedTensorDict
+    ):
+        raise ValueError(
+            f"collate got nested_keys={nested_keys}, but the other entries of the "
+            "samples differ in shape, so they stack lazily and the nested tensors "
+            "could not be read back. Name the entries that vary in length in "
+            "pad_keys or nested_keys."
+        )
     if pad_keys:
         padded = pad_sequence(
             [
