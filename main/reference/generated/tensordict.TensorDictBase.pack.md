@@ -12,10 +12,11 @@ ranks. The result has shape `(*batch_size, F)` for `dim=-1`, where
 contiguous for any `dim`. [`PackLayout.unpack`](tensordict.PackLayout.html#tensordict.PackLayout.unpack) inverts it.
 
 Packing along the last dim copies the data once, with one
-[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat). Along another dim the result can take a second
-copy: [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) keeps the channels-last strides that moving
-the feature dim gives a 4-d or 5-d result, and the result is then made
-contiguous.
+[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat), unless the leaves are channels-last:
+[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) keeps their strides, and making the result
+contiguous takes a second copy. Along another dim the result can take
+a second copy too, since moving the feature dim makes a 4-d or 5-d
+result channels-last.
 
 All the leaves must share one dtype and one device. Non-tensor data
 cannot be packed: drop it with [`filter_non_tensor_data()`](tensordict.TensorDictBase.filter_non_tensor_data.html#tensordict.TensorDictBase.filter_non_tensor_data) first.
