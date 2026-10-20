@@ -8,6 +8,7 @@ import collections
 import concurrent.futures
 import contextvars
 import functools
+import html
 import itertools
 import logging
 import math
@@ -2177,7 +2178,8 @@ def _compact_entry(td, key):
         return token
     if isinstance(item, NonTensorData):
         return type(item.data).__name__
-    if is_non_tensor(item):
+    if is_non_tensor(item) or (not is_tensorclass(item) and _keeps_own_repr(item)):
+        # a nested store shows its class name only: its leaves are on a server
         return type(item).__name__
     sub = item if first is td else td._get_str(key, None)
     prefix = "" if type(item) is TensorDict else type(item).__name__
@@ -2243,9 +2245,21 @@ def _compact_render(node, indent: str, used: int, tail: int) -> str:
     return prefix + "{\n" + ",\n".join(lines) + "}"
 
 
-def _compact_repr(obj) -> str | None:
-    """Returns the repr of ``set_printoptions(compact=True)``, or ``None`` for a class that keeps its own."""
+def _keeps_own_repr(td) -> bool:
+    # The stores list their key names and a non-tensor stack its values: a
+    # class with its own _repr_parts keeps its repr.
     from tensordict import LazyStackedTensorDict, TensorDictBase
+
+    return type(td)._repr_parts not in (
+        TensorDictBase._repr_parts,
+        LazyStackedTensorDict._repr_parts,
+    )
+
+
+def _compact_parts(obj):
+    # Returns the header items, the entries and the exclusive fields of the
+    # compact repr, or None for a class that keeps its own repr.
+    from tensordict import LazyStackedTensorDict
 
     header = []
     if is_tensorclass(obj):
@@ -2256,12 +2270,7 @@ def _compact_repr(obj) -> str | None:
             if obj.device is not None:
                 header.append(f"device={obj.device}")
     else:
-        # The stores list their key names and a non-tensor stack its values:
-        # a class with its own _repr_parts keeps its repr.
-        if type(obj)._repr_parts not in (
-            TensorDictBase._repr_parts,
-            LazyStackedTensorDict._repr_parts,
-        ):
+        if _keeps_own_repr(obj):
             return None
         if _REPR_OPTIONS["show_batch_size"]:
             header.append(f"batch_size=[{','.join(map(str, obj.batch_size))}]")
@@ -2275,14 +2284,97 @@ def _compact_repr(obj) -> str | None:
             own = [key for key in member.keys() if key not in keys]
             if own:
                 exclusive.append((str(i), ("", _compact_entries(member, own))))
+    return header, _compact_body(obj), exclusive
+
+
+def _compact_repr(obj) -> str | None:
+    """Returns the repr of ``set_printoptions(compact=True)``, or ``None`` for a class that keeps its own."""
+    parts = _compact_parts(obj)
+    if parts is None:
+        return None
+    header, body, exclusive = parts
     head = f"{type(obj).__name__}(" + "".join(f"{h}, " for h in header) + "fields="
     # on the last line of the fields come the exclusive fields, if any
     tail = 1 + len(", exclusive_fields={") if exclusive else 1
-    out = head + _compact_render(("", _compact_body(obj)), "", len(head), tail)
+    out = head + _compact_render(("", body), "", len(head), tail)
     if exclusive:
         used = len(out.rsplit("\n", 1)[-1]) + len(", exclusive_fields=")
         out += ", exclusive_fields=" + _compact_render(("", exclusive), "", used, 1)
     return out + ")"
+
+
+# The HTML repr of notebooks (_repr_html_): the entries of the compact repr in
+# nested <details> blocks, with inherited colors so that it reads in light and
+# dark themes. It shows at most _HTML_MAX_ENTRIES entries.
+_HTML_MAX_ENTRIES = 200
+_HTML_LIST = "list-style:none;margin:0;padding-left:1.5em"
+_HTML_DIM = "opacity:0.7"
+
+
+def _html_entries(entries, budget: list) -> str:
+    items = []
+    for i, (key, value) in enumerate(entries):
+        if budget[0] <= 0:
+            items.append(f"<li>... and {len(entries) - i} more</li>")
+            break
+        budget[0] -= 1
+        key = html.escape(str(key))
+        if isinstance(value, str):
+            value = html.escape(value)
+            items.append(f'<li>{key}: <span style="{_HTML_DIM}">{value}</span></li>')
+            continue
+        prefix, sub = value
+        label = html.escape(f"{prefix} " if prefix else "")
+        label += f"{len(sub)} {'entry' if len(sub) == 1 else 'entries'}"
+        items.append(
+            f'<li><details open><summary>{key}: <span style="{_HTML_DIM}">{label}'
+            f"</span></summary>{_html_entries(sub, budget)}</details></li>"
+        )
+    return f'<ul style="{_HTML_LIST}">' + "".join(items) + "</ul>"
+
+
+def _html_repr(obj) -> str | None:
+    """Returns the ``_repr_html_`` of a tensordict or a tensorclass.
+
+    It reads what the compact repr reads, and falls back to the text repr in a
+    ``<pre>`` block for the classes that keep their own repr, or if it fails.
+    """
+    from tensordict import TensorDictBase
+    from tensordict.tensorclass import _repr
+
+    if not _REPR_OPTIONS["html"]:
+        return None
+    try:
+        # a class with its own repr (a non-tensor class among them) keeps it
+        if is_tensorclass(obj):
+            parts = _compact_parts(obj) if type(obj).__repr__ is _repr else None
+        elif type(obj).__repr__ is TensorDictBase.__repr__:
+            parts = _compact_parts(obj)
+        else:
+            parts = None
+        if parts is not None:
+            header, body, exclusive = parts
+            names = obj._maybe_names() if _REPR_OPTIONS["show_batch_size"] else None
+            if names is not None and any(name is not None for name in names):
+                at = 1 if header and header[0].startswith("batch_size=") else 0
+                header.insert(at, f"names=[{','.join(map(str, names))}]")
+            budget = [_HTML_MAX_ENTRIES]
+            out = (
+                '<div style="font-family:monospace;line-height:1.4">'
+                f"<details open><summary><b>{html.escape(type(obj).__name__)}</b> "
+                f'<span style="{_HTML_DIM}">{html.escape(", ".join(header))}</span>'
+                f"</summary>{_html_entries(body, budget)}"
+            )
+            if exclusive:
+                out += (
+                    '<details open style="padding-left:1.5em"><summary>'
+                    f'<i style="{_HTML_DIM}">exclusive_fields</i></summary>'
+                    f"{_html_entries(exclusive, budget)}</details>"
+                )
+            return out + "</details></div>"
+    except Exception:
+        pass
+    return f"<pre>{html.escape(repr(obj))}</pre>"
 
 
 def _check_keys(
