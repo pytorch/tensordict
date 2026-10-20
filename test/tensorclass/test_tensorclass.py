@@ -3118,6 +3118,13 @@ class TestTensorClass:
         assert out.batch_size == torch.Size([3])
         assert td.names == ["k"]
 
+        # With no names to set, the copy shares the sub-tensordict, as on main
+        sub = TensorDict(a=torch.zeros(3), batch_size=[3])
+        data = MyDataShared(X=torch.zeros(3), z=sub, batch_size=[3])
+        out = copy.replace(data)
+        assert out.batch_size == torch.Size([3])
+        assert out.z is data.z
+
         sub = TensorDict(a=torch.zeros(3), batch_size=[3])
         data = MyDataShared(X=torch.zeros(3), z=sub, batch_size=[3])
         out = copy.replace(data, names=["q"])

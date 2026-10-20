@@ -3269,14 +3269,15 @@ def _replace(self, /, **changes: Any) -> Any:
         has_names = names is not None and any(name is not None for name in names)
     if not fits and not has_names:
         return result
-    # The setters change the sub-tensordicts in place: copy those that the
-    # copy shares with the caller or with self, as set() does
-    shared = {id(value) for value in changes.values()}
-    shared.update(id(value) for value in td.values())
-    result_dict = result_td._tensordict
-    for key, value in result_dict.items():
-        if id(value) in shared and _is_tensor_collection(type(value)):
-            result_dict[key] = value.clone(False)
+    if has_names:
+        # The names setter renames the sub-tensordicts in place: copy those
+        # that the copy shares with the caller or with self, as set() does
+        shared = {id(value) for value in changes.values()}
+        shared.update(id(value) for value in td.values())
+        result_dict = result_td._tensordict
+        for key, value in result_dict.items():
+            if id(value) in shared and _is_tensor_collection(type(value)):
+                result_dict[key] = value.clone(False)
     if fits:
         result_td.batch_size = batch_size
     if has_names:
