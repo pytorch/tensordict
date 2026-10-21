@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6307+g24ff0ed11.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6313+gac254115d.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6307+g24ff0ed11.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6313+gac254115d.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1721,6 +1721,11 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.softmax">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">softmax</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.14)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictBase.softmax" title="Link to this definition">#</a></dt>
 <dd><p>Returns a new tensordict with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.softmax.html#torch.softmax" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.softmax()</span></code></a> applied to every leaf along a batch dimension.</p>
+<p>A <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, also a nested one, gives
+a lazy stack with the values of its dense copy. The exception is a
+softmax along the stack dim of members whose entries have different
+shapes, which have no dense copy: each leaf of each member is
+normalised along its own dim <code class="docutils literal notranslate"><span class="pre">dim</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2101,7 +2106,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.softmax",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.softmax",
        "url": "/reference/generated/tensordict.TensorDictBase.softmax.html",
-       "articleBody": "TensorDictBase.softmax# TensorDictBase.softmax(dim: int, dtype: dtype | None = None)# Returns a new tensordict with torch.softmax() applied to every leaf along a batch dimension. Parameters: dim (int) \u2013 the batch dimension along which softmax is computed. A negative dim counts from the end of the batch dimensions. dtype (dtype, optional) \u2013 if given, each leaf is cast to this dtype before the operation, which helps to prevent overflows. Defaults to None. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.zeros(2, 3), batch_size=[2]) \u003e\u003e\u003e td.softmax(0)[\"x\"] tensor([[0.5000, 0.5000, 0.5000], [0.5000, 0.5000, 0.5000]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.softmax# TensorDictBase.softmax(dim: int, dtype: dtype | None = None)# Returns a new tensordict with torch.softmax() applied to every leaf along a batch dimension. A LazyStackedTensorDict, also a nested one, gives a lazy stack with the values of its dense copy. The exception is a softmax along the stack dim of members whose entries have different shapes, which have no dense copy: each leaf of each member is normalised along its own dim dim. Parameters: dim (int) \u2013 the batch dimension along which softmax is computed. A negative dim counts from the end of the batch dimensions. dtype (dtype, optional) \u2013 if given, each leaf is cast to this dtype before the operation, which helps to prevent overflows. Defaults to None. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(x=torch.zeros(2, 3), batch_size=[2]) \u003e\u003e\u003e td.softmax(0)[\"x\"] tensor([[0.5000, 0.5000, 0.5000], [0.5000, 0.5000, 0.5000]]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

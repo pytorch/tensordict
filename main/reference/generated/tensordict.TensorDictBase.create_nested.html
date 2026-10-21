@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6307+g24ff0ed11.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6313+gac254115d.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6307+g24ff0ed11.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6313+gac254115d.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1725,14 +1725,18 @@ document.write(`
 tensordict it is added to. An existing entry at <code class="docutils literal notranslate"><span class="pre">key</span></code> is replaced.
 For a tuple key, a plain <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> keeps a
 plain, unlocked <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> already on the path with its entries:
-<code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code> adds <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> to an existing <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;]</span></code>. A lazy stack of
-plain <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> instances does this in each member, and a
-tensorclass or a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> follows the
-rule of the tensordict it wraps. Any other entry on the path, such as a
+<code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code> adds <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> to an existing <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;]</span></code>. An indexed view
+of a plain <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> and a typed tensordict that wraps one do the
+same; the view keeps the entries in every row of the tensordict it
+indexes. A lazy stack of plain <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> instances, or of such
+stacks, does this in each member, and a tensorclass or a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> follows the rule of the
+tensordict it wraps. A <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> keeps
+the groups already on the path. Any other entry on the path, such as a
 tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
 tensordict, is replaced by a new empty tensordict, and so is every
 level of the path when the tensordict is of any other type, such as a
-view, a typed tensordict or a file.</p>
+lazy view or a store.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>key</strong> (<a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a>) – the key of the new tensordict.</p>
@@ -2114,7 +2118,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.create_nested",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.create_nested",
        "url": "/reference/generated/tensordict.TensorDictBase.create_nested.html",
-       "articleBody": "TensorDictBase.create_nested# TensorDictBase.create_nested(key)# Adds an empty nested tensordict at key, and returns self. The new tensordict has the batch size, device and names of the tensordict it is added to. An existing entry at key is replaced. For a tuple key, a plain TensorDict keeps a plain, unlocked TensorDict already on the path with its entries: (\"a\", \"b\") adds \"b\" to an existing td[\"a\"]. A lazy stack of plain TensorDict instances does this in each member, and a tensorclass or a TensorDictParams follows the rule of the tensordict it wraps. Any other entry on the path, such as a tensor, a lazy stack, a tensorclass, a typed tensordict or a locked tensordict, is replaced by a new empty tensordict, and so is every level of the path when the tensordict is of any other type, such as a view, a typed tensordict or a file. Parameters: key (NestedKey) \u2013 the key of the new tensordict. Raises: RuntimeError \u2013 if the tensordict is locked. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({}, [3, 4, 5]) \u003e\u003e\u003e _ = data.create_nested((\"some\", \"nested\", \"value\")) \u003e\u003e\u003e data[\"some\", \"nested\", \"value\"].batch_size torch.Size([3, 4, 5]) \u003e\u003e\u003e list(data.keys(include_nested=True)) [(\u0027some\u0027, \u0027nested\u0027, \u0027value\u0027), (\u0027some\u0027, \u0027nested\u0027), \u0027some\u0027] \u003e\u003e\u003e _ = data.create_nested((\"some\", \"other\")) \u003e\u003e\u003e list(data.keys(include_nested=True)) [(\u0027some\u0027, \u0027nested\u0027, \u0027value\u0027), (\u0027some\u0027, \u0027nested\u0027), (\u0027some\u0027, \u0027other\u0027), \u0027some\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.create_nested# TensorDictBase.create_nested(key)# Adds an empty nested tensordict at key, and returns self. The new tensordict has the batch size, device and names of the tensordict it is added to. An existing entry at key is replaced. For a tuple key, a plain TensorDict keeps a plain, unlocked TensorDict already on the path with its entries: (\"a\", \"b\") adds \"b\" to an existing td[\"a\"]. An indexed view of a plain TensorDict and a typed tensordict that wraps one do the same; the view keeps the entries in every row of the tensordict it indexes. A lazy stack of plain TensorDict instances, or of such stacks, does this in each member, and a tensorclass or a TensorDictParams follows the rule of the tensordict it wraps. A PersistentTensorDict keeps the groups already on the path. Any other entry on the path, such as a tensor, a lazy stack, a tensorclass, a typed tensordict or a locked tensordict, is replaced by a new empty tensordict, and so is every level of the path when the tensordict is of any other type, such as a lazy view or a store. Parameters: key (NestedKey) \u2013 the key of the new tensordict. Raises: RuntimeError \u2013 if the tensordict is locked. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({}, [3, 4, 5]) \u003e\u003e\u003e _ = data.create_nested((\"some\", \"nested\", \"value\")) \u003e\u003e\u003e data[\"some\", \"nested\", \"value\"].batch_size torch.Size([3, 4, 5]) \u003e\u003e\u003e list(data.keys(include_nested=True)) [(\u0027some\u0027, \u0027nested\u0027, \u0027value\u0027), (\u0027some\u0027, \u0027nested\u0027), \u0027some\u0027] \u003e\u003e\u003e _ = data.create_nested((\"some\", \"other\")) \u003e\u003e\u003e list(data.keys(include_nested=True)) [(\u0027some\u0027, \u0027nested\u0027, \u0027value\u0027), (\u0027some\u0027, \u0027nested\u0027), (\u0027some\u0027, \u0027other\u0027), \u0027some\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

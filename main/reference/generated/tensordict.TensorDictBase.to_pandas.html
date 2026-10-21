@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6307+g24ff0ed11.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6313+gac254115d.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6307+g24ff0ed11.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6313+gac254115d.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1725,6 +1725,12 @@ document.write(`
 <code class="docutils literal notranslate"><span class="pre">[num_rows]</span></code>, or non-tensor data. Tensors are copied to the CPU and
 converted to NumPy arrays. Non-tensor data becomes a column of Python
 values. Requires pandas.</p>
+<p>A nested tensorclass gives one column per leaf with a <code class="docutils literal notranslate"><span class="pre">separator</span></code>,
+as a nested tensordict does. Without a <code class="docutils literal notranslate"><span class="pre">separator</span></code>, where a nested
+tensordict raises, a nested tensorclass becomes one column of
+objects that holds the tensorclass of each row. It also stays one
+such column with a <code class="docutils literal notranslate"><span class="pre">separator</span></code> if it has no leaves, or a leaf of
+more than one dimension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>separator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – if given, joins the keys of nested
@@ -1751,6 +1757,20 @@ tensordicts. Defaults to <code class="docutils literal notranslate"><span class=
 <span class="go">0  0  0.0</span>
 <span class="go">1  1  0.0</span>
 <span class="go">2  2  0.0</span>
+</pre></div>
+</div>
+<p>A nested tensorclass without a <code class="docutils literal notranslate"><span class="pre">separator</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">Point</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">Point</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">df</span><span class="p">[</span><span class="s2">"p"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s2">"p"</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">df</span><span class="p">[</span><span class="s2">"p"</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">y</span>
+<span class="go">(dtype('O'), 'Point', tensor(1.))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">list</span><span class="p">(</span><span class="n">td</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">(</span><span class="n">separator</span><span class="o">=</span><span class="s2">"."</span><span class="p">)</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+<span class="go">['p.x', 'p.y']</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2113,7 +2133,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_pandas",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_pandas",
        "url": "/reference/generated/tensordict.TensorDictBase.to_pandas.html",
-       "articleBody": "TensorDictBase.to_pandas# TensorDictBase.to_pandas(*, separator: str | None = None)# Converts the tensordict to a pandas DataFrame, with one column per leaf. Each leaf must hold one value per row: a tensor of shape [num_rows], or non-tensor data. Tensors are copied to the CPU and converted to NumPy arrays. Non-tensor data becomes a column of Python values. Requires pandas. Keyword Arguments: separator (str, optional) \u2013 if given, joins the keys of nested entries with it to build the column names: with separator=\".\", the entry (\"obs\", \"x\") becomes the column \"obs.x\". Required when the tensordict has nested tensordicts. Defaults to None. Returns: A pd.DataFrame with one row per element of the tensordict. Raises: ValueError \u2013 if the tensordict has a nested tensordict and no separator, or if a tensor has more than one dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(3), \"b\": torch.zeros(3)}, [3]) \u003e\u003e\u003e df = td.to_pandas() \u003e\u003e\u003e print(df) a b 0 0 0.0 1 1 0.0 2 2 0.0 Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_pandas# TensorDictBase.to_pandas(*, separator: str | None = None)# Converts the tensordict to a pandas DataFrame, with one column per leaf. Each leaf must hold one value per row: a tensor of shape [num_rows], or non-tensor data. Tensors are copied to the CPU and converted to NumPy arrays. Non-tensor data becomes a column of Python values. Requires pandas. A nested tensorclass gives one column per leaf with a separator, as a nested tensordict does. Without a separator, where a nested tensordict raises, a nested tensorclass becomes one column of objects that holds the tensorclass of each row. It also stays one such column with a separator if it has no leaves, or a leaf of more than one dimension. Keyword Arguments: separator (str, optional) \u2013 if given, joins the keys of nested entries with it to build the column names: with separator=\".\", the entry (\"obs\", \"x\") becomes the column \"obs.x\". Required when the tensordict has nested tensordicts. Defaults to None. Returns: A pd.DataFrame with one row per element of the tensordict. Raises: ValueError \u2013 if the tensordict has a nested tensordict and no separator, or if a tensor has more than one dimension. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"a\": torch.arange(3), \"b\": torch.zeros(3)}, [3]) \u003e\u003e\u003e df = td.to_pandas() \u003e\u003e\u003e print(df) a b 0 0 0.0 1 1 0.0 2 2 0.0 A nested tensorclass without a separator: \u003e\u003e\u003e from tensordict import tensorclass \u003e\u003e\u003e @tensorclass ... class Point: ... x: torch.Tensor ... y: torch.Tensor \u003e\u003e\u003e td = TensorDict(p=Point(x=torch.zeros(3), y=torch.ones(3), batch_size=[3]), batch_size=[3]) \u003e\u003e\u003e df = td.to_pandas() \u003e\u003e\u003e df[\"p\"].dtype, type(df[\"p\"][0]).__name__, df[\"p\"][0].y (dtype(\u0027O\u0027), \u0027Point\u0027, tensor(1.)) \u003e\u003e\u003e list(td.to_pandas(separator=\".\").columns) [\u0027p.x\u0027, \u0027p.y\u0027] Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

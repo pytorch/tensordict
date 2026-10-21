@@ -19,6 +19,12 @@ the tensordict key by key. On a
 that starts with the batch shape up to the stack dimension is
 split along that dimension, one piece per member, so it must
 have the stack size there: expand it to the batch shape first.
+The pieces line up with the leaves as in
+[`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) only for the leaves with as
+many dims as `other`; for the others the lazy stack emits a
+[`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning): starting with TensorDict 0.17, the
+default will change to broadcasting like TensorDict.where,
+which aligns `other` with each leaf from the right.
 
 Keyword Arguments:
 

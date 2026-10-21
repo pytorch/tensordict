@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6307+g24ff0ed11.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6313+gac254115d.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6307+g24ff0ed11.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6313+gac254115d.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1725,6 +1725,14 @@ document.write(`
 <code class="docutils literal notranslate"><span class="pre">dest_cls</span></code>, each level is an instance of a new named tuple class,
 <code class="docutils literal notranslate"><span class="pre">GenericDict</span></code>, whose fields are the keys. The <code class="docutils literal notranslate"><span class="pre">None</span></code> fields of
 tensorclasses are dropped.</p>
+<p>On a tensorclass, the top level is a plain <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>, also with
+<code class="docutils literal notranslate"><span class="pre">dest_cls</span></code>: it holds the values of <code class="docutils literal notranslate"><span class="pre">to_dict(retain_none=False)</span></code>,
+in the same order, without the field names. The nested tensordicts
+and tensorclasses in it are still named tuples. A plain tuple of
+tensors can be pickled and loaded with
+<code class="docutils literal notranslate"><span class="pre">torch.load(weights_only=True)</span></code>, while a <code class="docutils literal notranslate"><span class="pre">GenericDict</span></code> cannot be
+pickled, since its class is made at each call. To keep the field
+names, call <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code>, or <code class="docutils literal notranslate"><span class="pre">to_tensordict().to_namedtuple()</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>dest_cls</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em>, </em><em>optional</em>) – the named tuple class of the result. A
@@ -1746,6 +1754,16 @@ converts back.</p>
 <span class="gp">... </span>    <span class="s2">"nested"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"a_tensor"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">)),</span> <span class="s2">"a_string"</span><span class="p">:</span> <span class="s2">"zero!"</span><span class="p">}},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">to_namedtuple</span><span class="p">()</span>
 <span class="go">GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))</span>
+</pre></div>
+</div>
+<p>On a tensorclass, the top level is a plain tuple:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">tensorclass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span><span class="w"> </span><span class="nc">Data</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">a_tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">a_string</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Data</span><span class="p">(</span><span class="n">a_tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">a_string</span><span class="o">=</span><span class="s2">"zero!"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_namedtuple</span><span class="p">()</span>
+<span class="go">(tensor([0., 0., 0.]), 'zero!')</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2108,7 +2126,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.to_namedtuple",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.to_namedtuple",
        "url": "/reference/generated/tensordict.TensorDictBase.to_namedtuple.html",
-       "articleBody": "TensorDictBase.to_namedtuple# TensorDictBase.to_namedtuple(dest_cls: type | None = None) \u2192 Any# Converts the tensordict to a named tuple, recursively. Each nested tensordict becomes a nested named tuple. Without dest_cls, each level is an instance of a new named tuple class, GenericDict, whose fields are the keys. The None fields of tensorclasses are dropped. Parameters: dest_cls (type, optional) \u2013 the named tuple class of the result. A nested tensordict is converted to dest_cls too if dest_cls takes its keys, and to a GenericDict otherwise. Defaults to None. See also from_namedtuple(), which converts back. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e data = TensorDict({ ... \"a_tensor\": torch.zeros((3)), ... \"nested\": {\"a_tensor\": torch.zeros((3)), \"a_string\": \"zero!\"}}, [3]) \u003e\u003e\u003e data.to_namedtuple() GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string=\u0027zero!\u0027)) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.to_namedtuple# TensorDictBase.to_namedtuple(dest_cls: type | None = None) \u2192 Any# Converts the tensordict to a named tuple, recursively. Each nested tensordict becomes a nested named tuple. Without dest_cls, each level is an instance of a new named tuple class, GenericDict, whose fields are the keys. The None fields of tensorclasses are dropped. On a tensorclass, the top level is a plain tuple, also with dest_cls: it holds the values of to_dict(retain_none=False), in the same order, without the field names. The nested tensordicts and tensorclasses in it are still named tuples. A plain tuple of tensors can be pickled and loaded with torch.load(weights_only=True), while a GenericDict cannot be pickled, since its class is made at each call. To keep the field names, call to_dict(), or to_tensordict().to_namedtuple(). Parameters: dest_cls (type, optional) \u2013 the named tuple class of the result. A nested tensordict is converted to dest_cls too if dest_cls takes its keys, and to a GenericDict otherwise. Defaults to None. See also from_namedtuple(), which converts back. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e import torch \u003e\u003e\u003e data = TensorDict({ ... \"a_tensor\": torch.zeros((3)), ... \"nested\": {\"a_tensor\": torch.zeros((3)), \"a_string\": \"zero!\"}}, [3]) \u003e\u003e\u003e data.to_namedtuple() GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string=\u0027zero!\u0027)) On a tensorclass, the top level is a plain tuple: \u003e\u003e\u003e from tensordict import tensorclass \u003e\u003e\u003e @tensorclass ... class Data: ... a_tensor: torch.Tensor ... a_string: str \u003e\u003e\u003e Data(a_tensor=torch.zeros(3), a_string=\"zero!\", batch_size=[3]).to_namedtuple() (tensor([0., 0., 0.]), \u0027zero!\u0027) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

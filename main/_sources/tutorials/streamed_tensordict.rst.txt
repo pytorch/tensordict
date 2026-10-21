@@ -166,7 +166,7 @@ holds tensors of different lengths in one tensor. With
 
  .. code-block:: none
 
-    TensorDict(batch_size=[2], fields={stream0: f32[j1], stream1: f32[j2]})
+    TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
     lengths of stream0: tensor([5, 4])
 
 
@@ -442,7 +442,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.357 seconds)
+   **Total running time of the script:** (0 minutes 6.354 seconds)
 
 
 .. _sphx_glr_download_tutorials_streamed_tensordict.py:

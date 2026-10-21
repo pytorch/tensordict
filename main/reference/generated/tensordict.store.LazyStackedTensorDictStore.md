@@ -38,6 +38,14 @@ through it, for example `store["nested"].set_(...)` or
 Write with the full key, `store.set(("nested", "b"), ...)`, or with
 [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update).
 
+`store[i]` is a view of element `i` that reads and writes on the
+server. On a locked store, the view follows the lock of the store: it
+writes the keys that the store has, with or without `inplace`, and a
+write of a new key raises the lock error. Unlike `stack[i]` of a locked
+lazy stack, the view itself is not locked: its `is_locked` is
+`False`, and the results of operations on it, such as `store[i] + 1`
+or `store[i].to("cpu")`, are unlocked tensordicts.
+
 Each leaf key is one string on the server for the whole stack, with a
 table of offsets when the shapes of the elements differ, so the number of
 keys on the server does not grow with the number of elements.
@@ -96,6 +104,15 @@ The example needs a Redis server on `localhost:6379`.
 >>> store[1] = TensorDict(x=torch.ones(5)) 
 >>> store[1]["x"] 
 tensor([1., 1., 1., 1., 1.])
+>>> store.is_locked = True 
+>>> store.is_locked, store[1].is_locked 
+(True, False)
+>>> store[1]["x"] = torch.zeros(5) 
+>>> store[1]["y"] = torch.zeros(5) 
+Traceback (most recent call last):
+...
+RuntimeError: Cannot modify locked TensorDict. ...
+>>> store.is_locked = False 
 >>> store.clear_redis() 
 >>> store.close()
 ```

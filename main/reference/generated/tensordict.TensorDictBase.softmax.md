@@ -4,6 +4,12 @@ TensorDictBase.softmax(*dim: [int](https://docs.python.org/3/builtins/functions.
 
 Returns a new tensordict with [`torch.softmax()`](https://docs.pytorch.org/docs/stable/generated/torch.softmax.html#torch.softmax) applied to every leaf along a batch dimension.
 
+A [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), also a nested one, gives
+a lazy stack with the values of its dense copy. The exception is a
+softmax along the stack dim of members whose entries have different
+shapes, which have no dense copy: each leaf of each member is
+normalised along its own dim `dim`.
+
 Parameters:
 
 - **dim** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the batch dimension along which softmax is computed. A
