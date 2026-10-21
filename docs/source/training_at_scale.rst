@@ -386,8 +386,11 @@ depends on how many messages they send:
        pickled, and one tensor collective sends the storage. ``all_gather``
        pads each storage to the size of the largest one.
    * - :meth:`~tensordict.TensorDictBase.gather_and_stack`
-     - One :func:`torch.distributed.gather_object`, which pickles each whole
-       tensordict.
+     - With ``gloo``, two collectives: one for the sizes, then one
+       :func:`torch.distributed.gather` of each consolidated storage and its
+       pickled metadata. With other
+       backends, one :func:`torch.distributed.gather_object`, which pickles
+       each whole tensordict.
    * - :meth:`~tensordict.TensorDictBase.send`,
        :meth:`~tensordict.TensorDictBase.recv`
      - One message for each leaf. With ``consolidated=True``, one message.
