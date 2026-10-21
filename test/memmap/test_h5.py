@@ -529,6 +529,42 @@ class TestH5Serialization:
         assert set(h5td["a"].keys()) == {"x", "b"}
         h5td.close()
 
+    @pytest.mark.parametrize("op", ["del_", "pop", "create_nested", "rename_key_"])
+    @pytest.mark.parametrize("source", ["file", "pickle", "clone"])
+    def test_replace_group_through_child(self, tmp_path, op, source):
+        # a group that a child deletes or replaces is not served from the
+        # cache of the tensordicts above it (#3181)
+        e = TensorDict(f=torch.zeros(3, 4), batch_size=[3, 4])
+        td = TensorDict(
+            n=TensorDict(d=TensorDict(e=e, batch_size=[3]), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        if source == "pickle":
+            h5td = pickle.loads(pickle.dumps(h5td))
+        elif source == "clone":
+            h5td = h5td.clone(False)
+        # the root and its child cache their own copies of the group
+        assert set(h5td["n", "d", "e"].keys()) == {"f"}
+        assert set(h5td["n"]["d", "e"].keys()) == {"f"}
+        child = h5td["n"]["d"]
+        new = TensorDict(g=torch.ones(3), batch_size=[3])
+        if op == "del_":
+            child.del_("e")
+            child.set("e", new)
+        elif op == "pop":
+            child.pop("e")
+            child.set("e", new)
+        elif op == "create_nested":
+            child.create_nested("e")
+            child.set(("e", "g"), torch.ones(3))
+        else:
+            child.set("h", new)
+            child.rename_key_("h", "e", safe=False)
+        for sub in (h5td["n", "d", "e"], h5td["n"]["d", "e"], child["e"]):
+            assert set(sub.keys()) == {"g"}
+        h5td.close()
+
     def test_device_setter(self, tmp_path):
         # as on a TensorDict, the device changes only through to()
         td = TensorDict({"a": torch.zeros(3)}, [3])
