@@ -6209,7 +6209,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             elif clone:
                 value = tree_map(torch.clone, value)
             elif (
-                value is self
+                (
+                    value is self
+                    # a tensorclass holding self, as tensorclass.update passes;
+                    # if locked, it raises its lock error below, as before
+                    or (
+                        type(value) is not Tensor
+                        and _is_tensorclass(type(value))
+                        and value._tensordict is self
+                        and not self.is_locked
+                    )
+                )
                 and not self._update_stores_copy_of_self
                 and (keys_to_update is None or target is None)
             ):

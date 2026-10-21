@@ -68,6 +68,7 @@ from tensordict.base import (
     _key_through_leaf_error,
     _register_tensor_class,
     _rename_keys_pairs,
+    _SELF_NESTING_ERROR,
     _TENSORDICTBASE_MIXINS,
     _UNSET,
     _update_at_aliases,
@@ -3834,6 +3835,8 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             if non_tensordict and key in non_tensordict:
                 del non_tensordict[key]
         return
+    if value is self and not self._tensordict.is_locked:
+        raise ValueError(_SELF_NESTING_ERROR.format(key))
     # _convert_mapping_for_field, inlined
     if key in type(self)._tensordict_fields and isinstance(value, Mapping):
         value = _normalize_nested_mapping(value)
@@ -5131,6 +5134,7 @@ def _set(
         AttributeError: if ``key`` is not a field of the class.
         RuntimeError: if the tensorclass is locked, also with
             ``inplace=True``.
+        ValueError: if ``value`` is the tensorclass itself.
 
     Examples:
         >>> import torch
@@ -5150,6 +5154,8 @@ def _set(
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
+        if value is self:
+            raise ValueError(_SELF_NESTING_ERROR.format(key))
         # if key in ("batch_size", "names", "device"):
         #     # handled by setattr
         #     return
