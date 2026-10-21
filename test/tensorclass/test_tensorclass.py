@@ -1796,6 +1796,29 @@ class TestTensorClass:
         assert result.z == "a string!"
         assert result.is_consolidated()
         torch.testing.assert_close(result.X, data.X)
+        torch.testing.assert_close(result.y, torch.ones((2, 3)) * 2)
+        assert future.result() is result
+
+    def test_consolidate_return_early_post_init_after_writes(self):
+        # The tensorclass is built when result() is called, after the writes,
+        # so that __post_init__ sees the data
+        calls = []
+
+        @tensorclass
+        class CheckedData:
+            x: torch.Tensor
+
+            def __post_init__(self):
+                calls.append(self.x.clone())
+
+        data = CheckedData(x=torch.ones(3), batch_size=[3])
+        calls.clear()
+        future = data.consolidate(num_threads=2, return_early=True)
+        assert calls == []
+        result = future.result()
+        assert isinstance(result, CheckedData)
+        assert len(calls) == 1
+        torch.testing.assert_close(calls[0], torch.ones(3))
 
     def test_consolidate_nested_post_init(self):
         # consolidate must not run __post_init__ on an empty tensorclass while
