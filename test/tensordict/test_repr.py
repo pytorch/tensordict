@@ -950,11 +950,6 @@ class TestCompactRepr:
             expected = repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))
         assert (repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))) == expected
 
-    @pytest.mark.xfail(
-        reason="the compact repr reads the leaves of a nested store until #3106 "
-        "(the HTML-repr PR) merges",
-        strict=False,
-    )
     def test_compact_default_reads_no_nested_store_leaf(self):
         # A nested TensorDictStore has its own _repr_parts and reads its
         # leaves from a server: the default repr must not fetch them.
