@@ -1422,8 +1422,31 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
     # tensorclasses, as tensordict.collate: a batch that a dataset read in one
     # index operation (__getitems__) is returned as is; a list of samples is
     # stacked densely if their keys and shapes match, lazily otherwise.
-    if is_tensor_collection(batch):
+    is_batch = is_tensor_collection(batch)
+    if collate_fn_map is not None:
+        # torch takes the first key of the map that matches the element, and
+        # tensordict's two keys come before any key registered later for a
+        # base class, such as TensorDictBase or a tensorclass base: hand the
+        # batch to such an entry, found as torch finds one. A batch read in
+        # one index operation stands for its element, which is not indexed
+        # again.
+        elem = batch if is_batch else batch[0]
+        collate_fn = collate_fn_map.get(type(elem))
+        if collate_fn is None:
+            for key, fn in collate_fn_map.items():
+                if fn is not _collate_tensor_collection and isinstance(elem, key):
+                    collate_fn = fn
+                    break
+        if collate_fn is not None and collate_fn is not _collate_tensor_collection:
+            return collate_fn(batch, collate_fn_map=collate_fn_map)
+    if is_batch:
         return batch
+    types = {type(item) for item in batch}
+    if len({_is_tensorclass(cls) for cls in types if is_tensor_collection(cls)}) > 1:
+        raise TypeError(
+            "Cannot collate a batch that mixes tensorclass instances with "
+            f"tensordicts: got {sorted(cls.__name__ for cls in types)}."
+        )
     return LazyStackedTensorDict.maybe_dense_stack(batch)
 
 

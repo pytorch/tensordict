@@ -9292,6 +9292,41 @@ class TestGeneric:
             )
             assert load([cls(x=torch.zeros(3)) for _ in range(4)]) == "mine"
 
+    def test_collate_default_base_registration(self, monkeypatch):
+        # #3236: a collate function registered after tensordict's entries, for
+        # TensorDictBase, TensorClass or a tensorclass base, wins.
+        class Base(TensorClass):
+            x: torch.Tensor
+
+        class Sub(Base):
+            pass
+
+        def mine(batch, *, collate_fn_map=None):
+            return "mine"
+
+        default_collate = torch.utils.data.default_collate
+        default_collate_fn_map = torch.utils.data._utils.collate.default_collate_fn_map
+        td = TensorDict(a=torch.zeros(3))
+        sub = Sub(x=torch.zeros(3))
+        lazy = lazy_stack([td, td])
+        batched = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        for key, samples, other in (
+            (TensorDictBase, [td, td], [sub, sub]),
+            (TensorDictBase, [lazy, lazy], [sub, sub]),
+            (TensorDictBase, batched, [sub, sub]),
+            (TensorClass, [sub, sub], [td, td]),
+            (Base, [sub, sub], [td, td]),
+        ):
+            with monkeypatch.context() as m:
+                m.setitem(default_collate_fn_map, key, mine)
+                assert default_collate(samples) == "mine"
+                assert default_collate(other) != "mine"
+        assert type(default_collate([sub, sub])) is Sub
+        # a batch that mixes tensordicts and tensorclasses raises a TypeError
+        for samples in ([td, sub], [sub, td]):
+            with pytest.raises(TypeError, match="mixes tensorclass"):
+                default_collate(samples)
+
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
         # the collate function that another library registered first.
