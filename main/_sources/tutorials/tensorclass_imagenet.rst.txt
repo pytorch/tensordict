@@ -525,8 +525,8 @@ first batches include the start of the worker processes.
 
  .. code-block:: none
 
-    train, regular DataLoader: 986 images per second, 0.22 s
-    train, tensorclass DataLoader: 2668 images per second, 0.08 s
+    train, regular DataLoader: 937 images per second, 0.23 s
+    train, tensorclass DataLoader: 2341 images per second, 0.09 s
 
 
 
@@ -557,8 +557,8 @@ loader only normalizes each batch.
 
  .. code-block:: none
 
-    val, regular DataLoader: 597 images per second, 0.22 s
-    val, tensorclass DataLoader: 19939 images per second, 0.01 s
+    val, regular DataLoader: 577 images per second, 0.22 s
+    val, tensorclass DataLoader: 13048 images per second, 0.01 s
 
 
 
@@ -621,7 +621,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.484 seconds)
+   **Total running time of the script:** (0 minutes 1.544 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensorclass_imagenet.py:
