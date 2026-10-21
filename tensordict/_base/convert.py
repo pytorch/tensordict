@@ -876,13 +876,7 @@ class _Conversion:
             ...     _ = data.to_h5(path)
             ...     td = TensorDict.from_h5(path)
             ...     print(td)
-            PersistentTensorDict(
-                fields={
-                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+            PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
         """
         from tensordict.persistent import PersistentTensorDict
 
@@ -978,13 +972,7 @@ class _Conversion:
             ...     _ = data.to_zarr(path)
             ...     td = TensorDict.from_zarr(path)
             ...     print(td)
-            PersistentTensorDict(
-                fields={
-                    key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+            PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
         """
         from tensordict.persistent import PersistentTensorDict
 
@@ -1220,13 +1208,7 @@ class _Conversion:
             ... )
             >>> params = TensorDict.from_module(module)
             >>> print(params["layers", "0", "linear1"])
-            TensorDict(
-                fields={
-                    bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False),
-                    weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)
+            TensorDict(batch_size=[], fields={bias: f32[2048], weight: f32[2048,4]})
 
         """
         from tensordict import TensorDict
@@ -2917,13 +2899,7 @@ class _Conversion:
             >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
             >>> td = TensorDict.from_pandas(df)
             >>> print(td)
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
-                    b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
+            TensorDict(batch_size=[3], fields={a: i64[], b: f64[]})
         """
         from tensordict.base import TensorDictBase
 

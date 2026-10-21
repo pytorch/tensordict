@@ -9,15 +9,20 @@ import collections
 import ctypes
 import faulthandler
 import importlib.util
+import io
 import math
 import operator
 import os
 import pickle
 import platform
+import re
 import sys
 import threading
 import warnings
+import weakref
 from dataclasses import dataclass
+from multiprocessing.managers import BaseProxy
+from multiprocessing.sharedctypes import SynchronizedBase
 
 import numpy as np
 import pytest
@@ -3517,6 +3522,254 @@ class TestNonTensorData:
         assert self._advanced_index_stack("metadata")._getitem_copies([0]) is None
         with _set_capture_non_tensor_stack(True):
             assert stack._getitem_copies([0]) is None
+
+    # The fast paths of flat stacks build the objects that the general paths
+    # build, with the same shared objects and the same pickles.
+    _FLAT_VALUES = {
+        "str": ["a", "b", "c", "a"],
+        "bytes": [b"a", b"b", b"c", b"a"],
+        "int": [1, 2, 3, 1],
+        "float": [1.0, 2.5, -0.5, 1.0],
+        "bool": [True, False, True, True],
+        "none": [None, None, None, None],
+        "mixed": ["a", 1, None, b"x"],
+        # values of other types take the general paths
+        "object": [[1], {"a": 1}, (2,), "s"],
+        "last_object": ["a", "b", "c", (1,)],
+    }
+
+    @classmethod
+    def _flat_structure(cls, obj, seen=None):
+        # the types and the instance attributes, recursively, with each
+        # object that appears again marked by its first position
+        if seen is None:
+            seen = {}
+        if type(obj) in (str, bytes, int, float, bool, type(None), torch.device):
+            return obj
+        if id(obj) in seen:
+            return ("seen", seen[id(obj)])
+        seen[id(obj)] = len(seen)
+        if isinstance(obj, torch.Tensor):
+            return (type(obj), obj.dtype, obj.tolist())
+        if isinstance(obj, torch.Size):
+            return (torch.Size, tuple(obj))
+        if isinstance(obj, weakref.ref):
+            return weakref.ref
+        if isinstance(obj, SynchronizedBase):
+            return (type(obj), obj.value)
+        if isinstance(obj, BaseProxy):
+            return (type(obj), obj._getvalue())
+        if isinstance(obj, dict):
+            items = obj.items()
+        elif isinstance(obj, (list, tuple)):
+            items = enumerate(obj)
+        elif hasattr(obj, "__dict__"):
+            items = vars(obj).items()
+        else:
+            return (type(obj), re.sub(" at 0x[0-9a-f]+", "", repr(obj)))
+        return (type(obj), [(k, cls._flat_structure(v, seen)) for k, v in items])
+
+    class _Pickler(pickle.Pickler):
+        # tensors and shared values pickle differently each time: write their
+        # values instead
+        def persistent_id(self, obj):
+            if isinstance(obj, torch.Tensor):
+                return type(obj).__name__, str(obj.dtype), obj.tolist()
+            if isinstance(obj, BaseProxy):
+                return type(obj).__name__, obj._getvalue()
+            return None
+
+    @classmethod
+    def _pickle_bytes(cls, obj):
+        def dumps(obj):
+            buffer = io.BytesIO()
+            cls._Pickler(buffer).dump(obj)
+            return buffer.getvalue()
+
+        try:
+            # the pickle, and the pickle after a round trip
+            return dumps(obj), dumps(pickle.loads(pickle.dumps(obj)))
+        except Exception as err:
+            return type(err), str(err)
+
+    def _check_general_path(self, fn, monkeypatch, round_trip=True):
+        def call():
+            try:
+                return fn()
+            except Exception as err:
+                return type(err), str(err)
+
+        fast = call()
+        fast_structure = self._flat_structure(fast)
+        fast_pickle = self._pickle_bytes(fast)
+        tc = sys.modules["tensordict.tensorclass"]
+        with monkeypatch.context() as m:
+            for name in ("_flat_members", "_flat_copies", "_flat_values"):
+                m.setattr(tc, name, lambda *args: [])
+            m.setattr(tc, "_FLAT_SCALAR_TYPES", frozenset())
+            general = call()
+            assert self._flat_structure(general) == fast_structure
+            assert self._pickle_bytes(general) == fast_pickle
+        if round_trip and type(fast_pickle[0]) is bytes:
+            # unpickling rebuilds the objects that were pickled
+            assert fast_pickle[1] == fast_pickle[0]
+
+    @pytest.mark.parametrize("values", list(_FLAT_VALUES))
+    @pytest.mark.parametrize(
+        "build",
+        [
+            "init",
+            "init_data",
+            "init_device",
+            "init_kwargs",
+            "from_list",
+            "from_list_data",
+            "from_list_nested",
+            "_from_list",
+            "_from_list_device",
+            "list_to_stack",
+            "setitem",
+        ],
+    )
+    def test_flat_stack_build_fast_path(self, values, build, monkeypatch):
+        values = self._FLAT_VALUES[values]
+
+        def fn():
+            if build == "init":
+                return NonTensorStack(*values)
+            if build == "init_data":
+                return NonTensorStack(*[NonTensorData(v) for v in values])
+            if build == "init_device":
+                return NonTensorStack(*[NonTensorData(v, device="cpu") for v in values])
+            if build == "init_kwargs":
+                return NonTensorStack(*values, stack_dim=0, stack_dim_name="n")
+            if build == "from_list":
+                return NonTensorStack.from_list(values)
+            if build == "from_list_data":
+                return NonTensorStack.from_list([NonTensorData(v) for v in values])
+            if build == "from_list_nested":
+                return NonTensorStack.from_list([values, values[::-1]])
+            if build == "_from_list":
+                return NonTensorStack._from_list(values, device=None)
+            if build == "_from_list_device":
+                return NonTensorStack._from_list(values, device=torch.device("cpu"))
+            with set_list_to_stack(True):
+                if build == "list_to_stack":
+                    return TensorDict({"s": values}, batch_size=[4])
+                td = TensorDict(batch_size=[4])
+                td["s"] = values
+                return td
+
+        self._check_general_path(fn, monkeypatch)
+
+    @pytest.mark.parametrize("values", ["str", "mixed", "object", "last_object"])
+    @pytest.mark.parametrize(
+        "source",
+        ["plain", "device", "locked", "shared", "memmap", "named", "nested"],
+    )
+    @pytest.mark.parametrize(
+        "op",
+        [
+            "index",
+            "index_list",
+            "td_index",
+            "slice",
+            "cat",
+            "td_cat",
+            "repeat_interleave",
+            "td_repeat_interleave",
+            "tolist",
+            "td_key",
+        ],
+    )
+    def test_flat_stack_op_fast_path(self, values, source, op, monkeypatch, tmp_path):
+        values = self._FLAT_VALUES[values]
+
+        def fn():
+            if source == "device":
+                stack = NonTensorStack(
+                    *[NonTensorData(v, device="cpu") for v in values]
+                )
+            elif source == "nested":
+                stack = NonTensorStack.from_list([values, values[::-1]])
+            else:
+                stack = NonTensorStack(*values)
+            td = TensorDict({"s": stack}, batch_size=stack.batch_size[:1])
+            if source == "locked":
+                td.lock_()
+            elif source == "shared":
+                td.share_memory_()
+            elif source == "memmap":
+                td.memmap_(tmp_path)
+            elif source == "named":
+                td.names = ["n"]
+            stack = td.get("s")
+            if op == "index":
+                return stack[torch.tensor([1, 0, 0])]
+            if op == "index_list":
+                return stack[[1, 0]]
+            if op == "td_index":
+                return td[torch.tensor([1, 0, 0])]
+            if op == "slice":
+                return stack[1:]
+            if op == "cat":
+                return torch.cat([stack, stack])
+            if op == "td_cat":
+                return torch.cat([td, td])
+            if op == "repeat_interleave":
+                return stack.repeat_interleave(2, dim=0)
+            if op == "td_repeat_interleave":
+                return td.repeat_interleave(torch.tensor([1, 0, 2, 1][: td.shape[0]]))
+            if op == "tolist":
+                return stack.tolist()
+            return type(td["s"]), list(td["s"])
+
+        # (the memory-mapped members do not pickle back to the same bytes)
+        self._check_general_path(fn, monkeypatch, round_trip=source != "memmap")
+
+    def test_flat_stack_fast_path_taken(self):
+        tc = sys.modules["tensordict.tensorclass"]
+        values = self._FLAT_VALUES["mixed"]
+        stack = NonTensorStack(*values)
+        assert len(tc._flat_members(values)) == 4
+        assert tc._flat_members(stack.tensordicts) == stack.tensordicts
+        assert len(tc._flat_copies(stack.tensordicts)) == 4
+        assert tc._flat_values(stack) == values
+        # they stop at a subclass, another value or another device, and the
+        # general path takes the rest
+        assert len(tc._flat_members(["a", MetaData("b"), "c"])) == 1
+        assert len(tc._flat_members(["a", np.str_("b")])) == 1
+        assert len(tc._flat_members(["a", NonTensorData("b", device="cpu")])) == 1
+        assert len(tc._flat_copies(NonTensorStack("a", [1], "b").tensordicts)) == 1
+        assert tc._flat_values(NonTensorStack(MetaData("a"), MetaData("b"))) == []
+        stack = NonTensorStack("a", MetaData("b"), "c")
+        assert stack.tolist() == ["a", "b", "c"]
+        assert stack[[2, 0]].tolist() == ["c", "a"]
+
+        class Stack(NonTensorStack):
+            pass
+
+        assert tc._flat_values(Stack("a", "b")) == []
+        assert type(Stack("a", "b").tensordicts[0]) is NonTensorData
+
+    def test_flat_stack_fast_path_shares_entries(self):
+        # cat, slices and repeat_interleave share the entries of the source,
+        # an advanced index copies them
+        stack = NonTensorStack("a", "b", "c")
+        cat = torch.cat([stack, stack])
+        cat[0] = "x"
+        assert stack.tolist() == ["x", "b", "c"]
+        assert cat.tolist() == ["x", "b", "c", "x", "b", "c"]
+        stack[1:][0] = "y"
+        assert stack.tolist() == ["x", "y", "c"]
+        repeated = stack.repeat_interleave(2)
+        assert (
+            repeated.tensordicts[0] is repeated.tensordicts[1] is stack.tensordicts[0]
+        )
+        copy = stack[torch.tensor([2, 2])]
+        copy[0] = "z"
+        assert copy.tolist() == ["z", "c"]
+        assert stack.tolist() == ["x", "y", "c"]
 
     def test_tensorclass_nontensor_field_gather_then_assign(self):
         @tensorclass

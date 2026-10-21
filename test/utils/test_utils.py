@@ -1267,29 +1267,45 @@ def test_parse_tensor_dict_string_device_index(device):
     assert set(out.keys()) == {"a"}
 
 
-@pytest.mark.parametrize("kind", ["plain", "non_tensor", "nested_non_tensor", "lazy"])
-def test_parse_tensor_dict_string_unparsable_field(kind):
-    if kind == "plain":
-        with set_printoptions(plain=True):
-            text = repr(TensorDict(a=torch.zeros(2, 3), batch_size=[2]))
-    elif kind == "non_tensor":
-        text = repr(TensorDict(a=torch.zeros(2), s="hello", batch_size=[2]))
-    elif kind == "nested_non_tensor":
-        text = repr(TensorDict(a=torch.zeros(2), b=TensorDict(s="hello")))
-    else:
-        lazy = lazy_stack(
-            [
-                TensorDict(a=torch.zeros(2), b=torch.zeros(())),
-                TensorDict(a=torch.zeros(2)),
-            ]
-        )
-        text = repr(TensorDict(x=lazy, batch_size=[2]))
+@pytest.mark.parametrize("compact", [True, False])
+@pytest.mark.parametrize(
+    "kind", ["plain", "non_tensor", "nested_non_tensor", "lazy", "ragged", "no_dtype"]
+)
+def test_parse_tensor_dict_string_unparsable_field(kind, compact):
+    if compact and kind == "plain":
+        pytest.skip("the compact repr ignores plain")
+    if not compact and kind in ("ragged", "no_dtype"):
+        pytest.skip("only the compact repr is checked")
+    with set_printoptions(compact=compact):
+        if kind == "plain":
+            with set_printoptions(plain=True):
+                text = repr(TensorDict(a=torch.zeros(2, 3), batch_size=[2]))
+        elif kind == "non_tensor":
+            text = repr(TensorDict(a=torch.zeros(2), s="hello", batch_size=[2]))
+        elif kind == "nested_non_tensor":
+            text = repr(TensorDict(a=torch.zeros(2), b=TensorDict(s="hello")))
+        elif kind == "lazy":
+            lazy = lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(2), b=torch.zeros(())),
+                    TensorDict(a=torch.zeros(2)),
+                ]
+            )
+            text = repr(TensorDict(x=lazy, batch_size=[2]))
+        elif kind == "ragged":
+            text = repr(
+                lazy_stack([TensorDict(a=torch.zeros(2)), TensorDict(a=torch.zeros(3))])
+            )
+        else:
+            with set_printoptions(show_dtype=False):
+                text = repr(TensorDict(a=torch.zeros(2)))
     with pytest.raises(ValueError, match="Cannot parse the field"):
         parse_tensor_dict_string(text)
 
 
+@pytest.mark.parametrize("compact", [True, False])
 @pytest.mark.parametrize("exclusive", ["tensor", "nested", "same_shape"])
-def test_parse_tensor_dict_string_lazy_exclusive_keys(exclusive):
+def test_parse_tensor_dict_string_lazy_exclusive_keys(exclusive, compact):
     # The exclusive keys must not be read as fields of the whole stack, even when
     # their shape fits its batch size ("same_shape")
     if exclusive == "tensor":
@@ -1299,13 +1315,107 @@ def test_parse_tensor_dict_string_lazy_exclusive_keys(exclusive):
     else:
         td0 = TensorDict(a=torch.zeros(2), b=torch.zeros(2))
     lazy = lazy_stack([td0, TensorDict(a=torch.zeros(2))])
+    with set_printoptions(compact=compact):
+        text = repr(lazy)
     with pytest.raises(ValueError, match="exclusive_fields of a lazy stack"):
-        parse_tensor_dict_string(repr(lazy))
+        parse_tensor_dict_string(text)
     # Without exclusive keys, the repr of a lazy stack still parses
     lazy = lazy_stack([TensorDict(a=torch.zeros(2)), TensorDict(a=torch.zeros(2))])
-    out = parse_tensor_dict_string(repr(lazy))
+    with set_printoptions(compact=compact):
+        text = repr(lazy)
+    out = parse_tensor_dict_string(text)
     assert set(out.keys()) == {"a"}
     assert out.batch_size == torch.Size([2])
+
+
+@tensorclass
+class _ParsedMesh:
+    points: torch.Tensor
+    cells: torch.Tensor
+    data: TensorDict
+
+
+def _parse_inputs():
+    flat = TensorDict(
+        obs=torch.zeros(3, 4),
+        done=torch.zeros(3, 1, dtype=torch.bool),
+        step=torch.zeros(3, dtype=torch.int64),
+        half=torch.zeros(3, 2, dtype=torch.bfloat16),
+        batch_size=[3],
+    )
+    nested = TensorDict(
+        a=torch.zeros(3, 2),
+        sub=TensorDict(
+            b=torch.zeros(3, 5, 2, dtype=torch.float64),
+            deeper=TensorDict(c=torch.zeros(3, 5, dtype=torch.uint8)),
+            batch_size=[3, 5],
+        ),
+        empty=TensorDict(batch_size=[3]),
+        batch_size=[3],
+        device="cpu",
+    )
+    lazy = lazy_stack(
+        [TensorDict(a=torch.zeros(4), b=torch.zeros((), dtype=torch.int32))] * 2
+    )
+    mesh = _ParsedMesh(
+        points=torch.zeros(5, 3),
+        cells=torch.zeros(5, 4, dtype=torch.long),
+        data=TensorDict(pressure=torch.zeros(5, 2), batch_size=[5]),
+        batch_size=[5],
+    )
+    return {"flat": flat, "nested": nested, "lazy": lazy, "tensorclass": mesh}
+
+
+@pytest.mark.parametrize("compact", [True, False])
+@pytest.mark.parametrize("kind", ["flat", "nested", "lazy", "tensorclass"])
+def test_parse_tensor_dict_string_round_trip(kind, compact):
+    # Logs hold both formats: the compact default and compact=False
+    td = _parse_inputs()[kind]
+    with set_printoptions(compact=compact):
+        out = parse_tensor_dict_string(repr(td))
+    assert type(out) is TensorDict
+    assert out.batch_size == td.batch_size
+    assert out.device == td.device
+    keys = list(td.keys(True, True))
+    assert sorted(out.keys(True, True), key=str) == sorted(keys, key=str)
+    for key in keys:
+        assert out.get(key).shape == td.get(key).shape, key
+        assert out.get(key).dtype == td.get(key).dtype, key
+        assert out.get(key).device == td.get(key).device, key
+    for key in td.keys(True, False):
+        if key not in keys:
+            # a nested tensordict is rebuilt as a TensorDict with its batch size
+            assert type(out.get(key)) is TensorDict
+            assert out.get(key).batch_size == td.get(key).batch_size, key
+
+
+def test_parse_tensor_dict_string_compact_text():
+    # the compact repr as it appears in a log
+    out = parse_tensor_dict_string(
+        "step 3: TensorDict(batch_size=[8,100], device=cpu, fields={\n"
+        "    action: f32[6],\n"
+        "    next: [2]{obs: f64[17], reward: f32[1]},\n"
+        "    x:y: i64[]})"
+    )
+    assert out.batch_size == torch.Size([8, 100])
+    assert out.device == torch.device("cpu")
+    assert out["action"].shape == torch.Size([8, 100, 6])
+    assert out["next"].batch_size == torch.Size([8, 100, 2])
+    assert out["next", "obs"].dtype == torch.float64
+    assert out["next", "reward"].shape == torch.Size([8, 100, 2, 1])
+    assert out["x:y"].dtype == torch.int64
+    # a leaf on another device than the one of its device-less tensordict
+    out = parse_tensor_dict_string(
+        "TensorDict(batch_size=[2], fields={a: f32[3]@meta})"
+    )
+    assert out.device is None
+    assert out["a"].device == torch.device("meta")
+    # every leaf without a device suffix is on the CPU
+    out = parse_tensor_dict_string("TensorDict(batch_size=[], fields={})")
+    assert out.is_empty()
+    assert out.device is None
+    with pytest.raises(ValueError, match="Batch size not found"):
+        parse_tensor_dict_string("TensorDict(fields={a: f32[3]})")
 
 
 def test_assert_close_keeps_torch_message():
@@ -1402,6 +1512,47 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert result.stdout.strip() == str(expected_level)
     assert "[tensordict][INFO] info message" in result.stderr
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
+
+
+@pytest.mark.parametrize("scenario", ["import", "find_spec_first", "dynamo_first"])
+def test_import_does_not_load_dynamo(scenario):
+    # Importing torch._dynamo takes about a second (#3090), so tensordict defers
+    # its Dynamo registrations until torch._dynamo is imported. They must be in
+    # place whether Dynamo is imported before tensordict, after it, or after a
+    # lookup that does not import it.
+    code = (
+        "import importlib.util, sys, torch\n"
+        "if 'torch._dynamo' in sys.modules:\n"
+        "    print('torch loads dynamo')\n"
+        "    sys.exit()\n"
+        f"scenario = {scenario!r}\n"
+        "if scenario == 'dynamo_first':\n"
+        "    import torch._dynamo\n"
+        "import tensordict, tensordict.nn\n"
+        "from tensordict import base\n"
+        "assert ('torch._dynamo' in sys.modules) == (scenario == 'dynamo_first')\n"
+        "if scenario == 'find_spec_first':\n"
+        "    assert importlib.util.find_spec('torch._dynamo') is not None\n"
+        "    assert 'torch._dynamo' not in sys.modules\n"
+        "from torch._dynamo import trace_rules\n"
+        "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n"
+        "def lock(td):\n"
+        "    td.lock_()\n"
+        "    return td['a'] + 1\n"
+        "def vmap(td):\n"
+        "    return torch.vmap(lambda t: t['a'] + 1)(td)\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "for fn in (lock, vmap):\n"
+        "    torch.compile(fn, fullgraph=True, backend='eager')(td.clone())\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert result.returncode == 0, result.stderr
+    if result.stdout.strip() == "torch loads dynamo":
+        pytest.skip("import torch loads torch._dynamo")
+    assert result.stdout.strip() == "ok"
 
 
 def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):

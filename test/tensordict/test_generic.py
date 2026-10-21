@@ -46,6 +46,7 @@ from tensordict import (
     PackLayout,
     PersistentTensorDict,
     set_capture_non_tensor_stack,
+    set_printoptions,
     TensorClass,
     tensorclass,
     TensorDict,
@@ -124,6 +125,7 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+_has_safetensors = importlib.util.find_spec("safetensors", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -208,6 +210,12 @@ def _leaf_storage(td, key):
     if len(key) == 1:
         return value.data_ptr()
     return _leaf_storage(value, key[1:])
+
+
+@tensorclass
+class _AppendMemmapRows:
+    x: torch.Tensor
+    label: str
 
 
 class TestGeneric:
@@ -3341,6 +3349,163 @@ class TestGeneric:
         out = tensordict.from_h5(path)
         assert (out["a"] == 0).all()
         out.close()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_round_trip(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        from safetensors.torch import load_file
+
+        @tensorclass
+        class Labeled:
+            x: torch.Tensor
+            label: str
+
+        td = TensorDict(
+            {
+                "a": torch.arange(3),
+                "config": NonTensorData({"lr": [0.1, None]}),
+                "labeled": Labeled(x=torch.zeros(3, 2), label="hi", batch_size=[3]),
+                "nested": {"b.c": torch.ones(3, 4, dtype=torch.bfloat16)},
+            },
+            batch_size=[3],
+            names=["time"],
+        )
+        tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+        assert sorted(load_file(tmp_path / "td.safetensors")) == [
+            "a",
+            "labeled.x",
+            "nested.b.c",
+        ]
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+        assert type(out) is TensorDict
+        assert out.names == ["time"]
+        assert out["nested"].batch_size == (3,)
+        assert list(out.keys(True, True)) == list(td.keys(True, True))
+        assert type(out["labeled"]) is Labeled
+        assert out["labeled"].label == "hi"
+        assert out["config"] == {"lr": [0.1, None]}
+        assert out["nested", "b.c"].dtype == torch.bfloat16
+        assert (out == td).all()
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors", device="cpu")
+        assert out.device == torch.device("cpu")
+
+        tensordict.to_safetensors(td["labeled"], tmp_path / "tc.safetensors")
+        out = tensordict.from_safetensors(tmp_path / "tc.safetensors")
+        assert type(out) is Labeled
+        assert (out == td["labeled"]).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_module(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        from safetensors.torch import save_file
+
+        def make_model():
+            return nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 2))
+
+        model = make_model()
+        tensordict.to_safetensors(
+            TensorDict.from_module(model), tmp_path / "td.safetensors"
+        )
+        # A file without tensordict metadata, as on the Hugging Face Hub.
+        save_file(model.state_dict(), tmp_path / "hf.safetensors")
+        for name in ("td.safetensors", "hf.safetensors"):
+            params = tensordict.from_safetensors(tmp_path / name)
+            assert params["0"].batch_size == ()
+            new_model = make_model()
+            params.to_module(new_model, inplace=True)
+            new_state_dict = new_model.state_dict()
+            for key, value in model.state_dict().items():
+                assert torch.equal(new_state_dict[key], value), key
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_shared_storage(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        weight = torch.randn(4, 4)
+        tied = TensorDict(a=weight, b=weight, c=weight[1:], d=weight.t())
+        consolidated = TensorDict(
+            a=torch.zeros(3), b={"c": torch.ones(3, 2)}, batch_size=[3]
+        ).consolidate()
+        for td in (tied, consolidated):
+            tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+            assert (
+                tensordict.from_safetensors(tmp_path / "td.safetensors") == td
+            ).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "object",
+            "tuple",
+            "jagged",
+            "non_tensor_stack",
+            "exclusive_keys",
+            "nested_exclusive_keys",
+            "bare_non_tensor",
+            "same_name",
+        ],
+    )
+    def test_safetensors_errors(self, tmp_path, case):
+        # https://github.com/pytorch/tensordict/issues/3087
+        error, match = TypeError, "not a JSON value"
+        if case == "object":
+            td = TensorDict(a=NonTensorData(object()))
+        elif case == "tuple":
+            td = TensorDict(a=NonTensorData((1, 2)))
+        elif case == "jagged":
+            jagged = torch.nested.nested_tensor(
+                [torch.zeros(2), torch.zeros(3)], layout=torch.jagged
+            )
+            td = TensorDict(a=jagged)
+            match = "only dense tensors"
+        elif case == "non_tensor_stack":
+            td = TensorDict(a=NonTensorStack.from_list(["a", "b"]))
+            match = "non-tensor stack"
+        elif case == "exclusive_keys":
+            # Only the first entry has "b": items() would silently drop it.
+            stack = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(()), b=torch.zeros(())),
+                TensorDict(a=torch.zeros(())),
+            )
+            td = TensorDict(obs=stack)
+            match = "entries have different keys"
+        elif case == "nested_exclusive_keys":
+            # A stack of stacks: the inner stacks list only their shared keys.
+            inner = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3), batch_size=[3]),
+            )
+            td = TensorDict(obs=lazy_stack([inner, inner], dim=1))
+            match = "entries have different keys"
+        elif case == "bare_non_tensor":
+            td = NonTensorData("hi")
+            match = "put it in a tensordict first"
+        else:
+            # ("a", "b.c") and ("a.b", "c") have the same name in the file.
+            td = TensorDict({"a": {"b.c": torch.zeros(())}, "a.b": {"c": 0}})
+            error, match = ValueError, "have the safetensors name 'a.b.c'"
+        with pytest.raises(error, match=match):
+            tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_unknown_class(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        tensordict.to_safetensors(
+            TensorDict(a=torch.zeros(2)), tmp_path / "td.safetensors"
+        )
+        with safe_open(tmp_path / "td.safetensors", framework="pt") as file:
+            metadata = json.loads(file.metadata()["tensordict"])
+        metadata["root"]["class"] = "<class 'not_imported.Labeled'>"
+        save_file(
+            {"a": torch.zeros(2)},
+            tmp_path / "td.safetensors",
+            metadata={"tensordict": json.dumps(metadata)},
+        )
+        with pytest.raises(RuntimeError, match="Could not find the tensorclass"):
+            tensordict.from_safetensors(tmp_path / "td.safetensors")
 
     # Module-level function -> (the TensorDict method it forwards to, the
     # parameters whose default may differ). from_module locks its result by
@@ -9898,6 +10063,183 @@ class TestGeneric:
         else:
             assert (d2[:, 0] == a).all()
 
+    @staticmethod
+    def _append_memmap_rows(num_rows, value):
+        return TensorDict(
+            a=torch.full((num_rows, 2), value),
+            nested=TensorDict(
+                b=torch.full((num_rows, 3, 4), value, dtype=torch.int8),
+                c=TensorDict(
+                    d=torch.full((num_rows, 3), value, dtype=torch.bool),
+                    batch_size=[num_rows, 3],
+                ),
+                batch_size=[num_rows],
+            ),
+            empty=torch.zeros(num_rows, 0),
+            label="run",
+            tc=_AppendMemmapRows(
+                x=torch.full((num_rows,), value), label="tc", batch_size=[num_rows]
+            ),
+            batch_size=[num_rows],
+        )
+
+    @pytest.mark.parametrize("num_saved", [3, 0])
+    def test_append_memmap(self, tmpdir, num_saved):
+        # https://github.com/pytorch/tensordict/issues/3093
+        parts = [
+            self._append_memmap_rows(num_saved, 0),
+            self._append_memmap_rows(2, 1),
+            self._append_memmap_rows(4, 2),
+        ]
+        parts[0].memmap(tmpdir)
+        before = tensordict.load_memmap(tmpdir)
+        assert tensordict.append_memmap(tmpdir, parts[1]) is None
+        tensordict.append_memmap(tmpdir, parts[2])
+        loaded = tensordict.load_memmap(tmpdir)
+        expected = torch.cat(parts)
+        assert loaded.batch_size == (num_saved + 6,)
+        assert loaded["nested", "c"].batch_size == (num_saved + 6, 3)
+        assert (loaded == expected).all()
+        assert type(loaded["tc"]) is _AppendMemmapRows
+        assert loaded["label"] == "run"
+        assert loaded["tc"].label == "tc"
+        # A tensordict loaded before the append keeps its rows.
+        assert before.batch_size == (num_saved,)
+        assert (before == parts[0]).all()
+
+    def test_append_memmap_tensorclass(self, tmpdir):
+        @tensorclass
+        class Sample:
+            x: torch.Tensor
+
+        Sample(x=torch.zeros(2, 3), batch_size=[2]).memmap(tmpdir)
+        tensordict.append_memmap(tmpdir, Sample(x=torch.ones(1, 3), batch_size=[1]))
+        loaded = Sample.load_memmap(tmpdir)
+        assert loaded.x.tolist() == [[0.0] * 3, [0.0] * 3, [1.0] * 3]
+        with pytest.raises(ValueError, match="Cannot append a TensorDict"):
+            tensordict.append_memmap(
+                tmpdir, TensorDict(x=torch.ones(1, 3), batch_size=[1])
+            )
+
+    @staticmethod
+    def _read_tree(path):
+        return {p: p.read_bytes() for p in sorted(Path(path).rglob("*")) if p.is_file()}
+
+    @pytest.mark.parametrize(
+        "change,match",
+        [
+            (lambda td: td.exclude("a"), "keys"),
+            (lambda td: td.set("a", td["a"].double()), "dtype torch.float64"),
+            (lambda td: td.set("a", torch.zeros(2, 3)), r"shape \(2, 3\)"),
+            (lambda td: td.set(("nested", "e"), torch.zeros(2)), "keys"),
+            (lambda td: td.set("label", "other"), "same value, not 'other'"),
+            (lambda td: td.set("a", TensorDict(batch_size=[2])), "a tensor"),
+            (
+                lambda td: td.set(
+                    ("nested", "c"),
+                    TensorDict(
+                        d=torch.zeros(2, 4, dtype=torch.bool), batch_size=[2, 4]
+                    ),
+                ),
+                "beyond the first dimension",
+            ),
+            (lambda td: td[0], "first batch dimension"),
+        ],
+    )
+    def test_append_memmap_mismatch(self, tmpdir, change, match):
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        with pytest.raises(ValueError, match=match):
+            tensordict.append_memmap(tmpdir, change(self._append_memmap_rows(2, 1)))
+        assert self._read_tree(tmpdir) == files
+
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("entry", ["non_tensor_stack", "lazy_stack", "nested"])
+    def test_append_memmap_unsupported(self, tmpdir, entry):
+        def make(num_rows):
+            if entry == "non_tensor_stack":
+                value = NonTensorStack(*[str(i) for i in range(num_rows)])
+            elif entry == "lazy_stack":
+                value = lazy_stack(
+                    [TensorDict(x=torch.zeros(i + 1)) for i in range(num_rows)]
+                )
+            else:
+                value = torch.nested.nested_tensor(
+                    [torch.zeros(i + 1) for i in range(num_rows)], layout=torch.strided
+                )
+            return TensorDict(
+                a=torch.zeros(num_rows), entry=value, batch_size=[num_rows]
+            )
+
+        make(3).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        with pytest.raises(ValueError, match="cannot grow"):
+            tensordict.append_memmap(tmpdir, make(2))
+        assert self._read_tree(tmpdir) == files
+
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("stack", [torch.stack, lazy_stack])
+    def test_append_memmap_stacked_rows(self, tmpdir, stack):
+        TensorDict(a=torch.zeros(2), s="hi", batch_size=[2]).memmap(tmpdir)
+        rows = stack([TensorDict(a=torch.ones(()), s="hi") for _ in range(3)])
+        assert isinstance(rows.get("s"), NonTensorStack)
+        tensordict.append_memmap(tmpdir, rows)
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded["a"].tolist() == [0.0, 0.0, 1.0, 1.0, 1.0]
+        assert loaded["s"] == "hi"
+        rows = stack([TensorDict(a=torch.ones(()), s=s) for s in ("hi", "ho")])
+        with pytest.raises(ValueError, match="same value"):
+            tensordict.append_memmap(tmpdir, rows)
+
+    def test_append_memmap_archive(self, tmpdir):
+        archive = Path(tmpdir) / "data.tdz"
+        TensorDict(a=torch.zeros(3), batch_size=[3]).save(archive)
+        with pytest.raises(ValueError, match="An archive cannot grow"):
+            tensordict.append_memmap(
+                archive, TensorDict(a=torch.zeros(1), batch_size=[1])
+            )
+
+    def test_append_memmap_failure_restores_files(self, tmpdir, monkeypatch):
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        tensor_chunks = tensordict._td_functions._tensor_chunks
+        calls = []
+
+        def failing_tensor_chunks(tensor):
+            calls.append(None)
+            if len(calls) == 3:
+                raise OSError("disk full")
+            return tensor_chunks(tensor)
+
+        monkeypatch.setattr(
+            tensordict._td_functions, "_tensor_chunks", failing_tensor_chunks
+        )
+        with pytest.raises(OSError, match="disk full"):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        assert self._read_tree(tmpdir) == files
+        assert (tensordict.load_memmap(tmpdir) == self._append_memmap_rows(3, 0)).all()
+
+    def test_append_memmap_interrupted_replace(self, tmpdir, monkeypatch):
+        # An interrupt after the first meta.json was replaced puts it back.
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        replace = os.replace
+        calls = []
+
+        def failing_replace(src, dst):
+            calls.append(None)
+            if len(calls) == 2:
+                raise KeyboardInterrupt
+            return replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", failing_replace)
+        with pytest.raises(KeyboardInterrupt):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        assert len(calls) == 2
+        assert self._read_tree(tmpdir) == files
+        assert (tensordict.load_memmap(tmpdir) == self._append_memmap_rows(3, 0)).all()
+
     def test_memmap_format_version(self, tmp_path):
         td = TensorDict(
             a=torch.zeros(3),
@@ -11871,6 +12213,7 @@ class TestGeneric:
         torch.testing.assert_close(td.get("key1")[:, 0], y)
         torch.testing.assert_close(td.get("key1")[:, 0], td[:, 0].get("key1"))
 
+    @set_printoptions(compact=False)
     def test_tensordict_prealloc_nested(self):
         N = 3
         B = 5
@@ -13599,11 +13942,13 @@ class TestGeneric:
 
     @pytest.mark.parametrize("fixture", list(_UPDATE_FIXTURES))
     @pytest.mark.parametrize("case", list(_UPDATE_CASES))
+    @set_printoptions(compact=False)
     def test_update_fast_path_matches_general(self, fixture, case):
         # TensorDict.update writes a dict or TensorDict of tensors, and merges
         # its sub-tensordicts, without the per-key loop of the general path,
         # which a subclass of TensorDict takes. Both give the same result,
-        # errors, warnings, storage sharing and merged sub-tensordicts.
+        # errors, warnings, storage sharing and merged sub-tensordicts. The
+        # verbose repr in the errors does not wrap by the class name's length.
         make, call = self._UPDATE_FIXTURES[fixture], self._UPDATE_CASES[case]
         expected = self._update_outcome(self._SlowPathTensorDict, make, call)
         assert self._update_outcome(TensorDict, make, call) == expected

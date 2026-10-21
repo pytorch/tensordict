@@ -58,6 +58,7 @@ from tensordict import (
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_list_to_stack,
+    set_printoptions,
     TensorClass,
     tensorclass,
     TensorDict,
@@ -2533,6 +2534,7 @@ class TestTensorClass:
         assert getattr(shadow, "y", "default") is None
 
     @pytest.mark.parametrize("shadow", [False, True])
+    @set_printoptions(compact=False)
     def test_none_field_is_missing_key(self, shadow):
         # #2210: a None field is a key missing from the TensorDict, and
         # _non_tensordict holds no placeholder for it
@@ -3309,6 +3311,7 @@ class TestTensorClass:
         assert a.grad.z is None
 
     @pytest.mark.parametrize("tensor_only", [False, True])
+    @set_printoptions(compact=False)
     def test_grad_keeps_self(self, tensor_only):
         # .grad holds None for a field without a grad. Neither that None nor
         # later writes into the grad may reach the instance.
@@ -7339,6 +7342,7 @@ class TestShadow:
         assert c.names == 0
         assert c.device == 0
 
+    @set_printoptions(compact=False)
     def test_shadow_repr(self):
         @tensorclass(shadow=True)
         class MyClass:
@@ -8115,6 +8119,7 @@ class TestSubClassing:
             assert not obj
 
     @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    @set_printoptions(compact=False)
     def test_subclassing_default_operators(self, api):
         if api == "inheritance":
 
@@ -8629,6 +8634,7 @@ class TestTensorOnly:
         assert key not in x._tensordict.keys()
         assert key not in x._non_tensordict
 
+    @set_printoptions(compact=False)
     def test_tensor_only_none_is_missing_key(self):
         x = self.TensorOnly(torch.zeros(3), torch.zeros(3), batch_size=[3])
         y = self.TensorOnly(

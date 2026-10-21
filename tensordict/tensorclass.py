@@ -924,20 +924,10 @@ def from_dataclass(
         >>> x = X(0, 0)
         >>> x2 = from_dataclass(x)
         >>> print(x2)
-        X_tc(
-            a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        X_tc(batch_size=[], fields={a: i64[], b: i64[]})
         >>> X2 = from_dataclass(X, autocast=True)
         >>> print(X2(a=0, b=0))
-        X_tc(
-            a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
-            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        X_tc(batch_size=[], fields={a: int, b: i64[]})
 
     """
     from dataclasses import asdict, make_dataclass
@@ -1170,13 +1160,7 @@ def tensorclass(
         ...     z="test",
         ...     batch_size=[3, 4])
         >>> print(data)
-        MyData(
-            X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-            y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
-            z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
-            batch_size=torch.Size([3, 4]),
-            device=None,
-            is_shared=False)
+        MyData(batch_size=[3,4], fields={X: f32[1], y: bool[2,2], z: str})
         >>> print(data.expand_and_mask())
         tensor([])
 
@@ -3394,6 +3378,12 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     Args:
         state (dict): State parameter to set the object
     """
+    if type(self) is NonTensorData:
+        # perf: what the code below does for a NonTensorData, as _setattr
+        # calls object.__setattr__ while these attributes are missing
+        object.__setattr__(self, "_tensordict", state.get("tensordict"))
+        object.__setattr__(self, "_non_tensordict", state.get("non_tensordict"))
+        return
     non_tensordict = state.get("non_tensordict")
     if not type(self)._is_non_tensor and non_tensordict:
         # Pickled by a version that kept None fields in _non_tensordict
@@ -6394,13 +6384,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ...     nested: Any = None
         >>> foo = Foo(tensor=torch.zeros(3), non_tensor="a string!", batch_size=[3])
         >>> print(foo)
-        Foo(
-            non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
-            tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested=None,
-            batch_size=torch.Size([3]),
-            device=None,
-            is_shared=False)
+        Foo(batch_size=[3], fields={non_tensor: str, tensor: f32[], nested: None})
         >>> foo[0].non_tensor
         'a string!'
         >>> foo.reshape(1, 3).batch_size
@@ -7899,6 +7883,22 @@ class NonTensorStack(LazyStackedTensorDict):
     _is_non_tensor: bool = True
 
     def __init__(self, *args, **kwargs):
+        stack_dim = kwargs.get("stack_dim", 0)
+        if (
+            args
+            and type(stack_dim) is int
+            and not stack_dim
+            and kwargs.keys() <= _FLAT_KWARGS
+            and type(self) is NonTensorStack
+            and not is_compiling()
+        ):
+            # perf: a flat stack skips the checks of the general path
+            members = _flat_members(args)
+            if len(members) == len(args):
+                _init_flat(self, members, kwargs.get("stack_dim_name"))
+                return
+            # the members built so far are those that the general path builds
+            args = (*members, *args[len(members) :])
         args = [
             arg if is_tensor_collection(arg) else NonTensorData(data=arg)
             for arg in args
@@ -7944,14 +7944,16 @@ class NonTensorStack(LazyStackedTensorDict):
             [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, 2)]]
 
         """
+        # perf: the values of the plain members first
+        result = _flat_values(self)
         iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
-        result = [
+        result += [
             td.tolist(
                 convert_tensors=convert_tensors,
                 tolist_first=tolist_first,
                 as_linked_list=as_linked_list,
             )
-            for td in iterator
+            for td in iterator[len(result) :]
         ]
         if as_linked_list:
             return LinkedList(result, td=self)
@@ -7974,6 +7976,9 @@ class NonTensorStack(LazyStackedTensorDict):
     def from_list(cls, non_tensors: List[Any]):
         # Use local function because refers to cls
         def _maybe_from_list(nontensor):
+            if cls is NonTensorStack and type(nontensor) in _FLAT_SCALAR_TYPES:
+                # perf: NonTensorStack wraps it as below, on its fast path
+                return nontensor
             if isinstance(nontensor, list):
                 return cls.from_list(nontensor)
             if is_non_tensor(nontensor):
@@ -8267,6 +8272,24 @@ class NonTensorStack(LazyStackedTensorDict):
                 *(cls._from_list(item, device=device, ndim=ndim) for item in datalist),
                 stack_dim=0,
             )
+        if (
+            datalist
+            and not is_compiling()
+            and all(type(item) in _FLAT_SCALAR_TYPES for item in datalist)
+        ):
+            # perf: build the elements directly, once the constructor has
+            # parsed the device for the first one
+            first = NonTensorData(
+                data=datalist[0], device=device, batch_size=torch.Size([])
+            )
+            if first._tensordict._device is device:
+                # the elements share the device object, as with the general path
+                result = NonTensorStack.__new__(NonTensorStack)
+                _init_flat(
+                    result,
+                    [first, *(_flat_ntd(item, device) for item in datalist[1:])],
+                )
+                return result
         return NonTensorStack(
             *(
                 NonTensorData(data=item, device=device, batch_size=torch.Size([]))
@@ -8479,8 +8502,15 @@ class NonTensorStack(LazyStackedTensorDict):
                 return None
             for position in positions:
                 items[position] = td
+        copies = _flat_copies(items)
+        if len(copies) == len(items):
+            result = NonTensorStack.__new__(NonTensorStack)
+            _init_flat(result, copies)
+            return result
         try:
-            result = NonTensorStack(*[td._clone(recurse=False) for td in items])
+            result = NonTensorStack(
+                *copies, *[td._clone(recurse=False) for td in items[len(copies) :]]
+            )
         except Exception:
             # the general path raises its own error
             return None
@@ -8592,6 +8622,155 @@ class NonTensorStack(LazyStackedTensorDict):
 
 
 _register_tensor_class(NonTensorStack)
+
+# The fast paths of NonTensorStack. They apply to a flat stack: a 1-D stack of
+# NonTensorData elements with an empty batch size, which is what a list of
+# values becomes. They build the same objects as the general paths, and the
+# elements are shared or copied as there.
+
+# The value types that NonTensorData stores as they are, with no conversion.
+_FLAT_SCALAR_TYPES = frozenset(_PYTREE_SCALAR_LEAVES)
+
+
+def _flat_ntd(value, device):
+    """``NonTensorData(data=value, device=device)``, built directly.
+
+    For a ``value`` of a type in ``_FLAT_SCALAR_TYPES`` and a parsed
+    ``device``: the result has the attributes that the constructor sets.
+    """
+    result = NonTensorData.__new__(NonTensorData)
+    # object.__setattr__ rather than writes to __dict__: reading __dict__
+    # would make every later attribute read of the result slower.
+    setattr_ = object.__setattr__
+    setattr_(
+        result,
+        "_tensordict",
+        TensorDict._new_unsafe({}, batch_size=torch.Size([]), device=device),
+    )
+    setattr_(
+        result,
+        "_non_tensordict",
+        {"data": value, "_metadata": None, "_is_non_tensor": True},
+    )
+    setattr_(result, "_is_initialized", True)
+    return result
+
+
+# The keyword arguments that the fast path of NonTensorStack() takes.
+_FLAT_KWARGS = frozenset({"stack_dim", "stack_dim_name"})
+
+
+def _init_flat(self, members, stack_dim_name=None):
+    """``LazyStackedTensorDict.__init__(self, *members, stack_dim_name=...)`` for plain members of one device."""
+    # attributes, not writes to __dict__ (see _flat_ntd)
+    self._is_locked = None
+    self.stack_dim = 0
+    self._batch_size = torch.Size([len(members)])
+    self.tensordicts = members
+    self._hook_out = None
+    self._hook_in = None
+    if stack_dim_name is not None:
+        self._td_dim_name = stack_dim_name
+
+
+def _is_plain_member(td):
+    """Whether ``td`` is a NonTensorData with an empty batch size and nothing else to check."""
+    if type(td) is not NonTensorData:
+        return False
+    inner = td._tensordict
+    return (
+        type(inner) is TensorDict
+        and not inner._batch_size
+        and not inner._tensordict
+        and not inner._is_shared
+        and not inner._is_memmap
+        and not inner._is_locked
+        and inner._td_dim_names is None
+    )
+
+
+def _flat_members(args):
+    """The members of ``NonTensorStack(*args)`` for a flat stack.
+
+    The args are values of a type in ``_FLAT_SCALAR_TYPES``, which are wrapped
+    in a NonTensorData as the general path does, and plain members, which the
+    stack holds as they are. If an arg is anything else or the devices
+    differ, returns the members of the args before it: the general path then
+    builds the stack or raises.
+    """
+    members = []
+    append = members.append
+    device = _UNSET
+    for arg in args:
+        if type(arg) in _FLAT_SCALAR_TYPES:
+            arg = _flat_ntd(arg, None)
+            arg_device = None
+        elif _is_plain_member(arg):
+            arg_device = arg._tensordict._device
+        else:
+            break
+        if arg_device != device:
+            if device is not _UNSET:
+                break
+            device = arg_device
+        append(arg)
+    return members
+
+
+def _flat_copies(members):
+    """``[td._clone(recurse=False) for td in members]`` for plain members.
+
+    For members of one device that hold a value of a type in
+    ``_FLAT_SCALAR_TYPES`` (which a clone does not copy) and no metadata.
+    Stops at the first other member, and returns the copies before it.
+    """
+    copies = []
+    if not _is_plain_member(members[0]):
+        return copies
+    device = members[0]._tensordict._device
+    append = copies.append
+    for td in members:
+        if not _is_plain_member(td) or td._tensordict._device != device:
+            break
+        non_tensordict = td._non_tensordict
+        data = non_tensordict.get("data", _UNSET)
+        if (
+            type(data) not in _FLAT_SCALAR_TYPES
+            or len(non_tensordict) != 3
+            or non_tensordict.get("_metadata", _UNSET) is not None
+            or non_tensordict.get("_is_non_tensor") is not True
+        ):
+            break
+        # what NonTensorData._clone(recurse=False) builds: the values are not
+        # copied, and the batch size and device objects are shared
+        inner = td._tensordict
+        copy = NonTensorData.__new__(NonTensorData)
+        object.__setattr__(
+            copy,
+            "_tensordict",
+            TensorDict._new_unsafe(
+                {}, batch_size=inner._batch_size, device=inner._device
+            ),
+        )
+        object.__setattr__(copy, "_non_tensordict", dict(non_tensordict))
+        append(copy)
+    return copies
+
+
+def _flat_values(stack):
+    """The first items of ``stack.tolist()``: the values of its first plain members."""
+    values = []
+    if type(stack) is not NonTensorStack or stack.stack_dim != 0 or is_compiling():
+        return values
+    append = values.append
+    for td in stack.tensordicts:
+        if not _is_plain_member(td):
+            break
+        data = td._non_tensordict.get("data", _UNSET)
+        if data is _UNSET:
+            break
+        append(data)
+    return values
 
 
 def _share_memory_nontensor(data, manager: Manager):

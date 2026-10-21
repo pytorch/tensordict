@@ -793,6 +793,7 @@ class TensorCollection:
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def make_memmap(
         self,
@@ -828,6 +829,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def dumps(
         self,
@@ -838,6 +840,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def memmap(
         self,
@@ -849,6 +852,7 @@ class TensorCollection:
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def memmap_like(
         self,
@@ -1082,6 +1086,8 @@ class TensorCollection:
         async_op: bool = False,
         return_premature: bool = False,
         group: Incomplete | None = None,
+        *,
+        bucket_bytes: int | None = None,
     ): ...
     def broadcast(
         self,
@@ -1096,6 +1102,7 @@ class TensorCollection:
         *,
         group: dist.ProcessGroup | None = None,
         async_op: bool = False,
+        bucket_bytes: int | None = None,
     ) -> None: ...
     def all_gather(
         self,

@@ -170,6 +170,7 @@ Where to go
    data_loading
    integrations
    distributed
+   training_at_scale
    compile
    printing
    compatibility

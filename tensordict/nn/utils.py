@@ -629,18 +629,9 @@ class set_composite_lp_aggregate(_DecoratorContextManager):
         >>> with set_composite_lp_aggregate(False):
         ...     lp = dist.log_prob(sample)
         ...     print(lp)
-        TensorDict(
-            fields={
-                cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                nested: TensorDict(
-                    fields={
-                        disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 3]),
-                    device=None,
-                    is_shared=False)},
-            batch_size=torch.Size([4, 3]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[4,3], fields={
+            cont_log_prob: f32[4],
+            nested: {disc_log_prob: f32[]}})
         >>> with set_composite_lp_aggregate(True):
         ...     lp = dist.log_prob(sample)
         ...     print(lp)

@@ -4212,6 +4212,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return_premature=False,
         _future_list=None,
         group=None,
+        _bucketed=False,
     ):
         from torch import distributed as dist
 
@@ -4240,10 +4241,15 @@ class LazyStackedTensorDict(TensorDictBase):
                     async_op=async_op,
                     _future_list=_future_list,
                     group=group,
+                    _bucketed=_bucketed,
                 )
                 continue
             elif not isinstance(value, Tensor):
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if _bucketed:
+                write = functools.partial(write_back, key, value) if is_dst else None
+                _future_list.append((value, write))
+                continue
             work = dist.reduce(value, dst=dst, op=op, async_op=async_op, group=group)
             if is_dst and async_op:
                 work = work.get_future().then(

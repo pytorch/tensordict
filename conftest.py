@@ -10,10 +10,12 @@ import importlib.util
 
 import pytest
 
+_has_safetensors = importlib.util.find_spec("safetensors") is not None
 _has_zarr = importlib.util.find_spec("zarr") is not None
 
 
 def pytest_collection_modifyitems(config, items):
+    skip_safetensors = pytest.mark.skip(reason="safetensors is not installed")
     skip_zarr = pytest.mark.skip(reason="zarr is not installed")
     for item in items:
         dtest = getattr(item, "dtest", None)
@@ -29,3 +31,7 @@ def pytest_collection_modifyitems(config, items):
             "zarr" in example.source for example in dtest.examples
         ):
             item.add_marker(skip_zarr)
+        if not _has_safetensors and any(
+            "safetensors" in example.source for example in dtest.examples
+        ):
+            item.add_marker(skip_safetensors)
