@@ -3626,11 +3626,9 @@ class TestExport:
         # non-tensor entry that the pytree rebuilds with its stored batch
         # size: export would specialize the dynamic batch dim to it.
         # https://github.com/pytorch/tensordict/issues/3163
-        # The pytree first rebuilds the entry with batch size [0] when the
-        # batch size it was flattened with held SymInts, and sets it again
-        # right after, as for a tensordict: TD_CHECK_INVARIANTS rejects the
-        # entry in between.
-        monkeypatch.setattr("tensordict._td._CHECK_INVARIANTS", False)
+        # Checked with TD_CHECK_INVARIANTS on, as CI runs: the pytree builds
+        # the entry with the right batch size before the tensordict.
+        monkeypatch.setattr("tensordict._td._CHECK_INVARIANTS", True)
 
         class Mod(torch.nn.Module):
             def forward(self, tc):

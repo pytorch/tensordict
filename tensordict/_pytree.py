@@ -322,15 +322,25 @@ def _tensorclass_constructor(
     # tensordict: otherwise torch.export with a dynamic batch dimension
     # specializes it to the example's size. Setting them again is slow: skip
     # it when the batch sizes are equal and static (Dynamo shows SymInts as
-    # ints, hence the is_compiling() check).
-    reset = is_compiling() or any(isinstance(dim, torch.SymInt) for dim in batch_size)
-    td_non_tensor = tuple(
-        (key, value.data)
-        for key, value in zip(keys, values)
-        if is_non_tensor(value)
-        and not isinstance(value, LazyStackedTensorDict)
-        and (reset or value.batch_size != batch_size)
-    )
+    # ints, hence the is_compiling() check), and skip the checks for a class
+    # without non-tensor fields and for a NonTensorData, which has no keys.
+    td_non_tensor = ()
+    if keys:
+        reset = None
+        for key, value in zip(keys, values):
+            cls_value = type(value)
+            if (
+                cls_value is torch.Tensor
+                or not getattr(cls_value, "_is_non_tensor", False)
+                or isinstance(value, LazyStackedTensorDict)
+            ):
+                continue
+            if reset is None:
+                reset = is_compiling() or any(
+                    isinstance(dim, torch.SymInt) for dim in batch_size
+                )
+            if reset or value._tensordict.batch_size != batch_size:
+                td_non_tensor += ((key, value.data),)
     result = _tensordict_constructor(
         cls=TensorDict,
         keys=keys,
