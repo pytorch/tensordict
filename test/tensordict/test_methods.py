@@ -3989,7 +3989,7 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             assert td.is_locked is not isinstance(td, TensorDictParams)
 
-    @pytest.mark.parametrize("dim", [0, -1, 3])
+    @pytest.mark.parametrize("dim", [0, 1, 2, -1, 3])
     def test_softmax(self, td_name, device, dim):
         if td_name == "td_with_unbatched":
             pytest.skip("UnbatchedTensor incompatible with torch.softmax")
@@ -4002,6 +4002,10 @@ class TestTensorDicts(TestTensorDictsBase):
         assert tds.shape == td.shape
         tds._check_batch_size()
         tds._check_device()
+        # a lazy stack gives the result of its dense copy (#2359)
+        expected = td.to_tensordict().softmax(dim)
+        for key, value in expected.items(True, True):
+            torch.testing.assert_close(tds.get(key), value)
 
     def test_sorted_keys(self, td_name, device):
         torch.manual_seed(1)
