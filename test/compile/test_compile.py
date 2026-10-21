@@ -366,6 +366,29 @@ def test_setitem_compiles(value, non_tensor, lazy):
     assert out.tolist() == [expected, expected, 1.0]
 
 
+@pytest.mark.parametrize("stack_dim", [0, 1])
+@pytest.mark.parametrize("dim", [0, 1, 2])
+def test_lazy_softmax_compiles(stack_dim, dim):
+    # softmax on a lazy stack, along its stack dim too, gives the values of
+    # the dense copy without a graph break (#2359)
+    dense = TensorDict(
+        a=torch.randn(2, 3, 4, 5), n={"b": torch.randn(2, 3, 4)}, batch_size=[2, 3, 4]
+    )
+    td = lazy_stack(dense.unbind(stack_dim), stack_dim)
+    out = torch.compile(lambda td: td.softmax(dim), fullgraph=True, backend="eager")(td)
+    for key, value in dense.softmax(dim).items(True, True):
+        torch.testing.assert_close(out.get(key), value)
+
+
+def test_lazy_softmax_ragged_compiles():
+    # members whose entries have different shapes keep their result along
+    # the stack dim, without a graph break (#2359)
+    td = lazy_stack([TensorDict(a=torch.randn(3, 4)), TensorDict(a=torch.randn(3, 5))])
+    out = torch.compile(lambda td: td.softmax(0), fullgraph=True, backend="eager")(td)
+    for member, expected in zip(out.tensordicts, td.tensordicts):
+        torch.testing.assert_close(member["a"], expected["a"].softmax(0))
+
+
 @pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )

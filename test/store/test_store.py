@@ -4374,6 +4374,10 @@ class TestLazyStackedTensorDictStore:
         try:
             store_td.lock_()
             view = store_td[1]
+            # as documented, the view itself and the results of its
+            # operations are not locked
+            assert not view.is_locked
+            assert not (view + 1).is_locked
             for key in ("x", ("n", "x")):
                 with pytest.raises(RuntimeError, match="Cannot modify locked"):
                     view.set(key, torch.ones(3))

@@ -221,6 +221,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_where(condition, other, *, out, pad, update_batch_size)` | `where`, without `_masking_on_dense_copy` | return the result, written into `out` if given | lazy, params, typed |
 | `_reduction_parts()` | `all()`, `any()` without a dim | return the parts to reduce: the values, or the members of a lazy stack | lazy |
 | `_reduced_names(dim)` | `all(dim)`, `any(dim)` | return the names of the result | lazy |
+| `_softmax(dim, dtype)` | `softmax` | return the softmax along the batch dim `dim`; the default calls `softmax` on the nested lazy stacks, whose members lack the stack dim | lazy, typed |
 | `_masked_fill_(mask, value)` | `masked_fill_` | fill in place where `mask` is True | sub, lazy, file, lazy store, params, typed |
 | `_masked_fill(mask, value)` | `masked_fill`, without `_masking_on_dense_copy` | return a filled copy; the default fills a clone in place | lazy |
 | `_fill_(key, value)` | `fill_`, and `zero_` with `_fills_without_reading` | fill the entry at the tuple `key`; raise `KeyError` if it is missing | file |
@@ -236,7 +237,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_contains_str(key)` | `_convert_inplace`, which `_set_str` calls | say whether `key` is a key, without reading data | `TensorDict`, file, store |
 | `_get_tuple(key, default)` | `get` | return the entry, or `default`; raise `ValueError` for a path through a tensor (files and the store return `default`) | every class but element |
 | `_get_at_tuple(key, idx, default)` | `get_at` | read the entry at `idx` | file, store, lazy store, element, params |
-| `_create_nested_tuple(key)` | `create_nested` | add an empty tensordict at the tuple `key`; a plain `TensorDict` keeps the plain, unlocked `TensorDict`s already on the path, and every other class replaces each level | lazy (a stack of plain `TensorDict`s hands the key to each member) |
+| `_create_nested_tuple(key)` | `create_nested` | add an empty tensordict at the tuple `key`; a plain `TensorDict` keeps the plain, unlocked `TensorDict`s already on the path, and every other class replaces each level | lazy (a stack of plain `TensorDict`s, or of such stacks, hands the key to each member), sub and typed (follow the rule of a plain source), file (keeps the groups on the path) |
 | `_del(key)` | `del_` | delete the entry at the tuple `key`; raise `KeyError` for a missing key and `ValueError` for a path through a tensor (for `()`, the file and the stores keep their own behaviour until 0.17) | every class but params and typed (sub forwards it) |
 | `_members_as_lists()` | `items`, `values` with `_NESTED_TENSORS_AS_LISTS` | return the members to walk one by one, or `None` | lazy |
 | `_contains_key(key)` | `key in td`, for a str key and an unravelled, non-empty tuple key | say whether `key` is in `keys(True, is_leaf=_is_leaf_nontensor)`, without reading the leaves | `TensorDict` (not its subclasses) |

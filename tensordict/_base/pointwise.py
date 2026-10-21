@@ -25,6 +25,8 @@ from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _apply_pointwise,
+    _has_lazy_stack,
+    _is_leaf_or_lazy_stack,
     _is_tensor_collection,
     _maybe_broadcast_other,
     _mixes_lazy_stacks,
@@ -1064,6 +1066,12 @@ class _PointwiseOps:
     def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
         """Returns a new tensordict with :func:`torch.softmax` applied to every leaf along a batch dimension.
 
+        A :class:`~tensordict.LazyStackedTensorDict`, also a nested one, gives
+        a lazy stack with the values of its dense copy. The exception is a
+        softmax along the stack dim of members whose entries have different
+        shapes, which have no dense copy: each leaf of each member is
+        normalised along its own dim ``dim``.
+
         Args:
             dim (int): the batch dimension along which softmax is computed. A
                 negative ``dim`` counts from the end of the batch dimensions.
@@ -1083,9 +1091,28 @@ class _PointwiseOps:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
         else:
             raise ValueError(f"Expected dim of type int, got {type(dim)}.")
-        return self._fast_apply(
-            lambda x: torch.softmax(x, dim=dim, dtype=dtype),
-        )
+        return self._softmax(dim, dtype)
+
+    def _softmax(self, dim: int, dtype: torch.dtype | None) -> Self:
+        """Returns the result of :meth:`softmax` along the batch dim ``dim``.
+
+        ``dim`` is already a non-negative int. The base applies
+        :func:`torch.softmax` to every leaf, and calls :meth:`softmax` on a
+        nested lazy stack, or on the tensorclass or ``TypedTensorDict`` that
+        holds one. :class:`~tensordict.LazyStackedTensorDict` gives each member
+        the dim it has there, and normalises the stacked entries along the
+        stack dim.
+        """
+
+        def softmax(x):
+            if type(x) is Tensor or not _is_tensor_collection(type(x)):
+                return torch.softmax(x, dim=dim, dtype=dtype)
+            if _has_lazy_stack(x):
+                # the leaves of the members of a lazy stack lack the stack dim
+                return x.softmax(dim, dtype)
+            return x._fast_apply(softmax, is_leaf=_is_leaf_or_lazy_stack)
+
+        return self._fast_apply(softmax, is_leaf=_is_leaf_or_lazy_stack)
 
     def log10(self) -> Self:
         """Returns a new tensordict with :func:`torch.log10` applied to every leaf."""
@@ -3183,6 +3210,12 @@ class _PointwiseOps:
                 that starts with the batch shape up to the stack dimension is
                 split along that dimension, one piece per member, so it must
                 have the stack size there: expand it to the batch shape first.
+                The pieces line up with the leaves as in
+                :class:`~tensordict.TensorDict` only for the leaves with as
+                many dims as ``other``; for the others the lazy stack emits a
+                :class:`FutureWarning`: starting with TensorDict 0.17, the
+                default will change to broadcasting like TensorDict.where,
+                which aligns ``other`` with each leaf from the right.
 
         Keyword Args:
             out (TensorDictBase, optional): the tensordict to write the result

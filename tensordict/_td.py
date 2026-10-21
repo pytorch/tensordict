@@ -3981,6 +3981,16 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
 
+    # Override: a plain, unlocked TensorDict in a plain source keeps its
+    # entries, in every row of the source. Any other path replaces each level.
+    def _create_nested_tuple(self, key):
+        if len(key) > 1 and type(self._source) is TensorDict:
+            source = self._source._get_str(key[0], None)
+            if type(source) is TensorDict and not source.is_locked:
+                _SubTensorDict(source, self.idx)._create_nested_tuple(key[1:])
+                return
+        super()._create_nested_tuple(key)
+
     def _cast_reduction(
         self,
         *,

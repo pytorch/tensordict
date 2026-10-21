@@ -76,6 +76,7 @@ from tensordict.base import (
     _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
+    _unwrap,
     _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
@@ -100,6 +101,7 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _import_and_wrap_functorch,
     _infer_size_impl,
+    _is_non_tensor,
     _is_unbatched,
     _KEY_ERROR,
     _lock_blocked,
@@ -518,6 +520,38 @@ _GATHER = 2  # an advanced index indexes the stack dim
 _STACK_ERROR = "Failed to stack tensors within a tensordict"
 
 
+def _entry_shapes(td: TensorCollection) -> dict[tuple[str, ...], torch.Size | None]:
+    """Returns the shapes of the leaves of the dense copy of ``td`` by key, without stacking them.
+
+    The shape is ``None`` where the members of a nested lazy stack have
+    leaves of different shapes, which stacking them raises for. The keys that
+    only some members have are left out, as the dense copy leaves them out.
+    """
+    td = _unwrap(td)
+    if isinstance(td, LazyStackedTensorDict) and not td._is_non_tensor:
+        if not td.tensordicts:
+            return {}
+        first, *others = [_entry_shapes(member) for member in td.tensordicts]
+        stack_dim = td.stack_dim
+        return {
+            key: None
+            if shape is None or any(other[key] != shape for other in others)
+            else torch.Size(
+                (*shape[:stack_dim], len(td.tensordicts), *shape[stack_dim:])
+            )
+            for key, shape in first.items()
+            if all(key in other for other in others)
+        }
+    shapes = {}
+    for key, value in td.items():
+        if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value)):
+            for subkey, shape in _entry_shapes(value).items():
+                shapes[(key, *subkey)] = shape
+        else:
+            shapes[(key,)] = value.shape
+    return shapes
+
+
 class _SplitIndex(NamedTuple):
     """An index of a lazy stack, read as indices of its members.
 
@@ -603,6 +637,45 @@ def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     except RuntimeError:
         return False
     return True
+
+
+def _where_split_differs(td: TensorDictBase, ndim: int) -> bool:
+    """Whether lazy where with a tensor ``other`` of ``ndim`` dims differs from TensorDict.where.
+
+    The lazy stack splits ``other`` along the stack dim. The pieces line up
+    with the leaves as in TensorDict.where, which aligns ``other`` with each
+    leaf from the right, only for the leaves with ``ndim`` dims.
+    """
+    if isinstance(td, LazyStackedTensorDict):
+        # This runs on every lazy where with a tensor `other`. The leaves of a
+        # member have one dim less than those of the stack.
+        dims = {ndim - 1}
+        for member in td.tensordicts:
+            if type(member) is TensorDict:
+                try:
+                    # a member of tensors only, checked without a Python loop
+                    if not dims.issuperset(
+                        map(Tensor.dim, member._tensordict.values())
+                    ):
+                        return True
+                    continue
+                except TypeError:
+                    # a sub-tensordict or non-tensor data
+                    pass
+            if _where_split_differs(member, ndim - 1):
+                return True
+        return False
+    for value in td.values():
+        if isinstance(value, Tensor):
+            if value.ndim != ndim:
+                return True
+        elif (
+            _is_tensor_collection(type(value))
+            and not is_non_tensor(value)
+            and _where_split_differs(value, ndim)
+        ):
+            return True
+    return False
 
 
 def _broadcasts_to(shape: torch.Size, target: torch.Size) -> bool:
@@ -1761,13 +1834,21 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: each member keeps or replaces its own entry on the path.
     def _create_nested_tuple(self, key):
-        # A stack of plain TensorDicts hands the key to each member, which
-        # keeps or replaces its own entry at key[0]. Any other stack, such as
-        # a NonTensorStack or a stack of files, replaces each level.
-        if len(key) == 1 or not all(type(td) is TensorDict for td in self.tensordicts):
+        # A stack of plain TensorDicts, or of such stacks, hands the key to
+        # each member, which keeps or replaces its own entry at key[0]. Any
+        # other stack, such as a NonTensorStack or a stack of files, replaces
+        # each level.
+        if len(key) == 1 or not self._hands_nested_key_to_members():
             return super()._create_nested_tuple(key)
         for td in self.tensordicts:
             td._create_nested_tuple(key)
+
+    def _hands_nested_key_to_members(self) -> bool:
+        return all(
+            type(td) is TensorDict
+            or (type(td) is LazyStackedTensorDict and td._hands_nested_key_to_members())
+            for td in self.tensordicts
+        )
 
     def _unbatched_member_values(self, value: Tensor) -> list[Tensor]:
         """The ``UnbatchedTensor`` ``value`` for each member, as ``unbind`` gives it.
@@ -4079,6 +4160,38 @@ class LazyStackedTensorDict(TensorDictBase):
     def _reduction_parts(self):
         return self.tensordicts
 
+    # Override: the members do not have the stack dim, and a softmax along the
+    # stack dim mixes the members.
+    def _softmax(self, dim: int, dtype: torch.dtype | None) -> Self:
+        if not self.tensordicts or self._is_vmapped or self._is_non_tensor:
+            # Under vmap over the stack dim, the batch size has no stack dim.
+            return super()._softmax(dim, dtype)
+        if dim != self.stack_dim:
+            member_dim = dim if dim < self.stack_dim else dim - 1
+            return type(self)(
+                *[td._softmax(member_dim, dtype) for td in self.tensordicts],
+                stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
+            )
+        if any(shape is None for shape in _entry_shapes(self).values()):
+            # TODO(#2359): members whose entries have different shapes cannot
+            # be stacked; they keep the previous result, which normalises the
+            # leaves of each member along the dim ``dim`` of the leaf.
+            return self._fast_apply(lambda x: torch.softmax(x, dim=dim, dtype=dtype))
+        # Along the stack dim, softmax the stacked entries and give each
+        # member its slice.
+        values = self.to_tensordict()._softmax(dim, dtype)
+
+        def softmax(x, value):
+            if value is None:
+                # An entry that only some members have is not in the dense
+                # copy: its leaves get what TensorDictBase._softmax gives them.
+                return torch.softmax(x, dim=dim, dtype=dtype)
+            # a copy, so that each member owns its entries
+            return value.clone(memory_format=torch.contiguous_format)
+
+        return self._fast_apply(softmax, values, default=None)
+
     # Override: the members may have different names.
     def _reduced_names(self, dim):
         try:
@@ -4914,6 +5027,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"{self.shape[: self.stack_dim + 1]}, got shape {other.shape}. "
                     f"Expand it to the batch shape {self.shape} first."
                 )
+            other_tensor = other if isinstance(other, Tensor) else None
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):
@@ -4936,6 +5050,25 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim,
                 stack_dim_name=self._td_dim_name,
             )
+            # once the result exists: a call that raises does not warn
+            if (
+                other_tensor is not None
+                and not is_compiling()
+                and _where_split_differs(self, other_tensor.ndim)
+            ):
+                warnings.warn(
+                    "LazyStackedTensorDict.where splits a tensor `other` of shape "
+                    f"{tuple(other_tensor.shape)} along the stack dim and gives "
+                    "each member its piece, which differs from TensorDict.where "
+                    f"for the leaves that do not have {other_tensor.ndim} dims. "
+                    "Starting with TensorDict 0.17, the default will change to "
+                    "broadcasting like TensorDict.where, which aligns `other` with "
+                    "each leaf from the right. To keep the current result, add "
+                    "size-1 dims to `other` after its stack dim until it has the "
+                    "dims of the leaves, or pass a tensordict.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
+                )
         else:
             result = LazyStackedTensorDict.lazy_stack(
                 [
