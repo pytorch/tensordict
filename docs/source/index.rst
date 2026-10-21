@@ -43,34 +43,6 @@ Build a TensorDict from the four tensors, then call the function:
 
 The new function names no tensor, so it does not change when you add one.
 
-TensorDict: keys at run time, like a dict
------------------------------------------
-
-You add and read keys at run time, as in a ``dict``. A ``dict`` value becomes
-a nested TensorDict, and a tuple of keys reads its entries. The tensors share
-the batch size, so indexing, reshaping, stacking, and ``.to(device)`` apply to
-every tensor at once, nested ones too:
-
-  >>> batch["meta"] = {"id": torch.arange(32)}
-  >>> batch[:8]["meta", "id"].shape
-  torch.Size([8])
-  >>> batch.reshape(4, 8)["images"].shape
-  torch.Size([4, 8, 3, 64, 64])
-  >>> torch.stack([batch, batch]).batch_size
-  torch.Size([2, 32])
-  >>> batch = batch.to("cuda" if torch.cuda.is_available() else "cpu")
-
-Every tensor that you add must have the batch dimensions, so the tensors of
-a group stay aligned:
-
-  >>> batch["scores"] = torch.ones(31)
-  Traceback (most recent call last):
-  ...
-  RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value must match the batch size.
-
-You can also :ref:`save it to disk <saving>`, :ref:`pass it to modules
-<modules-guide>`, and :ref:`compile functions that take it <compile>`.
-
 TensorClass: fields and methods, like a dataclass
 -------------------------------------------------
 
@@ -99,14 +71,45 @@ write once runs on one item or on a batch of any shape, and it compiles with
   >>> one = systems[0].step(torch.randn(1000, 3), dt=0.01)  # one system
   >>> type(one).__name__, one.batch_size
   ('Particles', torch.Size([1000]))
+  >>> torch.stack([systems, systems]).batch_size
+  torch.Size([2, 64, 1000])
   >>> step = torch.compile(Particles.step, fullgraph=True)
   >>> step(systems, torch.randn(64, 1000, 3), 0.01).batch_size
   torch.Size([64, 1000])
+  >>> systems = systems.to("cuda" if torch.cuda.is_available() else "cpu")
 
 The fields are class attributes, so your editor completes ``systems.pos``.
-Indexing, stacking, ``.to(device)``, and saving work as for a TensorDict.
+Saving works as for a TensorDict.
 :ref:`tensorclass-guide` explains TensorClass, and
 :ref:`choosing-a-container` helps you choose between the two forms.
+
+TensorDict: keys at run time, like a dict
+-----------------------------------------
+
+You add and read keys at run time, as in a ``dict``. A ``dict`` value becomes
+a nested TensorDict, and a tuple of keys reads its entries. The tensors share
+the batch size, so indexing, reshaping, stacking, and ``.to(device)`` apply to
+every tensor at once, nested ones too:
+
+  >>> batch["meta"] = {"id": torch.arange(32)}
+  >>> batch[:8]["meta", "id"].shape
+  torch.Size([8])
+  >>> batch.reshape(4, 8)["images"].shape
+  torch.Size([4, 8, 3, 64, 64])
+  >>> torch.stack([batch, batch]).batch_size
+  torch.Size([2, 32])
+  >>> batch = batch.to("cuda" if torch.cuda.is_available() else "cpu")
+
+Every tensor that you add must have the batch dimensions, so the tensors of
+a group stay aligned:
+
+  >>> batch["scores"] = torch.ones(31)
+  Traceback (most recent call last):
+  ...
+  RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value must match the batch size.
+
+You can also :ref:`save it to disk <saving>`, :ref:`pass it to modules
+<modules-guide>`, and :ref:`compile functions that take it <compile>`.
 
 Install
 -------

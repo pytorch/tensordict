@@ -27,8 +27,38 @@ flat = batch.flatten_keys(".")                # keys: image, label, text.tokens,
 
 The tensors share their leading dimensions, the batch size, so indexing,
 reshaping, stacking, `.to(device)`, saving, and `torch.compile` apply to all of
-them at once. TensorClass does the same for a class with typed fields and
-methods.
+them at once.
+
+TensorClass does the same for a class with typed fields and methods, like a
+dataclass. A method written once runs on one item or on a batch of any shape,
+and compiles:
+
+```python
+import torch
+from tensordict import TensorClass
+
+class Particles(TensorClass):
+    pos: torch.Tensor   # [*batch, 3]
+    vel: torch.Tensor   # [*batch, 3]
+    mass: torch.Tensor  # [*batch]
+
+    def step(self, force: torch.Tensor, dt: float) -> "Particles":
+        vel = self.vel + dt * force / self.mass.unsqueeze(-1)
+        return Particles(pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size)
+
+# 64 systems of 1,000 particles each
+systems = Particles(pos=torch.randn(64, 1000, 3), vel=torch.zeros(64, 1000, 3),
+                    mass=torch.ones(64, 1000), batch_size=[64, 1000])
+
+systems = systems.step(torch.randn(64, 1000, 3), dt=0.01)  # all 64 systems
+one = systems[0].step(torch.randn(1000, 3), dt=0.01)        # one system
+print(type(one).__name__, one.batch_size)                    # Particles torch.Size([1000])
+pairs = torch.stack([systems, systems])                      # batch_size [2, 64, 1000]
+
+step = torch.compile(Particles.step, fullgraph=True)
+systems = step(systems, torch.randn(64, 1000, 3), 0.01)
+systems = systems.to("cuda" if torch.cuda.is_available() else "cpu")  # moves every field
+```
 
 Used in physics ([PhysicsNeMo](https://github.com/NVIDIA/physicsnemo)),
 robotics ([MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground),
@@ -54,9 +84,7 @@ pip install tensordict
 Pure Python, for Python 3.10+ and PyTorch 2.11+. Nightly builds and extras:
 [Installation](https://docs.pytorch.org/tensordict/stable/installation.html).
 
-## TensorDict and TensorClass
-
-### TensorDict: keys at run time, like a dict
+## TensorDict: keys at run time, like a dict
 
 ```python
 import torch
@@ -78,36 +106,6 @@ batch["scores"] = torch.ones(31)
 # RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and
 # value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value
 # must match the batch size.
-```
-
-### TensorClass: declared fields and methods, like a dataclass
-
-A method written once runs on one item or on a batch of any shape, and
-compiles:
-
-```python
-import torch
-from tensordict import TensorClass
-
-class Particles(TensorClass):
-    pos: torch.Tensor   # [*batch, 3]
-    vel: torch.Tensor   # [*batch, 3]
-    mass: torch.Tensor  # [*batch]
-
-    def step(self, force: torch.Tensor, dt: float) -> "Particles":
-        vel = self.vel + dt * force / self.mass.unsqueeze(-1)
-        return Particles(pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size)
-
-# 64 systems of 1,000 particles each
-systems = Particles(pos=torch.randn(64, 1000, 3), vel=torch.zeros(64, 1000, 3),
-                    mass=torch.ones(64, 1000), batch_size=[64, 1000])
-
-systems = systems.step(torch.randn(64, 1000, 3), dt=0.01)  # all 64 systems
-one = systems[0].step(torch.randn(1000, 3), dt=0.01)        # one system
-print(type(one).__name__, one.batch_size)                    # Particles torch.Size([1000])
-
-step = torch.compile(Particles.step, fullgraph=True)
-systems = step(systems, torch.randn(64, 1000, 3), 0.01)
 ```
 
 ## More examples
