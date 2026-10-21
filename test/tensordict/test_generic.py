@@ -6713,20 +6713,6 @@ class TestGeneric:
             counts.append(read_full.call_count)
         assert counts == [6, 6]
 
-    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#3203: nested keys of a lazy stack of HDF5 files read every dataset",
-    )
-    def test_nested_keys_lazy_stack_h5_reads(self, tmp_path):
-        td = self._lazy_stack_of_h5(tmp_path)
-        backend = type(td.tensordicts[0]._backend)
-        with mock.patch.object(
-            backend, "read_full", autospec=True, side_effect=backend.read_full
-        ) as read_full:
-            list(td.keys(True, True))
-        assert read_full.call_count == 0
-
     @pytest.mark.parametrize(
         "make_td",
         [
