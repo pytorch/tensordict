@@ -475,25 +475,26 @@ def section_b(device, quick):
         log(f"B hidden={hidden}: warm-up {time.perf_counter() - t0:.1f}s")
         timings = interleaved(variants, device, n_iter, n_warmup=3, inner=inner)
         # Every variant has now trained its own copy of the same model on the
-        # same batches for the same number of steps: the losses agree, exactly
-        # in principle, and up to rounding between eager and compiled kernels.
+        # same batches for the same number of steps, so each TensorDict variant
+        # must match its plain-tensor twin in the same mode. Eager and compiled
+        # kernels round differently and the gap grows with every step (about 6%
+        # after the full-size run on an H100), so the modes are compared only on
+        # the first step, above.
         finals = {name: float(fn()) for name, fn in variants.items()}
-        ref = finals["plain tensors, eager"]
-        for name, value in finals.items():
-            tol = 1e-2 if "compile" in name else 1e-4
-            check(
-                math.isclose(value, ref, rel_tol=tol),
-                f"B hidden={hidden}: final loss of {name!r} is {value}, "
-                f"plain tensors eager gives {ref}",
-            )
-        check(
-            math.isclose(
-                finals["TensorDict, compile"],
-                finals["plain tensors, compile"],
-                rel_tol=1e-4,
-            ),
-            f"B hidden={hidden}: compiled final losses {finals}",
-        )
+        twins = {
+            "plain tensors, eager (A/A repeat)": "plain tensors, eager",
+            "TensorDict, eager": "plain tensors, eager",
+            "TensorDictModule, eager": "plain tensors, eager",
+            "TensorDict, compile": "plain tensors, compile",
+            "TensorDict, CudaGraphModule": "plain tensors, CudaGraphModule",
+        }
+        for name, twin in twins.items():
+            if name in finals and twin in finals:
+                check(
+                    math.isclose(finals[name], finals[twin], rel_tol=1e-4),
+                    f"B hidden={hidden}: final loss of {name!r} is "
+                    f"{finals[name]}, {twin!r} gives {finals[twin]}",
+                )
         title = (
             f"B: training step, batch {rows}, MLP hidden {hidden} "
             f"({n_params:,} parameters), time per step"
