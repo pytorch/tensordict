@@ -76,14 +76,11 @@ the values and the batch size to the constructor:
   ...     batch_size=[3, 4],  # for example, 3 robots and 4 time steps
   ... )
   >>> print(data)
-  Reading(
-      count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-      sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None),
-      signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      backup=None,
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
+  Reading(batch_size=[3,4], fields={
+      count: i64[1],
+      sensor: str,
+      signal: f32[5],
+      backup: None})
 
 The ``backup`` annotation is a string because the class refers to itself.
 Another way is ``from __future__ import annotations`` at the top of the
@@ -466,12 +463,7 @@ string as ``NonTensorData``:
   >>> slots.X = torch.ones(3, 4, 5)
   >>> slots.y = "testing"
   >>> print(slots)
-  Slots(
-      X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-      y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
+  Slots(batch_size=[3,4], fields={X: f32[5], y: str})
 
 A ``None`` field is a key missing from the tensor storage. Setting a field to
 ``None``, or deleting it with ``del obj.field``, ``obj.del_("field")`` or
@@ -487,21 +479,15 @@ field that is not a tensor, the boolean tensor has the batch shape, and it is
 ``False`` where the values differ:
 
   >>> print(data == data2)
-  Reading(
-      backup=Reading(
-          count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-          sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
-          signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-          backup=None,
-          batch_size=torch.Size([3, 4]),
-          device=None,
-          is_shared=False),
-      count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-      sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
-      signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-      batch_size=torch.Size([3, 4]),
-      device=None,
-      is_shared=False)
+  Reading(batch_size=[3,4], fields={
+      backup: Reading{
+          count: bool[1],
+          sensor: bool[],
+          signal: bool[5],
+          backup: None},
+      count: bool[1],
+      sensor: bool[],
+      signal: bool[5]})
   >>> data2.sensor = "camera"
   >>> (data == data2).sensor.any()
   tensor(False)
@@ -556,7 +542,15 @@ The flags are:
 
 ``nocast``
   Python numbers and NumPy arrays stay as they are. Without this flag, an
-  ``int``, ``float``, ``bool``, or NumPy array becomes a tensor.
+  ``int``, ``float``, ``bool``, or NumPy array becomes a tensor. A number
+  given to a field annotated ``int``, ``float`` or ``bool`` (or an optional
+  or union of these) is the exception: with a non-empty batch size it is
+  stored as :class:`~tensordict.NonTensorData`, and with an empty batch size
+  it still becomes a 0-d tensor and emits a :class:`FutureWarning`. Starting
+  with TensorDict 0.17, the default will change to keeping the Python value
+  of fields annotated int/float/bool, as :class:`~tensordict.NonTensorData`.
+  Annotate the field ``torch.Tensor`` to keep the tensor
+  (`#1199 <https://github.com/pytorch/tensordict/issues/1199>`_).
 
 ``tensor_only``
   Each field must have a tensor annotation: a tensor type, a tensor collection
@@ -712,9 +706,12 @@ tensorclass type or instance from it. You do not change the class definition:
   ...     a: int
   ...     b: torch.Tensor
   >>> XTc = from_dataclass(X, autocast=True)  # convert the type
-  >>> x_tc = from_dataclass(X(a=0, b=torch.zeros(())))  # convert an instance
+  >>> x_tc = from_dataclass(X(a=0, b=torch.zeros(())), autocast=True)  # convert an instance
   >>> XTc(a=torch.tensor(1), b=torch.zeros(())).a
   1
+
+Without ``autocast`` or ``nocast``, ``from_dataclass(X(a=0, ...))`` casts
+``a`` to a 0-d tensor and emits the ``FutureWarning`` of ``nocast`` above.
 
 It accepts the flags of a tensorclass (``autocast``, ``nocast``, ``frozen``,
 ``tensor_only``, ``shadow``). When it applies them (not with ``dest_cls``,

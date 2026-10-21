@@ -71,6 +71,8 @@ Persistence and serialization:
 - `_utils_key_json.py`: encodes keys into file names, and selects the JSON
   backend (`json` or `orjson`).
 - `_tabular.py`: pandas, CSV, Parquet and JSON import and export.
+- `_arrow.py`: `from_arrow` and `to_arrow`, which convert between Arrow
+  tables and tensordicts, viewing the Arrow buffers where they can.
 - `_datasets.py`: `to_mds`, which writes a MosaicML streaming dataset.
 
 Typed containers:

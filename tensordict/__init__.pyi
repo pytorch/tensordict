@@ -9,10 +9,13 @@ from tensordict._archive import (
     refresh_archive_checksums,
     unpack_memmap,
 )
+from tensordict._arrow import from_arrow, to_arrow
 from tensordict._base.shape import PackLayout
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
+from tensordict._safetensors import from_safetensors, to_safetensors
 from tensordict._td import (
+    append_memmap,
     cat,
     from_consolidated,
     from_module,
@@ -126,6 +129,8 @@ __all__ = [
     "from_csv",
     "from_dict",
     "from_any",
+    "from_arrow",
+    "to_arrow",
     "from_h5",
     "from_zarr",
     "from_json",
@@ -150,6 +155,7 @@ __all__ = [
     # Memory mapping
     "memmap",
     "load_memmap",
+    "append_memmap",
     # Saving and loading
     "save",
     "load",
@@ -157,6 +163,8 @@ __all__ = [
     "unpack_memmap",
     "is_memmap_archive",
     "refresh_archive_checksums",
+    "to_safetensors",
+    "from_safetensors",
     # Merging, padding, and grouping
     "merge_tensordicts",
     "pad",

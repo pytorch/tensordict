@@ -126,13 +126,7 @@ genome of the reads:
     ...     },
     ... )
     >>> print(td)
-    TensorDict(
-        fields={
-            genome: NonTensorData(data=hg38, batch_size=torch.Size([]), device=None),
-            score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={genome: str, score: f32[]})
 
 Indexing with a key (``td["genome"]``) returns the content of the
 :class:`~tensordict.NonTensorData`. :meth:`~tensordict.TensorDict.get`
@@ -161,24 +155,12 @@ gets the batch size of the tensordict:
     ...     batch_size=[3]
     ... )
     >>> print(td)
-    TensorDict(
-        fields={
-            genome: NonTensorData(data=hg38, batch_size=torch.Size([3]), device=None),
-            score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([3]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[3], fields={genome: str, score: f32[]})
 
 All the elements of the batch have the same value:
 
     >>> print(td[0])
-    TensorDict(
-        fields={
-            genome: NonTensorData(data=hg38, batch_size=torch.Size([]), device=None),
-            score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={genome: str, score: f32[]})
 
 If you write a different value into one element, the entry becomes a
 :class:`~tensordict.NonTensorStack`:
@@ -215,28 +197,13 @@ To give each element of the batch its own value, use a
     ...     batch_size=[3]
     ... )
     >>> print(td)
-    TensorDict(
-        fields={
-            score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-            seq: NonTensorStack(
-                ['ACGT', 'GGCC', 'TTAG'],
-                batch_size=torch.Size([3]),
-                device=None)},
-        batch_size=torch.Size([3]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[3], fields={score: f32[], seq: NonTensorStack})
 
 Index the tensordict to get one element. The first element has the first
 sequence:
 
     >>> print(td[0])
-    TensorDict(
-        fields={
-            score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            seq: NonTensorData(data=ACGT, batch_size=torch.Size([]), device=None)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={score: f32[], seq: str})
 
 For a stack, ``td["seq"]`` returns a ``tensordict.utils.LinkedList``. It is a
 subclass of :class:`list`, and an assignment to one of its items writes into
@@ -266,13 +233,7 @@ list is one value for the whole batch:
     ...     batch_size=[3]
     ... )
     >>> print(td[0])
-    TensorDict(
-        fields={
-            score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            seq: NonTensorData(data=['ACGT', 'GGCC', 'TTAG'], batch_size=torch.Size([]), device=None)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={score: f32[], seq: list})
 
 Stacking tensordicts with non-tensor data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -288,16 +249,7 @@ same:
     ...     },
     ... )
     >>> print(torch.stack([td, td]))
-    TensorDict(
-        fields={
-            genome: NonTensorStack(
-                ['hg38', 'hg38'],
-                batch_size=torch.Size([2]),
-                device=None),
-            score: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={genome: NonTensorStack, score: f32[]})
 
 For :class:`~tensordict.MetaData` entries, :func:`~torch.stack` returns one
 :class:`~tensordict.MetaData` if all the stacked values are the same Python
@@ -312,13 +264,7 @@ a :class:`~tensordict.NonTensorStack`, as for
     ...     },
     ... )
     >>> print(torch.stack([td, td]))
-    TensorDict(
-        fields={
-            genome: MetaData(data=hg38, batch_size=torch.Size([2]), device=None),
-            score: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={genome: MetaData, score: f32[]})
     >>> equal_lists = [TensorDict({"a": MetaData([1, 2])}), TensorDict({"a": MetaData([1, 2])})]
     >>> type(torch.stack(equal_lists).get("a")).__name__
     'NonTensorStack'

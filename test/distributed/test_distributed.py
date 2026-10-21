@@ -8,7 +8,9 @@ import argparse
 import importlib.util
 import os
 import pickle
+import socket
 import sys
+import warnings
 from datetime import timedelta
 
 import pytest
@@ -23,11 +25,13 @@ from tensordict import (
 )
 from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
+from torch.distributed import checkpoint as dcp
 from torch.distributed._tensor import (
     DeviceMesh,
     distribute_module,
     distribute_tensor,
     # init_device_mesh,
+    Replicate,
     Shard,
 )
 from torch.distributed.fsdp import (
@@ -262,6 +266,84 @@ class TestDTensor:
         finally:
             server_worker.join()
             client_worker.join()
+
+
+class TestDCPDTensor:
+    """Save a tensordict of sharded DTensors with DCP and load it resharded."""
+
+    @staticmethod
+    def make_tensordict(mesh, placements, fill=None):
+        weight = torch.arange(16.0).reshape(8, 2)
+        bias = torch.arange(8.0)
+        if fill is not None:
+            weight, bias = weight.fill_(fill), bias.fill_(fill)
+        return TensorDict(
+            {
+                "weight": distribute_tensor(weight, mesh, placements),
+                "nested": {"bias": distribute_tensor(bias, mesh, placements)},
+            },
+            batch_size=[8],
+        )
+
+    @classmethod
+    def worker(cls, rank, port, path, queue):
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=2, init_method=f"tcp://localhost:{port}"
+        )
+        try:
+            mesh = DeviceMesh("cpu", torch.arange(2))
+            expected = cls.make_tensordict(mesh, [Shard(0)])
+            dcp.save({"td": expected}, checkpoint_id=path)
+            # Same sharding
+            sharded = cls.make_tensordict(mesh, [Shard(0)], fill=-1)
+            dcp.load({"td": sharded}, checkpoint_id=path)
+            # Resharded: every rank holds the full tensors
+            replicated = cls.make_tensordict(mesh, [Replicate()], fill=-1)
+            dcp.load({"td": replicated}, checkpoint_id=path)
+            for key in (("weight",), ("nested", "bias")):
+                full = expected[key].full_tensor()
+                assert sharded[key].placements == (Shard(0),)
+                torch.testing.assert_close(sharded[key].to_local(), full.chunk(2)[rank])
+                assert replicated[key].placements == (Replicate(),)
+                torch.testing.assert_close(replicated[key].to_local(), full)
+            queue.put("ok")
+        except Exception as err:
+            queue.put(repr(err))
+        finally:
+            dist.destroy_process_group()
+
+    def test_dcp_save_load_resharded(self, tmp_path):
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            tdlogger.info("start method already set to %s", mp.get_start_method())
+        with socket.socket() as sock:
+            sock.bind(("localhost", 0))
+            port = sock.getsockname()[1]
+        path = str(tmp_path)
+        queues = [mp.Queue(1) for _ in range(2)]
+        procs = [
+            mp.Process(target=self.worker, args=(rank, port, path, queues[rank]))
+            for rank in range(2)
+        ]
+        for proc in procs:
+            proc.start()
+        try:
+            for queue in queues:
+                assert queue.get(timeout=TIMEOUT) == "ok"
+        finally:
+            for proc in procs:
+                proc.join(TIMEOUT)
+        # Resharded: plain tensors in one process, without a process group
+        restored = TensorDict(
+            {"weight": torch.zeros(8, 2), "nested": {"bias": torch.zeros(8)}},
+            batch_size=[8],
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # no process group: single-process load
+            dcp.load({"td": restored}, checkpoint_id=path)
+        torch.testing.assert_close(restored["weight"], torch.arange(16.0).reshape(8, 2))
+        torch.testing.assert_close(restored["nested", "bias"], torch.arange(8.0))
 
 
 class TestGather:
@@ -1468,6 +1550,138 @@ class TestAllReduce:
             for w in workers:
                 w.join(timeout=TIMEOUT)
             assert out == "yuppie"
+
+
+class TestBucketedReduce:
+    @staticmethod
+    def make_td(rank):
+        generator = torch.Generator().manual_seed(rank)
+
+        def rand(*shape, dtype=torch.float32):
+            return torch.randint(1, 4, shape, generator=generator).to(dtype)
+
+        return TensorDict(
+            {
+                "a": rand(2, 3),
+                ("b", "c"): rand(2, dtype=torch.int64),
+                ("b", "d", "e"): rand(2, 5, dtype=torch.float64),
+                "f": rand(2, 1, dtype=torch.int32),
+                "g": rand(2, 40),
+                ("b", "h"): rand(2),
+                "s": LazyStackedTensorDict(
+                    TensorDict(x=rand(4)), TensorDict(x=rand(4))
+                ),
+            },
+            batch_size=[2],
+        )
+
+    def test_bucket_planning(self, monkeypatch):
+        # Without a process group: record what each collective receives.
+        calls = []
+
+        def all_reduce(tensor, op=None, group=None, async_op=False):
+            calls.append(tensor)
+            if tensor.is_contiguous():
+                tensor.mul_(2)
+
+        monkeypatch.setattr(dist, "all_reduce", all_reduce)
+        td = self.make_td(0)
+        # Expanded: reducing it in place writes overlapping memory, so it
+        # stays out of the multi-rank test.
+        x = torch.ones(3).expand(2, 3)
+        td["x"] = x
+        expected = td.clone()
+        td.all_reduce(bucket_bytes=2**20)
+        # One bucket per dtype, plus one for "x", which is not packed.
+        assert len(calls) == 5
+        assert {t.dtype for t in calls[1:]} == {
+            torch.float32,
+            torch.int64,
+            torch.float64,
+            torch.int32,
+        }
+        assert calls[0] is x
+        assert (td["x"] == 1).all()
+        # The packed results are copied back into the leaves.
+        assert (td.exclude("x") == expected.exclude("x") * 2).all()
+
+    @staticmethod
+    def worker(queue, rank, op, port):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = port
+        dist.init_process_group(
+            "gloo", rank=rank, world_size=2, timeout=timedelta(seconds=60)
+        )
+
+        def run(td, dst, mode, **kwargs):
+            async_op = mode != "sync"
+            if dst is None:
+                works = td.all_reduce(op=op, async_op=async_op, **kwargs)
+            else:
+                works = td.reduce(
+                    dst,
+                    op=op,
+                    async_op=async_op,
+                    return_premature=mode == "premature",
+                    **kwargs,
+                )
+            for work in works or ():
+                work.wait()
+            return works
+
+        errors = []
+        try:
+            for bucket_bytes in (64, 2**20):
+                # dst None: all_reduce, which has no return_premature.
+                for dst, modes in (
+                    (None, ("sync", "async")),
+                    (1, ("sync", "async", "premature")),
+                ):
+                    for mode in modes:
+                        case = (bucket_bytes, mode, dst)
+                        expected = TestBucketedReduce.make_td(rank)
+                        run(expected, dst, mode)
+                        td = TestBucketedReduce.make_td(rank)
+                        works = run(td, dst, mode, bucket_bytes=bucket_bytes)
+                        if (dst is None or rank == dst) and not (td == expected).all():
+                            errors.append((case, "result"))
+                        if bucket_bytes == 2**20 and works is not None:
+                            # One bucket per dtype.
+                            if len(works) != 4:
+                                errors.append((case, len(works)))
+        except Exception as err:
+            errors.append(repr(err))
+        queue.put(errors)
+        dist.barrier()
+        dist.destroy_process_group()
+
+    # One port per run, so that a run does not wait for the port of the last.
+    @pytest.mark.parametrize(
+        "op,port",
+        [
+            (dist.ReduceOp.SUM, "29587"),
+            (dist.ReduceOp.MAX, "29588"),
+            (dist.ReduceOp.PRODUCT, "29589"),
+        ],
+        ids=["sum", "max", "product"],
+    )
+    def test_bucketed_equals_per_leaf(self, set_context, op, port):
+        queue = mp.Queue(2)
+        workers = [
+            mp.Process(target=type(self).worker, args=(queue, rank, op, port))
+            for rank in range(2)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = [queue.get(timeout=TIMEOUT) for _ in workers]
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+                if w.is_alive():
+                    w.terminate()
+        assert out == [[], []]
 
 
 class TestBroadcast:

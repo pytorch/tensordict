@@ -576,18 +576,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> with params.to_module(td_module):
         ...     _ = td_module(td)
         >>> print(td)
-        TensorDict(
-            fields={
-                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                action_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([3]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[3], fields={
+            action: f32[4],
+            action_log_prob: f32[],
+            hidden: f32[8],
+            input: f32[4],
+            loc: f32[4],
+            params: f32[8],
+            scale: f32[4]})
         >>> with params.to_module(td_module):
         ...     dist = td_module.get_dist(td)
         >>> print(dist)
@@ -600,18 +596,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         ...         return td_module(td)
         >>> td_vmap = vmap(func, (None, 0))(td, params)
         >>> print(td_vmap)
-        TensorDict(
-            fields={
-                action: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                action_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 3]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[4,3], fields={
+            action: f32[4],
+            action_log_prob: f32[],
+            hidden: f32[8],
+            input: f32[4],
+            loc: f32[4],
+            params: f32[8],
+            scale: f32[4]})
 
     """
 
@@ -1452,14 +1444,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         >>> input = TensorDict(x=torch.ones(3))
         >>> td = module(input.copy())
         >>> print(td)
-        TensorDict(
-            fields={
-                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[], fields={loc: f32[3], sample: f32[3], x: f32[3]})
         >>> print(module.get_dist(input))
         Normal(loc: torch.Size([3]), scale: torch.Size([3]))
         >>> print(module.log_prob(td))
@@ -1476,16 +1461,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         ... )
         >>> td = module(TensorDict(x=torch.ones(3)))
         >>> print(td)
-        TensorDict(
-            fields={
-                loc2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[], fields={
+            loc2: f32[3],
+            loc: f32[3],
+            sample0: f32[3],
+            sample1: f32[3],
+            x: f32[3]})
         >>> print(module.get_dist(input))
         Normal(loc: torch.Size([3]), scale: torch.Size([3]))
         >>> print(module.log_prob(td))
@@ -1503,26 +1484,18 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         >>> input = TensorDict(x=torch.ones(3))
         >>> td = module(input.copy())
         >>> print(td)
-        TensorDict(
-            fields={
-                loc2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[], fields={
+            loc2: f32[3],
+            loc: f32[3],
+            sample0: f32[3],
+            sample1: f32[3],
+            x: f32[3]})
         >>> print(module.get_dist(input))
         CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3])), 'sample1': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
         >>> print(module.log_prob(td))
-        TensorDict(
-            fields={
-                sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample1_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[], fields={
+            sample0_log_prob: f32[3],
+            sample1_log_prob: f32[3]})
         >>> # Even a single intermediate distribution is wrapped in a CompositeDistribution when
         >>> # return_composite=True
         >>> module = Seq(
@@ -1534,24 +1507,15 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         ... )
         >>> td = module(TensorDict(x=torch.ones(3)))
         >>> print(td)
-        TensorDict(
-            fields={
-                loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                y: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[], fields={
+            loc: f32[3],
+            sample0: f32[3],
+            x: f32[3],
+            y: f32[3]})
         >>> print(module.get_dist(input))
         CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
         >>> print(module.log_prob(td))
-        TensorDict(
-            fields={
-                sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        TensorDict(batch_size=[], fields={sample0_log_prob: f32[3]})
 
     """
 

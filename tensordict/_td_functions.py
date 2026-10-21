@@ -5,12 +5,18 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from typing import Any, Sequence, TYPE_CHECKING
 
 import torch
+from tensordict._archive import _tensor_chunks
 from tensordict._nestedkey import NestedKey
+from tensordict._td_memmap import _memmap_filename
 from tensordict._tensorcollection import TensorCollection
+from tensordict._utils_key_json import json_dumps
+from tensordict.utils import is_non_tensor, is_tensorclass
 
 if TYPE_CHECKING:
     from typing import TypeVar
@@ -20,6 +26,7 @@ if TYPE_CHECKING:
     T = TypeVar("T", bound="TensorCollection | TensorClass")
 
 __all__ = [
+    "append_memmap",
     "cat",
     "from_consolidated",
     "from_module",
@@ -626,6 +633,243 @@ def load_memmap(
     )
 
 
+def append_memmap(
+    prefix: str | Path,
+    rows: TensorCollection,
+    *,
+    allow_pickle: bool | None = None,
+) -> None:
+    """Appends rows to a tensordict saved in a directory, along its first batch dimension.
+
+    Each leaf file grows by the bytes of the new rows, and the ``meta.json``
+    files are rewritten last, each one through a temporary file, so that a
+    failed append leaves the saved data as it was. Readers that mapped the
+    files before the append keep seeing the old number of rows, and
+    :func:`~tensordict.load_memmap` after the append sees the new one. Use one
+    writer at a time. Each append maps the whole saved tree, as
+    :func:`~tensordict.load_memmap` does, to read its structure, so many small
+    appends to a save with many leaves are slow. See :ref:`saving`.
+
+    ``rows`` must have the keys, the classes, the dtypes and the trailing
+    shapes of the saved tensordict, and its batch size may differ from the
+    saved one in its first dimension only. A non-tensor entry stays as
+    saved, and its value in ``rows`` must be equal to it: either one value or
+    a :class:`~tensordict.NonTensorStack` of equal values. A saved
+    :class:`~tensordict.NonTensorStack`, a lazy stack, a nested tensor and an
+    archive cannot grow, and raise. Everything is checked before the first
+    file is written.
+
+    Args:
+        prefix (str or Path): the directory that :func:`~tensordict.save` or
+            :func:`~tensordict.memmap` wrote.
+        rows (TensorDictBase or tensorclass): the rows to append.
+
+    Keyword Args:
+        allow_pickle (bool, optional): whether the pickled non-tensor entries
+            of the saved tensordict, which are compared with those of
+            ``rows``, may be unpickled, as in
+            :func:`~tensordict.load_memmap`. Defaults to ``None``.
+
+    Raises:
+        ValueError: if ``prefix`` is not a directory, or if ``rows`` cannot be
+            appended to the saved tensordict.
+
+    Examples:
+        >>> import tempfile
+        >>> import torch
+        >>> import tensordict
+        >>> from tensordict import TensorDict
+        >>> td = TensorDict(a=torch.zeros(3, 2), batch_size=[3])
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     _ = tensordict.save(td, tmpdir)
+        ...     tensordict.append_memmap(tmpdir, TensorDict(a=torch.ones(2, 2), batch_size=[2]))
+        ...     print(tensordict.load_memmap(tmpdir)["a"].sum(-1).tolist())
+        [0.0, 0.0, 0.0, 2.0, 2.0]
+
+    """
+    from tensordict.base import is_tensor_collection
+
+    prefix = Path(prefix)
+    if not prefix.is_dir():
+        raise ValueError(
+            f"append_memmap appends to a directory written by save or memmap, "
+            f"and {prefix} is not one. An archive cannot grow: unpack it with "
+            f"unpack_memmap first."
+        )
+    if not is_tensor_collection(rows):
+        raise TypeError(
+            f"rows must be a tensordict or a tensorclass, got {type(rows)}."
+        )
+    saved = load_memmap(prefix, allow_pickle=allow_pickle)
+    if not saved.batch_dims or not rows.batch_dims:
+        raise ValueError(
+            "append_memmap appends along the first batch dimension, which the "
+            f"saved tensordict (batch size {saved.batch_size}) and the rows "
+            f"(batch size {rows.batch_size}) must both have."
+        )
+    leaves = []
+    metadata_files = []
+    _check_append(saved, rows, (), leaves, metadata_files)
+    num_rows = saved.batch_size[0] + rows.batch_size[0]
+    del saved
+
+    # Grow the leaf files. On an error, they get their old sizes back.
+    old_sizes = {}
+    replacements = []
+    num_replaced = 0
+    try:
+        for filename, old_nbytes, value in leaves:
+            if not value.numel():
+                continue
+            old_sizes[filename] = (
+                os.path.getsize(filename) if os.path.exists(filename) else None
+            )
+            with open(filename, "wb" if old_sizes[filename] is None else "r+b") as f:
+                # A file can be longer than its leaf, as after a failed
+                # append: write the rows right after the saved ones.
+                f.seek(old_nbytes)
+                for chunk in _tensor_chunks(value):
+                    f.write(chunk)
+        # Write every new meta.json before the first one replaces the old.
+        for metadata_file in metadata_files:
+            with open(metadata_file, "rb") as f:
+                old_metadata = f.read()
+            metadata = json.loads(old_metadata)
+            metadata["shape"][0] = num_rows
+            for entry in metadata.values():
+                if isinstance(entry, dict) and "dtype" in entry and "shape" in entry:
+                    entry["shape"][0] = num_rows
+            json_str = json_dumps(metadata)
+            tmp_file = metadata_file.with_name(f".{metadata_file.name}.append.tmp")
+            replacements.append((tmp_file, metadata_file, old_metadata))
+            with open(tmp_file, "wb") as f:
+                f.write(
+                    json_str.encode("utf-8") if isinstance(json_str, str) else json_str
+                )
+        for tmp_file, metadata_file, _ in replacements:
+            os.replace(tmp_file, metadata_file)
+            num_replaced += 1
+    except BaseException:
+        # Put back the meta.json files already replaced, then the leaves.
+        for _, metadata_file, old_metadata in replacements[:num_replaced]:
+            with open(metadata_file, "wb") as f:
+                f.write(old_metadata)
+        for tmp_file, _, _ in replacements:
+            if tmp_file.exists():
+                os.remove(tmp_file)
+        for filename, size in old_sizes.items():
+            if size is None:
+                os.remove(filename)
+            else:
+                os.truncate(filename, size)
+        raise
+
+
+def _check_append(saved, rows, key, leaves, metadata_files) -> None:
+    """Checks that ``rows`` can be appended to the loaded tensordict ``saved``.
+
+    Appends ``(filename, saved_nbytes, value)`` to ``leaves`` for each leaf,
+    and the path of each ``meta.json`` to rewrite to ``metadata_files``.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+    from tensordict.base import is_tensor_collection
+    from tensordict.tensorclass import NonTensorData
+
+    where = (
+        f"the entry {key if len(key) > 1 else key[0]!r}"
+        if key
+        else "the saved tensordict"
+    )
+    if rows.batch_size[1:] != saved.batch_size[1:]:
+        raise ValueError(
+            f"Cannot append rows of batch size {rows.batch_size} to {where}, of "
+            f"batch size {saved.batch_size}: they differ beyond the first dimension."
+        )
+    if is_tensorclass(saved):
+        if type(rows) is not type(saved):
+            raise ValueError(
+                f"Cannot append a {type(rows).__name__} to {where}, a "
+                f"{type(saved).__name__}."
+            )
+        saved, rows = saved._tensordict, rows._tensordict
+    elif not isinstance(saved, TensorDict) or is_tensorclass(rows):
+        raise ValueError(
+            f"Cannot append a {type(rows).__name__} to {where}, a "
+            f"{type(saved).__name__}."
+        )
+    if set(saved.keys()) != set(rows.keys()):
+        raise ValueError(
+            f"Cannot append rows with the keys {sorted(rows.keys())} to {where}, "
+            f"which has the keys {sorted(saved.keys())}."
+        )
+    prefix = Path(saved._memmap_prefix)
+    metadata_files.append(prefix / "meta.json")
+    for name in saved.keys():
+        entry_key = key + (name,)
+        where = f"the entry {entry_key if key else name!r}"
+        old = saved._get_str(name, None)
+        new = rows._get_str(name, None)
+        if is_non_tensor(old):
+            if not isinstance(old, NonTensorData):
+                raise ValueError(
+                    f"Cannot append to {where}, a {type(old).__name__}: a stack "
+                    "of non-tensor values cannot grow."
+                )
+            if not is_non_tensor(new) or not all(
+                _non_tensor_equal(value, old.data) for value in _non_tensor_values(new)
+            ):
+                raise ValueError(
+                    f"Cannot append to {where}: the saved non-tensor value "
+                    f"{old.data!r} stays as it is, so the rows must hold the "
+                    f"same value, not "
+                    f"{new.data if isinstance(new, NonTensorData) else new!r}."
+                )
+        elif isinstance(old, LazyStackedTensorDict):
+            raise ValueError(f"Cannot append to {where}: a lazy stack cannot grow.")
+        elif is_tensor_collection(old):
+            if not is_tensor_collection(new) or is_non_tensor(new):
+                raise ValueError(
+                    f"Cannot append a {type(new).__name__} to {where}, a "
+                    f"{type(old).__name__}."
+                )
+            _check_append(old, new, entry_key, leaves, metadata_files)
+        elif not isinstance(new, torch.Tensor) or is_tensor_collection(new):
+            raise ValueError(
+                f"Cannot append a {type(new).__name__} to {where}, a tensor."
+            )
+        elif old.is_nested or new.is_nested:
+            raise ValueError(f"Cannot append to {where}: a nested tensor cannot grow.")
+        elif new.dtype != old.dtype or new.shape[1:] != old.shape[1:]:
+            raise ValueError(
+                f"Cannot append rows of dtype {new.dtype} and shape "
+                f"{tuple(new.shape)} to {where}, of dtype {old.dtype} and shape "
+                f"{tuple(old.shape)}."
+            )
+        else:
+            # A leaf with no elements has no file.
+            filename = getattr(old, "filename", None) or _memmap_filename(
+                prefix, name, robust_key=True
+            )
+            leaves.append((filename, old.numel() * old.dtype.itemsize, new))
+
+
+def _non_tensor_values(value) -> list:
+    """Returns the value of a NonTensorData, or every value of a NonTensorStack."""
+    from tensordict.tensorclass import NonTensorData
+
+    if isinstance(value, NonTensorData):
+        return [value.data]
+    return [v for td in value.tensordicts for v in _non_tensor_values(td)]
+
+
+def _non_tensor_equal(a, b) -> bool:
+    try:
+        return bool(a == b)
+    except Exception:
+        return False
+
+
 def save(
     data: TensorCollection,
     prefix: str | None = None,
@@ -637,6 +881,7 @@ def save(
     robust_key: bool | None = True,
     archive: bool | None = None,
     compression: str | int | None = None,
+    atomic: bool = False,
 ) -> TensorCollection:
     """Saves a tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -678,6 +923,12 @@ def save(
             :mod:`zipfile` constant. Only valid for an archive. Defaults to
             ``None``, which stores them uncompressed. Only uncompressed
             entries load without a copy.
+        atomic (bool, optional): if ``True``, the directory is written next
+            to ``prefix`` and then renamed to it, so that an error or a crash
+            during the write leaves ``prefix`` as it was. Not supported on
+            Windows for a directory. :meth:`~tensordict.TensorDictBase.memmap`
+            gives the details.
+            Defaults to ``False``.
 
     Returns:
         A new, locked tensordict whose leaves are
@@ -706,6 +957,7 @@ def save(
         robust_key=robust_key,
         archive=archive,
         compression=compression,
+        atomic=atomic,
     )
 
 
@@ -721,6 +973,7 @@ def memmap(
     robust_key: bool | None = True,
     archive: bool | None = None,
     compression: str | int | None = None,
+    atomic: bool = False,
 ) -> TensorCollection:
     """Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -763,6 +1016,12 @@ def memmap(
             :mod:`zipfile` constant. Only valid for an archive. Defaults to
             ``None``, which stores them uncompressed. Only uncompressed
             entries load without a copy.
+        atomic (bool, optional): if ``True``, the directory is written next
+            to ``prefix`` and then renamed to it, so that an error or a crash
+            during the write leaves ``prefix`` as it was. Not supported on
+            Windows for a directory. :meth:`~tensordict.TensorDictBase.memmap`
+            gives the details.
+            Defaults to ``False``.
 
     Returns:
         A new, locked tensordict whose leaves are
@@ -790,6 +1049,7 @@ def memmap(
         robust_key=robust_key,
         archive=archive,
         compression=compression,
+        atomic=atomic,
     )
 
 

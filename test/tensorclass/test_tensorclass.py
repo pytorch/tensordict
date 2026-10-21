@@ -58,6 +58,7 @@ from tensordict import (
     set_capture_non_tensor_stack,
     set_get_defaults_to_none,
     set_list_to_stack,
+    set_printoptions,
     TensorClass,
     tensorclass,
     TensorDict,
@@ -1965,7 +1966,10 @@ class TestTensorClass:
             # an instance's values are deep-copied: nothing changes in 0.17
             from_dataclass(Cfg())
             TensorDict.from_dataclass(Cfg(), as_tensorclass=True)
-        assert not messages(record)
+        # only Silent() casting b to a 0-d tensor warns (#1199), not a default
+        assert [m.split(" is stored")[0] for m in messages(record)] == [
+            "The int given to the field 'b' of Silent"
+        ]
 
     @pytest.mark.parametrize("pre_dataclass", [False, True])
     def test_defaultfactory_init_false_setattr(self, pre_dataclass):
@@ -2494,15 +2498,17 @@ class TestTensorClass:
         data = MyData(x=torch.zeros(3), hidden=torch.ones(3), batch_size=[3])
         nested = TensorDict(data=data, batch_size=[3])
         for obj in (data, nested, lazy_stack([data, data])):
-            text = repr(obj)
+            with tensordict.set_printoptions(compact=False):
+                text = repr(obj)
             assert "x=" in text
             assert "hidden" not in text
             assert "secret" not in text
             assert "label" not in text
             assert "unset" not in text
-            with tensordict.set_printoptions(compact=True):
-                text = repr(obj)
+            # the compact repr is the default
+            text = repr(obj)
             assert "x: " in text
+            assert "secret" not in text
             assert "hidden" not in text
             assert "label" not in text
             assert "unset" not in text
@@ -2668,6 +2674,7 @@ class TestTensorClass:
         assert getattr(shadow, "y", "default") is None
 
     @pytest.mark.parametrize("shadow", [False, True])
+    @set_printoptions(compact=False)
     def test_none_field_is_missing_key(self, shadow):
         # #2210: a None field is a key missing from the TensorDict, and
         # _non_tensordict holds no placeholder for it
@@ -2951,10 +2958,11 @@ class TestTensorClass:
             from_dataclass(Tensors, tensor_only=True)
             # The flags are not used with dest_cls or for a tensorclass type.
             dest_cls = from_dataclass(MyDataClass)
-            assert isinstance(
-                from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
-                dest_cls,
-            )
+            with pytest.warns(FutureWarning, match="keeping the Python value"):
+                assert isinstance(
+                    from_dataclass(x, dest_cls=dest_cls, autocast=True, nocast=True),
+                    dest_cls,
+                )
             assert from_dataclass(dest_cls, tensor_only=True, autocast=True) is dest_cls
             # Inputs that are not dataclasses raise as before.
             with pytest.raises(TypeError, match="Expected a obj input"):
@@ -2983,18 +2991,24 @@ class TestTensorClass:
         assert isinstance(x.b, int)
         assert isinstance(x.c, int)
 
-        x = MyTensorClass(a=0, b=0, c=0)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = MyTensorClass(a=0, b=0, c=0)
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
         assert isinstance(x.c, torch.Tensor)
 
-        x = TensorDict.from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = TensorDict.from_dataclass(MyTensorClass(a=0, b=0, c=0))
         assert isinstance(x, TensorDict)
         assert isinstance(x["a"], torch.Tensor)
         assert isinstance(x["b"], torch.Tensor)
         assert isinstance(x["c"], torch.Tensor)
 
-        x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        with pytest.warns(FutureWarning, match="keeping the Python value") as record:
+            x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        # it points at the call, so Python shows it once per call site, not
+        # once per call
+        assert {w.filename for w in record} == {__file__}
         assert is_tensorclass(x)
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
@@ -3007,7 +3021,8 @@ class TestTensorClass:
             c: int = 0
 
         cls = from_dataclass(MyOtherDataClass)
-        x = from_dataclass(MyOtherDataClass(), dest_cls=cls)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            x = from_dataclass(MyOtherDataClass(), dest_cls=cls)
         assert is_tensorclass(x)
         assert type(x) is cls
         assert isinstance(x.a, torch.Tensor)
@@ -3444,6 +3459,7 @@ class TestTensorClass:
         assert a.grad.z is None
 
     @pytest.mark.parametrize("tensor_only", [False, True])
+    @set_printoptions(compact=False)
     def test_grad_keeps_self(self, tensor_only):
         # .grad holds None for a field without a grad. Neither that None nor
         # later writes into the grad may reach the instance.
@@ -6303,14 +6319,15 @@ class TestMemmap:
         class MyOtherClass:
             Y: torch.Tensor
 
-        data = MyClass(
-            X=torch.randn(10, 3),
-            td=TensorDict({"y": torch.randn(10)}, batch_size=[10]),
-            integer=3,
-            string="a string",
-            dictionary={"some_data": "a"},
-            batch_size=[],
-        )
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            data = MyClass(
+                X=torch.randn(10, 3),
+                td=TensorDict({"y": torch.randn(10)}, batch_size=[10]),
+                integer=3,
+                string="a string",
+                dictionary={"some_data": "a"},
+                batch_size=[],
+            )
 
         data.memmap_(tmpdir)
         data2 = MyClass.load_memmap(tmpdir)
@@ -6895,7 +6912,8 @@ class TestNoCasting:
         class X:
             a: int  # type is irrelevant
 
-        assert isinstance(X(1).a, torch.Tensor)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            assert isinstance(X(1).a, torch.Tensor)
 
         @tensorclass(nocast=True)
         class X:
@@ -6921,7 +6939,8 @@ class TestNoCasting:
         class X:
             a: int  # type is irrelevant
 
-        assert isinstance(X(True).a, torch.Tensor)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            assert isinstance(X(True).a, torch.Tensor)
 
         @tensorclass(nocast=True)
         class X:
@@ -7474,6 +7493,7 @@ class TestShadow:
         assert c.names == 0
         assert c.device == 0
 
+    @set_printoptions(compact=False)
     def test_shadow_repr(self):
         @tensorclass(shadow=True)
         class MyClass:
@@ -7840,6 +7860,162 @@ class TestDeprecations:
             c.update_at_({"a": torch.ones(())}, 0)
             assert (c.b == 3).all()
 
+    @pytest.mark.parametrize(
+        "annotation,value",
+        [
+            (int, 3),
+            (int, True),
+            (float, 1.5),
+            (float, 1),
+            pytest.param(float, np.float64(1.5), id="float-np.float64"),
+            (bool, False),
+            (Optional[int], 3),
+            (Union[int, float], 1.5),
+        ],
+    )
+    def test_scalar_field(self, annotation, value):
+        MyClass = type(
+            "MyClass", (TensorClass,), {"__annotations__": {"a": annotation}}
+        )
+        match = r"Starting with TensorDict 0\.17, the default will change to keeping"
+        with pytest.warns(FutureWarning, match=match) as record:
+            c = MyClass(a=value)
+        assert record[0].filename == __file__
+        assert c.a.shape == () and c.a == value
+        with pytest.warns(FutureWarning, match=match) as record:
+            c.a = value
+        assert record[0].filename == __file__
+
+        # with a non-empty batch size, where a 0-d tensor raises, the value is
+        # kept already
+        c = MyClass(a=value, batch_size=[2])
+        assert type(c.a) is type(value) and c.a == value
+        assert isinstance(c._tensordict.get("a"), NonTensorData)
+        c.a = value
+        assert type(c[1].a) is type(value) and c[1].a == value
+
+    def test_scalar_field_default(self):
+        class MyClass(TensorClass):
+            x: torch.Tensor
+            n: int = 3
+
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            assert MyClass(x=torch.zeros(())).n == torch.tensor(3)
+        assert MyClass(x=torch.zeros(4), batch_size=[4]).n == 3
+
+    @pytest.mark.parametrize("entry", ["tensor", "non_tensor"])
+    @pytest.mark.parametrize("op", ["set_inplace", "set_", "update", "update_"])
+    def test_scalar_field_inplace_raises(self, entry, op):
+        # A write in place raises as before, with a non-empty batch size
+        class MyClass(TensorClass):
+            a: int
+
+        if entry == "tensor":
+            a = torch.zeros(2, dtype=torch.long)
+        else:
+            a = NonTensorData(1, batch_size=[2])
+        c = MyClass(a=a, batch_size=[2])
+        with pytest.raises(RuntimeError) as err:
+            if op == "set_inplace":
+                c.set("a", 3, inplace=True)
+            elif op == "set_":
+                c.set_("a", 3)
+            elif op == "update":
+                c.update({"a": 3}, inplace=True)
+            else:
+                c.update_({"a": 3})
+        # the exception of the TensorDict, as before #1199
+        assert type(err.value) is RuntimeError
+        assert str(err.value) == (
+            "batch dimension mismatch, got self.batch_size=torch.Size([2]) and "
+            "value.shape=torch.Size([]) for key 'a'. The leading dimensions of "
+            "a value must match the batch size. Python scalars are stored as "
+            "0-dim tensors: to store a scalar in a tensordict with a non-empty "
+            "batch size, expand it to the batch size or wrap it in NonTensorData "
+            "(in a tensorclass, the nocast option stores scalars as they are)."
+        )
+
+    @pytest.mark.parametrize("entry", ["tensor", "non_tensor"])
+    @pytest.mark.parametrize("call", ["dict", "kwargs"])
+    def test_scalar_field_update(self, entry, call):
+        # update() keeps a number given to a scalar field as setattr does, with a
+        # non-empty batch size; it raised the batch-size mismatch before
+        class MyClass(TensorClass):
+            a: int
+            x: torch.Tensor
+
+        def make():
+            if entry == "tensor":
+                a = torch.zeros(2, dtype=torch.long)
+            else:
+                a = NonTensorData(1, batch_size=[2])
+            return MyClass(a=a, x=torch.zeros(2), batch_size=[2])
+
+        c = make()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            if call == "dict":
+                out = c.update({"a": 3, "x": torch.ones(2)})
+            else:
+                out = c.update(a=3, x=torch.ones(2))
+        assert out is c
+        assert isinstance(c._tensordict.get("a"), NonTensorData)
+        assert c.a == 3
+        assert (c.x == 1).all()
+        d = make()
+        d.a = 3
+        assert type(d._tensordict.get("a")) is type(c._tensordict.get("a"))
+        assert d.a == c.a
+
+    def test_scalar_field_update_keys_to_update(self):
+        class MyClass(TensorClass):
+            a: int
+            x: torch.Tensor
+
+        c = MyClass(a=1, x=torch.zeros(2), batch_size=[2])
+        c.update({"a": 3, "x": torch.ones(2)}, keys_to_update=["x"])
+        assert c.a == 1
+        assert (c.x == 1).all()
+        c.update({"a": 4}, keys_to_update=[("a",)])
+        assert c.a == 4
+
+    def test_scalar_field_over_non_tensor(self):
+        # over a NonTensorData entry, only the warning of TensorDict.set (#2432)
+        class MyClass(TensorClass):
+            n: int
+
+        c = MyClass(n=NonTensorData(3))
+        with pytest.warns(FutureWarning) as record:
+            c.n = 4
+        assert len(record) == 1
+        assert "written over the NonTensorData entry" in str(record[0].message)
+        assert c.n == torch.tensor(4)
+
+    def test_scalar_field_unchanged(self):
+        # no warning and no change: a value of another type, a field that is not
+        # annotated int, float or bool, and the classes that cast by annotation
+        class MyClass(TensorClass):
+            b: bool = 1
+            t: torch.Tensor = 1
+            x: Any = 1
+            o: Optional[int] = None
+
+        class NoCast(TensorClass["nocast"]):
+            a: int = 1
+
+        class AutoCast(TensorClass["autocast"]):
+            a: int = 1
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            c = MyClass()
+            assert all(isinstance(getattr(c, k), torch.Tensor) for k in "btx")
+            assert c.o is None
+            assert NoCast().a == 1 and AutoCast().a == 1
+            assert NoCast(batch_size=[2]).a == 1 and AutoCast(batch_size=[2]).a == 1
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                MyClass(t=torch.zeros(2), x=torch.zeros(2), batch_size=[2])
+
     # The library code that builds and converts tensorclasses does not call the
     # deprecated members.
     @pytest.mark.parametrize(
@@ -8022,10 +8198,12 @@ class TestSubClassing:
         assert not SubClass._autocast
         assert not SubClass._nocast
         assert issubclass(SubClass, TensorClass)
-        obj = SubClass(a=0)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            obj = SubClass(a=0)
         assert is_called
         is_called = False
-        obj.a = 1
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            obj.a = 1
         assert obj.a == 1
         assert is_called
 
@@ -8250,6 +8428,7 @@ class TestSubClassing:
             assert not obj
 
     @pytest.mark.parametrize("api", ["decorator", "dataclass", "inheritance"])
+    @set_printoptions(compact=False)
     def test_subclassing_default_operators(self, api):
         if api == "inheritance":
 
@@ -8764,6 +8943,7 @@ class TestTensorOnly:
         assert key not in x._tensordict.keys()
         assert key not in x._non_tensordict
 
+    @set_printoptions(compact=False)
     def test_tensor_only_none_is_missing_key(self):
         x = self.TensorOnly(torch.zeros(3), torch.zeros(3), batch_size=[3])
         y = self.TensorOnly(
