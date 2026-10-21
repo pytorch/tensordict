@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6348+gfa8286dda.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6350+gd7690cb6b.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6348+gfa8286dda.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6350+gd7690cb6b.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1778,8 +1778,14 @@ returned unchanged. Defaults to <code class="docutils literal notranslate"><span
 <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code> instances. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">destination</span></code>, or a new <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>.</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if <code class="docutils literal notranslate"><span class="pre">flatten=True</span></code> and two entries get the same key, as
+    a dotted key <code class="docutils literal notranslate"><span class="pre">&quot;a.b&quot;</span></code> and a nested key <code class="docutils literal notranslate"><span class="pre">(&quot;a&quot;,</span> <span class="pre">&quot;b&quot;)</span></code> do. The
+    key of a level in <code class="docutils literal notranslate"><span class="pre">_metadata</span></code> counts too. Use
+    <code class="docutils literal notranslate"><span class="pre">flatten=False</span></code> to keep such entries apart.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">destination</span></code>, or a new <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2152,7 +2158,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.state_dict",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.state_dict",
        "url": "/reference/generated/tensordict.TensorDictBase.state_dict.html",
-       "articleBody": "TensorDictBase.state_dict# TensorDictBase.state_dict(destination=None, prefix=\u0027\u0027, keep_vars=False, flatten=True) \u2192 OrderedDict[str, Any]# Returns the leaves of the tensordict in an OrderedDict, as torch.nn.Module.state_dict() does. The state dict is flat by default: the key of a nested leaf joins its keys with \".\" (\"n.b\" for (\"n\", \"b\")), following torch.nn.Module.state_dict(). With flatten=False, each nested tensordict becomes a nested OrderedDict. Read it back with load_state_dict(). The batch size and device of each level are stored in a _metadata attribute of the result, as in torch.nn.Module.state_dict(). In a flat state dict, they are stored under the \".\"-joined key of the level (\"\" for the root, \"n\" for the nested tensordict \"n\"). In a nested state dict, each nested OrderedDict has its own _metadata. Parameters: destination (OrderedDict, optional) \u2013 an OrderedDict to write the entries into, and to return. A plain dict raises an AttributeError. Defaults to None, which creates a new OrderedDict. prefix (str, optional) \u2013 a string prepended to every key. Defaults to \"\". keep_vars (bool, optional) \u2013 if False, the tensors are detached from autograd. If True, the tensors of the tensordict are returned unchanged. Defaults to False. flatten (bool, optional) \u2013 if True, nested keys are joined with \".\". If False, nested tensordicts become nested OrderedDict instances. Defaults to True. Returns: destination, or a new OrderedDict. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({\"1\": 1, \"2\": 2, \"3\": {\"3\": 3}}, []) \u003e\u003e\u003e sd = data.state_dict() \u003e\u003e\u003e print(dict(sd)) {\u00271\u0027: tensor(1), \u00272\u0027: tensor(2), \u00273.3\u0027: tensor(3)} \u003e\u003e\u003e print(dict(sd._metadata)) {\u0027\u0027: {\u0027batch_size\u0027: torch.Size([]), \u0027device\u0027: None}, \u00273\u0027: {\u0027batch_size\u0027: torch.Size([]), \u0027device\u0027: None}} Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.state_dict# TensorDictBase.state_dict(destination=None, prefix=\u0027\u0027, keep_vars=False, flatten=True) \u2192 OrderedDict[str, Any]# Returns the leaves of the tensordict in an OrderedDict, as torch.nn.Module.state_dict() does. The state dict is flat by default: the key of a nested leaf joins its keys with \".\" (\"n.b\" for (\"n\", \"b\")), following torch.nn.Module.state_dict(). With flatten=False, each nested tensordict becomes a nested OrderedDict. Read it back with load_state_dict(). The batch size and device of each level are stored in a _metadata attribute of the result, as in torch.nn.Module.state_dict(). In a flat state dict, they are stored under the \".\"-joined key of the level (\"\" for the root, \"n\" for the nested tensordict \"n\"). In a nested state dict, each nested OrderedDict has its own _metadata. Parameters: destination (OrderedDict, optional) \u2013 an OrderedDict to write the entries into, and to return. A plain dict raises an AttributeError. Defaults to None, which creates a new OrderedDict. prefix (str, optional) \u2013 a string prepended to every key. Defaults to \"\". keep_vars (bool, optional) \u2013 if False, the tensors are detached from autograd. If True, the tensors of the tensordict are returned unchanged. Defaults to False. flatten (bool, optional) \u2013 if True, nested keys are joined with \".\". If False, nested tensordicts become nested OrderedDict instances. Defaults to True. Raises: KeyError \u2013 if flatten=True and two entries get the same key, as a dotted key \"a.b\" and a nested key (\"a\", \"b\") do. The key of a level in _metadata counts too. Use flatten=False to keep such entries apart. Returns: destination, or a new OrderedDict. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e data = TensorDict({\"1\": 1, \"2\": 2, \"3\": {\"3\": 3}}, []) \u003e\u003e\u003e sd = data.state_dict() \u003e\u003e\u003e print(dict(sd)) {\u00271\u0027: tensor(1), \u00272\u0027: tensor(2), \u00273.3\u0027: tensor(3)} \u003e\u003e\u003e print(dict(sd._metadata)) {\u0027\u0027: {\u0027batch_size\u0027: torch.Size([]), \u0027device\u0027: None}, \u00273\u0027: {\u0027batch_size\u0027: torch.Size([]), \u0027device\u0027: None}} Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

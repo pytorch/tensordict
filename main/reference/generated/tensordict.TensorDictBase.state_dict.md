@@ -32,6 +32,13 @@ returned unchanged. Defaults to `False`.
 `"."`. If `False`, nested tensordicts become nested
 `OrderedDict` instances. Defaults to `True`.
 
+Raises:
+
+[**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if `flatten=True` and two entries get the same key, as
+ a dotted key `"a.b"` and a nested key `("a", "b")` do. The
+ key of a level in `_metadata` counts too. Use
+ `flatten=False` to keep such entries apart.
+
 Returns:
 
 `destination`, or a new `OrderedDict`.
