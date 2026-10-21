@@ -9315,6 +9315,7 @@ class TestGeneric:
             (TensorDictBase, [lazy, lazy], [sub, sub]),
             (TensorDictBase, batched, [sub, sub]),
             (TensorClass, [sub, sub], [td, td]),
+            (TensorClass, NonTensorStack("a", "b"), [td, td]),
             (Base, [sub, sub], [td, td]),
         ):
             with monkeypatch.context() as m:
@@ -9326,6 +9327,11 @@ class TestGeneric:
         for samples in ([td, sub], [sub, td]):
             with pytest.raises(TypeError, match="mixes tensorclass"):
                 default_collate(samples)
+        # but a non-tensor stack and non-tensor data stack together
+        stack = NonTensorStack("a", "b")
+        data = NonTensorData("c", batch_size=[2])
+        assert default_collate([stack, data]).tolist() == [["a", "b"], ["c", "c"]]
+        assert default_collate([data, stack]).tolist() == [["c", "c"], ["a", "b"]]
 
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps

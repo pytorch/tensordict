@@ -1424,30 +1424,45 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
     # stacked densely if their keys and shapes match, lazily otherwise.
     is_batch = is_tensor_collection(batch)
     if collate_fn_map is not None:
-        # torch takes the first key of the map that matches the element, and
-        # tensordict's two keys come before any key registered later for a
-        # base class, such as TensorDictBase or a tensorclass base: hand the
-        # batch to such an entry, found as torch finds one. A batch read in
-        # one index operation stands for its element, which is not indexed
-        # again.
-        elem = batch if is_batch else batch[0]
-        collate_fn = collate_fn_map.get(type(elem))
-        if collate_fn is None:
-            for key, fn in collate_fn_map.items():
-                if fn is not _collate_tensor_collection and isinstance(elem, key):
-                    collate_fn = fn
-                    break
-        if collate_fn is not None and collate_fn is not _collate_tensor_collection:
-            return collate_fn(batch, collate_fn_map=collate_fn_map)
+        # torch takes the entry for the element's exact type, else the first
+        # key of the map that the element is an instance of. It reached this
+        # entry, so only a key after tensordict's own two can still match,
+        # such as one registered later for TensorDictBase or a tensorclass
+        # base: hand the batch to the first such entry. The element of a batch
+        # read in one index operation is not indexed again: a lazy stack gives
+        # its first member, any other batch stands for itself.
+        after_own_keys = False
+        for key, fn in collate_fn_map.items():
+            if fn is _collate_tensor_collection:
+                after_own_keys = True
+                continue
+            if not after_own_keys:
+                continue
+            if not is_batch:
+                elem = batch[0]
+            elif (
+                isinstance(batch, LazyStackedTensorDict)
+                and batch.stack_dim == 0
+                and batch.tensordicts
+            ):
+                elem = batch.tensordicts[0]
+            else:
+                elem = batch
+            if isinstance(elem, key):
+                return fn(batch, collate_fn_map=collate_fn_map)
     if is_batch:
         return batch
-    types = {type(item) for item in batch}
-    if len({_is_tensorclass(cls) for cls in types if is_tensor_collection(cls)}) > 1:
-        raise TypeError(
-            "Cannot collate a batch that mixes tensorclass instances with "
-            f"tensordicts: got {sorted(cls.__name__ for cls in types)}."
-        )
-    return LazyStackedTensorDict.maybe_dense_stack(batch)
+    try:
+        return LazyStackedTensorDict.maybe_dense_stack(batch)
+    except AttributeError as err:
+        types = {type(item) for item in batch}
+        kinds = {_is_tensorclass(cls) for cls in types if is_tensor_collection(cls)}
+        if len(kinds) > 1:
+            raise TypeError(
+                "Cannot collate a batch that mixes tensorclass instances with "
+                f"tensordicts: got {sorted(cls.__name__ for cls in types)}."
+            ) from err
+        raise
 
 
 class _TensorClassCollateMeta(type):
