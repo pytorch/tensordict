@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import bisect
 import collections
 import enum
 import gc
@@ -15,6 +16,7 @@ import inspect
 
 # JSON backend is now handled by _utils_key_json.json_dumps
 import json
+import operator
 import os.path
 import sys
 import warnings
@@ -2468,13 +2470,26 @@ def _warn_update_keys_narrowed(
     ``dest`` is given where the route of ``update_`` that follows ``select``
     already (``_reads_copies_under``) is possible: it does not warn there.
     """
-    if len(set(map(len, keys_to_update))) == 1:
+    lengths = sorted(set(map(len, keys_to_update)))
+    if len(lengths) < 2:
         # keys of one length: none is under another
+        return
+    # Is a key strictly under another one? Compare the keys of each length
+    # with the first dims of the longer keys, with set operations: this runs
+    # for every update_ with keys of several lengths.
+    by_length = sorted(keys_to_update, key=len)
+    sizes = list(map(len, by_length))
+    for length in lengths[:-1]:
+        start, stop = sizes.index(length), bisect.bisect_right(sizes, length)
+        heads = set(map(operator.itemgetter(slice(length)), by_length[stop:]))
+        if not heads.isdisjoint(by_length[start:stop]):
+            break
+    else:
+        return
+    if is_compiling():
         return
     # the keys that another key of keys_to_update is strictly under
     prefixes = {key[:i] for key in keys_to_update for i in range(1, len(key))}
-    if prefixes.isdisjoint(keys_to_update) or is_compiling():
-        return
     deeper = [key for key in keys_to_update if key not in prefixes]
     try:
         if not _is_tensor_collection(type(source)):
