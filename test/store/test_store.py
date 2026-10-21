@@ -735,6 +735,17 @@ class TestTensorDictStore:
         torch.testing.assert_close(store_td["me", "obs"], torch.ones(10, 3))
         assert "me" not in store_td["me"].keys()
 
+    def test_replace_does_not_write_into_arg(self, store_td):
+        """replace(store, **kwargs) leaves the store passed to it unchanged (#2984)."""
+        store_td["obs"] = torch.zeros(10, 3)
+        td = TensorDict(obs=torch.ones(10, 3), batch_size=[10])
+        out = td.replace(store_td, extra=torch.ones(10))
+        assert set(store_td.keys()) == {"obs"}
+        assert type(out) is TensorDict
+        assert set(out.keys()) == {"obs", "extra"}
+        torch.testing.assert_close(out["obs"], torch.zeros(10, 3))
+        torch.testing.assert_close(out["extra"], torch.ones(10))
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_update__copy__lazy_source(self, store_td, stack_dim):
         """copy_ and update_ write a lazy stack into the store (#2593).
@@ -4154,6 +4165,17 @@ class TestLazyStackedTensorDictStore:
         finally:
             store_td.clear_redis()
             store_td.close()
+
+    def test_replace_does_not_write_into_arg(self, store_stack):
+        """replace(store, **kwargs) leaves the store passed to it unchanged (#2984)."""
+        store_td, _, lazy_td = store_stack
+        td = TensorDict(a=torch.zeros(5, 4, 3), batch_size=[5, 4])
+        out = td.replace(store_td, extra=torch.ones(5, 4))
+        assert set(store_td.keys()) == {"a", "b"}
+        assert type(out) is TensorDict
+        assert set(out.keys()) == {"a", "b", "extra"}
+        torch.testing.assert_close(out["a"], lazy_td["a"])
+        torch.testing.assert_close(out["extra"], torch.ones(5, 4))
 
     def test_update_nested_heterogeneous(self, store_kwargs):
         """update() of a nested leaf leaves a sibling whose elements differ in shape intact."""

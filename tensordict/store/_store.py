@@ -374,6 +374,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
+    _copy_shares_storage = True
     _rename_key_lenient = True
     # td[key] = value writes into an existing entry on the server
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE

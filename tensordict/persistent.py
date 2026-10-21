@@ -1104,6 +1104,7 @@ class PersistentTensorDict(
     _leaves_built_on_read = True
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
+    _copy_shares_storage = True
     _fills_without_reading = True
     # td[key] = value writes into an existing array of the file
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE

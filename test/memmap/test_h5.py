@@ -647,6 +647,39 @@ class TestH5Serialization:
         assert h5td.batch_size == (2, 3)
         h5td.close()
 
+    def test_replace_does_not_write_into_arg(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/2984
+        h5td = PersistentTensorDict.from_dict(
+            TensorDict(a=torch.zeros(3), nested={"x": torch.zeros(3)}, batch_size=[3]),
+            filename=tmp_path / "file.h5",
+        )
+        td = TensorDict(a=torch.ones(3), batch_size=[3])
+        out = td.replace(h5td, b=torch.ones(3), nested={"y": torch.ones(3)})
+        assert set(h5td.keys(True)) == {"a", "nested", ("nested", "x")}
+        assert type(out) is TensorDict
+        assert set(out.keys(True)) == {
+            "a",
+            "b",
+            "nested",
+            ("nested", "x"),
+            ("nested", "y"),
+        }
+        assert (out["a"] == 0).all()
+        assert (out["b"] == 1).all()
+        assert (out["nested", "y"] == 1).all()
+        # An indexed file is a view that shares the file too.
+        for index in (slice(0, 2), 0, torch.tensor([0, 2])):
+            sub = h5td[index]
+            out = TensorDict(batch_size=sub.batch_size).replace(
+                sub, b=torch.ones(sub.batch_size)
+            )
+            assert set(h5td.keys()) == {"a", "nested"}
+            assert type(out) is TensorDict
+            assert out.batch_size == sub.batch_size
+            assert set(out.keys()) == {"a", "b", "nested"}
+            assert (out["b"] == 1).all()
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
