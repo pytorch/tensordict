@@ -3523,11 +3523,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def __repr__(self) -> str:
-        try:
-            if _REPR_OPTIONS["compact"]:
+        if _REPR_OPTIONS["compact"]:
+            try:
                 compact = _compact_repr(self)
-                if compact is not None:
-                    return compact
+            except Exception:
+                # repr must not raise: fall back to the detailed form
+                compact = None
+            if compact is not None:
+                return compact
+        try:
             string = ",\n".join(self._repr_parts())
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
