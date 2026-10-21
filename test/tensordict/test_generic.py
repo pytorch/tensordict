@@ -1065,13 +1065,42 @@ class TestGeneric:
         assert td.consolidate() is td
         assert td.consolidate(pin_memory=True, inplace=True) is td
         assert td.consolidate(pin_memory=True, num_threads=2, return_early=True) is td
-        assert td.consolidate(pin_memory=True, device="cuda") is td
+        with pytest.warns(UserWarning, match="ignores device='cuda'"):
+            assert td.consolidate(pin_memory=True, device="cuda") is td
         filename = Path(tmpdir) / "file.td"
-        td_file = td.consolidate(filename=filename)
+        td_file = td.contiguous().consolidate(filename=filename)
         assert td_file.consolidate(filename=filename, pin_memory=True) is td_file
         # A pinned storage is returned as is
         monkeypatch.setattr(torch.Tensor, "is_pinned", lambda self: True)
         assert td.consolidate(pin_memory=True) is td
+
+    def test_consolidate_consolidated_ignored_args_warn(self, tmpdir):
+        # An already consolidated tensordict returns self and ignores device,
+        # share_memory and another filename: it warns about them (#3116)
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        with pytest.warns(UserWarning, match="ignores device='meta'"):
+            assert td.consolidate(device="meta") is td
+        with pytest.warns(UserWarning, match="ignores share_memory=True"):
+            assert td.consolidate(share_memory=True) is td
+        filename = Path(tmpdir) / "file.td"
+        td_file = td.contiguous().consolidate(filename=filename)
+        other = Path(tmpdir) / "other.td"
+        with pytest.warns(UserWarning, match="writes nothing.*consolidated into"):
+            assert td_file.consolidate(filename=other) is td_file
+        assert not other.exists()
+        # A loaded tensordict has no file of its own
+        loaded = TensorDict.from_consolidated(filename)
+        with pytest.warns(UserWarning, match="writes nothing.*no file of its own"):
+            assert loaded.consolidate(filename=filename) is loaded
+        # The arguments that match the storage do not warn (warnings raise in
+        # this module), and an invalid device is ignored as before
+        shared = td.contiguous().consolidate(share_memory=True)
+        assert td.consolidate(device="cpu") is td
+        assert td.consolidate(device="cpu:0") is td
+        assert td.consolidate(device="not-a-device") is td
+        assert shared.consolidate(share_memory=True) is shared
+        assert td_file.consolidate(filename=filename, share_memory=True) is td_file
+        assert td_file.consolidate(share_memory=True) is td_file
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_consolidate_pin_memory_consolidated_cuda(self):
@@ -1308,19 +1337,22 @@ class TestGeneric:
         assert loaded.names == [None]
         assert (loaded == td).all()
         # another file name writes nothing
-        assert td.consolidate(filename=tmp_path / "other.bin") is td
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert td.consolidate(filename=tmp_path / "other.bin") is td
         assert not (tmp_path / "other.bin").exists()
         # nor does a file that was replaced, or deleted
         os.remove(filename)
         td2 = TensorDict(z=torch.ones(2), batch_size=[2]).consolidate(filename=filename)
         td.batch_size = []
-        assert td.consolidate(filename=filename) is td
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert td.consolidate(filename=filename) is td
         loaded = TensorDict.from_consolidated(filename)
         assert loaded.batch_size == (2,)
         assert (loaded == td2).all()
         del td2, loaded
         os.remove(filename)
-        assert td.consolidate(filename=filename) is td
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert td.consolidate(filename=filename) is td
         assert not filename.exists()
 
     def test_consolidated_lazy_stack_names_serialized(self):
@@ -12485,6 +12517,21 @@ class TestGeneric:
             parameter = inspect.signature(getattr(cls, name)).parameters["cast_filter"]
             assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
             assert parameter.default is None
+
+    @pytest.mark.parametrize("name", ["qint32", "qint8", "quint4x2", "quint8"])
+    def test_quantized_dtype_shorthand_deprecated(self, name):
+        # A cast cannot supply the scale and zero point of a quantized tensor,
+        # so these raise for any float leaf (#3150)
+        @tensorclass
+        class MyClass:
+            pass
+
+        match = rf"{name}\(\) is deprecated and will be removed in TensorDict 0\.18\..*quantize_per_tensor"
+        for obj in (TensorDict(batch_size=[3]), MyClass(batch_size=[3])):
+            with pytest.warns(DeprecationWarning, match=match):
+                out = getattr(obj, name)()
+            assert type(out) is type(obj)
+            assert out.batch_size == (3,)
 
     def test_to_cast_filter_integer_target(self):
         # An integer target does not raise: the filter does what it says

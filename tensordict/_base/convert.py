@@ -249,12 +249,19 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
                         preserve_module_state=preserve_module_state,
                         is_dynamo=False,
                     )
+            else:
+                memo["shared"] = True
         swap[key] = local_out
     return swap
 
 
 def _replaced_entries(
-    swap: dict, td, entries: list, skip_wrappers: bool = False
+    swap: dict,
+    td,
+    entries: list,
+    skip_wrappers: bool = False,
+    seen: dict | None = None,
+    source=None,
 ) -> list:
     """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``.
 
@@ -263,14 +270,27 @@ def _replaced_entries(
     ``nn.Parameter`` that ``to_module`` wraps around a plain tensor, is not
     listed, unless both require grad: the gradient of the value of ``td``
     then lands on the wrapper, which is written back.
+
+    With a ``seen`` dict, given when the module uses a submodule more than
+    once, the submodule holds the values of its first entry in ``td``, the
+    ``source`` of the later entries: these values and their wrappers are not
+    listed for the later entries either, which keep their own values.
     """
     for key, val in swap.items():
         if key == _EXTRA_STATE_KEY_SUFFIX:
             # Restored with set_extra_state, nothing to write.
             continue
         if isinstance(val, dict):
+            sub = td._get_str(key, default=NO_DEFAULT)
+            # to_module swaps a shared submodule once and gives each of its
+            # entries the same dict; it sets memo["shared"] when it does.
             _replaced_entries(
-                val, td._get_str(key, default=NO_DEFAULT), entries, skip_wrappers
+                val,
+                sub,
+                entries,
+                skip_wrappers,
+                seen,
+                None if seen is None else seen.setdefault(id(val), sub),
             )
             continue
         current = td._get_str(key, None)
@@ -285,6 +305,18 @@ def _replaced_entries(
             and val.storage_offset() == current.storage_offset()
             and val.dtype == current.dtype
         ):
+            if source is not None and source is not td:
+                current = source._get_str(key, None)
+                if current is val or (
+                    isinstance(current, Tensor)
+                    and isinstance(val, Tensor)
+                    and torch._C._is_alias_of(val, current)
+                    and val.shape == current.shape
+                    and val.stride() == current.stride()
+                    and val.storage_offset() == current.storage_offset()
+                    and val.dtype == current.dtype
+                ):
+                    continue
             entries.append((td, key, val))
     return entries
 
@@ -304,7 +336,8 @@ def _restore_module(swap, args, kwargs, out):
     current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
     if not isinstance(current, dict):
         return current
-    replaced = _replaced_entries(current, out, [], skip_wrappers=True)
+    seen = {} if "shared" in memo else None
+    replaced = _replaced_entries(current, out, [], True, seen)
     if replaced:
         non_blocking = kwargs.get("non_blocking", False)
         with out.unlock_():
@@ -1661,6 +1694,8 @@ class _Conversion:
                         preserve_module_state=preserve_module_state,
                         is_dynamo=is_dynamo,
                     )
+                else:
+                    memo["shared"] = True
 
             if return_swap:
                 _swap[key] = local_out

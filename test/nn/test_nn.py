@@ -7853,6 +7853,37 @@ class TestToModule:
         assert params["weight"].shape == (4, 3)
         assert not isinstance(params["weight"], nn.UninitializedParameter)
 
+    def test_to_module_context_manager_shared_submodule(self, as_module):
+        # A submodule used twice gets the tensors of its first entry; the
+        # with block leaves the other entry with its own tensors (#3115)
+        lin = nn.Linear(3, 3)
+        module = nn.Sequential(lin, nn.ReLU(), lin)
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.detach().clone()
+        params["0"] = params["0"].apply(lambda x: torch.full_like(x, 1.0))
+        params["2"] = params["2"].apply(lambda x: torch.full_like(x, 2.0))
+        if not as_module:
+            params["0", "weight"] = nn.Parameter(params["0", "weight"])
+            params["2", "weight"] = nn.Parameter(params["2", "weight"])
+        leaves = dict(params.items(include_nested=True, leaves_only=True))
+        with params.to_module(module):
+            assert (lin.weight == 1).all()
+            module(torch.randn(2, 3)).sum().backward()
+        for key, leaf in params.items(include_nested=True, leaves_only=True):
+            assert leaf is leaves[key], key
+        assert (params["2"] == 2).all()
+        if not as_module:
+            assert params["0", "weight"].grad is not None
+            assert params["2", "weight"].grad is None
+
+        # A value that the block assigns to the submodule is written back to
+        # both entries
+        weight = nn.Parameter(torch.zeros(3, 3))
+        with params.to_module(module):
+            lin.weight = weight
+        assert params["0", "weight"] is weight
+        assert params["2", "weight"] is weight
+
     def test_to_module_context_manager_keeps_source_locked(self, as_module):
         # The exit of the block unlocks the source only to write back the
         # tensors that the block replaced, so the source keeps its lock and
