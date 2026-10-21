@@ -2360,15 +2360,17 @@ class TestTensorClass:
         data = MyData(x=torch.zeros(3), hidden=torch.ones(3), batch_size=[3])
         nested = TensorDict(data=data, batch_size=[3])
         for obj in (data, nested, lazy_stack([data, data])):
-            text = repr(obj)
+            with tensordict.set_printoptions(compact=False):
+                text = repr(obj)
             assert "x=" in text
             assert "hidden" not in text
             assert "secret" not in text
             assert "label" not in text
             assert "unset" not in text
-            with tensordict.set_printoptions(compact=True):
-                text = repr(obj)
+            # the compact repr is the default
+            text = repr(obj)
             assert "x: " in text
+            assert "secret" not in text
             assert "hidden" not in text
             assert "label" not in text
             assert "unset" not in text
