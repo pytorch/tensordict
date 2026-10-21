@@ -5080,7 +5080,10 @@ def _set(
                     # keep the Python value, as all batch sizes will from 0.17.
                     return set_tensor(non_tensor=True)
                 if not is_dynamo_compiling():
-                    _warn_scalar_field(cls, key, value)
+                    dest = self._tensordict._get_str(key, None)
+                    # over a NonTensorData entry, TensorDict.set warns (#2432)
+                    if inplace or not (is_non_tensor(dest) and is_tensorclass(dest)):
+                        _warn_scalar_field(cls, key, value)
             return set_tensor()
         elif issubclass(value_type, list) and list_to_stack():
             # set() will take care of casting to non tensor

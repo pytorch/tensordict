@@ -7421,6 +7421,18 @@ class TestDeprecations:
             assert MyClass(x=torch.zeros(())).n == torch.tensor(3)
         assert MyClass(x=torch.zeros(4), batch_size=[4]).n == 3
 
+    def test_scalar_field_over_non_tensor(self):
+        # over a NonTensorData entry, only the warning of TensorDict.set (#2432)
+        class MyClass(TensorClass):
+            n: int
+
+        c = MyClass(n=NonTensorData(3))
+        with pytest.warns(FutureWarning) as record:
+            c.n = 4
+        assert len(record) == 1
+        assert "written over the NonTensorData entry" in str(record[0].message)
+        assert c.n == torch.tensor(4)
+
     def test_scalar_field_unchanged(self):
         # no warning and no change: a value of another type, a field that is not
         # annotated int, float or bool, and the classes that cast by annotation
