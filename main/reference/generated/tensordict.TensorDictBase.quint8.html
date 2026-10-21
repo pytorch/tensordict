@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6297+gc7fd8640d.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6298+gb6fc45fae.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6297+gc7fd8640d.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6298+gb6fc45fae.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1721,6 +1721,13 @@ document.write(`
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.quint8">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">quint8</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cast_filter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.quint8" title="Link to this definition">#</a></dt>
 <dd><p>Returns a tensordict whose tensor leaves are cast to <code class="docutils literal notranslate"><span class="pre">torch.quint8</span></code>.</p>
+<div class="admonition-deprecated admonition">
+<p class="admonition-title">Deprecated</p>
+<p>A quantized tensor needs a scale and a zero point, which a dtype
+cast cannot supply, so this method raises for any floating-point
+entry. It will be removed in TensorDict 0.18. Use
+<code class="docutils literal notranslate"><span class="pre">td.apply(lambda</span> <span class="pre">x:</span> <span class="pre">torch.quantize_per_tensor(x,</span> <span class="pre">scale,</span> <span class="pre">zero_point,</span> <span class="pre">torch.quint8))</span></code> instead.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>cast_filter</strong> (<em>Callable</em><em>, </em><em>optional</em>) – a predicate
@@ -2090,7 +2097,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.quint8",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.quint8",
        "url": "/reference/generated/tensordict.TensorDictBase.quint8.html",
-       "articleBody": "TensorDictBase.quint8# TensorDictBase.quint8(*, cast_filter: Callable | None = None) \u2192 Self# Returns a tensordict whose tensor leaves are cast to torch.quint8. Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.quint8# TensorDictBase.quint8(*, cast_filter: Callable | None = None) \u2192 Self# Returns a tensordict whose tensor leaves are cast to torch.quint8. Deprecated A quantized tensor needs a scale and a zero point, which a dtype cast cannot supply, so this method raises for any floating-point entry. It will be removed in TensorDict 0.18. Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, torch.quint8)) instead. Keyword Arguments: cast_filter (Callable, optional) \u2013 a predicate fn(key, value) -\u003e bool that selects the tensor leaves to cast, as in to(). Defaults to None, which casts every tensor leaf (a tensorclass uses its own cast_filter, if it declares one). Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

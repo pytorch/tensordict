@@ -334,10 +334,6 @@ Dtype
 | [`TensorDictBase.complex32`](generated/tensordict.TensorDictBase.complex32.html#tensordict.TensorDictBase.complex32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex32`. |
 | [`TensorDictBase.complex64`](generated/tensordict.TensorDictBase.complex64.html#tensordict.TensorDictBase.complex64)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex64`. |
 | [`TensorDictBase.complex128`](generated/tensordict.TensorDictBase.complex128.html#tensordict.TensorDictBase.complex128)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex128`. |
-| [`TensorDictBase.qint8`](generated/tensordict.TensorDictBase.qint8.html#tensordict.TensorDictBase.qint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint8`. |
-| [`TensorDictBase.qint32`](generated/tensordict.TensorDictBase.qint32.html#tensordict.TensorDictBase.qint32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint32`. |
-| [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint8`. |
-| [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint4x2`. |
 
 `to` and the dtype shorthands take a `cast_filter` predicate
 `fn(key, value) -> bool` that selects the leaves to cast. The predicates
@@ -645,6 +641,10 @@ Their pages name the replacement and the release that removes them.
 | [`TensorDictBase.load_`](generated/tensordict.TensorDictBase.load_.html#tensordict.TensorDictBase.load_)(prefix, *args, **kwargs) | Loads a saved tensordict into the tensordict. |
 | --- | --- |
 | [`TensorDictBase.pin_memory_`](generated/tensordict.TensorDictBase.pin_memory_.html#tensordict.TensorDictBase.pin_memory_)([num_threads]) | Pins the tensor leaves of the tensordict and returns `self`. |
+| [`TensorDictBase.qint8`](generated/tensordict.TensorDictBase.qint8.html#tensordict.TensorDictBase.qint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint8`. |
+| [`TensorDictBase.qint32`](generated/tensordict.TensorDictBase.qint32.html#tensordict.TensorDictBase.qint32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint32`. |
+| [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint8`. |
+| [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint4x2`. |
 
 ## Other functions
 
