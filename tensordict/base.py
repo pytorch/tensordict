@@ -2374,13 +2374,11 @@ def _index_past_batch_dims(td, index):
         leaf = next((v for v in td.values(True, True) if isinstance(v, Tensor)), None)
         if leaf is None:
             return None
-        sizes = leaf.shape[ndim:used]
-        if any(isinstance(s, torch.SymInt) and s.node.is_nested_int() for s in sizes):
-            # a ragged dim of a jagged leaf has no size to index (#3232)
-            return None
-        batch_size = _getitem_batch_size(td.batch_size + sizes, index)
+        batch_size = _getitem_batch_size(td.batch_size + leaf.shape[ndim:used], index)
         return _index_leaves(td, index, batch_size)
-    except (IndexError, RuntimeError):
+    except (IndexError, RuntimeError, AttributeError):
+        # AttributeError: an int index on the ragged dim of a jagged leaf,
+        # whose nested int has no negation for the bounds check (#3232)
         return None
 
 

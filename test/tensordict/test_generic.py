@@ -767,7 +767,7 @@ class TestGeneric:
     def test_index_past_batch_dims_jagged_raises(self):
         # #3232: an index past the batch dims that reaches the ragged dim of a
         # jagged leaf raised an AttributeError from the nested int, and raises
-        # an IndexError again, as before #3202
+        # an IndexError again, as before #3206
         for kind in ("ragged_dim_1", "ragged_dim_2"):
             td = TensorDict(ids=self._jagged(kind), batch_size=[6])
             for index in [(0, 0), (slice(1, 3), 0), (0, 0, 0)]:
@@ -778,6 +778,13 @@ class TestGeneric:
                     warnings.simplefilter("error")
                     with pytest.raises(IndexError):
                         td[index]
+        # a tensor or list index on the ragged dim still indexes the leaves
+        leaf = self._jagged("ragged_dim_1")
+        td = TensorDict(ids=leaf, batch_size=[6])
+        for idx in (torch.tensor([2, 0]), [0, 2]):
+            with pytest.warns(FutureWarning, match="past the batch dims"):
+                result = td[1, idx]
+            torch.testing.assert_close(result["ids"], leaf[1][idx])
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone_empty(self, recurse):
