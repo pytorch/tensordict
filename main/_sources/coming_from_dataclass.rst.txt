@@ -55,7 +55,9 @@ The mapping
    * - A ``stack`` or ``cat`` helper
      - ``torch.stack(items)``, ``torch.cat(batches)``
    * - A ``collate_fn`` for the ``DataLoader``
-     - ``collate_fn=tensordict.collate`` (see :func:`~tensordict.collate`)
+     - Nothing: the default ``collate_fn`` stacks tensorclasses.
+       ``collate_fn=tensordict.collate`` adds padding (see
+       :func:`~tensordict.collate`)
    * - A helper that splits a batch into minibatches
      - ``batch.split(size)``, ``batch.chunk(n)``
    * - A field that holds another dataclass of tensors
@@ -172,19 +174,20 @@ samples into a batch, often a static method passed as ``collate_fn``:
        )
 
 :func:`torch.stack` and :func:`torch.cat` accept a list of tensorclasses
-and return one. For a ``DataLoader``, pass :func:`~tensordict.collate` as
-``collate_fn``. A sample here has an empty batch size:
+and return one, and the default ``collate_fn`` of a ``DataLoader`` stacks
+them too. A sample here has an empty batch size:
 
   >>> samples = [Batch(images=torch.randn(3, 8, 8), labels=torch.tensor(i)) for i in range(10)]
   >>> torch.stack(samples[:3]).batch_size
   torch.Size([3])
-  >>> loader = DataLoader(samples, batch_size=4, collate_fn=collate)
+  >>> loader = DataLoader(samples, batch_size=4)
   >>> first = next(iter(loader))
   >>> type(first).__name__, first.labels
   ('Batch', tensor([0, 1, 2, 3]))
 
-:func:`~tensordict.collate` also pads the fields whose length differs
-between samples, as the last worked example shows. :ref:`data-loading`
+Pass :func:`~tensordict.collate` as ``collate_fn`` when the fields'
+lengths differ between samples: it can pad them, as the last worked example
+shows. :ref:`data-loading`
 covers worker processes and pinned memory.
 
 Nested batches

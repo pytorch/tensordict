@@ -4,8 +4,9 @@ A *tensorclass* is a dataclass of tensors. You declare its fields with type
 annotations, as in a [`dataclass()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass), and it has the
 operations that such a class otherwise writes by hand: `.to(device)`,
 `pin_memory()`, slicing of every field with `batch[idx]`,
-`torch.stack` and `torch.cat`, and a `collate_fn` for the
-[`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) ([`collate()`](reference/generated/tensordict.collate.html#tensordict.collate)). It is
+`torch.stack` and `torch.cat`, and batching by the default
+`collate_fn` of a [`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) (or by
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate), which can also pad). It is
 registered as a pytree, so `torch.utils._pytree`, [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) and
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) accept it. You write its methods once: a method runs
 on one item or on a batch of any shape, and compiles with
