@@ -212,6 +212,12 @@ Where to go
 
 .. toctree::
    :hidden:
+   :caption: Tutorials: scientific computing
+
+   tutorials/tensorclass_particles
+
+.. toctree::
+   :hidden:
    :caption: API reference
 
    reference/index
