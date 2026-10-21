@@ -141,7 +141,8 @@ def env_info(device):
     info = {
         "python": platform.python_version(),
         "torch": torch.__version__,
-        "tensordict": getattr(tensordict, "__version__", "unknown"),
+        # a source tree that was not installed has __version__ = None
+        "tensordict": getattr(tensordict, "__version__", None) or "unknown",
         "cpu": platform.processor() or platform.machine(),
         "device": str(device),
     }
