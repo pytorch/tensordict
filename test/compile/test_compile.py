@@ -3472,6 +3472,28 @@ class TestExport:
         torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
 
     @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_non_tensor_dynamic_batch_size(self, strict, monkeypatch):
+        # The non-tensor entry takes [] in dynamic_shapes. Export rebuilds the
+        # input with the symbolic batch size: the entry must get that batch
+        # size before TD_CHECK_INVARIANTS checks the new tensordict, and strict
+        # export must not specialize the batch size.
+        monkeypatch.setattr("tensordict._td._CHECK_INVARIANTS", True)
+
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2
+
+        def make(batch):
+            return TensorDict(a=torch.randn(batch, 3), s="a string", batch_size=[batch])
+
+        batch = torch.export.Dim("batch", min=2)
+        ep = torch.export.export(
+            Mod(), (make(4),), strict=strict, dynamic_shapes=([{0: batch}, []],)
+        )
+        td = make(5)
+        torch.testing.assert_close(ep.module()(td), td["a"] * 2)
+
+    @pytest.mark.parametrize("strict", [False, True])
     def test_export_td_input_empty_nested(self, strict):
         # The nested td has no tensor: its batch size comes from the spec.
         class Mod(torch.nn.Module):
