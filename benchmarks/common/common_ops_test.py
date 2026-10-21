@@ -1149,6 +1149,12 @@ def test_to_nonblocking(benchmark, td):
     benchmark(td.to, "cuda:0", non_blocking=True)
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
+def test_to_non_blocking_pin(benchmark, td):
+    benchmark(td.to, "cuda:0", non_blocking_pin=True)
+
+
 def main():
     # creation
     td = TensorDict({}, [3, 4])
