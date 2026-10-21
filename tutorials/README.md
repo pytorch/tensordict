@@ -50,6 +50,11 @@ first. Then read the tutorials in this order.
 14. [Batched data loading with tensorclasses](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_imagenet.html)
     (`tensorclass_imagenet.py`): load batches of images from memory-mapped tensors.
 
+## Scientific computing
+
+15. [Simulating particles with a tensorclass](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_particles.html)
+    (`tensorclass_particles.py`): a batched simulation step, compiled, with a trajectory saved to disk.
+
 ## Run a tutorial
 
 Install tensordict, then run the script from the repository root:

@@ -91,5 +91,6 @@ See also
 - :ref:`choosing-a-container`: tensorclass, ``TypedTensorDict``, or
   ``TensorDict``.
 - :ref:`api-typed-tensordict`: the other container with typed fields.
-- The tutorials :doc:`/tutorials/tensorclass_fashion` and
-  :doc:`/tutorials/tensorclass_imagenet`.
+- The tutorials :doc:`/tutorials/tensorclass_fashion`,
+  :doc:`/tutorials/tensorclass_imagenet`, and
+  :doc:`/tutorials/tensorclass_particles`.

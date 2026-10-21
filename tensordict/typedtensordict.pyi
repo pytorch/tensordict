@@ -4,7 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import sys
-from collections.abc import Sequence
+from abc import ABCMeta
+from collections.abc import Callable, Sequence
 from dataclasses import InitVar
 from typing import Any, ClassVar, Literal, overload, Type
 
@@ -14,12 +15,12 @@ else:
     from typing_extensions import dataclass_transform, Self
 
 import torch
-from tensordict._td import TensorDict
+from tensordict._nestedkey import NestedKey
 from tensordict.base import TensorDictBase
 from tensordict.utils import DeviceType
 
 @dataclass_transform(kw_only_default=True)
-class _TypedTensorDictMeta(type):
+class _TypedTensorDictMeta(ABCMeta):
     def __new__(
         mcs,
         name: str,
@@ -50,7 +51,7 @@ class _TypedTensorDictMeta(type):
         ],
     ) -> Type["TypedTensorDict"]: ...
 
-class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
+class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
     batch_size: InitVar[Sequence[int] | torch.Size | int | None] = None
     device: InitVar[DeviceType | None] = None
     names: InitVar[Sequence[str] | None] = None
@@ -92,3 +93,30 @@ class TypedTensorDict(TensorDict, metaclass=_TypedTensorDictMeta):
         names: Sequence[str] | None = None,
         check: bool = True,
     ) -> Self: ...
+
+    # TensorDictBase declares these methods abstract. TypedTensorDict and its
+    # metaclass define them; most delegate to the tensordict that holds the data.
+    def keys(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[type], bool] | None = None,
+        *,
+        sort: bool = False,
+    ) -> Any: ...
+    def entry_class(self, key: NestedKey) -> type: ...
+    def _add_batch_dim(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _clone(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _get_str(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _maybe_remove_batch_dim(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _memmap_(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _permute(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _remove_batch_dim(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _set_at_str(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _set_at_tuple(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _set_str(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _set_tuple(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _squeeze(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _transpose(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _unsqueeze(self, *args: Any, **kwargs: Any) -> Any: ...
+    def _view(self, *args: Any, **kwargs: Any) -> Any: ...

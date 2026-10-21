@@ -15,6 +15,7 @@ import pickle
 import sys
 import tempfile
 import warnings
+import weakref
 from numbers import Number
 from pathlib import Path
 from typing import Any, Callable, overload, Type, TYPE_CHECKING
@@ -1104,6 +1105,7 @@ class PersistentTensorDict(
     _leaves_built_on_read = True
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
+    _copy_shares_storage = True
     _fills_without_reading = True
     # td[key] = value writes into an existing array of the file
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE
@@ -1114,6 +1116,8 @@ class PersistentTensorDict(
     _map_on_dense_copies = True
     # for the pickles made before non_tensor_as_stack
     _non_tensor_as_stack = False
+    # (weakref to the tensordict that caches this one, key in it), or None
+    _nested_parent = None
 
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
@@ -1421,7 +1425,13 @@ class PersistentTensorDict(
         # share the backend instance so per-store state (e.g. the consolidated
         # metadata flag of the zarr backend) is tracked once per store
         out._backend = self._backend
+        out._nested_parent = (weakref.ref(self), key)
         return out
+
+    def _link_nested(self):
+        """Records ``self`` as the parent of its cached nested tensordicts."""
+        for key, td in self._nested_tensordicts.items():
+            td._nested_parent = (weakref.ref(self), key)
 
     def close(self):
         """Closes the file or store of the tensordict.
@@ -2121,12 +2131,26 @@ class PersistentTensorDict(
             self._forget_nested(old)
 
     def _forget_nested(self, key: tuple) -> None:
-        """Drops the cached nested tensordicts at or under ``key``, whose node has moved or gone."""
+        """Drops the cached nested tensordicts at or under ``key``, whose node has moved or gone.
+
+        The tensordicts that hold this one cache their own copies of these
+        nodes (#3181): they are dropped from the outermost one down.
+        """
+        td = self
+        while td._nested_parent is not None:
+            parent = td._nested_parent[0]()
+            if parent is None:
+                break
+            key = td._nested_parent[1] + key
+            td = parent
+        td._drop_nested(key)
+
+    def _drop_nested(self, key: tuple) -> None:
         for cached in list(self._nested_tensordicts):
             if cached[: len(key)] == key:
                 del self._nested_tensordicts[cached]
             elif key[: len(cached)] == cached:
-                self._nested_tensordicts[cached]._forget_nested(key[len(cached) :])
+                self._nested_tensordicts[cached]._drop_nested(key[len(cached) :])
 
     # Override: writes the arrays without reading them.
     def _fill_(self, key: tuple[str, ...], value: float | bool) -> None:
@@ -2139,9 +2163,41 @@ class PersistentTensorDict(
                 nested._fill_((subkey,), value)
 
     def _create_nested_str(self, key):
+        # The existing entry is replaced. On a read-only file, create_group
+        # raises the ValueError it raised before entries were replaced (a
+        # delete first would raise a KeyError instead).
+        if not self._storage_is_read_only() and self._backend.contains(self.file, key):
+            self._del((key,))
         self._backend.create_group(self.file, key)
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
+
+    # Override: an existing group on the path keeps its entries.
+    def _create_nested_tuple(self, key):
+        if self._storage_is_read_only():
+            # a read-only file raises from creating the first level, as
+            # before, and keeps its cached sub-tensordicts
+            self._create_nested_str(key[0])
+            return
+        if len(key) > 1:
+            group = self._get_array(key[0], None)
+            if group is not None and not self._backend.is_array(group):
+                cached = self._nested_tensordicts.get((key[0],))
+                if cached is not None and cached.is_locked:
+                    # a locked sub-tensordict is not written into: creating
+                    # the group raises for the existing name, as before
+                    self._backend.create_group(self.file, key[0])
+                # a sub-tensordict read before under this key would keep a
+                # replaced group
+                self._forget_nested(key)
+                td = self._get_str(key[0], NO_DEFAULT)
+            else:
+                self._forget_nested(key)
+                td = self._create_nested_str(key[0])
+            td._create_nested_tuple(key[1:])
+        else:
+            self._forget_nested(key)
+            self._create_nested_str(key[0])
 
     # Override: one to_tensordict() read, outside the cache that the base
     # keeps while locked: a locked file would keep a copy of its data, and
@@ -2234,6 +2290,7 @@ class PersistentTensorDict(
             result._device = device
             for key, nested in list(result._nested_tensordicts.items()):
                 result._nested_tensordicts[key] = nested.to(device)
+            result._link_nested()
             if batch_size is not None:
                 result.batch_size = batch_size
             return result
@@ -2456,6 +2513,7 @@ class PersistentTensorDict(
             self._nested_tensordicts[key]._backend = self._backend
             self._nested_tensordicts[key].names = td._td_dim_names
             self._nested_tensordicts[key]._set_metadata(td)
+        self._link_nested()
 
     def _clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
         if recurse:
@@ -2514,6 +2572,7 @@ class PersistentTensorDict(
                 **self._dataset_kwargs,
             )
             clone._nested_tensordicts = nested_tds
+            clone._link_nested()
             clone._pin_mem = False
             clone.names = self._td_dim_names
             return clone
@@ -2524,6 +2583,8 @@ class PersistentTensorDict(
         backend_state = self._backend.getstate(state["file"])
         state["file"] = None
         state.update(backend_state)
+        # a weakref cannot be pickled: the parent links its children back
+        state["_nested_parent"] = None
         state["__lock_parents_weakrefs"] = None
         # as TensorDictBase.__getstate__ does: the last op can hold weakrefs,
         # and the cache is rebuilt on demand (gh-2920)
@@ -2541,6 +2602,7 @@ class PersistentTensorDict(
         if "kwargs" in state:
             state["_dataset_kwargs"] = state.pop("kwargs")
         self.__dict__.update(state)
+        self._link_nested()
         if self._is_locked:
             # this can cause avoidable overhead, as we will be locking the leaves
             # then locking their parent, and the parent of the parent, every

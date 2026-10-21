@@ -25,11 +25,15 @@ from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _apply_pointwise,
+    _default_is_leaf,
+    _has_lazy_stack,
+    _is_leaf_or_lazy_stack,
     _is_tensor_collection,
     _maybe_broadcast_other,
     _mixes_lazy_stacks,
     _NESTED_TENSORS_AS_LISTS,
     _same_leaf_keys,
+    _unwrap,
     _warn_unsupported_operand,
     _write_back_inplace,
     CompatibleType,
@@ -59,6 +63,26 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
         # same keys in the same order, the common case: no reordering
         return values
     return other._values_list(True, True, sorting_keys=keys)
+
+
+def _apply_keyword_tensor(
+    td: TensorCollection, name: str, leaf_fn: Callable, other: Tensor
+) -> TensorCollection:
+    """Returns ``leaf_fn`` on the leaves of ``td``, and the method ``name`` called with ``other=other`` on its nested lazy stacks, tensorclasses and TypedTensorDicts.
+
+    A tensor with dims reaches ``mod``, ``bitwise_and`` and ``logical_and``
+    only by keyword. A nested lazy stack then gives each member leaf its part
+    of it, as the dense tensordict does (#3042).
+    """
+
+    def fn(x):
+        if type(x) is Tensor or _default_is_leaf(type(x)):
+            return leaf_fn(x)
+        return getattr(x, name)(other=other)
+
+    return td._fast_apply(
+        fn, is_leaf=_is_leaf_or_lazy_stack, propagate_lock=True, filter_empty=True
+    )
 
 
 def _apply_pointwise_retry_(
@@ -1064,6 +1088,12 @@ class _PointwiseOps:
     def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
         """Returns a new tensordict with :func:`torch.softmax` applied to every leaf along a batch dimension.
 
+        A :class:`~tensordict.LazyStackedTensorDict`, also a nested one, gives
+        a lazy stack with the values of its dense copy. The exception is a
+        softmax along the stack dim of members whose entries have different
+        shapes, which have no dense copy: each leaf of each member is
+        normalised along its own dim ``dim``.
+
         Args:
             dim (int): the batch dimension along which softmax is computed. A
                 negative ``dim`` counts from the end of the batch dimensions.
@@ -1083,9 +1113,28 @@ class _PointwiseOps:
             dim = _maybe_correct_neg_dim(dim, self.batch_size)
         else:
             raise ValueError(f"Expected dim of type int, got {type(dim)}.")
-        return self._fast_apply(
-            lambda x: torch.softmax(x, dim=dim, dtype=dtype),
-        )
+        return self._softmax(dim, dtype)
+
+    def _softmax(self, dim: int, dtype: torch.dtype | None) -> Self:
+        """Returns the result of :meth:`softmax` along the batch dim ``dim``.
+
+        ``dim`` is already a non-negative int. The base applies
+        :func:`torch.softmax` to every leaf, and calls :meth:`softmax` on a
+        nested lazy stack, or on the tensorclass or ``TypedTensorDict`` that
+        holds one. :class:`~tensordict.LazyStackedTensorDict` gives each member
+        the dim it has there, and normalises the stacked entries along the
+        stack dim.
+        """
+
+        def softmax(x):
+            if type(x) is Tensor or not _is_tensor_collection(type(x)):
+                return torch.softmax(x, dim=dim, dtype=dtype)
+            if _has_lazy_stack(x):
+                # the leaves of the members of a lazy stack lack the stack dim
+                return x.softmax(dim, dtype)
+            return x._fast_apply(softmax, is_leaf=_is_leaf_or_lazy_stack)
+
+        return self._fast_apply(softmax, is_leaf=_is_leaf_or_lazy_stack)
 
     def log10(self) -> Self:
         """Returns a new tensordict with :func:`torch.log10` applied to every leaf."""
@@ -1438,6 +1487,10 @@ class _PointwiseOps:
                 the others. A tensor stands in for the missing entry on either
                 side, and the result has the keys of both. Defaults to ``None``.
         """
+        if isinstance(other, Tensor) and other.ndim:
+            return _apply_keyword_tensor(
+                self, "bitwise_and", lambda x: x.bitwise_and(other), other
+            )
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -1498,6 +1551,10 @@ class _PointwiseOps:
                 the others. A tensor stands in for the missing entry on either
                 side, and the result has the keys of both. Defaults to ``None``.
         """
+        if isinstance(other, Tensor) and other.ndim:
+            return _apply_keyword_tensor(
+                self, "logical_and", lambda x: x.logical_and(other), other
+            )
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -2188,6 +2245,8 @@ class _PointwiseOps:
                 dimensions of each leaf and expanded over its feature
                 dimensions.
         """
+        if isinstance(other, Tensor) and other.ndim:
+            return _apply_keyword_tensor(self, "mod", lambda x: x % other, other)
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(True, True, sorting_keys=keys)
@@ -2878,7 +2937,18 @@ class _PointwiseOps:
             return self._fast_apply(
                 lambda x, low, high: x.clamp(low, high), min, max, default=None
             )
-        return self._fast_apply(lambda x: x.clamp(min, max))
+
+        def clamp_leaf(x):
+            if type(x) is Tensor or _default_is_leaf(type(x)):
+                return x.clamp(min, max)
+            if _unwrap(x)._lazy:
+                # a nested lazy stack, or a tensorclass or TypedTensorDict on
+                # one, gives each member leaf its part of a tensor bound with
+                # dims, which comes by keyword (#3042)
+                return x.clamp(min=min, max=max)
+            return x._fast_apply(clamp_leaf, is_leaf=_is_leaf_or_lazy_stack)
+
+        return self._fast_apply(clamp_leaf, is_leaf=_is_leaf_or_lazy_stack)
 
     @_write_back_inplace
     @_maybe_broadcast_other("pow_")
@@ -3183,6 +3253,12 @@ class _PointwiseOps:
                 that starts with the batch shape up to the stack dimension is
                 split along that dimension, one piece per member, so it must
                 have the stack size there: expand it to the batch shape first.
+                The pieces line up with the leaves as in
+                :class:`~tensordict.TensorDict` only for the leaves with as
+                many dims as ``other``; for the others the lazy stack emits a
+                :class:`FutureWarning`: starting with TensorDict 0.17, the
+                default will change to broadcasting like TensorDict.where,
+                which aligns ``other`` with each leaf from the right.
 
         Keyword Args:
             out (TensorDictBase, optional): the tensordict to write the result

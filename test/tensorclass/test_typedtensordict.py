@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+from abc import ABCMeta
 from pathlib import Path
 
 try:
@@ -215,6 +217,37 @@ class TestConstruction:
         )
         assert state.noise is noise
 
+    def test_stub_matches_runtime_class(self):
+        # Type checkers read typedtensordict.pyi: its class must have the
+        # public bases and the metaclass of the runtime class, and must define
+        # the abstract methods of TensorDictBase, which the runtime class
+        # defines or delegates.
+        typed_stub = Path(__file__).parents[2] / "tensordict" / "typedtensordict.pyi"
+        classes = {
+            node.name: node
+            for node in ast.parse(typed_stub.read_text()).body
+            if isinstance(node, ast.ClassDef)
+        }
+        stub_class = classes["TypedTensorDict"]
+        stub_bases = [ast.unparse(base) for base in stub_class.bases]
+        runtime_bases = [
+            base.__name__
+            for base in TypedTensorDict.__bases__
+            if not base.__name__.startswith("_")
+        ]
+        assert stub_bases == runtime_bases == ["TensorDictBase"]
+
+        (metaclass,) = (kw.value for kw in stub_class.keywords if kw.arg == "metaclass")
+        stub_meta_bases = [ast.unparse(base) for base in classes[metaclass.id].bases]
+        assert type(TypedTensorDict).__bases__ == (type(TensorDictBase),)
+        assert type(TensorDictBase) is ABCMeta
+        assert stub_meta_bases == ["ABCMeta"]
+
+        stub_methods = {
+            node.name for node in stub_class.body if isinstance(node, ast.FunctionDef)
+        }
+        assert TensorDictBase.__abstractmethods__ <= stub_methods
+
     @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
     def test_static_field_contract(self, tmp_path):
         from mypy import api
@@ -266,6 +299,7 @@ ignore_missing_imports = True
             """from typing_extensions import assert_type
 from tensordict import TypedTensorDict
 from tensordict._td import TensorDict
+from tensordict.base import TensorDictBase
 
 class State(TypedTensorDict):
     observation: int
@@ -287,6 +321,10 @@ assert_type(state.observation, int)
 assert_type(state.optional, int | None)
 assert_type(consume(child), int)
 assert_type(State.from_tensordict(TensorDict(), check=False), State)
+
+def consume_base(td: TensorDictBase) -> None: ...
+
+consume_base(state)
 """
         )
         stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
@@ -295,16 +333,20 @@ assert_type(State.from_tensordict(TensorDict(), check=False), State)
         invalid = tmp_path / "invalid.py"
         invalid.write_text(
             """from tensordict import TypedTensorDict
+from tensordict._td import TensorDict
 
 class State(TypedTensorDict):
     observation: int
     reward: int
+
+def consume_td(td: TensorDict) -> None: ...
 
 State(observation=1)
 State(observation="bad", reward=2)
 State(observation=1, reward=2, extra=3)
 state = State(observation=1, reward=2)
 state.missing
+consume_td(state)
 """
         )
         stdout, stderr, status = api.run(["--config-file", str(config), str(invalid)])
@@ -313,6 +355,8 @@ state.missing
         assert 'incompatible type "str"' in stdout
         assert 'Unexpected keyword argument "extra"' in stdout
         assert 'has no attribute "missing"' in stdout
+        # A TypedTensorDict is not a TensorDict at runtime.
+        assert '"consume_td" has incompatible type "State"' in stdout
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@ import pickle
 import platform
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -1065,13 +1066,42 @@ class TestGeneric:
         assert td.consolidate() is td
         assert td.consolidate(pin_memory=True, inplace=True) is td
         assert td.consolidate(pin_memory=True, num_threads=2, return_early=True) is td
-        assert td.consolidate(pin_memory=True, device="cuda") is td
+        with pytest.warns(UserWarning, match="ignores device='cuda'"):
+            assert td.consolidate(pin_memory=True, device="cuda") is td
         filename = Path(tmpdir) / "file.td"
-        td_file = td.consolidate(filename=filename)
+        td_file = td.contiguous().consolidate(filename=filename)
         assert td_file.consolidate(filename=filename, pin_memory=True) is td_file
         # A pinned storage is returned as is
         monkeypatch.setattr(torch.Tensor, "is_pinned", lambda self: True)
         assert td.consolidate(pin_memory=True) is td
+
+    def test_consolidate_consolidated_ignored_args_warn(self, tmpdir):
+        # An already consolidated tensordict returns self and ignores device,
+        # share_memory and another filename: it warns about them (#3116)
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
+        with pytest.warns(UserWarning, match="ignores device='meta'"):
+            assert td.consolidate(device="meta") is td
+        with pytest.warns(UserWarning, match="ignores share_memory=True"):
+            assert td.consolidate(share_memory=True) is td
+        filename = Path(tmpdir) / "file.td"
+        td_file = td.contiguous().consolidate(filename=filename)
+        other = Path(tmpdir) / "other.td"
+        with pytest.warns(UserWarning, match="writes nothing.*consolidated into"):
+            assert td_file.consolidate(filename=other) is td_file
+        assert not other.exists()
+        # A loaded tensordict has no file of its own
+        loaded = TensorDict.from_consolidated(filename)
+        with pytest.warns(UserWarning, match="writes nothing.*no file of its own"):
+            assert loaded.consolidate(filename=filename) is loaded
+        # The arguments that match the storage do not warn (warnings raise in
+        # this module), and an invalid device is ignored as before
+        shared = td.contiguous().consolidate(share_memory=True)
+        assert td.consolidate(device="cpu") is td
+        assert td.consolidate(device="cpu:0") is td
+        assert td.consolidate(device="not-a-device") is td
+        assert shared.consolidate(share_memory=True) is shared
+        assert td_file.consolidate(filename=filename, share_memory=True) is td_file
+        assert td_file.consolidate(share_memory=True) is td_file
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_consolidate_pin_memory_consolidated_cuda(self):
@@ -1308,19 +1338,22 @@ class TestGeneric:
         assert loaded.names == [None]
         assert (loaded == td).all()
         # another file name writes nothing
-        assert td.consolidate(filename=tmp_path / "other.bin") is td
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert td.consolidate(filename=tmp_path / "other.bin") is td
         assert not (tmp_path / "other.bin").exists()
         # nor does a file that was replaced, or deleted
         os.remove(filename)
         td2 = TensorDict(z=torch.ones(2), batch_size=[2]).consolidate(filename=filename)
         td.batch_size = []
-        assert td.consolidate(filename=filename) is td
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert td.consolidate(filename=filename) is td
         loaded = TensorDict.from_consolidated(filename)
         assert loaded.batch_size == (2,)
         assert (loaded == td2).all()
         del td2, loaded
         os.remove(filename)
-        assert td.consolidate(filename=filename) is td
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert td.consolidate(filename=filename) is td
         assert not filename.exists()
 
     def test_consolidated_lazy_stack_names_serialized(self):
@@ -2214,6 +2247,42 @@ class TestGeneric:
             ("a", "b"),
             ("a", "b", "c"),
         }
+        # A stack of stacks of plain TensorDicts hands the key on to each
+        # member of its members.
+        td = lazy_stack(
+            [
+                lazy_stack([TensorDict(a={"x": torch.zeros(())}) for _ in range(2)]),
+                lazy_stack([TensorDict(a={"x": torch.zeros(())}), TensorDict()]),
+            ]
+        )
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1, 0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1, 1].keys(True)) == {"a", ("a", "b")}
+
+    @pytest.mark.parametrize("idx", [0, (slice(None), 1)])
+    def test_create_nested_sub_tensordict(self, idx):
+        # A view keeps the entries of a plain TensorDict on the path, in every
+        # row of its source (#3008).
+        x = torch.arange(6.0).reshape(3, 2)
+        td = TensorDict(a={"x": x.clone()}, batch_size=[3, 2])
+        sub = td._get_sub_tensordict(idx)
+        assert sub.create_nested(("a", "b")) is sub
+        assert set(sub.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert (td["a", "x"] == x).all()
+        assert td["a", "b"].batch_size == (3, 2)
+
+    def test_create_nested_typed(self):
+        # A typed tensordict keeps a plain TensorDict on the path (#3008).
+        class Typed(TypedTensorDict):
+            a: TensorDictBase
+
+        td = Typed(a=TensorDict(x=torch.ones(3), batch_size=[3]), batch_size=[3])
+        assert td.create_nested(("a", "b")) is td
+        assert type(td.get("a")) is TensorDict
+        assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert (td["a", "x"] == 1).all()
 
     @pytest.mark.parametrize("member", ["tensor", "locked"])
     @pytest.mark.parametrize("view", ["sub", "sub_slice", "typed"])
@@ -8505,6 +8574,88 @@ class TestGeneric:
         td = TensorDict(a=torch.zeros(4), batch_size=[4])
         assert collate(td) is td
         assert collate([]) == []
+
+    def test_collate_default(self, monkeypatch):
+        # The default collate_fn of a DataLoader stacks tensordicts and
+        # tensorclasses as collate does.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        @tensorclass
+        class Decorated:
+            x: torch.Tensor
+
+        def load(samples):
+            dl = torch.utils.data.DataLoader(samples, batch_size=4)  # noqa: TOR401
+            return next(iter(dl))
+
+        for cls in (Sample, Decorated):
+            batch = load([cls(x=torch.full((3,), i)) for i in range(8)])
+            assert type(batch) is cls
+            assert batch.batch_size == (4,)
+            assert (batch.x[:, 0] == torch.arange(4)).all()
+            batch, label = load([(cls(x=torch.randn(3)), i) for i in range(8)])
+            assert type(batch) is cls
+            assert batch.batch_size == (4,)
+            assert (label == torch.arange(4)).all()
+            # a dataset whose __getitems__ returns the batch
+            batch = load(cls(x=torch.randn(8, 3), batch_size=[8]))
+            assert type(batch) is cls
+            assert batch.batch_size == (4,)
+        batch = load(
+            [TensorDict(a=torch.full((3,), i), b=TensorDict(c=i)) for i in range(8)]
+        )
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (4,)
+        assert (batch["b", "c"] == torch.arange(4)).all()
+        batch = load([TensorDict(a=torch.randn(n + 1)) for n in range(8)])
+        assert isinstance(batch, LazyStackedTensorDict)
+        assert batch.batch_size == (4,)
+        batch = load(TensorDict(a=torch.randn(8, 3), batch_size=[8]))
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (4,)
+        # defining tensorclasses adds no keys to torch's map
+        default_collate_fn_map = torch.utils.data._utils.collate.default_collate_fn_map
+        keys = list(default_collate_fn_map)
+        for i in range(4):
+            type(f"Sub{i}", (TensorClass,), {"__annotations__": {"x": torch.Tensor}})
+            tensorclass(type(f"Dec{i}", (), {"__annotations__": {"x": torch.Tensor}}))
+        assert list(default_collate_fn_map) == keys
+        # a collate function registered for a tensorclass type wins
+        for cls in (Sample, Decorated):
+            monkeypatch.setitem(
+                default_collate_fn_map, cls, lambda batch, collate_fn_map: "mine"
+            )
+            assert load([cls(x=torch.zeros(3)) for _ in range(4)]) == "mine"
+
+    def test_collate_default_registration(self):
+        # tensordict adds two keys to torch's default_collate_fn_map, and keeps
+        # the collate function that another library registered first.
+        code = (
+            "import torch.utils.data._utils.collate as c\n"
+            "def other(batch, *, collate_fn_map=None):\n"
+            "    return 'other'\n"
+            "class Registered(dict):\n"
+            "    def setdefault(self, key, default=None):\n"
+            "        dict.setdefault(self, key, other)\n"
+            "        return super().setdefault(key, default)\n"
+            "before = dict(c.default_collate_fn_map)\n"
+            "c.default_collate_fn_map = Registered(before)\n"
+            "import tensordict\n"
+            "added = [k for k in c.default_collate_fn_map if k not in before]\n"
+            "print([k.__name__ for k in added])\n"
+            "print(all(c.default_collate_fn_map[k] is v for k, v in before.items()))\n"
+            "print(all(c.default_collate_fn_map[k] is other for k in added))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.splitlines() == [
+            "['TensorCollection', '_TensorClassCollateMarker']",
+            "True",
+            "True",
+        ]
 
     def test_collate_keys(self):
         @tensorclass

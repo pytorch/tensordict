@@ -68,6 +68,7 @@ from tensordict.base import (
     _key_through_leaf_error,
     _register_tensor_class,
     _rename_keys_pairs,
+    _SELF_NESTING_ERROR,
     _TENSORDICTBASE_MIXINS,
     _UNSET,
     _update_at_aliases,
@@ -110,6 +111,7 @@ from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_is_leaf, tree_map
+from torch.utils.data._utils.collate import default_collate_fn_map
 
 if TYPE_CHECKING:
     from typing import Self
@@ -850,6 +852,11 @@ def from_dataclass(
     converts a dataclass instance to a :class:`~tensordict.TensorDict`
     instead.
 
+    To write the class as a tensorclass, a dataclass of tensors with
+    ``to(device)``, ``pin_memory()``, slicing and stacking for all its
+    fields, see :ref:`tensorclass-guide`. :ref:`coming-from-dataclass` shows
+    what replaces each method of a hand-written dataclass of tensors.
+
     Args:
         obj (Any): the dataclass instance or type to convert.
 
@@ -1409,6 +1416,32 @@ def _unchecked_copy(func: FunctionType) -> FunctionType:
     return copied
 
 
+def _collate_tensor_collection(batch, *, collate_fn_map=None):
+    # The entry of torch's default_collate_fn_map for tensordicts and
+    # tensorclasses, as tensordict.collate: a batch that a dataset read in one
+    # index operation (__getitems__) is returned as is; a list of samples is
+    # stacked densely if their keys and shapes match, lazily otherwise.
+    if is_tensor_collection(batch):
+        return batch
+    return LazyStackedTensorDict.maybe_dense_stack(batch)
+
+
+class _TensorClassCollateMeta(type):
+    def __instancecheck__(cls, instance):
+        return _is_tensorclass(type(instance))
+
+
+class _TensorClassCollateMarker(metaclass=_TensorClassCollateMeta):
+    # The key of default_collate_fn_map for the @tensorclass classes, which do
+    # not inherit from TensorCollection: one key for all of them, as torch's
+    # collate checks the keys one by one for the types it does not find.
+    pass
+
+
+default_collate_fn_map.setdefault(TensorCollection, _collate_tensor_collection)
+default_collate_fn_map.setdefault(_TensorClassCollateMarker, _collate_tensor_collection)
+
+
 @dataclass_transform()
 def _tensorclass(
     cls: T,
@@ -1612,11 +1645,14 @@ def _tensorclass(
                 pass
 
     if not tensor_only and not shadow:
+        params = cls.__dict__["__dataclass_params__"]
         for field in dataclasses.fields(cls):
             setattr(
                 cls,
                 field.name,
-                _FieldGetter(field.name, _is_non_tensor and field.name == "data"),
+                _FieldGetter(
+                    field.name, _is_non_tensor and field.name == "data", params
+                ),
             )
 
     if tensor_only:
@@ -1901,10 +1937,10 @@ def _tensorclass(
 
     if not tensor_only:
         # Attribute lookup would find a TensorClass method or property of the
-        # same name (e.g. "sum", or the "fields" of a tensorclass base) before
-        # the field, which _getattr serves.
+        # same name (e.g. "sum") before the field, which _getattr serves. The
+        # other classes have a field getter for each field, "fields" included.
         for name in expected_keys:
-            if (shadow or name == "fields") and hasattr(cls, name):
+            if shadow and hasattr(cls, name):
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
     # Without a docstring, the class documents its constructor signature.
@@ -3757,21 +3793,32 @@ def _getattr(self, item: str, **kwargs) -> Any:
 # that x.field does not first fail the normal attribute lookup and then go
 # through __getattr__. It defines no __set__, so an entry of the instance
 # __dict__ (which a custom __setattr__ can write with object.__setattr__) still
-# comes first. On the class it raises AttributeError, as the field had no class
-# attribute before: otherwise dataclass() would take it as the default of a
-# field that a subclass declares again. It has no docstring, so that Sphinx and
-# help() do not show one for every field.
+# comes first. Read on the class that it serves, it returns itself, as a
+# property does: code that calls getattr(cls, name) for each name in vars(cls),
+# such as Lightning's apply_to_collection, needs that. On any other class it
+# raises AttributeError, as the field had no class attribute before, so that
+# dataclass() does not take it as the default of a field that a subclass
+# declares again. It also raises once a later dataclass() call on its own class
+# has replaced __dataclass_params__, so that this call takes no default either.
+# That relies on a detail of dataclasses (CPython 3.10 to 3.14): it sets
+# __dataclass_params__ before it reads the defaults, which
+# test_dataclass_after_tensorclass checks. It has no docstring, so that Sphinx
+# and help() do not show one for every field.
 class _FieldGetter:
-    __slots__ = ("_check_shared", "_name")
+    __slots__ = ("_check_shared", "_name", "_params")
 
-    def __init__(self, name: str, check_shared: bool):
+    def __init__(self, name: str, check_shared: bool, params):
         self._name = name
         # True for the data field of NonTensorData and MetaData.
         self._check_shared = check_shared
+        # The __dataclass_params__ of the class that the getter serves.
+        self._params = params
 
     def __get__(self, obj, objtype=None):
         name = self._name
         if obj is None:
+            if vars(objtype).get("__dataclass_params__") is self._params:
+                return self
             raise AttributeError(
                 f"type object {objtype.__name__!r} has no attribute {name!r}"
             )
@@ -3923,6 +3970,8 @@ def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
             if non_tensordict and key in non_tensordict:
                 del non_tensordict[key]
         return
+    if value is self and not self._tensordict.is_locked:
+        raise ValueError(_SELF_NESTING_ERROR.format(key))
     # _convert_mapping_for_field, inlined
     if key in type(self)._tensordict_fields and isinstance(value, Mapping):
         value = _normalize_nested_mapping(value)
@@ -5220,6 +5269,7 @@ def _set(
         AttributeError: if ``key`` is not a field of the class.
         RuntimeError: if the tensorclass is locked, also with
             ``inplace=True``.
+        ValueError: if ``value`` is the tensorclass itself.
 
     Examples:
         >>> import torch
@@ -5260,6 +5310,10 @@ def _set(
             non_blocking=non_blocking,
             non_tensor=False,
         ):
+            # checked on the value stored, after the field check and casting;
+            # a NonTensorData set to itself unwraps to its own data below
+            if value is self and not self_is_non_tensor:
+                raise ValueError(_SELF_NESTING_ERROR.format(key))
             if self_is_non_tensor:
                 while is_non_tensor(value):
                     value = value.data

@@ -554,7 +554,8 @@ def collate(
     Pass it as ``collate_fn`` when the samples are tensordicts or
     tensorclasses, or tuples or dicts that hold them, such as
     ``(td, label)`` pairs. The default ``collate_fn`` of a ``DataLoader``
-    cannot read a tensordict (see :ref:`data-loading`).
+    stacks tensordicts and tensorclasses the same way; pass this function
+    for the keyword arguments below (see :ref:`data-loading`).
 
     The samples are collated by the type of the first one:
 

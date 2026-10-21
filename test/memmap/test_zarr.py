@@ -830,6 +830,63 @@ class TestZarrWriteOps:
         ztd["nested", "x"] = torch.zeros(3, 4)
         assert (ztd["nested", "x"] == 0).all()
 
+    def test_create_nested_existing(self, ztd):
+        # A tuple key keeps the groups already on the path, and a string key
+        # replaces the existing entry (#3008).
+        ztd.create_nested(("b", "d"))
+        assert set(ztd.keys(True)) == {"a", "b", ("b", "c"), ("b", "d")}
+        # a group read before it is replaced is not served from the cache
+        ztd["b", "d", "e"] = torch.zeros(3, 4)
+        assert set(ztd["b", "d"].keys()) == {"e"}
+        ztd.create_nested(("b", "d"))
+        assert set(ztd["b", "d"].keys()) == set()
+        ztd.create_nested("b")
+        assert set(ztd.keys(True)) == {"a", "b"}
+
+    def test_create_nested_read_only(self, ztd, tmp_path):
+        # a read-only store raises the errors of zarr's create_group at the
+        # first level of the key, as before #3008's fix
+        ro = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        for key in ("b", ("b", "c"), ("b", "d")):
+            with pytest.raises(zarr.errors.ContainsGroupError):
+                ro.create_nested(key)
+        with pytest.raises(zarr.errors.ContainsArrayError):
+            ro.create_nested(("a", "x"))
+        with pytest.raises(ValueError, match="read-only"):
+            ro.create_nested(("new", "y"))
+        assert set(ro.keys(True)) == {"a", "b", ("b", "c")}
+
+    @pytest.mark.parametrize("op", ["del_", "pop", "create_nested", "rename_key_"])
+    def test_replace_group_through_child(self, tmp_path, op):
+        # a group that a child deletes or replaces is not served from the
+        # cache of the tensordicts above it (#3181)
+        e = TensorDict(f=torch.zeros(3, 4), batch_size=[3, 4])
+        td = TensorDict(
+            n=TensorDict(d=TensorDict(e=e, batch_size=[3]), batch_size=[3]),
+            batch_size=[3],
+        )
+        ztd = td.to_zarr(tmp_path / "t.zarr")
+        # the root and its child cache their own copies of the group
+        assert ztd["n", "d", "e"].batch_size == (3, 4)
+        assert ztd["n"]["d", "e"].batch_size == (3, 4)
+        child = ztd["n"]["d"]
+        new = TensorDict(g=torch.ones(3), batch_size=[3])
+        if op == "del_":
+            child.del_("e")
+            child.set("e", new)
+        elif op == "pop":
+            child.pop("e")
+            child.set("e", new)
+        elif op == "create_nested":
+            child.create_nested("e")
+            child.set(("e", "g"), torch.ones(3))
+        else:
+            child.set("h", new)
+            child.rename_key_("h", "e", safe=False)
+        for sub in (ztd["n", "d", "e"], ztd["n"]["d", "e"], child["e"]):
+            assert set(sub.keys()) == {"g"}
+            assert sub.batch_size == (3,)
+
     def test_kwargs_passthrough(self, tmp_path):
         td = TensorDict({"a": torch.randn(64, 64)}, batch_size=[64])
         td.to_zarr(tmp_path / "s.zarr", chunks=(16, 64))

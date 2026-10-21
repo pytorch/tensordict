@@ -27,6 +27,8 @@ TUTORIAL_ORDER = [
     "data_fashion",
     "tensorclass_fashion",
     "tensorclass_imagenet",
+    # Scientific computing
+    "tensorclass_particles",
 ]
 
 
