@@ -746,6 +746,19 @@ class TestTensorDictStore:
         torch.testing.assert_close(out["obs"], torch.zeros(10, 3))
         torch.testing.assert_close(out["extra"], torch.ones(10))
 
+    def test_replace_does_not_write_into_nested_store_of_arg(self, store_td):
+        """replace leaves a store nested in, or stacked into, its argument unchanged (#2984)."""
+        store_td["obs"] = torch.zeros(10, 3)
+        arg = TensorDict(s=store_td, batch_size=[10])
+        out = TensorDict(batch_size=[10]).replace(arg, s={"extra": torch.ones(10)})
+        assert set(store_td.keys()) == {"obs"}
+        assert set(out["s"].keys()) == {"obs", "extra"}
+        torch.testing.assert_close(out["s", "extra"], torch.ones(10))
+        arg = LazyStackedTensorDict(store_td, store_td, stack_dim=0)
+        out = TensorDict(batch_size=[2, 10]).replace(arg, extra=torch.ones(2, 10))
+        assert set(store_td.keys()) == {"obs"}
+        torch.testing.assert_close(out["extra"], torch.ones(2, 10))
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_update__copy__lazy_source(self, store_td, stack_dim):
         """copy_ and update_ write a lazy stack into the store (#2593).

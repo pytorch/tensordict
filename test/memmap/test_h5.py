@@ -680,6 +680,48 @@ class TestH5Serialization:
             assert (out["b"] == 1).all()
         h5td.close()
 
+    def test_replace_does_not_write_into_nested_file_of_arg(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/2984
+        class Data(TensorClass):
+            x: torch.Tensor
+
+        files = [
+            PersistentTensorDict.from_dict(
+                TensorDict(a=torch.zeros(3), batch_size=[3]),
+                filename=tmp_path / f"file{i}.h5",
+            )
+            for i in range(4)
+        ]
+        # A lazy stack writes each entry into every member.
+        stack = lazy_stack(files[:2])
+        out = TensorDict(batch_size=[2, 3]).replace(stack, b=torch.ones(2, 3))
+        assert [set(f.keys()) for f in files[:2]] == [{"a"}, {"a"}]
+        assert set(out.keys()) == {"a", "b"}
+        assert (out["b"] == 1).all()
+        # A nested file that the keyword entries merge into, also deeper (by
+        # a nested key) and inside a lazy stack; a nested tensorclass beside
+        # it keeps its type.
+        arg = TensorDict(
+            h=files[2],
+            tc=Data(x=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = TensorDict(batch_size=[3]).replace(arg, h={"b": torch.ones(3)})
+        assert set(files[2].keys()) == {"a"}
+        assert set(out["h"].keys()) == {"a", "b"}
+        assert (out["h", "b"] == 1).all()
+        assert type(out["tc"]) is Data
+        arg = lazy_stack(
+            [TensorDict(n={"h": files[3]}, batch_size=[3]) for _ in range(2)]
+        )
+        out = TensorDict(batch_size=[2, 3]).replace(
+            arg, n={("h", "b"): torch.ones(2, 3)}
+        )
+        assert set(files[3].keys()) == {"a"}
+        assert (out["n", "h", "b"] == 1).all()
+        for f in files:
+            f.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
