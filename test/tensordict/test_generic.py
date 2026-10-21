@@ -19,6 +19,7 @@ import pickle
 import platform
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -8573,6 +8574,88 @@ class TestGeneric:
         td = TensorDict(a=torch.zeros(4), batch_size=[4])
         assert collate(td) is td
         assert collate([]) == []
+
+    def test_collate_default(self, monkeypatch):
+        # The default collate_fn of a DataLoader stacks tensordicts and
+        # tensorclasses as collate does.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        @tensorclass
+        class Decorated:
+            x: torch.Tensor
+
+        def load(samples):
+            dl = torch.utils.data.DataLoader(samples, batch_size=4)  # noqa: TOR401
+            return next(iter(dl))
+
+        for cls in (Sample, Decorated):
+            batch = load([cls(x=torch.full((3,), i)) for i in range(8)])
+            assert type(batch) is cls
+            assert batch.batch_size == (4,)
+            assert (batch.x[:, 0] == torch.arange(4)).all()
+            batch, label = load([(cls(x=torch.randn(3)), i) for i in range(8)])
+            assert type(batch) is cls
+            assert batch.batch_size == (4,)
+            assert (label == torch.arange(4)).all()
+            # a dataset whose __getitems__ returns the batch
+            batch = load(cls(x=torch.randn(8, 3), batch_size=[8]))
+            assert type(batch) is cls
+            assert batch.batch_size == (4,)
+        batch = load(
+            [TensorDict(a=torch.full((3,), i), b=TensorDict(c=i)) for i in range(8)]
+        )
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (4,)
+        assert (batch["b", "c"] == torch.arange(4)).all()
+        batch = load([TensorDict(a=torch.randn(n + 1)) for n in range(8)])
+        assert isinstance(batch, LazyStackedTensorDict)
+        assert batch.batch_size == (4,)
+        batch = load(TensorDict(a=torch.randn(8, 3), batch_size=[8]))
+        assert type(batch) is TensorDict
+        assert batch.batch_size == (4,)
+        # defining tensorclasses adds no keys to torch's map
+        default_collate_fn_map = torch.utils.data._utils.collate.default_collate_fn_map
+        keys = list(default_collate_fn_map)
+        for i in range(4):
+            type(f"Sub{i}", (TensorClass,), {"__annotations__": {"x": torch.Tensor}})
+            tensorclass(type(f"Dec{i}", (), {"__annotations__": {"x": torch.Tensor}}))
+        assert list(default_collate_fn_map) == keys
+        # a collate function registered for a tensorclass type wins
+        for cls in (Sample, Decorated):
+            monkeypatch.setitem(
+                default_collate_fn_map, cls, lambda batch, collate_fn_map: "mine"
+            )
+            assert load([cls(x=torch.zeros(3)) for _ in range(4)]) == "mine"
+
+    def test_collate_default_registration(self):
+        # tensordict adds two keys to torch's default_collate_fn_map, and keeps
+        # the collate function that another library registered first.
+        code = (
+            "import torch.utils.data._utils.collate as c\n"
+            "def other(batch, *, collate_fn_map=None):\n"
+            "    return 'other'\n"
+            "class Registered(dict):\n"
+            "    def setdefault(self, key, default=None):\n"
+            "        dict.setdefault(self, key, other)\n"
+            "        return super().setdefault(key, default)\n"
+            "before = dict(c.default_collate_fn_map)\n"
+            "c.default_collate_fn_map = Registered(before)\n"
+            "import tensordict\n"
+            "added = [k for k in c.default_collate_fn_map if k not in before]\n"
+            "print([k.__name__ for k in added])\n"
+            "print(all(c.default_collate_fn_map[k] is v for k, v in before.items()))\n"
+            "print(all(c.default_collate_fn_map[k] is other for k in added))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.splitlines() == [
+            "['TensorCollection', '_TensorClassCollateMarker']",
+            "True",
+            "True",
+        ]
 
     def test_collate_keys(self):
         @tensorclass
