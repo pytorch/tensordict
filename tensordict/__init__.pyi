@@ -12,6 +12,7 @@ from tensordict._archive import (
 from tensordict._base.shape import PackLayout
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
+from tensordict._safetensors import from_safetensors, to_safetensors
 from tensordict._td import (
     cat,
     from_consolidated,
@@ -157,6 +158,8 @@ __all__ = [
     "unpack_memmap",
     "is_memmap_archive",
     "refresh_archive_checksums",
+    "to_safetensors",
+    "from_safetensors",
     # Merging, padding, and grouping
     "merge_tensordicts",
     "pad",

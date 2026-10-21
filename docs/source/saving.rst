@@ -47,6 +47,11 @@ Choose a format
      - :meth:`~tensordict.TensorDictBase.consolidate`,
        :func:`~tensordict.from_consolidated`
      - `Consolidated files`_
+   * - Give the file to code that reads safetensors, such as the Hugging
+       Face libraries, or load a safetensors checkpoint
+     - :func:`~tensordict.to_safetensors`,
+       :func:`~tensordict.from_safetensors`
+     - `Safetensors files`_
    * - Give the file to code that calls :func:`torch.load`
      - :func:`torch.save`
      - `torch.save and torch.load`_
@@ -228,6 +233,12 @@ archive, a consolidated file, or :func:`torch.save`:
      - Yes
      - No
      - Open the data in the shortest time
+   * - safetensors
+     - ``to_safetensors(td, "x.safetensors")``,
+       ``from_safetensors("x.safetensors")``
+     - No
+     - No
+     - Give the data to code that reads safetensors
    * - ``torch.save``
      - ``torch.save(td, "x.pt")``, ``torch.load("x.pt")``
      - With ``torch.load(..., mmap=True)``
@@ -344,6 +355,58 @@ tensordict with 1000 small leaves took 34 ms, and 0.3 ms once consolidated
 layout to send a tensordict as one message. See
 :meth:`~tensordict.TensorDictBase.consolidate` for its other options
 (``num_threads``, ``device``, ``pin_memory``, ``share_memory``).
+
+Safetensors files
+~~~~~~~~~~~~~~~~~
+
+safetensors is the format of most model weights on the Hugging Face Hub. A
+safetensors file maps names to tensors, and has no pickle.
+:func:`~tensordict.to_safetensors` saves each tensor under its nested key
+joined with ``"."``, the name that a model's ``state_dict`` gives it, and
+:func:`~tensordict.from_safetensors` loads the file. You need the
+``safetensors`` package:
+
+  >>> from tensordict import from_safetensors, to_safetensors
+  >>> to_safetensors(params, root / "model.safetensors")
+  >>> from safetensors.torch import load_file
+  >>> sorted(load_file(root / "model.safetensors"))
+  ['0.bias', '0.weight', '2.bias', '2.weight']
+  >>> loaded = from_safetensors(root / "model.safetensors")
+  >>> _ = loaded.to_module(new_model, inplace=True)
+
+``to_safetensors`` also writes the structure of the tensordict in the
+metadata of the file, as one JSON string: the batch size and dim names of
+each level, the class of each tensorclass, and the non-tensor values. So
+``from_safetensors`` gives back the tensordict that you saved, also for keys
+that contain ``"."``:
+
+  >>> from tensordict import NonTensorData
+  >>> trial = TensorDict(
+  ...     {"x": torch.zeros(3), "config": NonTensorData({"lr": 0.1}), "a.b": {"c": torch.ones(3)}},
+  ...     batch_size=[3],
+  ... )
+  >>> to_safetensors(trial, root / "trial.safetensors")
+  >>> loaded = from_safetensors(root / "trial.safetensors")
+  >>> loaded["config"], loaded["a.b"].batch_size
+  ({'lr': 0.1}, torch.Size([3]))
+
+A file without this metadata, such as a checkpoint from the Hub, loads as a
+nested :class:`~tensordict.TensorDict` with an empty batch size: each name
+is split on ``"."``. Pass ``device`` to load the tensors on a device.
+
+safetensors holds dense tensors only. ``to_safetensors`` raises an error for
+a nested or jagged tensor, for a non-tensor value that JSON cannot represent
+exactly (only ``str``, ``int``, ``float``, ``bool``, ``None``, ``list``, and
+``dict`` with string keys), for a stack of non-tensor values, and for a lazy
+stack whose entries have different keys. To save a lazy stack whose entries
+have different shapes, pad them first, for example with
+:func:`~tensordict.pad_sequence`. Tensors that share memory, such as
+tied weights, are saved as separate copies, and load as separate tensors.
+
+To load a tensorclass, import the module that defines it first.
+``from_safetensors`` never imports a module by the name in a file. The class
+is matched by its full name, so a tensorclass defined in a script
+(``__main__``) loads only in a script that defines it too.
 
 torch.save and torch.load
 -------------------------

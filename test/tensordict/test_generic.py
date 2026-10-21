@@ -124,6 +124,7 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+_has_safetensors = importlib.util.find_spec("safetensors", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -3341,6 +3342,163 @@ class TestGeneric:
         out = tensordict.from_h5(path)
         assert (out["a"] == 0).all()
         out.close()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_round_trip(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        from safetensors.torch import load_file
+
+        @tensorclass
+        class Labeled:
+            x: torch.Tensor
+            label: str
+
+        td = TensorDict(
+            {
+                "a": torch.arange(3),
+                "config": NonTensorData({"lr": [0.1, None]}),
+                "labeled": Labeled(x=torch.zeros(3, 2), label="hi", batch_size=[3]),
+                "nested": {"b.c": torch.ones(3, 4, dtype=torch.bfloat16)},
+            },
+            batch_size=[3],
+            names=["time"],
+        )
+        tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+        assert sorted(load_file(tmp_path / "td.safetensors")) == [
+            "a",
+            "labeled.x",
+            "nested.b.c",
+        ]
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+        assert type(out) is TensorDict
+        assert out.names == ["time"]
+        assert out["nested"].batch_size == (3,)
+        assert list(out.keys(True, True)) == list(td.keys(True, True))
+        assert type(out["labeled"]) is Labeled
+        assert out["labeled"].label == "hi"
+        assert out["config"] == {"lr": [0.1, None]}
+        assert out["nested", "b.c"].dtype == torch.bfloat16
+        assert (out == td).all()
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors", device="cpu")
+        assert out.device == torch.device("cpu")
+
+        tensordict.to_safetensors(td["labeled"], tmp_path / "tc.safetensors")
+        out = tensordict.from_safetensors(tmp_path / "tc.safetensors")
+        assert type(out) is Labeled
+        assert (out == td["labeled"]).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_module(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        from safetensors.torch import save_file
+
+        def make_model():
+            return nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 2))
+
+        model = make_model()
+        tensordict.to_safetensors(
+            TensorDict.from_module(model), tmp_path / "td.safetensors"
+        )
+        # A file without tensordict metadata, as on the Hugging Face Hub.
+        save_file(model.state_dict(), tmp_path / "hf.safetensors")
+        for name in ("td.safetensors", "hf.safetensors"):
+            params = tensordict.from_safetensors(tmp_path / name)
+            assert params["0"].batch_size == ()
+            new_model = make_model()
+            params.to_module(new_model, inplace=True)
+            new_state_dict = new_model.state_dict()
+            for key, value in model.state_dict().items():
+                assert torch.equal(new_state_dict[key], value), key
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_shared_storage(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        weight = torch.randn(4, 4)
+        tied = TensorDict(a=weight, b=weight, c=weight[1:], d=weight.t())
+        consolidated = TensorDict(
+            a=torch.zeros(3), b={"c": torch.ones(3, 2)}, batch_size=[3]
+        ).consolidate()
+        for td in (tied, consolidated):
+            tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+            assert (
+                tensordict.from_safetensors(tmp_path / "td.safetensors") == td
+            ).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "object",
+            "tuple",
+            "jagged",
+            "non_tensor_stack",
+            "exclusive_keys",
+            "nested_exclusive_keys",
+            "bare_non_tensor",
+            "same_name",
+        ],
+    )
+    def test_safetensors_errors(self, tmp_path, case):
+        # https://github.com/pytorch/tensordict/issues/3087
+        error, match = TypeError, "not a JSON value"
+        if case == "object":
+            td = TensorDict(a=NonTensorData(object()))
+        elif case == "tuple":
+            td = TensorDict(a=NonTensorData((1, 2)))
+        elif case == "jagged":
+            jagged = torch.nested.nested_tensor(
+                [torch.zeros(2), torch.zeros(3)], layout=torch.jagged
+            )
+            td = TensorDict(a=jagged)
+            match = "only dense tensors"
+        elif case == "non_tensor_stack":
+            td = TensorDict(a=NonTensorStack.from_list(["a", "b"]))
+            match = "non-tensor stack"
+        elif case == "exclusive_keys":
+            # Only the first entry has "b": items() would silently drop it.
+            stack = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(()), b=torch.zeros(())),
+                TensorDict(a=torch.zeros(())),
+            )
+            td = TensorDict(obs=stack)
+            match = "entries have different keys"
+        elif case == "nested_exclusive_keys":
+            # A stack of stacks: the inner stacks list only their shared keys.
+            inner = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3), batch_size=[3]),
+            )
+            td = TensorDict(obs=lazy_stack([inner, inner], dim=1))
+            match = "entries have different keys"
+        elif case == "bare_non_tensor":
+            td = NonTensorData("hi")
+            match = "put it in a tensordict first"
+        else:
+            # ("a", "b.c") and ("a.b", "c") have the same name in the file.
+            td = TensorDict({"a": {"b.c": torch.zeros(())}, "a.b": {"c": 0}})
+            error, match = ValueError, "have the safetensors name 'a.b.c'"
+        with pytest.raises(error, match=match):
+            tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_unknown_class(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/3087
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        tensordict.to_safetensors(
+            TensorDict(a=torch.zeros(2)), tmp_path / "td.safetensors"
+        )
+        with safe_open(tmp_path / "td.safetensors", framework="pt") as file:
+            metadata = json.loads(file.metadata()["tensordict"])
+        metadata["root"]["class"] = "<class 'not_imported.Labeled'>"
+        save_file(
+            {"a": torch.zeros(2)},
+            tmp_path / "td.safetensors",
+            metadata={"tensordict": json.dumps(metadata)},
+        )
+        with pytest.raises(RuntimeError, match="Could not find the tensorclass"):
+            tensordict.from_safetensors(tmp_path / "td.safetensors")
 
     # Module-level function -> (the TensorDict method it forwards to, the
     # parameters whose default may differ). from_module locks its result by
