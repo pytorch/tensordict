@@ -692,6 +692,14 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         Write with the full key, ``store.set(("nested", "b"), ...)``, or with
         :meth:`update`.
 
+    ``store[i]`` is a view of element ``i`` that reads and writes on the
+    server. On a locked store, the view follows the lock of the store: it
+    writes the keys that the store has, with or without ``inplace``, and a
+    write of a new key raises the lock error. Unlike ``stack[i]`` of a locked
+    lazy stack, the view itself is not locked: its ``is_locked`` is
+    ``False``, and the results of operations on it, such as ``store[i] + 1``
+    or ``store[i].to("cpu")``, are unlocked tensordicts.
+
     Each leaf key is one string on the server for the whole stack, with a
     table of offsets when the shapes of the elements differ, so the number of
     keys on the server does not grow with the number of elements.
@@ -747,6 +755,15 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         >>> store[1] = TensorDict(x=torch.ones(5))  # doctest: +SKIP
         >>> store[1]["x"]  # doctest: +SKIP
         tensor([1., 1., 1., 1., 1.])
+        >>> store.is_locked = True  # doctest: +SKIP
+        >>> store.is_locked, store[1].is_locked  # doctest: +SKIP
+        (True, False)
+        >>> store[1]["x"] = torch.zeros(5)  # doctest: +SKIP
+        >>> store[1]["y"] = torch.zeros(5)  # doctest: +SKIP
+        Traceback (most recent call last):
+        ...
+        RuntimeError: Cannot modify locked TensorDict. ...
+        >>> store.is_locked = False  # doctest: +SKIP
         >>> store.clear_redis()  # doctest: +SKIP
         >>> store.close()  # doctest: +SKIP
     """
@@ -767,6 +784,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
     _contiguous_via_to_tensordict = True
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
+    _copy_shares_storage = True
     _rename_key_lenient = True
     # td[key] = value writes into an existing entry on the server
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE

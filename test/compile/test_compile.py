@@ -366,6 +366,29 @@ def test_setitem_compiles(value, non_tensor, lazy):
     assert out.tolist() == [expected, expected, 1.0]
 
 
+@pytest.mark.parametrize("stack_dim", [0, 1])
+@pytest.mark.parametrize("dim", [0, 1, 2])
+def test_lazy_softmax_compiles(stack_dim, dim):
+    # softmax on a lazy stack, along its stack dim too, gives the values of
+    # the dense copy without a graph break (#2359)
+    dense = TensorDict(
+        a=torch.randn(2, 3, 4, 5), n={"b": torch.randn(2, 3, 4)}, batch_size=[2, 3, 4]
+    )
+    td = lazy_stack(dense.unbind(stack_dim), stack_dim)
+    out = torch.compile(lambda td: td.softmax(dim), fullgraph=True, backend="eager")(td)
+    for key, value in dense.softmax(dim).items(True, True):
+        torch.testing.assert_close(out.get(key), value)
+
+
+def test_lazy_softmax_ragged_compiles():
+    # members whose entries have different shapes keep their result along
+    # the stack dim, without a graph break (#2359)
+    td = lazy_stack([TensorDict(a=torch.randn(3, 4)), TensorDict(a=torch.randn(3, 5))])
+    out = torch.compile(lambda td: td.softmax(0), fullgraph=True, backend="eager")(td)
+    for member, expected in zip(out.tensordicts, td.tensordicts):
+        torch.testing.assert_close(member["a"], expected["a"].softmax(0))
+
+
 @pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )
@@ -3457,6 +3480,28 @@ class TestExport:
         out = ep.module()(td)
         assert out.batch_size == torch.Size([5])
         torch.testing.assert_close(out["c"], td["a"] * 2 + td["b"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_td_input_non_tensor_dynamic_batch_size(self, strict, monkeypatch):
+        # The non-tensor entry takes [] in dynamic_shapes. Export rebuilds the
+        # input with the symbolic batch size: the entry must get that batch
+        # size before TD_CHECK_INVARIANTS checks the new tensordict, and strict
+        # export must not specialize the batch size.
+        monkeypatch.setattr("tensordict._td._CHECK_INVARIANTS", True)
+
+        class Mod(torch.nn.Module):
+            def forward(self, td):
+                return td["a"] * 2
+
+        def make(batch):
+            return TensorDict(a=torch.randn(batch, 3), s="a string", batch_size=[batch])
+
+        batch = torch.export.Dim("batch", min=2)
+        ep = torch.export.export(
+            Mod(), (make(4),), strict=strict, dynamic_shapes=([{0: batch}, []],)
+        )
+        td = make(5)
+        torch.testing.assert_close(ep.module()(td), td["a"] * 2)
 
     @pytest.mark.parametrize("strict", [False, True])
     def test_export_td_input_empty_nested(self, strict):

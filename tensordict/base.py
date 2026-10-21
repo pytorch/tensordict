@@ -825,7 +825,7 @@ def _maybe_broadcast_other(
                     need_broadcast = True
                     break
             if (
-                self._lazy
+                (self._lazy or type(self)._wrapped_attr is not None)
                 and keywords
                 and kwargs
                 and not need_broadcast
@@ -835,6 +835,16 @@ def _maybe_broadcast_other(
             ):
                 from tensordict._lazy import LazyStackedTensorDict
 
+                wrapped_attr = type(self)._wrapped_attr
+                if wrapped_attr is not None:
+                    source = getattr(self, wrapped_attr)
+                    if isinstance(source, LazyStackedTensorDict) and not is_non_tensor(
+                        source
+                    ):
+                        # A TypedTensorDict on a lazy stack: the op on the
+                        # stack gives each member leaf its part of the operands
+                        result = getattr(source, func.__name__)(*others, **kwargs)
+                        return type(self)._wrap_td(result)
                 operands = [*others, *(kwargs[k] for k in keywords[len(others) :])]
                 if (
                     isinstance(self, LazyStackedTensorDict)
@@ -3110,6 +3120,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by the files and stores, which hold no autograd history: detach_
     # returns without reading their entries.
     _storage_holds_no_gradients: bool = False
+    # Set by the files and stores, whose copy() shares their storage: replace
+    # merges its keyword entries into a to_tensordict() copy of such an
+    # argument, which then does not change (#2984).
+    _copy_shares_storage: bool = False
     # Set by PersistentTensorDict, which writes a constant without reading the
     # array: zero_ fills each entry through _fill_ instead of reading copies.
     _fills_without_reading: bool = False
@@ -6209,7 +6223,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             elif clone:
                 value = tree_map(torch.clone, value)
             elif (
-                value is self
+                (
+                    value is self
+                    # a tensorclass holding self, as tensorclass.update passes;
+                    # if locked, it raises its lock error below, as before
+                    or (
+                        type(value) is not Tensor
+                        and _is_tensorclass(type(value))
+                        and value._tensordict is self
+                        and not self.is_locked
+                    )
+                )
                 and not self._update_stores_copy_of_self
                 and (keys_to_update is None or target is None)
             ):
@@ -6979,10 +7003,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         When both a positional argument and ``**kwargs`` are given, the
         keyword entries are merged into a copy of the positional argument
         (with ``dict`` unpacking for a dictionary, with :meth:`~.copy` and
-        :meth:`~.update` for a tensordict), so the argument does not change.
-        A tensordict backed by a file or a store, such as a
-        :class:`~tensordict.PersistentTensorDict`, shares that storage with
-        its copy and still receives the keyword entries.
+        :meth:`~.update` for a tensordict, and with :meth:`~.to_tensordict`
+        and :meth:`~.update` for a file or a store, such as a
+        :class:`~tensordict.PersistentTensorDict`, or an indexed view of one),
+        so the argument does not change. A file or a store shares its storage
+        with its copy: called on one, ``replace`` writes the new entries into
+        the file or store. So does a lazy stack of files or a tensordict that
+        holds a file as a nested entry: passed as the argument, it still
+        receives the keyword entries.
 
         Args:
             *args (dict or TensorDictBase): at most one, the entries to write.
@@ -7026,7 +7054,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if isinstance(dict_to_replace, dict):
                     dict_to_replace = {**dict_to_replace, **kwargs}
                 elif is_tensor_collection(dict_to_replace):
-                    dict_to_replace = dict_to_replace.copy()
+                    if dict_to_replace._copy_shares_storage:
+                        dict_to_replace = dict_to_replace.to_tensordict()
+                    else:
+                        dict_to_replace = dict_to_replace.copy()
                     dict_to_replace.update(kwargs)
         else:
             dict_to_replace = kwargs
@@ -7054,14 +7085,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         tensordict it is added to. An existing entry at ``key`` is replaced.
         For a tuple key, a plain :class:`~tensordict.TensorDict` keeps a
         plain, unlocked ``TensorDict`` already on the path with its entries:
-        ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. A lazy stack of
-        plain ``TensorDict`` instances does this in each member, and a
-        tensorclass or a :class:`~tensordict.nn.TensorDictParams` follows the
-        rule of the tensordict it wraps. Any other entry on the path, such as a
+        ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. An indexed view
+        of a plain ``TensorDict`` and a typed tensordict that wraps one do the
+        same; the view keeps the entries in every row of the tensordict it
+        indexes. A lazy stack of plain ``TensorDict`` instances, or of such
+        stacks, does this in each member, and a tensorclass or a
+        :class:`~tensordict.nn.TensorDictParams` follows the rule of the
+        tensordict it wraps. A :class:`~tensordict.PersistentTensorDict` keeps
+        the groups already on the path. Any other entry on the path, such as a
         tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
         tensordict, is replaced by a new empty tensordict, and so is every
         level of the path when the tensordict is of any other type, such as a
-        view, a typed tensordict or a file.
+        lazy view or a store.
 
         Args:
             key (NestedKey): the key of the new tensordict.
@@ -7099,8 +7134,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``TensorDict`` already on the path, so it keeps its entries, and
         replaces any other entry with a new empty tensordict. Every other
         class replaces each level of the path. ``LazyStackedTensorDict``
-        overrides it: a stack of plain ``TensorDict`` instances hands the key
-        to each member.
+        overrides it: a stack of plain ``TensorDict`` instances, or of such
+        stacks, hands the key to each member. ``_SubTensorDict`` and
+        ``TypedTensorDict`` override it to follow the rule of a plain source,
+        and ``PersistentTensorDict`` to keep the groups on the path.
         """
         from tensordict._td import TensorDict
 

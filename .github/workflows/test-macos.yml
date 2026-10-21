@@ -55,6 +55,26 @@ jobs:
         # clang rejects those headers because cpp_prefix.h has a new mtime.
         # GitHub empties $RUNNER_TEMP at the start of every job.
         export TMPDIR="$RUNNER_TEMP"
+        # A process that dies on a signal prints its Python stack, also when
+        # it dies while it imports torch, before a test can enable faulthandler.
+        export PYTHONFAULTHANDLER=1
+
+        # On macOS, libomp registers each process in
+        # /tmp/__KMP_REGISTERED_LIB_<pid>, a file it maps and reads; it
+        # ignores TMPDIR. A file left by an earlier process with the same PID
+        # that died while registering crashes the next process that gets the
+        # PID: an empty file with SIGBUS (#2669), a zero-filled one with
+        # "OMP: Error #15 ... found unknown library" (#2482). The crashing
+        # process leaves the file behind, so on these reused runners it stays
+        # a trap. Remove the files of the processes that no longer run.
+        for f in /tmp/__KMP_REGISTERED_LIB_*; do
+          [ -e "$f" ] || continue
+          pid="${f##*_}"
+          if ! ps -p "$pid" > /dev/null 2>&1; then
+            echo "Removing the stale libomp registration $f ($(wc -c < "$f" | tr -d ' ') bytes)"
+            rm -f "$f" || true
+          fi
+        done
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"

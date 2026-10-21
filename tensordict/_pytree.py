@@ -347,8 +347,20 @@ def _tensorclass_constructor(
 def _tensordict_constructor(
     *, cls, keys, values, batch_size, names, device, non_tensor_items
 ):
+    entries = dict(zip(keys, values))
+    for key, item in non_tensor_items:
+        if not isinstance(item, _PytreeNonTensorStack):
+            # tensorclass imports this module
+            from tensordict.tensorclass import NonTensorData
+
+            # Build the entry as set_non_tensor would. The value unflattened for
+            # it can have the batch size [0] * batch_dims, which _new_unsafe
+            # rejects when TD_CHECK_INVARIANTS is set.
+            entries[key] = NonTensorData(
+                data=item, batch_size=batch_size, device=device, names=names
+            )
     result = cls._new_unsafe(
-        dict(zip(keys, values)),
+        entries,
         batch_size=batch_size,
         names=names,
         device=device,
@@ -373,8 +385,6 @@ def _tensordict_constructor(
                 and leaf.batch_size[: result.batch_dims] == result.batch_size
             ):
                 _warn_non_tensor_stack_rebuilt(key, leaf, result._get_str(key, None))
-            continue
-        result.set_non_tensor(key, item)
     return result
 
 

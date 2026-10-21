@@ -59,6 +59,7 @@ from tensordict.utils import (
     unravel_key_list as unravel_key_list,
 )
 from torch import nn, Tensor
+from typing_extensions import deprecated
 
 class _NoDefault(enum.IntEnum):
     ZERO = 0
@@ -1685,9 +1686,29 @@ class TensorCollection:
     def int32(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def int64(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def int8(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorDictBase.qint32() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.qint32)) instead."
+    )
     def qint32(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorDictBase.qint8() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.qint8)) instead."
+    )
     def qint8(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorDictBase.quint4x2() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.quint4x2)) instead."
+    )
     def quint4x2(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorDictBase.quint8() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.quint8)) instead."
+    )
     def quint8(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def uint16(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def uint32(self, *, cast_filter: Callable | None = ...) -> Self: ...

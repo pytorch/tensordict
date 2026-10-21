@@ -1104,6 +1104,7 @@ class PersistentTensorDict(
     _leaves_built_on_read = True
     _pin_memory_unsupported = True
     _storage_holds_no_gradients = True
+    _copy_shares_storage = True
     _fills_without_reading = True
     # td[key] = value writes into an existing array of the file
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE
@@ -2139,9 +2140,41 @@ class PersistentTensorDict(
                 nested._fill_((subkey,), value)
 
     def _create_nested_str(self, key):
+        # The existing entry is replaced. On a read-only file, create_group
+        # raises the ValueError it raised before entries were replaced (a
+        # delete first would raise a KeyError instead).
+        if not self._storage_is_read_only() and self._backend.contains(self.file, key):
+            self._del((key,))
         self._backend.create_group(self.file, key)
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
+
+    # Override: an existing group on the path keeps its entries.
+    def _create_nested_tuple(self, key):
+        if self._storage_is_read_only():
+            # a read-only file raises from creating the first level, as
+            # before, and keeps its cached sub-tensordicts
+            self._create_nested_str(key[0])
+            return
+        if len(key) > 1:
+            group = self._get_array(key[0], None)
+            if group is not None and not self._backend.is_array(group):
+                cached = self._nested_tensordicts.get((key[0],))
+                if cached is not None and cached.is_locked:
+                    # a locked sub-tensordict is not written into: creating
+                    # the group raises for the existing name, as before
+                    self._backend.create_group(self.file, key[0])
+                # a sub-tensordict read before under this key would keep a
+                # replaced group
+                self._forget_nested(key)
+                td = self._get_str(key[0], NO_DEFAULT)
+            else:
+                self._forget_nested(key)
+                td = self._create_nested_str(key[0])
+            td._create_nested_tuple(key[1:])
+        else:
+            self._forget_nested(key)
+            self._create_nested_str(key[0])
 
     # Override: one to_tensordict() read, outside the cache that the base
     # keeps while locked: a locked file would keep a copy of its data, and

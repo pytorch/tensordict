@@ -1,3 +1,8 @@
+.. meta::
+   :description: TensorDict is a dict of tensors, and TensorClass a dataclass
+      of tensors, that index, stack, move to a device and compile with
+      torch.compile like one tensor in PyTorch.
+
 TensorDict
 ==========
 
@@ -124,6 +129,9 @@ Where to go
 - :ref:`Getting started <getting-started>`: a one-hour tour, with examples
   that you can run. Start here.
 - :ref:`Coming from JAX <coming-from-jax>`: JAX pytree idioms in tensordict.
+- :ref:`Coming from a hand-written dataclass <coming-from-dataclass>`: what
+  replaces a hand-written ``to``, ``pin_memory``, ``__getitem__`` and
+  ``collate_fn``.
 - :ref:`User guide <overview>`: one page for each concept, from the batch
   size to TensorClass and ``tensordict.nn``.
 - :ref:`How-to guides <saving>`: one page for each task, such as saving,
@@ -141,6 +149,7 @@ Where to go
    installation
    getting_started
    coming_from_jax
+   coming_from_dataclass
 
 .. toctree::
    :hidden:
@@ -209,6 +218,12 @@ Where to go
    tutorials/data_fashion
    tutorials/tensorclass_fashion
    tutorials/tensorclass_imagenet
+
+.. toctree::
+   :hidden:
+   :caption: Tutorials: scientific computing
+
+   tutorials/tensorclass_particles
 
 .. toctree::
    :hidden:

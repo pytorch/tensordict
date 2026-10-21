@@ -143,6 +143,27 @@ def _pin_memory_nodes(td) -> list | None:
     return nodes
 
 
+def _deprecated_quantized_cast(func):
+    # A dtype shorthand for a quantized dtype, which raises for any float leaf
+    # (#3150): deprecated, with its docstring saying so.
+    name = func.__name__
+    replacement = (
+        "td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        f"torch.{name}))"
+    )
+    func.__doc__ = f"""
+        .. admonition:: Deprecated
+
+            A quantized tensor needs a scale and a zero point, which a dtype
+            cast cannot supply, so this method raises for any floating-point
+            entry. It will be removed in TensorDict 0.18. Use
+            ``{replacement}`` instead.
+        """
+    return deprecated(
+        f"TensorDictBase.{name}()", removal="0.18", replacement=replacement
+    )(_make_dtype_promotion(func))
+
+
 class _DeviceOps:
     """Device and dtype conversions, memory placement and memory size."""
 
@@ -1349,16 +1370,16 @@ class _DeviceOps:
     @_make_dtype_promotion
     def int8(self, *, cast_filter: Callable | None = None) -> Self: ...
 
-    @_make_dtype_promotion
+    @_deprecated_quantized_cast
     def qint32(self, *, cast_filter: Callable | None = None) -> Self: ...
 
-    @_make_dtype_promotion
+    @_deprecated_quantized_cast
     def qint8(self, *, cast_filter: Callable | None = None) -> Self: ...
 
-    @_make_dtype_promotion
+    @_deprecated_quantized_cast
     def quint4x2(self, *, cast_filter: Callable | None = None) -> Self: ...
 
-    @_make_dtype_promotion
+    @_deprecated_quantized_cast
     def quint8(self, *, cast_filter: Callable | None = None) -> Self: ...
 
     @_make_dtype_promotion

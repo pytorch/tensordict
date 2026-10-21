@@ -112,8 +112,8 @@ print(training_data_tc)
 # A tensorclass implements ``__len__``, ``__getitem__``, and ``__getitems__``,
 # so you can use it as a map-style dataset. The ``DataLoader`` then reads each
 # batch with one batched index, and the result is already a
-# ``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x``: the default
-# collate function cannot read a tensorclass.
+# ``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x`` to keep that
+# batch as it is; the default collate function also returns it unchanged.
 
 batch_size = 64
 
