@@ -7,7 +7,8 @@ Collates a list of samples into a batch, for [`DataLoader`](https://docs.pytorch
 Pass it as `collate_fn` when the samples are tensordicts or
 tensorclasses, or tuples or dicts that hold them, such as
 `(td, label)` pairs. The default `collate_fn` of a `DataLoader`
-cannot read a tensordict (see [Load data and share it between processes](../../data_loading.html#data-loading)).
+stacks tensordicts and tensorclasses the same way; pass this function
+for the keyword arguments below (see [Load data and share it between processes](../../data_loading.html#data-loading)).
 
 The samples are collated by the type of the first one:
 

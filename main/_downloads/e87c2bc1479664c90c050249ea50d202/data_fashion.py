@@ -16,7 +16,7 @@ What you will learn:
 - How to convert a ``torchvision`` dataset into a tensordict of
   :class:`~tensordict.MemoryMappedTensor` entries, once.
 - How to pass a tensordict to a ``DataLoader`` as a map-style dataset, and
-  why it needs ``collate_fn=lambda x: x``.
+  what ``collate_fn`` it takes.
 - How to read the batches in a training loop.
 
 Before you start, read :ref:`sphx_glr_tutorials_tensordict_memory.py` for
@@ -117,10 +117,10 @@ print(training_data_td)
 # A ``TensorDict`` implements ``__len__``, ``__getitem__``, and
 # ``__getitems__``, so you can use it as a map-style dataset. The
 # ``DataLoader`` then reads each batch with one batched index, and the result
-# is already a ``TensorDict``. Pass ``collate_fn=lambda x: x``: the default
-# collate function cannot read a ``TensorDict`` and raises ``TypeError``. If
-# your dataset is a list of tensordicts, pass ``collate_fn=torch.stack``
-# instead, or ``collate_fn=tensordict.lazy_stack`` if their shapes differ.
+# is already a ``TensorDict``. Pass ``collate_fn=lambda x: x`` to keep that
+# batch as it is; the default collate function also returns it unchanged. If
+# your dataset is a list of tensordicts, the default collate function stacks
+# them, densely if their shapes match and lazily otherwise.
 
 batch_size = 64
 

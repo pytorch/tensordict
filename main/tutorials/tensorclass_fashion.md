@@ -124,8 +124,8 @@ FashionMNISTData(batch_size=[60000], fields={
 A tensorclass implements `__len__`, `__getitem__`, and `__getitems__`,
 so you can use it as a map-style dataset. The `DataLoader` then reads each
 batch with one batched index, and the result is already a
-`FashionMNISTData` batch. Pass `collate_fn=lambda x: x`: the default
-collate function cannot read a tensorclass.
+`FashionMNISTData` batch. Pass `collate_fn=lambda x: x` to keep that
+batch as it is; the default collate function also returns it unchanged.
 
 ```
 batch_size = 64
@@ -252,7 +252,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 1.7624 s
+Tensorclass training done! time: 2.0586 s
 ```
 
 ## Conclusion
@@ -273,7 +273,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.249 seconds)
+**Total running time of the script:** (0 minutes 4.513 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
