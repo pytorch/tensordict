@@ -192,6 +192,61 @@ def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
     return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
 
+def _writes_state_dict_metadata(td, key: tuple[str, ...]) -> bool:
+    """Returns ``False`` for a non-tensor field of a tensorclass, which ``state_dict`` stores in the ``_metadata`` of the tensorclass."""
+    parent = td.get(key[:-1]) if len(key) > 1 else td
+    return not (
+        _is_tensorclass(type(parent)) and _is_non_tensor(parent.entry_class(key[-1]))
+    )
+
+
+def _check_flat_state_dict_keys(td, prefix: str) -> None:
+    """Raises a ``KeyError`` if two entries of ``td`` get the same key in a flat state dict.
+
+    The flat key of an entry starts with its first key, followed by ``"."``
+    or nothing, so two entries can only collide if their first keys are the
+    same up to their first ``"."``. ``state_dict`` calls it only for a level
+    with a dotted key, or with a ``""`` key when ``prefix`` does not end with
+    ``"."``: the ``_metadata`` key of a ``""`` entry is then that of ``td``.
+    The check reads keys only, no values.
+    """
+    keys = td.keys()
+    root_collides = "" in keys and not prefix.endswith(".")
+    heads = collections.Counter(key.split(".", 1)[0] for key in keys)
+    shared = {head for head, count in heads.items() if count > 1}
+    if root_collides:
+        shared.add("")
+    if not shared:
+        return
+    # As in state_dict, the leaves are the entries that are not tensor
+    # collections; the other entries are levels with a _metadata key.
+    leaves = set(td.keys(True, True))
+    seen_leaves = {}
+    # A "" key gets the _metadata key of td itself, written under the key ()
+    seen_nodes = {prefix: ()} if root_collides else {}
+    for key in td.keys(True, False):
+        seen = seen_leaves if key in leaves else seen_nodes
+        key = (key,) if isinstance(key, str) else key
+        if key[0].split(".", 1)[0] not in shared:
+            continue
+        flat_key = prefix + ".".join(key)
+        other = seen.setdefault(flat_key, key)
+        if other is key:
+            continue
+        if seen is seen_nodes:
+            if not _writes_state_dict_metadata(td, key):
+                continue
+            if other and not _writes_state_dict_metadata(td, other):
+                seen[flat_key] = key
+                continue
+        conflicts = [k[0] if len(k) == 1 else k for k in (other, key)]
+        raise KeyError(
+            f"Flattening keys in tensordict causes keys {conflicts} to collide "
+            f"in the flat state dict key {flat_key!r}. Use state_dict(flatten=False) "
+            "to keep them apart."
+        )
+
+
 class _Serialization:
     """TensorDict's own storage formats: memory-mapping, saving, loading, consolidation and state dicts."""
 
@@ -232,6 +287,12 @@ class _Serialization:
                 ``"."``. If ``False``, nested tensordicts become nested
                 ``OrderedDict`` instances. Defaults to ``True``.
 
+        Raises:
+            KeyError: if ``flatten=True`` and two entries get the same key, as
+                a dotted key ``"a.b"`` and a nested key ``("a", "b")`` do. The
+                key of a level in ``_metadata`` counts too. Use
+                ``flatten=False`` to keep such entries apart.
+
         Returns:
             ``destination``, or a new ``OrderedDict``.
 
@@ -259,7 +320,10 @@ class _Serialization:
             "device": self.device,
         }
 
+        dotted = False
         for key, item in self.items():
+            if "." in key:
+                dotted = True
             if not _is_tensor_collection(type(item)):
                 if not keep_vars:
                     destination[prefix + key] = item.detach()
@@ -276,6 +340,8 @@ class _Serialization:
                 destination[prefix + key] = item.state_dict(
                     keep_vars=keep_vars, flatten=False
                 )
+        if flatten and (dotted or (not prefix.endswith(".") and "" in self.keys())):
+            _check_flat_state_dict_keys(self, prefix)
 
         return destination
 

@@ -6338,6 +6338,144 @@ class TestGeneric:
         assert sd_kept["a"].requires_grad
         assert sd_kept["a"].data_ptr() == t.data_ptr()
 
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("kind", ["leaf", "metadata", "non_tensor", "empty"])
+    def test_state_dict_flat_collision(self, reverse, kind):
+        # A dotted key and a nested key with the same flat key: one value,
+        # metadata entry or non-tensor payload was lost (#3133)
+        if kind == "leaf":
+            items = [("a.b", torch.tensor(11)), ("a", {"b": torch.tensor(22)})]
+        elif kind == "non_tensor":
+            items = [("a.b", NonTensorData("x")), ("a", {"b": NonTensorData("y")})]
+        else:
+            left = {} if kind == "empty" else {"x": torch.ones(2)}
+            right = {} if kind == "empty" else {"y": torch.ones(3)}
+            items = [
+                ("a.b", TensorDict(left, [2])),
+                ("a", {"b": TensorDict(right, [3])}),
+            ]
+        if reverse:
+            items.reverse()
+        td = TensorDict(dict(items), [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict()
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            TensorDict({"model": td}, []).state_dict(prefix="m.")
+        nested = td.state_dict(flatten=False)
+        restored = td.clone()
+        if kind == "leaf":
+            restored.zero_()
+        restored.load_state_dict(nested, from_flatten=False)
+        assert (restored == td).all()
+        if kind in ("metadata", "empty"):
+            assert restored["a.b"].batch_size == torch.Size([2])
+            assert restored["a", "b"].batch_size == torch.Size([3])
+
+    def test_state_dict_flat_collision_empty_key(self):
+        # The level "" gets the _metadata key of its parent when the prefix
+        # does not end with "."
+        td = TensorDict({"": TensorDict({}, [2])}, [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict()
+        sd = td.state_dict(prefix="model.")
+        assert list(sd._metadata) == ["model", "model."]
+        # A "" key that is a leaf, or under another key, collides with nothing
+        sd = TensorDict({"": 1, "a": {"": {"x": 2}}}, []).state_dict()
+        assert list(sd) == ["", "a..x"]
+        # A "" level and a key that starts with "." have the same entries
+        td = TensorDict({"": {"x": 1}, ".x": 2}, [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict(prefix="model.")
+
+    def test_state_dict_flat_collision_nested_dotted_keys(self):
+        td = TensorDict({"a.b": {"c": 1}, "a.b.c": 2}, [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict()
+
+    def test_state_dict_flat_dotted_keys(self):
+        # Dotted keys that collide with nothing are written as before
+        td = TensorDict({"a.b": 1, "a": {"c": 2, "b": {"x": 3}}, "a.d": {}}, [])
+        sd = td.state_dict()
+        assert list(sd) == ["a.b", "a.c", "a.b.x"]
+        assert list(sd._metadata) == ["", "a", "a.b", "a.d"]
+        td = TensorDict({"layer.weight": torch.tensor(11.0, requires_grad=True)}, [])
+        destination = OrderedDict({"model.layer.weight": torch.tensor(0), "other": 9})
+        destination._metadata = OrderedDict({"other": {"batch_size": torch.Size([5])}})
+        result = td.state_dict(destination=destination, prefix="model.", keep_vars=True)
+        assert result is destination
+        assert result["model.layer.weight"] is td["layer.weight"]
+        assert result["other"] == 9
+        assert result._metadata["other"]["batch_size"] == torch.Size([5])
+        assert result._metadata["model"]["batch_size"] == torch.Size([])
+
+    @pytest.mark.parametrize("wrap", [False, True])
+    def test_state_dict_flat_collision_tensorclass(self, wrap):
+        @tensorclass
+        class Checkpoint:
+            state: TensorDict
+            label: str
+
+        checkpoint = Checkpoint(
+            state=TensorDict({"a.b": 11, "a": {"b": 22}}, []),
+            label="checkpoint",
+            batch_size=[],
+        )
+        value = TensorDict({"checkpoint": checkpoint}, []) if wrap else checkpoint
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            value.state_dict()
+        nested = value.state_dict(flatten=False)
+        restored = value.clone()
+        restored.load_state_dict(nested, from_flatten=False)
+        checkpoint = restored["checkpoint"] if wrap else restored
+        assert checkpoint.label == "checkpoint"
+        assert checkpoint.state["a.b"] == 11
+        assert checkpoint.state["a", "b"] == 22
+        # A tensor field collides with a dotted key, but a non-tensor field is
+        # stored in the _metadata of its tensorclass and collides with nothing
+        checkpoint = Checkpoint(state=TensorDict(), label="x", batch_size=[])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            TensorDict({"c": checkpoint, "c.state": {}}, []).state_dict()
+        sd = TensorDict({"c.label": {}, "c": checkpoint}, []).state_dict()
+        assert set(sd._metadata) == {"", "c.label", "c", "c.state"}
+
+    @pytest.mark.parametrize("collide", [False, True])
+    def test_state_dict_flat_collision_lazy_stack(self, collide):
+        nested = {"b": torch.ones(3)} if collide else {"c": torch.ones(3)}
+        td = TensorDict({"a.b": torch.zeros(3), "a": nested, "e": torch.ones(3)}, [3])
+        td = lazy_stack([td[0], td[1]])
+        if collide:
+            with pytest.raises(KeyError, match="collide.*flatten=False"):
+                td.state_dict()
+            return
+        # The check reads keys only: it stacks no leaf
+        counts = []
+        for flatten in (True, False):
+            with mock.patch.object(torch, "stack", wraps=torch.stack) as stack:
+                td.state_dict(flatten=flatten)
+            counts.append(stack.call_count)
+        assert counts == [3, 3]
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    @pytest.mark.parametrize("collide", [False, True])
+    def test_state_dict_flat_collision_h5(self, collide, tmp_path):
+        nested = {"b": torch.ones(3)} if collide else {"c": torch.ones(3)}
+        td = TensorDict({"a.b": torch.zeros(3), "a": nested, "e": torch.ones(3)}, [3])
+        td = PersistentTensorDict.from_dict(td, filename=tmp_path / "td.h5")
+        if collide:
+            with pytest.raises(KeyError, match="collide.*flatten=False"):
+                td.state_dict()
+            return
+        # The check reads keys only: it reads no array
+        backend = type(td._backend)
+        counts = []
+        for flatten in (True, False):
+            with mock.patch.object(
+                backend, "read_full", autospec=True, side_effect=backend.read_full
+            ) as read_full:
+                td.state_dict(flatten=flatten)
+            counts.append(read_full.call_count)
+        assert counts == [3, 3]
+
     @pytest.mark.parametrize(
         "make_td",
         [
