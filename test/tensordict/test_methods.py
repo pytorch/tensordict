@@ -5537,7 +5537,7 @@ class TestTensorDicts(TestTensorDictsBase):
             written = 0
         source = {"n": {"x": ones, "y": ones}}
 
-        def call(keys):
+        def call(keys, source=source):
             with torch.no_grad(), warnings.catch_warnings(record=True) as record:
                 warnings.simplefilter("always")
                 if method == "update_":
@@ -5559,6 +5559,18 @@ class TestTensorDicts(TestTensorDictsBase):
         assert warned or (x == 0).all()
         if td_name == "td":
             assert warned
+            if method == "update_":
+                # a lazy stack source in which only member 0 holds ("n", "x")
+                td.set(("n", "x"), torch.zeros(td.shape, device=device))
+                members = [
+                    TensorDict({"n": {"y": ones[0]}}, td.shape[1:])
+                    for _ in range(td.shape[0])
+                ]
+                members[0]["n", "x"] = ones[0]
+                lazy = LazyStackedTensorDict(*members, stack_dim=0)
+                assert call(["n", ("n", "y")], lazy)
+                assert (td["n", "x"][0] == 1).all()
+                assert (td["n", "x"][1:] == 0).all()
         # the results that stay the same
         assert not call(["n"])
         assert not call([("n", "x"), ("n", "y")])

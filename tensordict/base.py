@@ -2468,6 +2468,9 @@ def _warn_update_keys_narrowed(
     ``dest`` is given where the route of ``update_`` that follows ``select``
     already (``_reads_copies_under``) is possible: it does not warn there.
     """
+    if len(set(map(len, keys_to_update))) == 1:
+        # keys of one length: none is under another
+        return
     # the keys that another key of keys_to_update is strictly under
     prefixes = {key[:i] for key in keys_to_update for i in range(1, len(key))}
     if prefixes.isdisjoint(keys_to_update) or is_compiling():
@@ -2482,7 +2485,13 @@ def _warn_update_keys_narrowed(
             value = source.get(key, None)
             if value is None or _is_leaf_nontensor(type(value)):
                 continue
-            for leaf in value.keys(True, True, is_leaf=_is_leaf_nontensor):
+            # a lazy stack lists only the keys that all its members hold
+            leaves = (
+                _all_leaf_keys(value)
+                if _has_lazy_stack(value)
+                else value.keys(True, True, is_leaf=_is_leaf_nontensor)
+            )
+            for leaf in leaves:
                 leaf = (*key, *_unravel_key_to_tuple(leaf))
                 if not any(leaf[: len(k)] == k for k in deeper):
                     break
