@@ -483,7 +483,15 @@ annotation of its field. See Auto-casting.
 `nocast`
 
 Python numbers and NumPy arrays stay as they are. Without this flag, an
-`int`, `float`, `bool`, or NumPy array becomes a tensor.
+`int`, `float`, `bool`, or NumPy array becomes a tensor. A number
+given to a field annotated `int`, `float` or `bool` (or an optional
+or union of these) is the exception: with a non-empty batch size it is
+stored as [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), and with an empty batch size
+it still becomes a 0-d tensor and emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting
+with TensorDict 0.17, the default will change to keeping the Python value
+of fields annotated int/float/bool, as [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData).
+Annotate the field `torch.Tensor` to keep the tensor
+([#1199](https://github.com/pytorch/tensordict/issues/1199)).
 
 `tensor_only`
 
@@ -647,10 +655,13 @@ tensorclass type or instance from it. You do not change the class definition:
 ... a: int
 ... b: torch.Tensor
 >>> XTc = from_dataclass(X, autocast=True) # convert the type
->>> x_tc = from_dataclass(X(a=0, b=torch.zeros(()))) # convert an instance
+>>> x_tc = from_dataclass(X(a=0, b=torch.zeros(())), autocast=True) # convert an instance
 >>> XTc(a=torch.tensor(1), b=torch.zeros(())).a
 1
 ```
+
+Without `autocast` or `nocast`, `from_dataclass(X(a=0, ...))` casts
+`a` to a 0-d tensor and emits the `FutureWarning` of `nocast` above.
 
 It accepts the flags of a tensorclass (`autocast`, `nocast`, `frozen`,
 `tensor_only`, `shadow`). When it applies them (not with `dest_cls`,

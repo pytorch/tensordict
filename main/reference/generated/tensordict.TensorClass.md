@@ -87,10 +87,17 @@ are cast to tensors. Other values are stored as
 
 ```
 >>> class Foo(TensorClass):
-... x: int
+... x: torch.Tensor
 >>> Foo(x=1).x
 tensor(1)
 ```
+
+A Python scalar given to a field annotated `int`, `float` or
+`bool` (or an optional or union of these) is cast too, with a
+`FutureWarning`: starting with TensorDict 0.17, the default will
+change to keeping the Python value of fields annotated int/float/bool,
+as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData). With a non-empty batch size,
+where a 0-d tensor does not fit, the value is kept already.
 - `autocast`: when a field is set, the value is converted to the
 annotated type. For example, an `int` field set to
 `torch.ones(())` holds `1`.
