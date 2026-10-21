@@ -3698,7 +3698,7 @@ def _make_dtype_promotion(func):
         return _cast_filtered(self, todtype, cast_filter, propagate_lock=True)
 
     new_func.__doc__ = rf"""Returns a tensordict whose tensor leaves are cast to ``{str(dtype)}``.
-
+{func.__doc__ or ""}
         Keyword Args:
             cast_filter (Callable, optional): a predicate
                 ``fn(key, value) -> bool`` that selects the tensor leaves to
