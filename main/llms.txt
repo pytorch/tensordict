@@ -565,3 +565,4 @@
 - [Slicing, indexing, and masking](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_slicing.md)
 - [Storing TensorDicts in zarr](https://docs.pytorch.org/tensordict/stable/tutorials/zarr_storage.md)
 - [TypedTensorDict](https://docs.pytorch.org/tensordict/stable/typed_tensordict.md)
+- [Batch samples of different sizes without padding](https://docs.pytorch.org/tensordict/stable/variable_size_batches.md)

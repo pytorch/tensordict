@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/data_loading.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Use tensordict with other libraries" href="integrations.html" />
+    <link rel="next" title="Batch samples of different sizes without padding" href="variable_size_batches.html" />
     <link rel="prev" title="Large datasets and storage backends" href="storage.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6372+gc13148175.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6373+gf2375972b.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6372+gc13148175.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6373+gf2375972b.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -678,6 +678,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
                   Load data and share it between processes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
                 </a>
               </li>
             
@@ -1227,6 +1233,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="integrations.html">
                   Use tensordict with other libraries
                 </a>
@@ -1559,6 +1571,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="saving_format.html">The on-disk format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variable_size_batches.html">Batch samples of different sizes without padding</a></li>
 <li class="toctree-l1"><a class="reference internal" href="integrations.html">Use tensordict with other libraries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed tensordicts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="training_at_scale.html">Train at scale</a></li>
@@ -2141,11 +2154,11 @@ loader.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="integrations.html"
+       href="variable_size_batches.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Use tensordict with other libraries</p>
+        <p class="prev-next-title">Batch samples of different sizes without padding</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2180,11 +2193,11 @@ loader.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="integrations.html"
+       href="variable_size_batches.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Use tensordict with other libraries</p>
+        <p class="prev-next-title">Batch samples of different sizes without padding</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

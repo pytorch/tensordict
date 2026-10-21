@@ -274,11 +274,12 @@ torch.Size([3, 2])
 ```
 
 Indexing (with an int, a slice, a mask or a tensor of indices), `split`,
-`chunk` and [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) work along that dimension, although torch does
-not do them on the nested tensor itself. Leaves that share their offsets, such
-as token ids and their attention mask, still share them in the result.
-[`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) raises, because the result would need a second ragged
-dimension: use [`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) instead.
+`chunk` and [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) work along that dimension. On the nested tensor
+itself, torch does only the int index and `chunk` along it, and raises for
+the others. Leaves that share their offsets, such as token ids and their
+attention mask, still share them in the result. [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) raises,
+because the result would need a second ragged dimension: use
+[`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) instead.
 
 ```
 >>> data = torch.cat([data, data[torch.tensor([1])]])
@@ -374,6 +375,8 @@ zeros. A value with another shape raises a `RuntimeError`. The
 
 ## See also
 
+- [Batch samples of different sizes without padding](../variable_size_batches.html#variable-size-batches): a how-to for batches of molecules, point
+clouds or sequences, from the `DataLoader` to the model.
 - [`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), [`stack()`](../reference/generated/tensordict.stack.html#tensordict.stack),
 [`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack), [`maybe_dense_stack()`](../reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack),
 [`cat()`](../reference/generated/tensordict.cat.html#tensordict.cat), and [`pad_sequence()`](../reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence) in the
