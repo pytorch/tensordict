@@ -2139,9 +2139,24 @@ class PersistentTensorDict(
                 nested._fill_((subkey,), value)
 
     def _create_nested_str(self, key):
+        # the existing entry is replaced
+        if self._backend.contains(self.file, key):
+            self._del((key,))
         self._backend.create_group(self.file, key)
         target_td = self._get_str(key, default=NO_DEFAULT)
         return target_td
+
+    # Override: an existing group on the path keeps its entries.
+    def _create_nested_tuple(self, key):
+        if len(key) > 1:
+            group = self._get_array(key[0], None)
+            if group is not None and not self._backend.is_array(group):
+                td = self._get_str(key[0], NO_DEFAULT)
+            else:
+                td = self._create_nested_str(key[0])
+            td._create_nested_tuple(key[1:])
+        else:
+            self._create_nested_str(key[0])
 
     # Override: one to_tensordict() read, outside the cache that the base
     # keeps while locked: a locked file would keep a copy of its data, and

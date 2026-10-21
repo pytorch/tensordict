@@ -970,15 +970,13 @@ class TestTensorDicts(TestTensorDictsBase):
             _ = nested.get("key")
             assert td.get(("some", "nested", "key")).shape == td.shape
             assert is_tensor_collection(td.get(("some", "nested", "key")))
-            # The plain TensorDicts already on the path keep their entries.
-            # Views, typed tensordicts and files replace each level.
+            # The plain TensorDicts and groups already on the path keep their
+            # entries. Lazy views replace each level, and a typed tensordict
+            # created a typed "some", which is replaced.
             if td_name not in (
-                "sub_td",
-                "sub_td2",
                 "permute_td",
                 "unsqueezed_td",
                 "squeezed_td",
-                "td_h5",
                 "typed_td",
                 "nested_typed_td",
             ):

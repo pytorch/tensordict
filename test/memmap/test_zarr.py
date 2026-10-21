@@ -830,6 +830,14 @@ class TestZarrWriteOps:
         ztd["nested", "x"] = torch.zeros(3, 4)
         assert (ztd["nested", "x"] == 0).all()
 
+    def test_create_nested_existing(self, ztd):
+        # A tuple key keeps the groups already on the path, and a string key
+        # replaces the existing entry (#3008).
+        ztd.create_nested(("b", "d"))
+        assert set(ztd.keys(True)) == {"a", "b", ("b", "c"), ("b", "d")}
+        ztd.create_nested("b")
+        assert set(ztd.keys(True)) == {"a", "b"}
+
     def test_kwargs_passthrough(self, tmp_path):
         td = TensorDict({"a": torch.randn(64, 64)}, batch_size=[64])
         td.to_zarr(tmp_path / "s.zarr", chunks=(16, 64))

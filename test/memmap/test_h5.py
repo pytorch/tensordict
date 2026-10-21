@@ -466,6 +466,24 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {"a", ("nested", "w")}
         h5td.close()
 
+    def test_create_nested_existing(self, tmp_path):
+        # A string key replaces the existing entry. A tuple key keeps the
+        # groups already on the path, as in TensorDict (#3008).
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(d=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        assert h5td.create_nested(("nested", "b")) is h5td
+        assert set(h5td.keys(True)) == {"a", "nested", ("nested", "d"), ("nested", "b")}
+        assert (h5td["nested", "d"] == 1).all()
+        h5td.create_nested(("a", "b"))
+        h5td.create_nested("nested")
+        assert set(h5td.keys(True)) == {"a", ("a", "b"), "nested"}
+        assert h5td["nested"].batch_size == (3,)
+        h5td.close()
+
     def test_device_setter(self, tmp_path):
         # as on a TensorDict, the device changes only through to()
         td = TensorDict({"a": torch.zeros(3)}, [3])

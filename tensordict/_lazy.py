@@ -1761,13 +1761,21 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: each member keeps or replaces its own entry on the path.
     def _create_nested_tuple(self, key):
-        # A stack of plain TensorDicts hands the key to each member, which
-        # keeps or replaces its own entry at key[0]. Any other stack, such as
-        # a NonTensorStack or a stack of files, replaces each level.
-        if len(key) == 1 or not all(type(td) is TensorDict for td in self.tensordicts):
+        # A stack of plain TensorDicts, or of such stacks, hands the key to
+        # each member, which keeps or replaces its own entry at key[0]. Any
+        # other stack, such as a NonTensorStack or a stack of files, replaces
+        # each level.
+        if len(key) == 1 or not self._hands_nested_key_to_members():
             return super()._create_nested_tuple(key)
         for td in self.tensordicts:
             td._create_nested_tuple(key)
+
+    def _hands_nested_key_to_members(self) -> bool:
+        return all(
+            type(td) is TensorDict
+            or (type(td) is LazyStackedTensorDict and td._hands_nested_key_to_members())
+            for td in self.tensordicts
+        )
 
     def _unbatched_member_values(self, value: Tensor) -> list[Tensor]:
         """The ``UnbatchedTensor`` ``value`` for each member, as ``unbind`` gives it.

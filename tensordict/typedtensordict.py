@@ -1430,6 +1430,16 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
 
+    # Override: a plain, unlocked TensorDict in a plain source keeps its
+    # entries, as in TensorDict. Any other path replaces each level.
+    def _create_nested_tuple(self, key):
+        if len(key) > 1 and type(self._source) is TensorDict:
+            td = self._source._get_str(key[0], None)
+            if type(td) is TensorDict and not td.is_locked:
+                td._create_nested_tuple(key[1:])
+                return
+        super()._create_nested_tuple(key)
+
     # ------------------------------------------------------------------
     # _new_unsafe: needed for torch.stack and other operations
     # ------------------------------------------------------------------
