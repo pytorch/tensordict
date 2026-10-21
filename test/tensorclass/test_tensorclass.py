@@ -4949,6 +4949,9 @@ class TestTensorClass:
                 write()
             assert tc.x is None
             assert (tc.a == 0).all()
+        # a key that is not a field keeps its AttributeError
+        with pytest.raises(AttributeError, match="no such field"):
+            tc.set("zz", tc)
         # an update that leaves out the field, or that writes a copy, works
         tc.update({"x": tc, "a": torch.ones(3)}, keys_to_update=["a"])
         assert tc.x is None

@@ -5154,8 +5154,6 @@ def _set(
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
-        if value is self:
-            raise ValueError(_SELF_NESTING_ERROR.format(key))
         # if key in ("batch_size", "names", "device"):
         #     # handled by setattr
         #     return
@@ -5177,6 +5175,9 @@ def _set(
             non_blocking=non_blocking,
             non_tensor=False,
         ):
+            # checked on the value stored, after the field check and casting
+            if value is self:
+                raise ValueError(_SELF_NESTING_ERROR.format(key))
             if self_is_non_tensor:
                 while is_non_tensor(value):
                     value = value.data
