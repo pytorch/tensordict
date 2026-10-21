@@ -61,11 +61,17 @@ systems = systems.to("cuda" if torch.cuda.is_available() else "cpu")  # moves ev
 ```
 
 Used in physics ([PhysicsNeMo](https://github.com/NVIDIA/physicsnemo)),
-robotics ([MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground),
+weather ([Earth2Studio](https://github.com/NVIDIA/earth2studio),
+[geoarches](https://github.com/INRIA/geoarches)), materials
+([ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit)), genomics
+([Medaka](https://github.com/nanoporetech/medaka)), microscopy
+([VisCy](https://github.com/mehta-lab/VisCy)), causal inference
+([causica](https://github.com/microsoft/causica)), robotics
+([MuJoCo Playground](https://github.com/google-deepmind/mujoco_playground),
 [ProtoMotions](https://github.com/NVlabs/ProtoMotions)), reinforcement learning
-([TorchRL](https://github.com/pytorch/rl)), LLM post-training
-([verl](https://github.com/verl-project/verl), [ROLL](https://github.com/alibaba/ROLL)),
-and genomics ([Medaka](https://github.com/nanoporetech/medaka)). More than
+([TorchRL](https://github.com/pytorch/rl)), and LLM post-training
+([verl](https://github.com/verl-project/verl), [ROLL](https://github.com/alibaba/ROLL)).
+More than
 [2,000 other repositories](https://github.com/pytorch/tensordict/network/dependents)
 depend on it.
 
