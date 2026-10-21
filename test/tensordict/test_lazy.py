@@ -1180,6 +1180,63 @@ class TestLazyStackedTensorDict:
                 lazy.exclude("x").clamp(min=lo, max=0.75)
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "kind", ["nested", "deep", "tensorclass", "typed", "typed_root"]
+    )
+    def test_pointwise_keyword_tensor_nested(self, stack_dim, kind):
+        # A lazy stack below a dense root, or the one that a TypedTensorDict
+        # wraps, also gives each member leaf its part of a tensor passed by
+        # keyword, as the dense tensordict does (#3042)
+        class MC(TensorClass):
+            y: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            y: torch.Tensor
+
+        torch.manual_seed(0)
+        members = [TensorDict(y=torch.randn(4), batch_size=[4]) for _ in range(3)]
+        lazy = lazy_stack(members, stack_dim)  # batch [3, 4] or [4, 3]
+
+        def make(n):
+            if kind == "nested":
+                z = torch.linspace(-1, 1, 12).view(n.batch_size).to(n.get("y").dtype)
+                return TensorDict(n=n, z=z)
+            if kind == "deep":
+                return TensorDict(o=TensorDict(n=n), batch_size=[n.batch_size[0]])
+            if kind == "tensorclass":
+                return TensorDict(n=MC.from_tensordict(n))
+            if kind == "typed":
+                return TensorDict(n=Typed.from_tensordict(n))
+            return Typed.from_tensordict(n)
+
+        td, dense = make(lazy), make(lazy.to_tensordict())
+        td_bool, dense_bool = make(lazy > 0), make(lazy.to_tensordict() > 0)
+
+        def check(result, expected):
+            assert type(result) is type(expected)
+            assert set(result.keys(True, True)) == set(expected.keys(True, True))
+            for key, value in expected.items(True, True):
+                torch.testing.assert_close(result.get(key), value)
+
+        lo = torch.rand(lazy.batch_size) - 0.5
+        check(td.clamp(min=lo, max=lo + 0.5), dense.clamp(min=lo, max=lo + 0.5))
+        check(td.mod(other=lo + 2), dense.mod(other=lo + 2))
+        check(td_bool.bitwise_and(other=lo > 0), dense_bool.bitwise_and(other=lo > 0))
+        check(td_bool.logical_and(other=lo > 0), dense_bool.logical_and(other=lo > 0))
+        # the result keeps the lazy stack and the classes that wrap it
+        result = td.clamp(min=lo, max=lo + 0.5)
+        if kind == "deep":
+            assert isinstance(result.get(("o", "n")), LazyStackedTensorDict)
+        elif kind == "nested":
+            assert isinstance(result.get("n"), LazyStackedTensorDict)
+        elif kind == "tensorclass":
+            assert isinstance(result.get("n")._tensordict, LazyStackedTensorDict)
+        elif kind == "typed":
+            assert isinstance(result.get("n")._source, LazyStackedTensorDict)
+        else:
+            assert isinstance(result._source, LazyStackedTensorDict)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("kind", ["tensorclass", "typed"])
     def test_arithmetic_ops_broadcast_tensor_nested_wrapped(self, stack_dim, kind):
         # A tensorclass or a TypedTensorDict that wraps a lazy stack, nested in
