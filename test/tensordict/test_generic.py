@@ -5065,6 +5065,18 @@ class TestGeneric:
             with pytest.raises(IndexError):
                 data[:, :, 0] = 1.0
 
+    def test_setitem_past_batch_dims_no_batch_dims(self):
+        # #3202: a write into a tensordict without batch dims runs past them,
+        # as the reads that raise a RuntimeError do, but does not warn
+        td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3, 2)))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td[0] = 1.0
+            td[:] = td.clone()
+            td[[0, 2]] = 2.0
+        assert (td["a"] == torch.tensor([2.0, 0.0, 2.0])).all()
+        assert (td["b", "c"] == torch.tensor([2.0, 0.0, 2.0])[:, None]).all()
+
     @pytest.mark.parametrize(
         "index",
         [

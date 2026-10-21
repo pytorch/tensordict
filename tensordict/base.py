@@ -2291,24 +2291,33 @@ _WRITE_PAST_BATCH_DIMS = _WritePastBatchDims()
 def _may_index_past_batch_dims(index, batch_dims: int) -> bool:
     """``False`` if ``index`` uses no more than ``batch_dims`` dims, ``True`` if it may use more (#3202).
 
-    A cheap test for ``td[index] = value``: ints, slices and ``None`` use one
-    dim or none, and a tensor uses one dim, or as many as it has for a mask.
+    A cheap test for ``td[index] = value``, which counts the dims of the
+    common elements: an int, a slice, a range, a flat list of ints and an
+    integer tensor or array use one dim, a mask as many as it has, and
+    ``None`` none. Any other element returns ``True``. A tensordict without
+    batch dims returns ``False``: its writes do not warn, as on main.
     """
-    if type(index) is tuple:
-        if len(index) > batch_dims:
+    if not batch_dims:
+        return False
+    if type(index) is not tuple:
+        index = (index,)
+    used = 0
+    # a loop with type tests, not a helper per element: setitem is a hot path
+    for idx in index:
+        cls = type(idx)
+        if cls is int or cls is slice or cls is range:
+            used += 1
+        elif idx is None:
+            continue
+        elif cls is Tensor:
+            used += idx.ndim if idx.dtype is torch.bool else 1
+        elif cls is np.ndarray:
+            used += idx.ndim if idx.dtype == np.bool_ else 1
+        elif cls is list and (not idx or type(idx[0]) is int):
+            used += 1
+        else:
             return True
-        # a loop, not all(): setitem is a hot path
-        for idx in index:
-            if not (idx is None or type(idx) is int or type(idx) is slice):
-                return True
-        return False
-    if index is None:
-        return False
-    if type(index) is int or type(index) is slice:
-        return not batch_dims
-    if type(index) is Tensor:
-        return index.ndim > batch_dims or not batch_dims
-    return True
+    return used > batch_dims
 
 
 def _index_runs_past_batch_dims(index, batch_dims: int) -> bool:
@@ -3721,13 +3730,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         :class:`~tensordict.LazyStackedTensorDict` adds the key only to the
         members that ``index`` selects.
 
-        An index that runs past the batch dimensions with ints, lists, tensors
-        or masks, as in ``td[:, idx] = value`` on a tensordict with one batch
-        dimension, writes into the dims of the leaves, and emits a
+        An index that runs past the batch dimensions with ints, slices, lists,
+        tensors or masks, as in ``td[:, idx] = value`` on a tensordict with one
+        batch dimension, writes into the dims of the leaves, and emits a
         :class:`FutureWarning` after the write. Starting with TensorDict 0.17,
         the default will change to raising an ``IndexError``: to write into
         the leaves, write ``for leaf in td.values(True, True): leaf[:, idx] =
-        value``.
+        value``. A write into a tensordict without batch dims does not warn.
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
