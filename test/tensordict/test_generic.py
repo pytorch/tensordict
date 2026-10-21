@@ -10018,6 +10018,20 @@ class TestGeneric:
             tensordict.append_memmap(tmpdir, make(2))
         assert self._read_tree(tmpdir) == files
 
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("stack", [torch.stack, lazy_stack])
+    def test_append_memmap_stacked_rows(self, tmpdir, stack):
+        TensorDict(a=torch.zeros(2), s="hi", batch_size=[2]).memmap(tmpdir)
+        rows = stack([TensorDict(a=torch.ones(()), s="hi") for _ in range(3)])
+        assert isinstance(rows.get("s"), NonTensorStack)
+        tensordict.append_memmap(tmpdir, rows)
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded["a"].tolist() == [0.0, 0.0, 1.0, 1.0, 1.0]
+        assert loaded["s"] == "hi"
+        rows = stack([TensorDict(a=torch.ones(()), s=s) for s in ("hi", "ho")])
+        with pytest.raises(ValueError, match="same value"):
+            tensordict.append_memmap(tmpdir, rows)
+
     def test_append_memmap_archive(self, tmpdir):
         archive = Path(tmpdir) / "data.tdz"
         TensorDict(a=torch.zeros(3), batch_size=[3]).save(archive)
@@ -10043,6 +10057,27 @@ class TestGeneric:
         )
         with pytest.raises(OSError, match="disk full"):
             tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        assert self._read_tree(tmpdir) == files
+        assert (tensordict.load_memmap(tmpdir) == self._append_memmap_rows(3, 0)).all()
+
+    def test_append_memmap_interrupted_replace(self, tmpdir, monkeypatch):
+        # An interrupt after the first meta.json was replaced puts it back.
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        replace = os.replace
+        calls = []
+
+        def failing_replace(src, dst):
+            calls.append(None)
+            if len(calls) == 2:
+                raise KeyboardInterrupt
+            return replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", failing_replace)
+        with pytest.raises(KeyboardInterrupt):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        assert len(calls) == 2
         assert self._read_tree(tmpdir) == files
         assert (tensordict.load_memmap(tmpdir) == self._append_memmap_rows(3, 0)).all()
 

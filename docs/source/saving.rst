@@ -224,14 +224,15 @@ first example:
 The rows must have the keys, the classes, the dtypes and the trailing shapes
 of the saved data. ``append_memmap`` checks this before it writes anything,
 and raises an error if they differ. A non-tensor value, such as a string, is
-saved once for all the rows, so the rows must hold the same value. The files
+saved once for all the rows, so the rows must hold the same value, either
+once or in a stack of equal values. The files
 of a lazy stack, a :class:`~tensordict.NonTensorStack`, a nested tensor, or
 an archive cannot grow, and ``append_memmap`` raises an error for them.
 
 ``append_memmap`` replaces each ``meta.json`` file last, so a failed append
 leaves the data as it was. A tensordict loaded before the append keeps its
-number of rows (``loaded`` above still has 100), and ``load_memmap`` after
-the append sees the new rows. Append from one process at a time.
+number of rows, and ``load_memmap`` after the append sees the new rows.
+Append from one process at a time.
 
 Save to one file
 ----------------

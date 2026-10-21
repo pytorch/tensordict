@@ -646,12 +646,15 @@ def append_memmap(
     failed append leaves the saved data as it was. Readers that mapped the
     files before the append keep seeing the old number of rows, and
     :func:`~tensordict.load_memmap` after the append sees the new one. Use one
-    writer at a time. See :ref:`saving`.
+    writer at a time. Each append maps the whole saved tree, as
+    :func:`~tensordict.load_memmap` does, to read its structure, so many small
+    appends to a save with many leaves are slow. See :ref:`saving`.
 
     ``rows`` must have the keys, the classes, the dtypes and the trailing
     shapes of the saved tensordict, and its batch size may differ from the
     saved one in its first dimension only. A non-tensor entry stays as
-    saved, and its value in ``rows`` must be equal to it. A
+    saved, and its value in ``rows`` must be equal to it: either one value or
+    a :class:`~tensordict.NonTensorStack` of equal values. A saved
     :class:`~tensordict.NonTensorStack`, a lazy stack, a nested tensor and an
     archive cannot grow, and raise. Everything is checked before the first
     file is written.
@@ -713,6 +716,7 @@ def append_memmap(
     # Grow the leaf files. On an error, they get their old sizes back.
     old_sizes = {}
     replacements = []
+    num_replaced = 0
     try:
         for filename, old_nbytes, value in leaves:
             if not value.numel():
@@ -729,30 +733,36 @@ def append_memmap(
         # Write every new meta.json before the first one replaces the old.
         for metadata_file in metadata_files:
             with open(metadata_file, "rb") as f:
-                metadata = json.loads(f.read())
+                old_metadata = f.read()
+            metadata = json.loads(old_metadata)
             metadata["shape"][0] = num_rows
             for entry in metadata.values():
                 if isinstance(entry, dict) and "dtype" in entry and "shape" in entry:
                     entry["shape"][0] = num_rows
             json_str = json_dumps(metadata)
             tmp_file = metadata_file.with_name(f".{metadata_file.name}.append.tmp")
-            replacements.append((tmp_file, metadata_file))
+            replacements.append((tmp_file, metadata_file, old_metadata))
             with open(tmp_file, "wb") as f:
                 f.write(
                     json_str.encode("utf-8") if isinstance(json_str, str) else json_str
                 )
+        for tmp_file, metadata_file, _ in replacements:
+            os.replace(tmp_file, metadata_file)
+            num_replaced += 1
     except BaseException:
+        # Put back the meta.json files already replaced, then the leaves.
+        for _, metadata_file, old_metadata in replacements[:num_replaced]:
+            with open(metadata_file, "wb") as f:
+                f.write(old_metadata)
+        for tmp_file, _, _ in replacements:
+            if tmp_file.exists():
+                os.remove(tmp_file)
         for filename, size in old_sizes.items():
             if size is None:
                 os.remove(filename)
             else:
                 os.truncate(filename, size)
-        for tmp_file, _ in replacements:
-            if tmp_file.exists():
-                os.remove(tmp_file)
         raise
-    for tmp_file, metadata_file in replacements:
-        os.replace(tmp_file, metadata_file)
 
 
 def _check_append(saved, rows, key, leaves, metadata_files) -> None:
@@ -806,8 +816,8 @@ def _check_append(saved, rows, key, leaves, metadata_files) -> None:
                     f"Cannot append to {where}, a {type(old).__name__}: a stack "
                     "of non-tensor values cannot grow."
                 )
-            if not isinstance(new, NonTensorData) or not _non_tensor_equal(
-                new.data, old.data
+            if not is_non_tensor(new) or not all(
+                _non_tensor_equal(value, old.data) for value in _non_tensor_values(new)
             ):
                 raise ValueError(
                     f"Cannot append to {where}: the saved non-tensor value "
@@ -842,6 +852,15 @@ def _check_append(saved, rows, key, leaves, metadata_files) -> None:
                 prefix, name, robust_key=True
             )
             leaves.append((filename, old.numel() * old.dtype.itemsize, new))
+
+
+def _non_tensor_values(value) -> list:
+    """Returns the value of a NonTensorData, or every value of a NonTensorStack."""
+    from tensordict.tensorclass import NonTensorData
+
+    if isinstance(value, NonTensorData):
+        return [value.data]
+    return [v for td in value.tensordicts for v in _non_tensor_values(td)]
 
 
 def _non_tensor_equal(a, b) -> bool:
