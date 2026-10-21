@@ -307,6 +307,17 @@ directly. Its first dimension is a batch dimension:
   >>> data[1]["nodes"].shape
   torch.Size([3, 2])
 
+Indexing (with an int, a slice, a mask or a tensor of indices), ``split``,
+``chunk`` and :func:`torch.cat` work along that dimension, although torch does
+not do them on the nested tensor itself. Leaves that share their offsets, such
+as token ids and their attention mask, still share them in the result.
+:func:`torch.stack` raises, because the result would need a second ragged
+dimension: use :func:`~tensordict.lazy_stack` instead.
+
+  >>> data = torch.cat([data, data[torch.tensor([1])]])
+  >>> data.batch_size, [t.shape for t in data[1:]["nodes"].unbind()]
+  (torch.Size([3]), [torch.Size([3, 2]), torch.Size([3, 2])])
+
 Padding with pad_sequence
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 

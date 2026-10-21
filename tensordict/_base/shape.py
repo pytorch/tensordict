@@ -40,6 +40,7 @@ from tensordict.utils import (
     _infer_size_impl,
     _is_tensorclass,
     _is_unbatched,
+    _jagged_split,
     _maybe_correct_neg_dim,
     _resolve_expand_shape,
     _user_stacklevel,
@@ -1782,10 +1783,13 @@ class _ShapeOps:
                 (v,) * num_splits
                 if _is_unbatched(v)
                 else v.split(split_sizes, dim)
-                if type(v) is Tensor
-                or _is_tensorclass(type(v))
-                or not _is_tensor_collection(type(v))
+                if type(v) is Tensor or _is_tensorclass(type(v))
                 else v._split(split_sizes, dim)
+                if _is_tensor_collection(type(v))
+                # torch does not split a jagged nested tensor along its batch dim
+                else _jagged_split(v, split_sizes)
+                if dim == 0 and getattr(v, "layout", None) is torch.jagged
+                else v.split(split_sizes, dim)
             )
             for k, v in self.items()
         }

@@ -240,8 +240,8 @@ sequence:
 
 For a stack, ``td["seq"]`` returns a ``tensordict.utils.LinkedList``. It is a
 subclass of :class:`list`, and an assignment to one of its items writes into
-the tensordict. :meth:`~tensordict.NonTensorStack.tolist` returns a plain
-:class:`list`:
+the tensordict. :meth:`~tensordict.NonTensorStack.tolist` and
+:meth:`~tensordict.utils.LinkedList.tolist` return a plain :class:`list`:
 
     >>> values = td["seq"]
     >>> isinstance(values, list)
@@ -250,6 +250,8 @@ the tensordict. :meth:`~tensordict.NonTensorStack.tolist` returns a plain
     >>> td[1]["seq"]
     'CCGG'
     >>> td.get("seq").tolist()
+    ['ACGT', 'CCGG', 'TTAG']
+    >>> td["seq"].tolist()
     ['ACGT', 'CCGG', 'TTAG']
 
 A :class:`~tensordict.NonTensorData` that holds a list does not give one

@@ -78,6 +78,7 @@ from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
 _has_mypy = importlib.util.find_spec("mypy") is not None
+_has_jaxtyping = importlib.util.find_spec("jaxtyping") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
@@ -532,6 +533,9 @@ DeviceType: TypeAlias = torch.device | str | int
 def __getattr__(name: str) -> Any: ...
 """
     )
+    package.joinpath("_tensorcollection.pyi").write_text(
+        "class TensorCollection: ...\n"
+    )
     package.joinpath("tensorclass.pyi").write_text(
         (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
     )
@@ -574,6 +578,27 @@ assert_type(-obs, Obs)
 assert_type(obs == obs, Obs)
 for item in obs:
     assert_type(item, Obs)
+
+# apply gives None only when fn returns None for every leaf, inplace or not,
+# and filter_empty is not False.
+def double(x: torch.Tensor) -> torch.Tensor:
+    return x
+def drop(x: torch.Tensor) -> None: ...
+def maybe_drop(x: torch.Tensor) -> torch.Tensor | None:
+    return x
+def named_double(key: str, x: torch.Tensor) -> torch.Tensor:
+    return x
+def named_drop(key: str, x: torch.Tensor) -> None: ...
+assert_type(obs.apply(double), Obs)
+assert_type(obs.apply(double, inplace=True), Obs)
+assert_type(obs.apply(drop), Obs | None)
+assert_type(obs.apply(drop, inplace=True), Obs | None)
+assert_type(obs.apply(maybe_drop), Obs | None)
+assert_type(obs.apply(drop, filter_empty=False), Obs)
+assert_type(obs.apply(double, filter_empty=True), Obs | None)
+assert_type(obs.named_apply(named_double), Obs)
+assert_type(obs.named_apply(named_drop), Obs | None)
+assert_type(obs.named_apply(named_drop, filter_empty=False), Obs)
 """
     )
     stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
@@ -692,6 +717,82 @@ TensorDict.from_dict([torch.Tensor()])
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_stack_cat_source_static_types(tmp_path, monkeypatch):
+    from mypy import api
+
+    # Check the source annotations of stack, cat and lazy_stack alone: their
+    # signatures and the TYPE_CHECKING block that defines their TypeVar are
+    # copied from _td_functions.py into a stub. Mypy also searches the working
+    # directory, which must not hold the tensordict sources.
+    monkeypatch.chdir(tmp_path)
+    with open(_TENSORDICT_DIR / "_td_functions.py", "r") as f:
+        tree = ast.parse(f.read())
+    names = ("stack", "cat", "lazy_stack", "maybe_dense_stack")
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    assert len(functions) == len(names)
+    for function in functions:
+        function.body = [ast.Expr(ast.Constant(...))]
+    (type_checking,) = (
+        node
+        for node in tree.body
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+    )
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    package.joinpath("_tensorcollection.pyi").write_text(
+        "class TensorCollection: ...\n"
+    )
+    package.joinpath("tensorclass.pyi").write_text("class TensorClass: ...\n")
+    package.joinpath("__init__.pyi").write_text(
+        """from typing import Sequence, TYPE_CHECKING
+
+from tensordict._tensorcollection import TensorCollection as TensorCollection
+from tensordict.tensorclass import TensorClass as TensorClass
+
+"""
+        + "\n".join(map(ast.unparse, [type_checking, *functions]))
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    valid = tmp_path / "valid.py"
+    valid.write_text(
+        """from typing import assert_type
+import tensordict
+from tensordict import TensorClass, TensorCollection
+
+class Obs(TensorClass): ...
+class TD(TensorCollection): ...
+
+obs = Obs()
+td = TD()
+assert_type(tensordict.stack([obs, obs]), Obs)
+assert_type(tensordict.cat([obs, obs], dim=0), Obs)
+assert_type(tensordict.lazy_stack([obs, obs]), Obs)
+assert_type(tensordict.maybe_dense_stack([obs, obs]), Obs)
+assert_type(tensordict.stack([td, td]), TD)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+    assert status == 0, stdout + stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.parametrize(
     "path,class_name",
     [
@@ -792,6 +893,27 @@ class Ragged:
         _RAGGED_POST_INIT_CALLS.append(self.offsets)
         if self.offsets is None or int(self.offsets[0]) != 0:
             raise ValueError(f"offsets must start at 0, got {self.offsets}")
+
+
+class _ShapedTensor:
+    # Stands in for a jaxtyping annotation such as Float[Tensor, "*batch 3"]: a
+    # class that names the array type it wraps in ``array_type`` and that
+    # cannot be instantiated.
+    array_type = torch.Tensor
+    dim_str = "*batch 3"
+
+    def __new__(cls, *args, **kwargs):
+        raise RuntimeError("jaxtyping annotations cannot be instantiated")
+
+
+class _ShapedArray(_ShapedTensor):
+    array_type = np.ndarray
+
+
+class _WithArrayType(TensorClass):
+    # An attribute named ``array_type`` alone does not make a shape annotation.
+    array_type: ClassVar[type] = np.ndarray
+    x: torch.Tensor
 
 
 _MESH_POST_INIT_CALLS = []
@@ -1666,6 +1788,40 @@ class TestTensorClass:
         torch.testing.assert_close(td_load["adj"].indices, adj.indices)
         torch.testing.assert_close(td_load["x"], td["x"])
 
+    def test_consolidate_file_nested(self, tmp_path, monkeypatch):
+        # A tensordict that holds a tensorclass can be written to a file and
+        # read back with the nested tensorclass (#3117)
+        data = MyData2(
+            torch.ones((2,)), torch.ones((2, 3)) * 2, "a string!", batch_size=[2]
+        )
+        td = TensorDict(tc=data, x=torch.zeros(2), batch_size=[2])
+        filename = tmp_path / "file.mmap"
+        td_c = td.consolidate(filename=filename)
+        assert isinstance(td_c["tc"], MyData2)
+        # the in-memory metadata still holds the class itself
+        assert td_c._consolidated["metadata"]["tc"]["cls"] is MyData2
+
+        loaded = tensordict.from_consolidated(filename)
+        assert loaded.is_consolidated()
+        assert isinstance(loaded["tc"], MyData2)
+        # the loaded metadata holds the class too, so pickles of it name it
+        assert loaded._consolidated["metadata"]["tc"]["cls"] is MyData2
+        assert loaded["tc"].z == "a string!"
+        assert (loaded == td).all()
+        loaded = pickle.loads(pickle.dumps(loaded))
+        assert isinstance(loaded["tc"], MyData2)
+        assert (loaded == td).all()
+
+        # A tensorclass that is not defined where the file is read cannot be
+        # found by name
+        monkeypatch.setattr(
+            tensordict.base,
+            "_ACCEPTED_CLASSES",
+            tuple(c for c in tensordict.base._ACCEPTED_CLASSES if c is not MyData2),
+        )
+        with pytest.raises(RuntimeError, match="Could not find the class .*MyData2"):
+            tensordict.from_consolidated(filename)
+
     def test_dataclass(self):
         data = MyData(
             X=torch.ones(3, 4, 5),
@@ -1676,12 +1832,14 @@ class TestTensorClass:
         assert dataclasses.is_dataclass(data)
 
     def test_default(self):
-        @tensorclass
-        class MyData:
-            X: torch.Tensor = (
-                None  # TODO: do we want to allow any default, say an integer?
-            )
-            y: torch.Tensor = torch.ones(3, 4, 5)
+        with pytest.warns(FutureWarning, match="MyData.y is shared"):
+
+            @tensorclass
+            class MyData:
+                X: torch.Tensor = (
+                    None  # TODO: do we want to allow any default, say an integer?
+                )
+                y: torch.Tensor = torch.ones(3, 4, 5)
 
         data = MyData(batch_size=[3, 4])
         assert (data.y == 1).all()
@@ -1732,6 +1890,67 @@ class TestTensorClass:
         assert (MyData().X == 1).all()
         assert len(calls) == 1
 
+    def test_tensor_default_warns(self):
+        # A tensor default is shared by every instance; 0.17 copies it (#3095)
+        def messages(record):
+            return [
+                str(w.message)
+                for w in record
+                if "Starting with TensorDict 0.17" in str(w.message)
+            ]
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class Sub(TensorClass):
+                step: torch.Tensor = torch.tensor(0)
+
+            @tensorclass
+            class Deco:
+                weight: torch.Tensor = torch.nn.Parameter(torch.zeros(()))
+
+            class Child(Sub):  # the inherited field warned already
+                x: torch.Tensor = None
+
+        found = messages(record)
+        assert len(found) == 2, found
+        assert found[0].startswith("The Tensor default of the field Sub.step ")
+        assert found[1].startswith("The Parameter default of the field Deco.weight ")
+        assert "default_factory=lambda: torch.tensor(0)" in found[0]
+        (sub_warning,) = (w for w in record if str(w.message) == found[0])
+        assert sub_warning.category is FutureWarning
+        assert sub_warning.filename == __file__
+        a, b = Sub(), Sub()
+        a.step.add_(1)
+        assert b.step == 1  # unchanged until 0.17
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class Silent(TensorClass):
+                a: torch.Tensor = None
+                b: int = 1
+                c: str = "c"
+                d: torch.Tensor = dataclasses.field(
+                    default_factory=lambda: torch.tensor(0)
+                )
+                e: ClassVar[torch.Tensor] = torch.tensor(0)
+
+            @dataclasses.dataclass
+            class Cfg:
+                x: torch.Tensor = dataclasses.field(default=torch.zeros(2))
+
+            Silent()
+            NonTensorData("a")
+            MetaData("a")
+            # an instance's values are deep-copied: nothing changes in 0.17
+            from_dataclass(Cfg())
+            TensorDict.from_dataclass(Cfg(), as_tensorclass=True)
+        # only Silent() casting b to a 0-d tensor warns (#1199), not a default
+        assert [m.split(" is stored")[0] for m in messages(record)] == [
+            "The int given to the field 'b' of Silent"
+        ]
+
     @pytest.mark.parametrize("pre_dataclass", [False, True])
     def test_defaultfactory_init_false_setattr(self, pre_dataclass):
         # With a custom __setattr__, the dataclass __init__ sets the fields. It
@@ -1748,6 +1967,79 @@ class TestTensorClass:
             MyData = dataclasses.dataclass(MyData)
         MyData = tensorclass(MyData)
         torch.testing.assert_close(MyData().X, torch.ones(3))
+
+    def test_ignored_field_options_warn(self):
+        # Tensorclasses ignore these field options: the class warns once for
+        # each, at the class statement (#3073).
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class MyData(TensorClass):
+                x: torch.Tensor
+                y: torch.Tensor = dataclasses.field(default=None, init=False)
+                z: torch.Tensor = dataclasses.field(
+                    default=None, repr=False, compare=False
+                )
+                w: torch.Tensor = dataclasses.field(default=None, kw_only=True)
+
+            # A subclass does not warn again for the inherited fields
+            class MyChild(MyData):
+                v: torch.Tensor = None
+
+        record = [w for w in record if "tensorclasses ignore" in str(w.message)]
+        assert all(w.category is UserWarning for w in record)
+        assert all(w.filename == __file__ for w in record)
+        messages = [str(w.message) for w in record]
+        assert sorted(messages) == sorted(
+            f"MyData.{name}: tensorclasses ignore the field option {option}"
+            for name, option in [
+                ("y", "init=False: __init__ still takes the field as an argument."),
+                ("z", "repr=False: repr() still shows the field."),
+                ("z", "compare=False: == and != still compare the field."),
+                (
+                    "w",
+                    "kw_only=True: __init__ still takes the field as a positional "
+                    "argument.",
+                ),
+            ]
+        )
+
+        # No warning where the class's own methods replace the ones that
+        # ignore the options, or where the options take their default.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+
+            class MyOwnMethods(TensorClass):
+                x: torch.Tensor = dataclasses.field(
+                    default=None, init=False, repr=False, compare=False, kw_only=True
+                )
+
+                def __init__(self, x):
+                    self.x = x
+
+                def __repr__(self):
+                    return "MyOwnMethods"
+
+                def __eq__(self, other):
+                    return True
+
+                def __ne__(self, other):
+                    return False
+
+            class MyDefaults(TensorClass):
+                x: torch.Tensor = dataclasses.field(
+                    default=None, init=True, repr=True, compare=True, kw_only=False
+                )
+
+        assert not [w for w in record if "tensorclasses ignore" in str(w.message)]
+
+    def test_class_kw_only_raises(self):
+        with pytest.raises(
+            TypeError, match="tensorclasses do not support the class option kw_only"
+        ):
+
+            class MyData(TensorClass, kw_only=True):
+                x: torch.Tensor
 
     def test_del_returns_self(self):
         @tensorclass
@@ -2232,8 +2524,11 @@ class TestTensorClass:
         assert isinstance(x["b"], torch.Tensor)
         assert isinstance(x["c"], torch.Tensor)
 
-        with pytest.warns(FutureWarning, match="keeping the Python value"):
+        with pytest.warns(FutureWarning, match="keeping the Python value") as record:
             x = from_dataclass(MyTensorClass(a=0, b=0, c=0))
+        # it points at the call, so Python shows it once per call site, not
+        # once per call
+        assert {w.filename for w in record} == {__file__}
         assert is_tensorclass(x)
         assert isinstance(x.a, torch.Tensor)
         assert isinstance(x.b, torch.Tensor)
@@ -2266,14 +2561,16 @@ class TestTensorClass:
             )
             b: torch.Tensor = dataclasses.field(default=None, kw_only=True)
 
-        if conversion == "from_dataclass":
-            cls = from_dataclass(MyFieldsDataClass)
-        elif conversion == "inplace":
-            cls = from_dataclass(MyFieldsDataClass, inplace=True)
-        elif conversion == "from_instance":
-            cls = type(from_dataclass(MyFieldsDataClass()))
-        else:
-            cls = tensorclass(MyFieldsDataClass)
+        # The tensorclass ignores repr=False and kw_only=True (#3073)
+        with pytest.warns(UserWarning, match="tensorclasses ignore the field option"):
+            if conversion == "from_dataclass":
+                cls = from_dataclass(MyFieldsDataClass)
+            elif conversion == "inplace":
+                cls = from_dataclass(MyFieldsDataClass, inplace=True)
+            elif conversion == "from_instance":
+                cls = type(from_dataclass(MyFieldsDataClass()))
+            else:
+                cls = tensorclass(MyFieldsDataClass)
 
         data0, data1 = cls(), cls()
         torch.testing.assert_close(data0.a, torch.ones(3))
@@ -2502,6 +2799,68 @@ class TestTensorClass:
             assert obj.get("missing", 0, as_list=True) == 0
             assert isinstance(lazy.get("X", as_list=True), list)
             assert lazy.get("X", as_nested_tensor=True).is_nested
+
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_field_typo_suggests_field(self, tensor_only):
+        # #3079: a misspelled field names the fields and the closest one
+        @tensorclass(tensor_only=tensor_only)
+        class Data:
+            obs: torch.Tensor
+            reward: torch.Tensor
+
+        x = torch.zeros(3)
+        data = Data(obs=x, reward=x, batch_size=[3])
+        fields = re.escape("Its fields are ['obs', 'reward'].")
+        with pytest.raises(
+            AttributeError,
+            match=re.escape(
+                "'Data' object has no attribute or field 'rewrd'. "
+                "Did you mean 'reward'? "
+            )
+            + fields,
+        ):
+            data.rewrd
+        assert not hasattr(data, "rewrd")
+        assert getattr(data, "rewrd", None) is None
+        # a private name keeps the bare message
+        with pytest.raises(AttributeError, match="^_rewrd$"):
+            data._rewrd
+        # the unknown keyword comes before the missing field
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "Data.__init__() got an unexpected keyword argument 'rewrd'. "
+                "Did you mean 'reward'? Its fields are ['obs', 'reward']. It is "
+                "also missing 1 required positional argument: 'reward'."
+            ),
+        ):
+            Data(obs=x, rewrd=x, batch_size=[3])
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "Data.__init__() got unexpected keyword arguments ['rewrd', 'ob']."
+            ),
+        ):
+            Data(rewrd=x, ob=x, batch_size=[3])
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "Data.__init__() missing 1 required positional argument: 'reward'"
+            ),
+        ):
+            Data(obs=x, batch_size=[3])
+        if not tensor_only:
+            with pytest.raises(
+                AttributeError, match=fields + re.escape(" Did you mean 'reward'?")
+            ):
+                Data(obs=x, reward=x, rewrd=x, batch_size=[3])
+        with pytest.raises(
+            AttributeError, match=fields + re.escape(" Did you mean 'reward'?")
+        ):
+            data.rewrd = x
+        # the private fields are not listed
+        with pytest.raises(AttributeError, match=re.escape("Its fields are ['data'].")):
+            NonTensorData("a").foo
 
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_getattr(self, any_to_td):
@@ -2936,6 +3295,248 @@ class TestTensorClass:
             data = cls(X=torch.ones(3), batch_size=[3])
             assert copy.copy(data) == "copy"
             assert copy.deepcopy(data) == "deepcopy"
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    @pytest.mark.parametrize("spelling", ["decorator", "subclass"])
+    def test_copy_replace(self, spelling):
+        # copy.replace keeps the batch size, device and names (#3072)
+        if spelling == "decorator":
+
+            @tensorclass
+            class MyDataReplace:
+                X: torch.Tensor
+                z: str = "z"
+                y: MyDataReplace = None
+
+        else:
+
+            class MyDataReplace(TensorClass):
+                X: torch.Tensor
+                z: str = "z"
+                y: MyDataReplace = None
+
+        nested = MyDataReplace(X=torch.zeros(3, 2), batch_size=[3])
+        data = MyDataReplace(
+            X=torch.zeros(3, 2), y=nested, batch_size=[3], names=["n"], device="cpu"
+        )
+        for changes in ({}, {"X": torch.ones(3, 2)}, {"z": "other"}):
+            out = copy.replace(data, **changes)
+            assert type(out) is MyDataReplace
+            assert out is not data
+            assert out.batch_size == torch.Size([3])
+            assert out.names == ["n"]
+            assert out.device == torch.device("cpu")
+            assert type(out.y) is MyDataReplace
+            assert out.y.batch_size == torch.Size([3])
+        assert (out.X == 0).all()
+        assert out.z == "other"
+        assert data.z == "z"
+        assert (copy.replace(data, X=torch.ones(3, 2)).X == 1).all()
+
+        # The metadata can still be passed, as to __init__
+        out = copy.replace(data, names=["m"], y=None)
+        assert out.batch_size == torch.Size([3])
+        assert out.names == ["m"]
+        out = copy.replace(data, batch_size=[3, 2], y=None)
+        assert out.batch_size == torch.Size([3, 2])
+        assert out.names == [None, None]
+        with pytest.raises(AttributeError, match="no such field"):
+            copy.replace(data, other=1)
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_init(self):
+        # copy.replace builds the copy with __init__, as dataclasses.replace
+        class MyDataInit(TensorClass):
+            X: torch.Tensor
+
+            def __init__(self, X, scale=1.0):
+                self.X = X * scale
+
+        data = MyDataInit(torch.ones(3), batch_size=[3])
+        out = copy.replace(data, scale=2.0)
+        assert out.batch_size == torch.Size([3])
+        assert (out.X == 2).all()
+
+        # A batch size that __init__ or __post_init__ sets from the data wins
+        class MyDataInitBatch(TensorClass):
+            X: torch.Tensor
+
+            def __init__(self, X):
+                self.X = X
+                self.batch_size = X.shape[:1]
+
+        @tensorclass
+        class MyDataPostInitBatch:
+            X: torch.Tensor
+
+            def __post_init__(self):
+                self.batch_size = self.X.shape[:1]
+
+        class MyDataAutoBatch(TensorClass):
+            X: torch.Tensor
+
+            def __post_init__(self):
+                self.auto_batch_size_(1)
+
+        for cls in (MyDataInitBatch, MyDataPostInitBatch, MyDataAutoBatch):
+            data = cls(X=torch.zeros(3, 2))
+            assert data.batch_size == torch.Size([3])
+            assert copy.replace(data).batch_size == torch.Size([3])
+            out = copy.replace(data, X=torch.ones(5, 2))
+            assert out.batch_size == torch.Size([5])
+            assert (out.X == 1).all()
+            out = copy.replace(data, X=torch.ones(5, 2), names=["m"])
+            assert out.batch_size == torch.Size([5])
+            assert out.names == ["m"]
+
+        @tensorclass
+        class MyDataPostInit:
+            X: torch.Tensor
+
+            def __post_init__(self):
+                self.X = self.X.float()
+
+        data = MyDataPostInit(X=torch.zeros(3), batch_size=[3])
+        out = copy.replace(data, X=torch.ones(3, dtype=torch.long))
+        assert out.batch_size == torch.Size([3])
+        assert out.X.dtype == torch.float32
+
+        data = NonTensorData("a", batch_size=[3])
+        out = copy.replace(data, data="b")
+        assert type(out) is NonTensorData
+        assert out.batch_size == torch.Size([3])
+        assert out.data == "b"
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_no_fit(self):
+        # Without batch dims to keep, or when the new values do not fit them,
+        # the copy keeps the batch size that dataclasses.replace gives it
+        class MyDataNoFit(TensorClass):
+            X: torch.Tensor
+            z: str = "z"
+
+        data = MyDataNoFit(X=torch.zeros(3), batch_size=[3], names=["n"])
+        out = copy.replace(data, X=torch.zeros(5))
+        assert out.batch_size == torch.Size([])
+        assert out.names == []
+        assert out.X.shape == torch.Size([5])
+        z = NonTensorData("other")
+        out = copy.replace(data, z=z)
+        assert out.batch_size == torch.Size([])
+        assert z.batch_size == torch.Size([])
+
+        # names= goes through the names setter of the copy
+        for source, changes in (
+            (MyDataNoFit(X=torch.zeros(3)), {}),
+            (data, {"X": torch.zeros(5)}),
+        ):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                out = copy.replace(source, names=["m"], **changes)
+            assert any(
+                "Got the dimension names" in str(w.message)
+                and w.category is FutureWarning
+                for w in record
+            )
+            assert out.batch_size == torch.Size([])
+            assert out.names == []
+
+        # Names that do not match the batch dims raise
+        with pytest.raises(ValueError, match="dimension names"):
+            copy.replace(data, names=["m", "k"])
+
+        # Non-tensor values with other batch dims do not fit either
+        z = NonTensorData("a", batch_size=[5])
+        out = copy.replace(data, z=z)
+        assert out.batch_size == torch.Size([])
+        assert z.batch_size == torch.Size([5])
+        out = copy.replace(data, z=["a"] * 5)
+        assert out.z == ["a"] * 5
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_shared(self):
+        # The sub-tensordicts of the caller and of the instance keep their
+        # batch size and names
+        class MyDataShared(TensorClass):
+            X: torch.Tensor
+            z: Any = None
+
+        named = MyDataShared(X=torch.zeros(3), batch_size=[3], names=["n"])
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        z = NonTensorData("a", batch_size=[3])
+        for value in (td, z):
+            out = copy.replace(named, z=value)
+            assert out.names == ["n"]
+            assert value.batch_size == torch.Size([3])
+            assert value.names == [None]
+
+        data = MyDataShared(X=torch.zeros(3), batch_size=[3])
+        td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["k"])
+        out = copy.replace(data, z=td)
+        assert out.batch_size == torch.Size([3])
+        assert td.names == ["k"]
+
+        # With no names to set, the copy shares the sub-tensordict, as on main
+        sub = TensorDict(a=torch.zeros(3), batch_size=[3])
+        data = MyDataShared(X=torch.zeros(3), z=sub, batch_size=[3])
+        out = copy.replace(data)
+        assert out.batch_size == torch.Size([3])
+        assert out.z is data.z
+
+        sub = TensorDict(a=torch.zeros(3), batch_size=[3])
+        data = MyDataShared(X=torch.zeros(3), z=sub, batch_size=[3])
+        out = copy.replace(data, names=["q"])
+        assert out.names == ["q"]
+        assert out.z.names == ["q"]
+        assert data.z.names == [None]
+        assert sub.names == [None]
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13), reason="copy.replace requires Python 3.13"
+    )
+    def test_copy_replace_named_replace(self):
+        # __replace__ reserves no field or method name
+        @tensorclass(shadow=True)
+        class MyDataField:
+            X: torch.Tensor
+            replace: torch.Tensor
+
+        data = MyDataField(X=torch.zeros(3), replace=torch.zeros(3), batch_size=[3])
+        out = copy.replace(data, replace=torch.ones(3))
+        assert out.batch_size == torch.Size([3])
+        assert (out.replace == 1).all()
+
+        class MyDataMethod(TensorClass):
+            X: torch.Tensor
+
+            def replace(self, **kwargs):
+                return "replace"
+
+        data = MyDataMethod(X=torch.zeros(3), batch_size=[3])
+        assert data.replace() == "replace"
+        out = copy.replace(data, X=torch.ones(3))
+        assert out.batch_size == torch.Size([3])
+        assert (out.X == 1).all()
+
+        class MyDataOwn(TensorClass):
+            X: torch.Tensor
+
+            def __replace__(self, **changes):
+                return "own"
+
+        class MyDataOwnChild(MyDataOwn):
+            y: torch.Tensor = None
+
+        for cls in (MyDataOwn, MyDataOwnChild):
+            assert copy.replace(cls(X=torch.zeros(3), batch_size=[3])) == "own"
 
     @pytest.mark.parametrize("consolidate", [False, True])
     def test_pickle_consolidate(self, consolidate):
@@ -6028,6 +6629,25 @@ class TestAutoCasting:
 
         assert T._autocast
 
+    def test_autocast_shape_annotations(self):
+        # A shape annotation casts to the array type that it wraps.
+        class Shaped(TensorClass["autocast"]):
+            a: _ShapedTensor
+            b: _ShapedArray
+
+        x = Shaped(a=[1, 2], b=[1, 2], batch_size=[2])
+        assert isinstance(x.a, torch.Tensor)
+        assert isinstance(x.b, np.ndarray)
+
+        # A tensorclass with an ``array_type`` attribute is not unwrapped.
+        class Outer(TensorClass["autocast"]):
+            inner: _WithArrayType
+
+        y = Outer(
+            inner=_WithArrayType(x=torch.zeros(2), batch_size=[2]), batch_size=[2]
+        )
+        assert isinstance(y.inner, _WithArrayType)
+
     def test_autocast_simple(self):
         obj = AutoCastTensor(
             tensor=1,
@@ -8100,7 +8720,7 @@ class TestTensorOnly:
 
         with pytest.raises(
             TypeError,
-            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+            match="tensor_only requires types to be Tensor, Tensor-subtypes or None",
         ):
 
             class TensorOnlyAny(TensorClass["tensor_only"]):
@@ -8110,7 +8730,7 @@ class TestTensorOnly:
 
         with pytest.raises(
             TypeError,
-            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+            match="tensor_only requires types to be Tensor, Tensor-subtypes or None",
         ):
 
             class TensorOnlyStr(TensorClass["tensor_only"]):
@@ -8120,13 +8740,65 @@ class TestTensorOnly:
 
         with pytest.raises(
             TypeError,
-            match="tensor_only requires types to be Tensor, Tensor-subtrypes or None",
+            match="tensor_only requires types to be Tensor, Tensor-subtypes or None",
         ):
 
             class TensorOnlyStrUnion(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: torch.Tensor
                 c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
+
+    def test_tensor_only_shape_annotations(self):
+        # A shape annotation counts as the array type that it wraps, and its
+        # shape is not checked.
+        class Shaped(TensorClass["tensor_only"]):
+            a: _ShapedTensor
+            b: _ShapedTensor | None = None
+
+        x = Shaped(a=torch.zeros(2, 3), batch_size=[2])
+        assert isinstance(x.a, torch.Tensor)
+        assert x.b is None
+        x.b = torch.zeros(2, 4)
+        assert x.b.shape == (2, 4)
+
+        with pytest.raises(
+            TypeError,
+            match="tensor_only requires types to be Tensor, Tensor-subtypes or None",
+        ):
+
+            class ShapedArray(TensorClass["tensor_only"]):
+                a: _ShapedArray
+
+    def test_tensor_only_array_type_attribute(self):
+        # A tensorclass with an ``array_type`` attribute is not unwrapped.
+        class Outer(TensorClass["tensor_only"]):
+            inner: _WithArrayType
+
+        x = Outer(
+            inner=_WithArrayType(x=torch.zeros(2), batch_size=[2]), batch_size=[2]
+        )
+        assert isinstance(x.inner, _WithArrayType)
+
+    @pytest.mark.skipif(not _has_jaxtyping, reason="jaxtyping not installed")
+    @pytest.mark.parametrize("flag", ["tensor_only", "autocast"])
+    def test_jaxtyping_annotations(self, flag):
+        namespace = {"__name__": __name__}
+        code = f"""
+            import torch
+            from jaxtyping import Float
+            from tensordict import TensorClass
+
+            class Points(TensorClass["{flag}"]):
+                pos: Float[torch.Tensor, "*batch 3"]
+                mass: Float[torch.Tensor, "*batch"] | None = None
+        """
+        exec(
+            compile(textwrap.dedent(code), "<test>", "exec", dont_inherit=True),
+            namespace,
+        )
+        points = namespace["Points"](pos=[[0.0, 1.0, 2.0]], batch_size=[1])
+        assert isinstance(points.pos, torch.Tensor)
+        assert points.mass is None
 
     def test_tensor_only_parameterized_generic(self):
         # Regression test for GitHub issue #1658:

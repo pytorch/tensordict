@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Mapping, Sequence
 
 import torch
-from tensordict._lazy import LazyStackedTensorDict
+from tensordict._lazy import _as_nested_tensor, LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import (
     _is_leaf_nontensor,
@@ -35,6 +35,7 @@ from torch.utils.data import default_collate
 __all__ = [
     "collate",
     "dense_stack_tds",
+    "group_by",
     "make_tensordict",
     "merge_tensordicts",
     "pad",
@@ -541,7 +542,13 @@ def _pad_lazy_stack_inplace(
     return tensordict
 
 
-def collate(batch: Any) -> Any:
+def collate(
+    batch: Any,
+    *,
+    pad_keys: Mapping[NestedKey, float] | None = None,
+    nested_keys: Sequence[NestedKey] | None = None,
+    mask_key: NestedKey | None = None,
+) -> Any:
     """Collates a list of samples into a batch, for :class:`~torch.utils.data.DataLoader`.
 
     Pass it as ``collate_fn`` when the samples are tensordicts or
@@ -561,13 +568,49 @@ def collate(batch: Any) -> Any:
       type), with each entry collated across the samples.
     - anything else goes through :func:`torch.utils.data.default_collate`.
 
+    The keyword arguments batch variable-length entries of the tensordicts
+    and tensorclasses in the batch. Pass them with
+    :func:`functools.partial` to get a ``collate_fn``. The entries they do
+    not name are collated as above.
+
     Args:
         batch (list): the samples of one batch. Anything other than a
             non-empty list is returned as is, for example the tensordict
             that a batch sampler reads in one index operation.
 
+    Keyword Args:
+        pad_keys (Mapping[NestedKey, float], optional): the entries to pad,
+            each mapped to its padding value. They are padded along their
+            first dimension to the longest sample and stacked, as
+            :func:`~tensordict.pad_sequence` does. Defaults to ``None``.
+        nested_keys (sequence of NestedKey, optional): the entries to stack
+            into nested tensors with the ``torch.jagged`` layout, whose first
+            dimension is ragged. The other entries must then stack densely:
+            name every entry that varies in length in ``pad_keys`` or
+            ``nested_keys``. Defaults to ``None``.
+        mask_key (NestedKey, optional): where to store the masks of the
+            ``pad_keys`` entries: a tensordict with an entry for each of them
+            that is ``True`` at the valid positions, as
+            :func:`~tensordict.pad_sequence` builds with ``return_mask``. It
+            must not be an entry of the samples. A tensorclass needs a field
+            of that name. Requires ``pad_keys``. Defaults to ``None``, for no
+            masks.
+
+    With ``pad_keys``, the samples must have an empty batch size. These
+    options do not support :class:`~tensordict.PersistentTensorDict` (h5)
+    samples: call :meth:`~tensordict.TensorDictBase.to_tensordict` first.
+
     Returns:
         The collated batch.
+
+    Raises:
+        KeyError: if a sample has no entry for a key of ``pad_keys`` or
+            ``nested_keys``.
+        ValueError: if ``mask_key`` is given without ``pad_keys`` or names
+            an entry of a sample, if a key is in both ``pad_keys`` and
+            ``nested_keys``, if ``pad_keys`` is given for samples with batch
+            dimensions, or if ``nested_keys`` is given and the other entries
+            do not stack densely.
 
     Examples:
         >>> import torch
@@ -581,28 +624,128 @@ def collate(batch: Any) -> Any:
         >>> batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate)))
         >>> type(batch).__name__, batch.batch_size
         ('LazyStackedTensorDict', torch.Size([4]))
+
+    Pad the token ids with the pad id of a tokenizer and the labels with
+    ``-100``, keep a mask of the valid tokens, and stack the point clouds as
+    jagged nested tensors:
+
+        >>> from functools import partial
+        >>> samples = [
+        ...     TensorDict(
+        ...         ids=torch.ones(n, dtype=torch.long),
+        ...         labels=torch.ones(n, dtype=torch.long),
+        ...         points=torch.randn(n + 1, 3),
+        ...         score=torch.tensor(float(n)),
+        ...     )
+        ...     for n in (2, 3)
+        ... ]
+        >>> collate_fn = partial(
+        ...     collate,
+        ...     pad_keys={"ids": 7, "labels": -100},
+        ...     nested_keys=["points"],
+        ...     mask_key="mask",
+        ... )
+        >>> batch = next(iter(DataLoader(samples, batch_size=2, collate_fn=collate_fn)))
+        >>> batch["ids"]
+        tensor([[1, 1, 7],
+                [1, 1, 1]])
+        >>> batch["mask", "ids"]
+        tensor([[ True,  True, False],
+                [ True,  True,  True]])
+        >>> batch["points"].is_nested, batch["score"]
+        (True, tensor([2., 3.]))
     """
     if not isinstance(batch, list) or not batch:
         return batch
     first = batch[0]
     if _is_tensor_collection(type(first)):
-        return LazyStackedTensorDict.maybe_dense_stack(batch)
+        if pad_keys is None and nested_keys is None and mask_key is None:
+            return LazyStackedTensorDict.maybe_dense_stack(batch)
+        return _collate_keys(batch, pad_keys, nested_keys, mask_key)
     if isinstance(first, torch.Tensor):
         return torch.stack(batch)
+    options = {"pad_keys": pad_keys, "nested_keys": nested_keys, "mask_key": mask_key}
     if isinstance(first, Mapping):
-        return {key: collate([sample[key] for sample in batch]) for key in first}
+        return {
+            key: collate([sample[key] for sample in batch], **options) for key in first
+        }
     if isinstance(first, tuple):
-        items = (collate(list(entries)) for entries in zip(*batch))
+        items = (collate(list(entries), **options) for entries in zip(*batch))
         if hasattr(first, "_fields"):
             return type(first)(*items)
         return tuple(items)
     return default_collate(batch)
 
 
+def _collate_keys(
+    batch: list,
+    pad_keys: Mapping[NestedKey, float] | None,
+    nested_keys: Sequence[NestedKey] | None,
+    mask_key: NestedKey | None,
+) -> Any:
+    """Collates tensor collections, padding or nesting the named entries."""
+    pad_keys = {unravel_key(key): value for key, value in (pad_keys or {}).items()}
+    nested_keys = [unravel_key(key) for key in nested_keys or ()]
+    if mask_key is not None and not pad_keys:
+        raise ValueError("collate got a mask_key but no pad_keys to mask.")
+    both = [key for key in nested_keys if key in pad_keys]
+    if both:
+        raise ValueError(
+            f"collate got the keys {both} in both pad_keys and nested_keys."
+        )
+    if pad_keys and batch[0].batch_dims:
+        raise ValueError(
+            "collate(pad_keys=...) pads the first dim of each entry, which is a "
+            f"batch dim of these samples (batch_size={batch[0].batch_size}). "
+            "Give the samples an empty batch size, or call pad_sequence."
+        )
+    if mask_key is not None:
+        mask_key = unravel_key(mask_key)
+    for sample in batch:
+        keys = sample.keys(include_nested=True)
+        for key in (*pad_keys, *nested_keys):
+            if key not in keys:
+                raise KeyError(f"collate got the key {key!r}, which a sample lacks.")
+        if mask_key is not None and mask_key in keys:
+            raise ValueError(
+                f"collate got mask_key={mask_key!r}, which is an entry of a sample."
+            )
+    out = LazyStackedTensorDict.maybe_dense_stack(
+        [sample.exclude(*pad_keys, *nested_keys) for sample in batch]
+    )
+    if nested_keys and isinstance(
+        out._tensordict if is_tensorclass(out) else out, LazyStackedTensorDict
+    ):
+        raise ValueError(
+            f"collate got nested_keys={nested_keys}, but the other entries of the "
+            "samples differ in shape, so they stack lazily and the nested tensors "
+            "could not be read back. Name the entries that vary in length in "
+            "pad_keys or nested_keys."
+        )
+    if pad_keys:
+        padded = pad_sequence(
+            [
+                (sample._tensordict if is_tensorclass(sample) else sample).select(
+                    *pad_keys
+                )
+                for sample in batch
+            ],
+            padding_value=pad_keys,
+            return_mask=False if mask_key is None else mask_key,
+        )
+        for key in pad_keys:
+            out.set(key, padded.get(key))
+        if mask_key is not None:
+            out.set(mask_key, padded.get(mask_key))
+    for key in nested_keys:
+        out.set(key, _as_nested_tensor([sample.get(key) for sample in batch], None))
+    return out
+
+
 def pad_sequence(
     list_of_tensordicts: Sequence[T],
     pad_dim: int = 0,
-    padding_value: float = 0.0,
+    padding_value: float | Mapping[NestedKey, float] = 0.0,
     out: T | None = None,
     return_mask: bool | NestedKey = False,
     padding_side: str = "right",
@@ -628,10 +771,14 @@ def pad_sequence(
             entries and on another dimension of others, the batch size is not
             padded, and, unless ``out`` is given, no entry may be longer along
             it than the batch of the first sample. Defaults to ``0``.
-        padding_value (float, optional): the value of the padded elements.
-            When ``pad_dim`` is a batch dimension, non-tensor entries hold
-            ``None`` there instead, as with :func:`~tensordict.pad`. Defaults
-            to ``0.0``.
+        padding_value (float or Mapping[NestedKey, float], optional): the
+            value of the padded elements. A mapping gives the value of each
+            entry by its key (``"a"`` or ``("a", "b")``), and the entries it
+            does not name are padded with ``0``. A key of the mapping that
+            names no entry of the inputs raises a ``KeyError``. The masks are
+            always padded with ``False``. When ``pad_dim`` is a batch
+            dimension, non-tensor entries hold ``None`` there instead, as with
+            :func:`~tensordict.pad`. Defaults to ``0.0``.
         out (TensorDictBase, optional): a tensordict to write the result
             into. Defaults to ``None``.
         return_mask (bool or NestedKey, optional): if ``True``, the result has
@@ -660,6 +807,8 @@ def pad_sequence(
         RuntimeError: if ``list_of_tensordicts`` is empty, if the entry
             shapes differ in a dimension other than ``pad_dim``, or if
             ``return_mask`` is set for tensorclass inputs.
+        KeyError: if ``padding_value`` is a mapping with a key that names no
+            entry of the inputs.
         ValueError: if ``padding_side`` is neither ``"left"`` nor ``"right"``,
             or if a negative ``pad_dim`` lands on a batch dimension of some
             entries and on another dimension of others, and, with no ``out``,
@@ -678,6 +827,21 @@ def pad_sequence(
         (torch.Size([2, 5, 8]), torch.Size([2, 6, 8]))
         >>> padded_td["masks", "a"].sum(-1)
         tensor([3, 5])
+
+    A mapping pads each entry with its own value, for example the token ids
+    with the pad id of a tokenizer and the labels with ``-100``:
+
+        >>> samples = [
+        ...     TensorDict(ids=torch.ones(n, dtype=torch.long), labels=torch.ones(n, dtype=torch.long))
+        ...     for n in (2, 3)
+        ... ]
+        >>> padded = pad_sequence(samples, padding_value={"ids": 7, "labels": -100})
+        >>> padded["ids"]
+        tensor([[1, 1, 7],
+                [1, 1, 1]])
+        >>> padded["labels"]
+        tensor([[   1,    1, -100],
+                [   1,    1,    1]])
     """
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
@@ -703,6 +867,16 @@ def pad_sequence(
     update_batch_size = True
     max_seq_length = float("-inf")
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
+    padding_values = None
+    if isinstance(padding_value, Mapping):
+        padding_values = {unravel_key(k): v for k, v in padding_value.items()}
+        missing = [k for k in padding_values if k not in keys]
+        if missing:
+            raise KeyError(
+                f"padding_value has keys {missing} that name no entry of the "
+                f"tensordicts, whose entries are {sorted(keys, key=str)}."
+            )
+        padding_value = 0.0
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
     mask_pad_dims = {}
     # The batch dims that pad_dim lands on, counted in each entry
@@ -838,7 +1012,11 @@ def pad_sequence(
                 torch.nn.utils.rnn.pad_sequence(
                     [d[key].transpose(0, pos_pad_dim) for d in list_of_dicts],
                     batch_first=True,
-                    padding_value=padding_value if key not in mask_pad_dims else False,
+                    padding_value=False
+                    if key in mask_pad_dims
+                    else padding_value
+                    if padding_values is None
+                    else padding_values.get(key, padding_value),
                     padding_side=padding_side,
                 ).transpose(1, pos_pad_dim + 1),
                 inplace=True,
@@ -1013,6 +1191,103 @@ def unpad_sequence(
                     sample.set(key, item)
             samples.append(sample)
     return LazyStackedTensorDict(*samples, stack_dim=0)
+
+
+def group_by(
+    tensordict: T, key: NestedKey
+) -> tuple[torch.Tensor | list[Any], tuple[T, ...]]:
+    """Splits a tensordict into groups of rows that share the value of an entry.
+
+    The rows are taken along the first batch dimension. ``groups[i]`` holds
+    the rows whose entry ``key`` equals ``values[i]``, in their original
+    order, as ``tensordict[tensordict[key] == values[i]]`` would for a
+    one-dimensional entry. An entry with more dimensions than one value per
+    row is compared row by row, as :func:`torch.unique` with ``dim=0`` does.
+
+    The rows are gathered once and split into views of the gathered
+    tensordict, instead of indexing it with one mask per group.
+
+    The number of groups depends on the data, and the group sizes are read
+    on the host (``.tolist()``), which synchronizes with the device: this
+    function is meant for eager mode, not for compiled code.
+
+    Args:
+        tensordict (TensorDictBase or tensorclass instance): the tensordict to
+            split. It needs at least one batch dimension.
+        key (NestedKey): the entry to group the rows by. A tensor entry, or a
+            non-tensor entry (for example a
+            :class:`~tensordict.NonTensorStack` of strings) whose values are
+            hashable and can be sorted.
+
+    Returns:
+        A ``(values, groups)`` tuple. ``values`` holds the sorted unique values
+        of the entry: a tensor for a tensor entry, a list for a non-tensor
+        entry (of tuples if each row holds several values). ``groups`` is a
+        tuple of tensordicts of the type of ``tensordict``, one per value, in
+        the same order.
+
+    Raises:
+        ValueError: if ``tensordict`` has no batch dimension.
+        KeyError: if ``tensordict`` has no entry ``key``.
+        TypeError: if the entry is a tensordict, or a non-tensor entry whose
+            values cannot be hashed or sorted.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict, group_by
+        >>> td = TensorDict(
+        ...     uid=torch.tensor([2, 0, 2, 1, 0]),
+        ...     reward=torch.arange(5.0),
+        ...     batch_size=[5],
+        ... )
+        >>> values, groups = group_by(td, "uid")
+        >>> values
+        tensor([0, 1, 2])
+        >>> [group["reward"] for group in groups]
+        [tensor([1., 4.]), tensor([3.]), tensor([0., 2.])]
+    """
+    if not tensordict.batch_dims:
+        raise ValueError(
+            "group_by groups the rows along the first batch dimension of the "
+            "tensordict, which has none."
+        )
+    # A tensorclass returns the content of its non-tensor entries, not the entries
+    source = tensordict._tensordict if is_tensorclass(tensordict) else tensordict
+    entry = source.get(key, None)
+    if entry is None:
+        raise KeyError(f"group_by: the tensordict has no entry {key!r}.")
+    if is_non_tensor(entry):
+
+        def as_hashable(row):
+            return tuple(map(as_hashable, row)) if isinstance(row, list) else row
+
+        rows = [as_hashable(row) for row in entry.tolist()]
+        try:
+            values = sorted(set(rows))
+        except TypeError as err:
+            raise TypeError(
+                f"group_by: the values of the non-tensor entry {key!r} must be "
+                "hashable and sortable."
+            ) from err
+        positions = {value: i for i, value in enumerate(values)}
+        inverse = torch.tensor([positions[row] for row in rows], dtype=torch.long)
+        counts = torch.bincount(inverse, minlength=len(values))
+    elif isinstance(entry, torch.Tensor) and not _is_tensor_collection(type(entry)):
+        values, inverse, counts = torch.unique(
+            entry,
+            sorted=True,
+            return_inverse=True,
+            return_counts=True,
+            dim=0 if entry.ndim > 1 else None,
+        )
+    else:
+        raise TypeError(
+            f"group_by needs a tensor or non-tensor entry, but {key!r} holds a "
+            f"{type(entry).__name__}."
+        )
+    order = torch.argsort(inverse, stable=True)
+    groups = tensordict[order].split(counts.tolist(), dim=0)
+    return values, tuple(groups)
 
 
 def merge_tensordicts(
