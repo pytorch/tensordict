@@ -5546,7 +5546,10 @@ class TestTensorDicts(TestTensorDictsBase):
                 td.update(as_source(other(1.0)), keys_to_update=keys_to_update)
                 expected = other(0.0).update(other(1.0).select(*keys_to_update))
                 for key in expected.keys(True, True):
-                    assert (td[key] == expected[key]).all(), (keys_to_update, key)
+                    assert (td[key] == expected[key].to(td[key].device)).all(), (
+                        keys_to_update,
+                        key,
+                    )
 
     @pytest.mark.parametrize(
         "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]
