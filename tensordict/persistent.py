@@ -34,6 +34,7 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
+from tensordict._td_memmap import _format_metadata
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
@@ -1957,6 +1958,8 @@ class PersistentTensorDict(
                     "_type": str(type(self)),
                 }
             )
+            for name, value in _format_metadata(type(self)).items():
+                metadata.setdefault(name, value)
             with open(filepath, "wb") as json_metadata:
                 from tensordict._utils_key_json import json_dumps
 

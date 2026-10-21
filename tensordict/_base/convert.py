@@ -253,15 +253,38 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
     return swap
 
 
-def _replaced_entries(swap: dict, td, entries: list) -> list:
-    """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``."""
+def _replaced_entries(
+    swap: dict, td, entries: list, skip_wrappers: bool = False
+) -> list:
+    """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``.
+
+    With ``skip_wrappers``, a value that views the storage of the value of
+    ``td`` with the same shape, strides, offset and dtype, such as the
+    ``nn.Parameter`` that ``to_module`` wraps around a plain tensor, is not
+    listed, unless both require grad: the gradient of the value of ``td``
+    then lands on the wrapper, which is written back.
+    """
     for key, val in swap.items():
         if key == _EXTRA_STATE_KEY_SUFFIX:
             # Restored with set_extra_state, nothing to write.
             continue
         if isinstance(val, dict):
-            _replaced_entries(val, td._get_str(key, default=NO_DEFAULT), entries)
-        elif td._get_str(key, None) is not val:
+            _replaced_entries(
+                val, td._get_str(key, default=NO_DEFAULT), entries, skip_wrappers
+            )
+            continue
+        current = td._get_str(key, None)
+        if current is not val and not (
+            skip_wrappers
+            and isinstance(current, Tensor)
+            and isinstance(val, Tensor)
+            and not (current.requires_grad and val.requires_grad)
+            and torch._C._is_alias_of(val, current)
+            and val.shape == current.shape
+            and val.stride() == current.stride()
+            and val.storage_offset() == current.storage_offset()
+            and val.dtype == current.dtype
+        ):
             entries.append((td, key, val))
     return entries
 
@@ -271,15 +294,17 @@ def _restore_module(swap, args, kwargs, out):
 
     The tensors that the module holds at the exit and that are not in ``out``
     (for example the materialized parameters of a lazy module) are written
-    into ``out``. ``out`` is unlocked only if there are any, as unlocking and
-    relocking it costs more than the swap.
+    into ``out``. The parameters and buffers that ``to_module`` wrapped around
+    the leaves of ``out`` are not, so that ``out`` keeps its own leaves.
+    ``out`` is unlocked only if there are any, as unlocking and relocking it
+    costs more than the swap.
     """
     hooks = torch.nn.modules.module._global_parameter_registration_hooks
     memo = {"hooks": tuple(hooks.values())}
     current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
     if not isinstance(current, dict):
         return current
-    replaced = _replaced_entries(current, out, [])
+    replaced = _replaced_entries(current, out, [], skip_wrappers=True)
     if replaced:
         non_blocking = kwargs.get("non_blocking", False)
         with out.unlock_():
@@ -2836,10 +2861,21 @@ class _Conversion:
         """Converts a pandas DataFrame to a tensordict, with one entry per column.
 
         The batch size is ``[num_rows]``. Numeric and boolean columns become
-        tensors, string and object columns become non-tensor data, a
+        tensors, a string or object column becomes one
+        :class:`~tensordict.NonTensorData` that holds the whole column, a
         categorical column becomes the tensor of its codes, and a datetime
         column becomes an ``int64`` tensor of nanoseconds.
         :meth:`~.to_pandas` converts back.
+
+        .. note::
+            A string or object column is one value for the whole batch, so
+            ``td[i]["name"]`` gives the values of every row, not the value of
+            row ``i``. To get one value per row, set the column again as a
+            list: ``td["name"] = df["name"].tolist()`` stores a
+            :class:`~tensordict.NonTensorStack`, whose ``td[i]["name"]`` is
+            the value of row ``i``. It builds one object per row, about 20
+            microseconds each, so it is much slower than reading the column
+            for large frames.
 
         Args:
             dataframe (pd.DataFrame): the DataFrame to convert.
@@ -2965,7 +3001,10 @@ class _Conversion:
         Requires pandas or pyarrow: the file is read with
         :func:`pandas.read_csv` when pandas is installed, and with
         ``pyarrow.csv.read_csv`` otherwise. The columns are converted as in
-        :meth:`~.from_pandas`. :meth:`~.to_csv` writes such a file.
+        :meth:`~.from_pandas`. :meth:`~.to_csv` writes such a file. Through
+        pandas, a string column is one value for the whole batch (see the
+        note in :meth:`~.from_pandas`); through pyarrow, it is a
+        :class:`~tensordict.NonTensorStack` with one value per row.
 
         Args:
             path (str or Path): the path of the CSV file.
@@ -3101,7 +3140,10 @@ class _Conversion:
         Requires pyarrow or pandas: the file is read with
         ``pyarrow.parquet.read_table`` when pyarrow is installed, and with
         :func:`pandas.read_parquet` otherwise. The columns are converted as in
-        :meth:`~.from_pandas`. :meth:`~.to_parquet` writes such a file.
+        :meth:`~.from_pandas`. :meth:`~.to_parquet` writes such a file. Through
+        pyarrow, a string column is a :class:`~tensordict.NonTensorStack`
+        with one value per row; through pandas, it is one value for the whole
+        batch (see the note in :meth:`~.from_pandas`).
 
         Args:
             path (str or Path): the path of the Parquet file.
@@ -3240,7 +3282,11 @@ class _Conversion:
         or one record per line with ``lines=True`` (JSON Lines). Each field
         becomes an entry with one value per record. The file is read with
         :func:`pandas.read_json` when pandas is installed, and with the
-        :mod:`json` module otherwise. To convert a single JSON object, load
+        :mod:`json` module otherwise. Through pandas, a string field is one
+        value for the whole batch (see the note in :meth:`~.from_pandas`);
+        through the :mod:`json` module, it is a
+        :class:`~tensordict.NonTensorStack` with one value per record. To
+        convert a single JSON object, load
         it with :func:`json.load` and pass it to :meth:`~.from_dict`.
         :meth:`~.to_json` writes such a file.
 

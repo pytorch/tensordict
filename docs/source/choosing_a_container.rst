@@ -218,5 +218,6 @@ See also
 - :ref:`stacking`: lazy stacks and data of variable size.
 - :ref:`storage` and :ref:`saving`: the backends on disk and on servers.
 - :ref:`compatibility`: the typed containers on each backend.
+- :ref:`coming-from-jax`: the containers for users of JAX pytrees.
 - :ref:`api-tensordict`, :ref:`api-tensorclass`, and
   :ref:`api-typed-tensordict`: the API reference.
