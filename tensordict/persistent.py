@@ -2139,8 +2139,10 @@ class PersistentTensorDict(
                 nested._fill_((subkey,), value)
 
     def _create_nested_str(self, key):
-        # the existing entry is replaced
-        if self._backend.contains(self.file, key):
+        # The existing entry is replaced. On a read-only file, create_group
+        # raises the ValueError it raised before entries were replaced (a
+        # delete first would raise a KeyError instead).
+        if not self._storage_is_read_only() and self._backend.contains(self.file, key):
             self._del((key,))
         self._backend.create_group(self.file, key)
         target_td = self._get_str(key, default=NO_DEFAULT)

@@ -489,6 +489,22 @@ class TestH5Serialization:
         assert h5td["nested"].batch_size == (3,)
         h5td.close()
 
+    def test_create_nested_read_only(self, tmp_path):
+        # a read-only file raises the ValueError of h5py's create_group, for a
+        # string key and for a tuple key, as before #3008's fix
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(d=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5").close()
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5", mode="r")
+        for key in ("nested", ("a", "b"), ("nested", "d")):
+            with pytest.raises(ValueError):
+                h5td.create_nested(key)
+        assert set(h5td.keys(True)) == {"a", "nested", ("nested", "d")}
+        h5td.close()
+
     def test_device_setter(self, tmp_path):
         # as on a TensorDict, the device changes only through to()
         td = TensorDict({"a": torch.zeros(3)}, [3])
