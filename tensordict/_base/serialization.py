@@ -702,8 +702,11 @@ class _Serialization:
             filename (str or Path, optional): a file to use as the storage. The
                 leaves are views into a memory map of the file, and the
                 metadata is written after them, so that
-                :meth:`~.from_consolidated` can read the file back. Defaults to
-                ``None``, which keeps the storage in memory.
+                :meth:`~.from_consolidated` can read the file back. An
+                existing file is written in place, unless it is larger than
+                the new one and ``use_buffer=False``: it is then replaced by a
+                new file, and the tensordicts that map the old file keep their
+                data. Defaults to ``None``, which keeps the storage in memory.
 
         Keyword Args:
             num_threads (int, optional): the number of threads that copy the
@@ -892,6 +895,7 @@ class _Serialization:
                 )
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
+                _replace_larger_file(filename, filesize + suffix)
                 total_storage = torch.from_file(
                     str(filename),
                     size=filesize + suffix,
@@ -2499,6 +2503,33 @@ def _file_id(filename) -> tuple[int, int, int] | None:
     except OSError:
         return None
     return stat.st_dev, stat.st_ino, stat.st_size
+
+
+def _replace_larger_file(filename, size: int) -> None:
+    """Puts an empty file at ``filename`` if the file there is larger than ``size`` bytes.
+
+    ``torch.from_file`` does not shrink a file, so the footer written at the
+    end of the map would not be at the end of the file. A new file also
+    leaves the old one intact for the tensordicts that map it. A symlink
+    keeps pointing at the new file. If the file cannot be replaced, for
+    example on Windows while it is open, it is written in place as before.
+    A file the caller cannot write is left as it is, so that writing to it
+    fails as before instead of replacing it.
+    """
+    try:
+        if os.path.getsize(filename) <= size or not os.access(filename, os.W_OK):
+            return
+        target = os.path.realpath(filename)
+        # A sibling is on the same file system, so a rename moves it into place.
+        fd, tmp = tempfile.mkstemp(prefix=".tdtmp-", dir=os.path.dirname(target))
+    except OSError:
+        return
+    os.close(fd)
+    try:
+        shutil.copymode(target, tmp)
+        os.replace(tmp, target)
+    except OSError:
+        os.unlink(tmp)
 
 
 def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> None:

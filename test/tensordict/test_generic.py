@@ -1359,6 +1359,168 @@ class TestGeneric:
             assert td.consolidate(filename=filename) is td
         assert not filename.exists()
 
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    @pytest.mark.parametrize("num_threads,return_early", [(0, False), (4, True)])
+    @pytest.mark.parametrize(
+        "old_count,new_count", [(None, 2), (2, 100), (100, 100), (100, 2)]
+    )
+    def test_consolidated_file_overwrite(
+        self, tmp_path, use_buffer, num_threads, return_early, old_count, new_count
+    ):
+        # Overwriting a file reloads the new data, whatever the size of the
+        # file it replaces (#3135)
+        if use_buffer and return_early:
+            pytest.skip("return_early=True is not supported with use_buffer=True")
+        filename = tmp_path / "td.bin"
+        previous = None
+        if old_count is not None:
+            previous = TensorDict(
+                a=torch.arange(old_count), batch_size=[old_count]
+            ).consolidate(filename=filename)
+            if use_buffer or (_IS_WINDOWS and old_count > new_count):
+                # use_buffer=True truncates the file that previous maps, and
+                # Windows cannot replace a file while previous maps it
+                del previous
+                previous = None
+        expected = TensorDict(a=torch.arange(new_count) + 500, batch_size=[new_count])
+        saved = expected.consolidate(
+            filename=filename,
+            use_buffer=use_buffer,
+            num_threads=num_threads,
+            return_early=return_early,
+        )
+        if return_early:
+            saved = saved.result()
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == (new_count,)
+        assert_allclose_td(loaded, expected)
+        assert_allclose_td(saved, expected)
+        # the file has the size of a fresh write, and no stale rows
+        expected.consolidate(filename=tmp_path / "fresh.bin")
+        assert filename.stat().st_size == (tmp_path / "fresh.bin").stat().st_size
+        if not use_buffer:
+            # a result of use_buffer=True maps a buffer that does not pickle
+            assert_allclose_td(pickle.loads(pickle.dumps(saved)), expected)
+        assert_allclose_td(pickle.loads(pickle.dumps(loaded)), expected)
+        assert [p.name for p in tmp_path.iterdir() if p.name.startswith(".")] == []
+        if previous is not None:
+            if old_count > new_count:
+                # the larger file was replaced: previous keeps its own data
+                assert (previous["a"] == torch.arange(old_count)).all()
+                with pytest.warns(UserWarning, match="writes nothing"):
+                    previous.consolidate(filename=filename)
+                assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+            else:
+                # the file was written in place: previous sees the new rows
+                assert (previous["a"][:2] == torch.tensor([500, 501])).all()
+
+    def test_consolidated_file_overwrite_schema(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        TensorDict(old=torch.arange(100), batch_size=[100]).consolidate(
+            filename=filename
+        )
+        expected = TensorDict(
+            new={"x": torch.tensor([3.0, 4.0])}, batch_size=[2], names=["rows"]
+        )
+        expected.consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        assert set(loaded.keys(True, True)) == {("new", "x")}
+        assert loaded.batch_size == (2,)
+        assert loaded.names == ["rows"]
+        assert_allclose_td(loaded, expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    @pytest.mark.parametrize("num_threads,return_early", [(0, False), (4, True)])
+    def test_consolidated_file_overwrite_source_view(
+        self, tmp_path, num_threads, return_early
+    ):
+        # a source made of views into the larger file it overwrites
+        filename = tmp_path / "td.bin"
+        original = TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(
+            filename=filename
+        )
+        key = "renamed_" * 40
+        source = TensorDict({key: original["a"][-2:]}, batch_size=[2])
+        saved = source.consolidate(
+            filename=filename, num_threads=num_threads, return_early=return_early
+        )
+        if return_early:
+            saved = saved.result()
+        loaded = TensorDict.from_consolidated(filename)
+        torch.testing.assert_close(saved[key], torch.tensor([98, 99]))
+        torch.testing.assert_close(loaded[key], torch.tensor([98, 99]))
+        assert loaded.batch_size == (2,)
+
+    @pytest.mark.parametrize("existing", [False, True])
+    def test_consolidated_file_overwrite_empty(self, tmp_path, existing):
+        filename = tmp_path / "td.bin"
+        if existing:
+            TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(
+                filename=filename
+            )
+        saved = TensorDict({}, batch_size=[]).consolidate(filename=filename)
+        assert saved.is_empty()
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.batch_size == ()
+        assert loaded.is_empty()
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="symlinks need privileges on Windows")
+    def test_consolidated_file_overwrite_links(self, tmp_path):
+        # a larger file is replaced by a new one: a symlink follows it, a
+        # hardlink keeps the old file, and the mode is kept
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        filename.chmod(0o640)
+        os.link(filename, tmp_path / "hard.bin")
+        (tmp_path / "sym.bin").symlink_to(filename)
+        expected = TensorDict(a=torch.tensor([500, 501]), batch_size=[2])
+        saved = expected.consolidate(filename=tmp_path / "sym.bin")
+        assert (tmp_path / "sym.bin").is_symlink()
+        assert saved._consolidated["filename"] == filename.resolve()
+        assert (filename.stat().st_mode & 0o777) == 0o640
+        assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+        assert_allclose_td(TensorDict.from_consolidated(tmp_path / "sym.bin"), expected)
+        old = TensorDict.from_consolidated(tmp_path / "hard.bin")
+        assert (old["a"] == torch.arange(100)).all()
+        # the result rewrites the metadata of its own file
+        saved.names = ["x"]
+        assert saved.consolidate(filename=filename) is saved
+        assert TensorDict.from_consolidated(filename).names == ["x"]
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
+    )
+    def test_consolidated_file_overwrite_read_only(self, tmp_path):
+        # a larger file the caller cannot write is not replaced: the write
+        # fails as before and the file keeps its data
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        filename.chmod(0o444)
+        size = filename.stat().st_size
+        with pytest.raises(RuntimeError):
+            TensorDict(a=torch.tensor([500, 501]), batch_size=[2]).consolidate(
+                filename=filename
+            )
+        assert filename.stat().st_size == size
+        loaded = TensorDict.from_consolidated(filename)
+        assert (loaded["a"] == torch.arange(100)).all()
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+
+    def test_consolidated_file_overwrite_replace_fails(self, tmp_path):
+        # if the larger file cannot be replaced (as on Windows while it is
+        # mapped), it is written in place, as before
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        size = filename.stat().st_size
+        expected = TensorDict(a=torch.tensor([500, 501]), batch_size=[2])
+        with mock.patch("os.replace", side_effect=PermissionError):
+            saved = expected.consolidate(filename=filename)
+        assert_allclose_td(saved, expected)
+        assert filename.stat().st_size == size
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
             [
