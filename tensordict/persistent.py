@@ -2150,17 +2150,29 @@ class PersistentTensorDict(
 
     # Override: an existing group on the path keeps its entries.
     def _create_nested_tuple(self, key):
-        # a sub-tensordict read before at this key would keep a replaced group
-        self._forget_nested(key)
-        # a read-only file raises from creating the first level, as before
-        if len(key) > 1 and not self._storage_is_read_only():
+        if self._storage_is_read_only():
+            # a read-only file raises from creating the first level, as
+            # before, and keeps its cached sub-tensordicts
+            self._create_nested_str(key[0])
+            return
+        if len(key) > 1:
             group = self._get_array(key[0], None)
             if group is not None and not self._backend.is_array(group):
+                cached = self._nested_tensordicts.get((key[0],))
+                if cached is not None and cached.is_locked:
+                    # a locked sub-tensordict is not written into: creating
+                    # the group raises for the existing name, as before
+                    self._backend.create_group(self.file, key[0])
+                # a sub-tensordict read before under this key would keep a
+                # replaced group
+                self._forget_nested(key)
                 td = self._get_str(key[0], NO_DEFAULT)
             else:
+                self._forget_nested(key)
                 td = self._create_nested_str(key[0])
             td._create_nested_tuple(key[1:])
         else:
+            self._forget_nested(key)
             self._create_nested_str(key[0])
 
     # Override: one to_tensordict() read, outside the cache that the base
