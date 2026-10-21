@@ -153,6 +153,17 @@ else:
     Self = Any
 
 
+def _first_entry_class(td: TensorDictBase, key: NestedKey) -> type:
+    # PersistentTensorDict.entry_class reads the file's structure, not the
+    # dataset (#3203)
+    if type(td) is PersistentTensorDict:
+        try:
+            return td.entry_class(key)
+        except KeyError:
+            pass
+    return type(td.get(key))
+
+
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
@@ -179,14 +190,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         # entries. The default is_leaf rejects every tensor collection, so with
         # it the entry of the first member decides.
         if self.is_leaf is _default_is_leaf:
-            first = self.tensordict.tensordicts[0]
-            if type(first) is PersistentTensorDict:
-                try:
-                    data_type = first.entry_class(key)
-                except KeyError:
-                    data_type = type(first.get(key))
-            else:
-                data_type = type(first.get(key))
+            data_type = _first_entry_class(self.tensordict.tensordicts[0], key)
             if _is_tensor_collection(data_type):
                 return LazyStackedTensorDict
             return data_type
@@ -282,6 +286,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         )
         return view._iter_helper(tensordict, prefix)
 
+    # The generic walk reads each HDF5 dataset to learn its type (#3203)
     def _iter_persistent(self, tensordict, prefix):
         for key in tensordict._key_list():
             try:
@@ -3470,14 +3475,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return [key for key in first_keys if key in keys]
 
     def entry_class(self, key: NestedKey) -> type:
-        first = self.tensordicts[0]
-        if type(first) is PersistentTensorDict:
-            try:
-                data_type = first.entry_class(key)
-            except KeyError:
-                data_type = type(first.get(key))
-        else:
-            data_type = type(first.get(key))
+        data_type = _first_entry_class(self.tensordicts[0], key)
         if not _is_tensor_collection(data_type):
             return data_type
         if data_type is TensorDict:
