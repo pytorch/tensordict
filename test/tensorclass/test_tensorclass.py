@@ -5060,6 +5060,54 @@ class TestTensorClass:
         assert (data0.y.X == 1).all()
         assert data0.y.z == "test_tensorclass1"
 
+    @pytest.mark.parametrize("tensor_only", [False, True])
+    def test_set_self_nesting(self, tensor_only):
+        # #2741: these calls put the tensorclass inside itself, and the next
+        # repr or clone raised a RecursionError
+        class SelfNesting(TensorClass, tensor_only=tensor_only):
+            a: torch.Tensor
+            x: SelfNesting = None
+
+        msg = re.escape("Cannot set a tensordict inside itself (key 'x')")
+        tc = SelfNesting(a=torch.zeros(3), batch_size=[3])
+        for write in (
+            lambda: tc.set("x", tc),
+            lambda: tc.set(("x",), tc),
+            lambda: setattr(tc, "x", tc),
+            lambda: tc.update({"x": tc}),
+            lambda: tc.update(x=tc),
+            lambda: tc.update(TensorDict(x=tc, batch_size=[3])),
+            # as in TensorDict.update, the entries before x are written
+            lambda: tc.update(SelfNesting(a=torch.zeros(3), x=tc, batch_size=[3])),
+        ):
+            with pytest.raises(ValueError, match=msg):
+                write()
+            assert tc.x is None
+            assert (tc.a == 0).all()
+        # a key that is not a field keeps its AttributeError
+        with pytest.raises(AttributeError, match="no such field"):
+            tc.set("zz", tc)
+        # an update that leaves out the field, or that writes a copy, works
+        tc.update({"x": tc, "a": torch.ones(3)}, keys_to_update=["a"])
+        assert tc.x is None
+        assert (tc.a == 1).all()
+        tc.update({"x": tc}, clone=True)
+        assert tc.x is not tc
+        assert (tc.x.a == 1).all()
+        repr(tc)
+        # a locked tensorclass raises its lock error, as before
+        tc = SelfNesting(a=torch.zeros(3), batch_size=[3]).lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            tc.update({"x": tc}, inplace=True)
+
+    def test_set_non_tensor_data_to_itself(self):
+        # a NonTensorData set to itself keeps its data, as before #2741's check
+        nd = NonTensorData("hi")
+        nd.set("data", nd)
+        assert nd.data == "hi"
+        nd.data = nd
+        assert nd.data == "hi"
+
     def test_update_ignore_lock_deprecated(self):
         # #2260: ignore_lock=True warns once per call, also when the update
         # goes on into the tensordict of the tensorclass and its nested entries

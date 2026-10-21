@@ -466,6 +466,69 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {"a", ("nested", "w")}
         h5td.close()
 
+    def test_create_nested_existing(self, tmp_path):
+        # A string key replaces the existing entry. A tuple key keeps the
+        # groups already on the path, as in TensorDict (#3008).
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(d=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        assert h5td.create_nested(("nested", "b")) is h5td
+        assert set(h5td.keys(True)) == {"a", "nested", ("nested", "d"), ("nested", "b")}
+        assert (h5td["nested", "d"] == 1).all()
+        # a group read before it is replaced is not served from the cache
+        h5td["nested", "b", "c"] = torch.zeros(3)
+        assert set(h5td["nested", "b"].keys()) == {"c"}
+        h5td.create_nested(("nested", "b"))
+        assert set(h5td["nested", "b"].keys()) == set()
+        h5td.create_nested(("a", "b"))
+        h5td.create_nested("nested")
+        assert set(h5td.keys(True)) == {"a", ("a", "b"), "nested"}
+        assert h5td["nested"].batch_size == (3,)
+        h5td.close()
+
+    def test_create_nested_read_only(self, tmp_path):
+        # a read-only file raises the ValueError of h5py's create_group, for a
+        # string key and for a tuple key, as before #3008's fix
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(d=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5").close()
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5", mode="r")
+        for key in ("nested", ("a", "b"), ("nested", "d")):
+            with pytest.raises(ValueError):
+                h5td.create_nested(key)
+        assert set(h5td.keys(True)) == {"a", "nested", ("nested", "d")}
+        h5td.close()
+
+    def test_create_nested_keeps_cached_and_locked_children(self, tmp_path):
+        td = TensorDict(a=TensorDict(x=torch.zeros(3), batch_size=[3]), batch_size=[3])
+        PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5").close()
+        # a create_nested that raises on a read-only file leaves the cached
+        # sub-tensordict and its lock as they were
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5", mode="r")
+        sub = h5td["a"].lock_()
+        with pytest.raises(ValueError):
+            h5td.create_nested(("a", "b"))
+        assert h5td["a"] is sub
+        assert sub.is_locked
+        h5td.close()
+        # a locked sub-tensordict is not written into: the call raises for
+        # the existing group, as before #3008's fix
+        h5td = PersistentTensorDict.from_h5(tmp_path / "file.h5", mode="r+")
+        sub = h5td["a"].lock_()
+        with pytest.raises(ValueError):
+            h5td.create_nested(("a", "b"))
+        assert set(sub.keys()) == {"x"}
+        sub.unlock_()
+        h5td.create_nested(("a", "b"))
+        assert set(h5td["a"].keys()) == {"x", "b"}
+        h5td.close()
+
     def test_device_setter(self, tmp_path):
         # as on a TensorDict, the device changes only through to()
         td = TensorDict({"a": torch.zeros(3)}, [3])
