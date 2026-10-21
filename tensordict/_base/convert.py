@@ -2527,13 +2527,17 @@ class _Conversion:
         from dataclasses import fields
 
         from tensordict import TensorDict
+        from tensordict.tensorclass import _FieldGetter
 
         if not is_dataclass(dataclass):
             raise TypeError(
                 f"Expected a dataclass input, got a {type(dataclass)} input instead."
             )
+        # The field getters of a tensorclass are not defaults.
         if isinstance(dataclass, type) and not all(
-            hasattr(dataclass, field.name) for field in fields(dataclass)
+            hasattr(dataclass, field.name)
+            and not isinstance(getattr(dataclass, field.name), _FieldGetter)
+            for field in fields(dataclass)
         ):
             raise TypeError(
                 f"from_dataclass() got the dataclass type {dataclass.__name__}, "

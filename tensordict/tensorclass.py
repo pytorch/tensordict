@@ -1640,11 +1640,14 @@ def _tensorclass(
                 pass
 
     if not tensor_only and not shadow:
+        params = cls.__dict__["__dataclass_params__"]
         for field in dataclasses.fields(cls):
             setattr(
                 cls,
                 field.name,
-                _FieldGetter(field.name, _is_non_tensor and field.name == "data"),
+                _FieldGetter(
+                    field.name, _is_non_tensor and field.name == "data", params
+                ),
             )
 
     if tensor_only:
@@ -1929,10 +1932,10 @@ def _tensorclass(
 
     if not tensor_only:
         # Attribute lookup would find a TensorClass method or property of the
-        # same name (e.g. "sum", or the "fields" of a tensorclass base) before
-        # the field, which _getattr serves.
+        # same name (e.g. "sum") before the field, which _getattr serves. The
+        # other classes have a field getter for each field, "fields" included.
         for name in expected_keys:
-            if (shadow or name == "fields") and hasattr(cls, name):
+            if shadow and hasattr(cls, name):
                 setattr(cls, name, property(functools.partial(_getattr, item=name)))
 
     # Without a docstring, the class documents its constructor signature.
@@ -3785,21 +3788,32 @@ def _getattr(self, item: str, **kwargs) -> Any:
 # that x.field does not first fail the normal attribute lookup and then go
 # through __getattr__. It defines no __set__, so an entry of the instance
 # __dict__ (which a custom __setattr__ can write with object.__setattr__) still
-# comes first. On the class it raises AttributeError, as the field had no class
-# attribute before: otherwise dataclass() would take it as the default of a
-# field that a subclass declares again. It has no docstring, so that Sphinx and
-# help() do not show one for every field.
+# comes first. Read on the class that it serves, it returns itself, as a
+# property does: code that calls getattr(cls, name) for each name in vars(cls),
+# such as Lightning's apply_to_collection, needs that. On any other class it
+# raises AttributeError, as the field had no class attribute before, so that
+# dataclass() does not take it as the default of a field that a subclass
+# declares again. It also raises once a later dataclass() call on its own class
+# has replaced __dataclass_params__, so that this call takes no default either.
+# That relies on a detail of dataclasses (CPython 3.10 to 3.14): it sets
+# __dataclass_params__ before it reads the defaults, which
+# test_dataclass_after_tensorclass checks. It has no docstring, so that Sphinx
+# and help() do not show one for every field.
 class _FieldGetter:
-    __slots__ = ("_check_shared", "_name")
+    __slots__ = ("_check_shared", "_name", "_params")
 
-    def __init__(self, name: str, check_shared: bool):
+    def __init__(self, name: str, check_shared: bool, params):
         self._name = name
         # True for the data field of NonTensorData and MetaData.
         self._check_shared = check_shared
+        # The __dataclass_params__ of the class that the getter serves.
+        self._params = params
 
     def __get__(self, obj, objtype=None):
         name = self._name
         if obj is None:
+            if vars(objtype).get("__dataclass_params__") is self._params:
+                return self
             raise AttributeError(
                 f"type object {objtype.__name__!r} has no attribute {name!r}"
             )

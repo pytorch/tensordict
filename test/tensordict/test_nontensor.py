@@ -20,6 +20,7 @@ import sys
 import threading
 import warnings
 import weakref
+from copy import copy as shallow_copy, deepcopy
 from dataclasses import dataclass
 from multiprocessing.managers import BaseProxy
 from multiprocessing.sharedctypes import SynchronizedBase
@@ -943,6 +944,39 @@ class TestNonTensorData:
         assert result._td() is td.get("a")
         result.extend(["baz", "qux"])
         assert result._td() is None
+
+    @set_list_to_stack(True)
+    def test_linked_list_from_iterable(self):
+        # gh-3162: code that rebuilds a sequence as type(seq)(items), such as
+        # Lightning's apply_to_collection, gets a list that is not linked.
+        td = TensorDict(a=["foo", "bar"], batch_size=(2,))
+        values = td["a"]
+        rebuilt = type(values)(item.upper() for item in values)
+        assert isinstance(rebuilt, LinkedList)
+        assert rebuilt == ["FOO", "BAR"]
+        assert rebuilt._td() is None
+        rebuilt[0] = "baz"
+        assert rebuilt == ["baz", "BAR"]
+        assert td["a"] == ["foo", "bar"]
+        assert LinkedList() == []
+
+    @set_list_to_stack(True)
+    @pytest.mark.parametrize("copy_fn", ["pickle", "deepcopy", "copy"])
+    def test_linked_list_copy(self, copy_fn):
+        # gh-3182: pickling raised AttributeError on Python 3.10. A copy is an
+        # unlinked LinkedList with the same items.
+        td = TensorDict(a=["foo", "bar"], batch_size=(2,))
+        values = td["a"]
+        if copy_fn == "pickle":
+            copied = pickle.loads(pickle.dumps(values))
+        else:
+            copied = {"copy": shallow_copy, "deepcopy": deepcopy}[copy_fn](values)
+        assert type(copied) is LinkedList
+        assert copied == ["foo", "bar"]
+        assert copied._td() is None
+        copied[0] = "baz"
+        assert copied == ["baz", "bar"]
+        assert td["a"] == ["foo", "bar"]
 
     @pytest.mark.parametrize("value", ["b", NonTensorData("b")])
     def test_linked_list_nontensordata_write_raises(self, value):
