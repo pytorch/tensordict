@@ -2250,19 +2250,73 @@ def _warn_as_tensor_memmap() -> None:
     )
 
 
-def _warn_index_past_batch_dims(index) -> None:
-    """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202)."""
+def _warn_index_past_batch_dims(index, write: bool = False) -> None:
+    """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
+
+    ``write`` is ``True`` for ``td[index] = value``.
+    """
     if is_compiling():
         return
+    if write:
+        op = "written with td[index] = value "
+        replacement = (
+            "To write into the leaves, write "
+            "for leaf in td.values(True, True): leaf[:, idx] = value."
+        )
+    else:
+        op = ""
+        replacement = (
+            "To index the leaves, write td.apply(lambda x: x[:, idx]), "
+            "which keeps the batch size."
+        )
     warnings.warn(
-        f"The index {index} runs past the batch dims, and is used on the dims "
-        "of the leaves instead. Starting with TensorDict 0.17, the default will "
-        "change to raising an IndexError, as torch does for a tensor of the "
-        "batch size. To index the leaves, write td.apply(lambda x: x[:, idx]), "
-        "which keeps the batch size.",
+        f"The index {index} {op}runs past the batch dims, and is used on the "
+        "dims of the leaves instead. Starting with TensorDict 0.17, the default "
+        "will change to raising an IndexError, as torch does for a tensor of "
+        f"the batch size. {replacement}",
         FutureWarning,
         stacklevel=_user_stacklevel(),
     )
+
+
+class _WritePastBatchDims(local):
+    """Per-thread flag: ``True`` while ``td[index] = value`` writes with an index that may run past the batch dims (#3202)."""
+
+    active = False
+
+
+_WRITE_PAST_BATCH_DIMS = _WritePastBatchDims()
+
+
+def _may_index_past_batch_dims(index, batch_dims: int) -> bool:
+    """``False`` if ``index`` uses no more than ``batch_dims`` dims, ``True`` if it may use more (#3202).
+
+    A cheap test for ``td[index] = value``: ints, slices and ``None`` use one
+    dim or none, and a tensor uses one dim, or as many as it has for a mask.
+    """
+    if type(index) is tuple:
+        if len(index) > batch_dims:
+            return True
+        # a loop, not all(): setitem is a hot path
+        for idx in index:
+            if not (idx is None or type(idx) is int or type(idx) is slice):
+                return True
+        return False
+    if index is None:
+        return False
+    if type(index) is int or type(index) is slice:
+        return not batch_dims
+    if type(index) is Tensor:
+        return index.ndim > batch_dims or not batch_dims
+    return True
+
+
+def _index_runs_past_batch_dims(index, batch_dims: int) -> bool:
+    """``True`` if ``index`` uses more than ``batch_dims`` dims, as torch reads it (#3202)."""
+    try:
+        return _read_index(_entry_index(index), batch_dims)[3] > batch_dims
+    except (IndexError, RuntimeError, TypeError, ValueError):
+        return False
 
 
 def _index_past_batch_dims(td, index):
@@ -3666,6 +3720,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         :ref:`non-tensor-data`). A
         :class:`~tensordict.LazyStackedTensorDict` adds the key only to the
         members that ``index`` selects.
+
+        An index that runs past the batch dimensions with ints, lists, tensors
+        or masks, as in ``td[:, idx] = value`` on a tensordict with one batch
+        dimension, writes into the dims of the leaves, and emits a
+        :class:`FutureWarning` after the write. Starting with TensorDict 0.17,
+        the default will change to raising an ``IndexError``: to write into
+        the leaves, write ``for leaf in td.values(True, True): leaf[:, idx] =
+        value``.
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
@@ -3684,7 +3746,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # we must use any and because using Ellipsis in index can break with some indices
         if index is Ellipsis or (istuple and any(idx is Ellipsis for idx in index)):
             index = _expand_batch_ellipsis(index, self.batch_size)
-        self._setitem_index(index, value)
+        if (
+            not _may_index_past_batch_dims(index, self.batch_dims)
+            or is_compiling()
+            or _WRITE_PAST_BATCH_DIMS.active
+        ):
+            self._setitem_index(index, value)
+            return
+        # the nested tensordicts that this write reaches do not warn (#3202)
+        _WRITE_PAST_BATCH_DIMS.active = True
+        try:
+            self._setitem_index(index, value)
+        finally:
+            _WRITE_PAST_BATCH_DIMS.active = False
+        if _index_runs_past_batch_dims(index, self.batch_dims):
+            # warn after the write, so that only the writes that work warn
+            _warn_index_past_batch_dims(index, write=True)
 
     def _setitem_index(self, index: IndexType, value: Any) -> None:
         """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.

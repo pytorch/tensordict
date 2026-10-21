@@ -175,7 +175,10 @@ raising an ``IndexError``. Here, ``td.select("joints")[:, :, [0, 1]]`` has
 batch size ``[2, 3, 2]``, and ``td[:, :, [0, 1]]`` raises, because
 ``battery`` has no third dimension. To index the leaves, write
 ``td.select("joints").apply(lambda x: x[:, :, [0, 1]])``, which keeps the
-batch size.
+batch size. A write through such an index, as in
+``td.select("joints")[:, :, [0, 1]] = 0``, goes into the leaves and emits the
+same ``FutureWarning``; to write into the leaves, write
+``for leaf in td.values(True, True): leaf[:, :, [0, 1]] = 0``.
 
 A list of strings is not a key selection. To keep some keys, use
 :meth:`~tensordict.TensorDict.select` (see :ref:`keys`).

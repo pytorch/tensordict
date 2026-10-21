@@ -4992,6 +4992,79 @@ class TestGeneric:
         for key in ("qpos", "qvel", "qf"):
             assert torch.equal(robot[key], proprio[key][:, ids])
 
+    @pytest.mark.parametrize("as_tensor", [False, True])
+    @pytest.mark.parametrize("scalar", [False, True])
+    def test_setitem_past_batch_dims_deprecated(self, as_tensor, scalar):
+        # #3202: writing the joint axis of a proprioception TensorDict, as in
+        # td[:, active_joint_ids] = value, writes into the leaves, and warns
+        # that it raises from 0.17, like the read
+        @tensorclass
+        class _Robot:
+            qpos: torch.Tensor
+            qvel: torch.Tensor
+
+        num_envs, dof = 4, 3
+        qpos = torch.arange(num_envs * dof, dtype=torch.float).reshape(num_envs, dof)
+        ids = torch.tensor([0, 2]) if as_tensor else [0, 2]
+        value = 7.0 if scalar else torch.tensor([-1.0, -2.0])
+        expected = qpos.clone()
+        expected[:, ids] = value
+        expected_qvel = qpos + 100
+        expected_qvel[:, ids] = value
+
+        def make():
+            return {
+                "td": TensorDict(qpos=qpos.clone(), qvel=qpos + 100, batch_size=[4]),
+                "nested": TensorDict(
+                    robot=TensorDict(
+                        qpos=qpos.clone(), qvel=qpos + 100, batch_size=[4]
+                    ),
+                    batch_size=[4],
+                ),
+                "tc": _Robot(qpos=qpos.clone(), qvel=qpos + 100, batch_size=[4]),
+            }
+
+        for name, data in make().items():
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                data[:, ids] = value
+            messages = [
+                w for w in record if "runs past the batch dims" in str(w.message)
+            ]
+            assert len(messages) == 1, name
+            assert messages[0].category is FutureWarning
+            assert messages[0].filename == __file__
+            assert "leaf[:, idx] = value" in str(messages[0].message)
+            robot = data["robot"] if name == "nested" else data
+            assert torch.equal(robot.get("qpos"), expected)
+            assert torch.equal(robot.get("qvel"), expected_qvel)
+        # the spelling that the warning names writes the same leaves, without
+        # a warning
+        for name, data in make().items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                for leaf in data.values(True, True):
+                    leaf[:, ids] = value
+            robot = data["robot"] if name == "nested" else data
+            assert torch.equal(robot.get("qpos"), expected)
+            assert torch.equal(robot.get("qvel"), expected_qvel)
+        # the writes within the batch dims do not warn, nor do the writes that
+        # raise
+        data = make()["td"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            data[0] = 1.0
+            data[ids] = value if scalar else 1.0
+            data[:2] = data[2:].clone()
+            data[torch.tensor([True, False, True, False])] = 0
+            data[..., 1] = 0
+            with pytest.raises(IndexError):
+                data[:, ids] = TensorDict(
+                    qpos=torch.zeros(4, 2), qvel=torch.zeros(4, 2), batch_size=[4, 2]
+                )
+            with pytest.raises(IndexError):
+                data[:, :, 0] = 1.0
+
     @pytest.mark.parametrize(
         "index",
         [
