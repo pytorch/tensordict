@@ -20,6 +20,7 @@ from tensordict import (
     PersistentTensorDict,
     TensorClass,
     TensorDict,
+    TypedTensorDict,
 )
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
@@ -683,14 +684,17 @@ class TestH5Serialization:
     def test_replace_does_not_write_into_nested_file_of_arg(self, tmp_path):
         # https://github.com/pytorch/tensordict/issues/2984
         class Data(TensorClass):
-            x: torch.Tensor
+            a: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
 
         files = [
             PersistentTensorDict.from_dict(
                 TensorDict(a=torch.zeros(3), batch_size=[3]),
                 filename=tmp_path / f"file{i}.h5",
             )
-            for i in range(4)
+            for i in range(6)
         ]
         # A lazy stack writes each entry into every member.
         stack = lazy_stack(files[:2])
@@ -703,7 +707,7 @@ class TestH5Serialization:
         # it keeps its type.
         arg = TensorDict(
             h=files[2],
-            tc=Data(x=torch.zeros(3), batch_size=[3]),
+            tc=Data(a=torch.zeros(3), batch_size=[3]),
             batch_size=[3],
         )
         out = TensorDict(batch_size=[3]).replace(arg, h={"b": torch.ones(3)})
@@ -719,6 +723,27 @@ class TestH5Serialization:
         )
         assert set(files[3].keys()) == {"a"}
         assert (out["n", "h", "b"] == 1).all()
+        # A tensorclass or a TypedTensorDict over a nested file keeps its type.
+        arg = TensorDict(
+            tc=Data.from_tensordict(files[4]),
+            typed=Typed.from_tensordict(files[5]),
+            batch_size=[3],
+        )
+        out = TensorDict(batch_size=[3]).replace(
+            arg, tc={"a": torch.ones(3)}, typed={"b": torch.ones(3)}
+        )
+        assert type(out["tc"]) is Data
+        assert type(out["typed"]) is Typed
+        assert (out["tc"].a == 1).all()
+        assert (out["typed", "b"] == 1).all()
+        assert (files[4]["a"] == 0).all()
+        assert set(files[5].keys()) == {"a"}
+        # As the argument, it is read into a TensorDict, which takes any key.
+        out = TensorDict(batch_size=[3]).replace(
+            Data.from_tensordict(files[4]), b=torch.ones(3)
+        )
+        assert set(out.keys()) == {"a", "b"}
+        assert set(files[4].keys()) == {"a"}
         for f in files:
             f.close()
 

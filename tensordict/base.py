@@ -668,21 +668,30 @@ def _copy_for_update(td: Any, entries: Mapping) -> Any:
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
+    from tensordict.typedtensordict import TypedTensorDict
 
+    if _is_tensorclass(type(td)) or isinstance(td, TypedTensorDict):
+        # copy the tensordict that it wraps and wrap the copy, so the type stays
+        inner = td._source if isinstance(td, TypedTensorDict) else td._tensordict
+        copy = _copy_for_update(inner, entries)
+        if copy is None:
+            return None
+        if isinstance(td, TypedTensorDict):
+            return type(td)._wrap_td(copy)
+        return td._from_tensordict(copy, dict(td._non_tensordict), safe=False)
     if td._copy_shares_storage:
         return td.to_tensordict()
-    inner = _unwrap_tensorclass(td)
-    if isinstance(inner, LazyStackedTensorDict) and not is_non_tensor(inner):
-        members = [_copy_for_update(member, entries) for member in inner.tensordicts]
+    if isinstance(td, LazyStackedTensorDict) and not is_non_tensor(td):
+        members = [_copy_for_update(member, entries) for member in td.tensordicts]
         if all(member is None for member in members):
             return None
         result = td.copy()
-        _unwrap_tensorclass(result).tensordicts = [
+        result.tensordicts = [
             member._clone(recurse=False) if copy is None else copy
-            for member, copy in zip(inner.tensordicts, members)
+            for member, copy in zip(td.tensordicts, members)
         ]
         return result
-    if not isinstance(inner, TensorDict):
+    if not isinstance(td, TensorDict):
         return None
     nested = {}
     for key, value in entries.items():
@@ -692,7 +701,7 @@ def _copy_for_update(td: Any, entries: Mapping) -> Any:
             is_tensor_collection(value) and not is_non_tensor(value)
         ):
             continue
-        sub = nested.get(key, inner._get_str(key, None))
+        sub = nested.get(key, td._get_str(key, None))
         if is_tensor_collection(sub) and not is_non_tensor(sub):
             sub = _copy_for_update(sub, value)
             if sub is not None:
@@ -701,9 +710,7 @@ def _copy_for_update(td: Any, entries: Mapping) -> Any:
         return None
     result = td.copy()
     for key, sub in nested.items():
-        _unwrap_tensorclass(result)._set_str(
-            key, sub, inplace=False, validated=True, non_blocking=False
-        )
+        result._set_str(key, sub, inplace=False, validated=True, non_blocking=False)
     return result
 
 
@@ -7059,8 +7066,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         so the argument does not change. The copy also reads into memory each
         file or store that is a member of a lazy stack argument, or a nested
         tensordict that the keyword entries merge into. A file or a store
-        shares its storage with its copy: called on one, ``replace`` writes
-        the new entries into the file or store.
+        shares its storage with its copy: called on one, or on a tensordict
+        that holds one as a nested entry that the new entries merge into,
+        ``replace`` writes the new entries into the file or store.
 
         Args:
             *args (dict or TensorDictBase): at most one, the entries to write.
@@ -7104,7 +7112,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if isinstance(dict_to_replace, dict):
                     dict_to_replace = {**dict_to_replace, **kwargs}
                 elif is_tensor_collection(dict_to_replace):
-                    copy = _copy_for_update(dict_to_replace, kwargs)
+                    if dict_to_replace._copy_shares_storage:
+                        copy = dict_to_replace.to_tensordict()
+                    else:
+                        copy = _copy_for_update(dict_to_replace, kwargs)
                     if copy is None:
                         copy = dict_to_replace.copy()
                     dict_to_replace = copy
