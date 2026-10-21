@@ -180,6 +180,7 @@ Where to go
    saving_format
    storage
    data_loading
+   variable_size_batches
    integrations
    distributed
    training_at_scale

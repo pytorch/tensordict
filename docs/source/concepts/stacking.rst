@@ -397,6 +397,8 @@ zeros. A value with another shape raises a ``RuntimeError``. The
 See also
 --------
 
+- :ref:`variable-size-batches`: a how-to for batches of molecules, point
+  clouds or sequences, from the ``DataLoader`` to the model.
 - :class:`~tensordict.LazyStackedTensorDict`, :func:`~tensordict.stack`,
   :func:`~tensordict.lazy_stack`, :func:`~tensordict.maybe_dense_stack`,
   :func:`~tensordict.cat`, and :func:`~tensordict.pad_sequence` in the
