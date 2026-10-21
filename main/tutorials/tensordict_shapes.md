@@ -35,7 +35,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fdcfb164a30>
+<torch._C.Generator object at 0x7fa7dc768a30>
 ```
 
 ## Indexing
@@ -366,7 +366,7 @@ the shape for the length of a `with` block, and get the changes back in the
 original tensordict.
 
 The same operations work on a [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass), the class
-form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+form of a tensordict with typed fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Further reading
 
@@ -376,7 +376,7 @@ form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#te
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.350 seconds)
+**Total running time of the script:** (0 minutes 0.361 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 

@@ -1,16 +1,26 @@
 .. currentmodule:: tensordict
 
+.. meta::
+   :description: TensorClass is a dataclass of tensors for PyTorch. It has
+      to(device), pin_memory, slicing of every field, torch.stack, a collate_fn
+      for the DataLoader, pytree registration and torch.compile support.
+
 .. _tensorclass-guide:
 
-TensorClass
-===========
+TensorClass: a dataclass of tensors
+===================================
 
-A *tensorclass* is a class for tensor data. You declare its fields with type
-annotations, as in a :func:`~dataclasses.dataclass`, and you write its methods
-once. A method then runs on one item or on a batch of any shape, and compiles
-with ``torch.compile(fullgraph=True)``. The instances have the tensor
-operations of a :class:`~tensordict.TensorDict`: indexing, reshaping,
-``to(device)``, ``torch.stack``, ``torch.cat``, and saving to disk.
+A *tensorclass* is a dataclass of tensors. You declare its fields with type
+annotations, as in a :func:`~dataclasses.dataclass`, and it has the
+operations that such a class otherwise writes by hand: ``.to(device)``,
+``pin_memory()``, slicing of every field with ``batch[idx]``,
+``torch.stack`` and ``torch.cat``, and a ``collate_fn`` for the
+:class:`~torch.utils.data.DataLoader` (:func:`~tensordict.collate`). It is
+registered as a pytree, so ``torch.utils._pytree``, :mod:`torch.func` and
+:func:`torch.compile` accept it. You write its methods once: a method runs
+on one item or on a batch of any shape, and compiles with
+``torch.compile(fullgraph=True)``. The instances have the other operations of
+a :class:`~tensordict.TensorDict`, such as reshaping and saving to disk.
 
   >>> import torch
   >>> from tensordict import TensorClass
@@ -55,7 +65,9 @@ constructor (see :ref:`tensorclass-static-typing`).
 Read the quick start and :ref:`tensorclass-methods` first. Each later section
 describes one feature: read it when you need that feature. To compare a
 tensorclass with a ``TensorDict`` and the other containers, see
-:ref:`choosing-a-container`.
+:ref:`choosing-a-container`. If you have a dataclass with a hand-written
+``to``, ``pin_memory``, ``__getitem__`` or collate function,
+:ref:`coming-from-dataclass` shows what replaces each one.
 
 Quick start
 -----------
@@ -693,6 +705,8 @@ the device is always kept unless you pass it.
 version, so its result has the default batch size (``[]``), no device and no
 names: use ``s.replace(...)`` or :func:`copy.replace` instead.
 
+.. _tensorclass-from-dataclass:
+
 Converting a dataclass
 ----------------------
 
@@ -891,6 +905,8 @@ See also
 - :ref:`typed-tensordict-guide`: typed fields on a
   :class:`~tensordict.TensorDictBase` subclass.
 - :ref:`choosing-a-container`: which container to use.
+- :ref:`coming-from-dataclass`: the methods of a hand-written dataclass of
+  tensors, and the tensorclass operations that replace them.
 - :ref:`coming-from-jax`: the JAX pytree idioms in tensorclass terms.
 - :ref:`compatibility`: tensorclasses on HDF5, Redis, lazy stacks, and
   memory-mapped tensordicts.

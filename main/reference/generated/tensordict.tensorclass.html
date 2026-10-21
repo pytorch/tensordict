@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6319+g86c941a37.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6320+gcb8e61631.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6319+g86c941a37.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6320+gcb8e61631.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -545,6 +545,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -609,7 +615,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1078,6 +1084,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1142,7 +1154,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1511,6 +1523,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../getting_started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
@@ -1522,7 +1535,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../../concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tensorclass.html">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
@@ -1727,7 +1740,7 @@ indexing, reshaping, <code class="docutils literal notranslate"><span class="pre
 code, subclass <a class="reference internal" href="tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> instead. It takes the same
 flags, and type checkers understand it without a plugin. This decorator
 is kept for existing code and for code that moves from
-<code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>. See <a class="reference internal" href="../../tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass</span></a>.</p>
+<code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>. See <a class="reference internal" href="../../tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass: a dataclass of tensors</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>cls</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#type" title="(in Python v3.15)"><em>type</em></a><em>, </em><em>optional</em>) – the class to decorate, passed by
@@ -2237,7 +2250,7 @@ as <a class="reference internal" href="tensordict.NonTensorData.html#tensordict.
        "headline": "tensorclass",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - tensorclass",
        "url": "/reference/generated/tensordict.tensorclass.html",
-       "articleBody": "tensorclass# tensordict.tensorclass(cls: T = None, /, *, autocast: bool = False, frozen: bool = False, nocast: bool = False, shadow: bool = False, tensor_only: bool = False, skip_post_init_on_rebuild: bool = False, cast_filter: Callable | None = None, kw_only: bool = False) \u2192 T | None# A decorator that turns a class with annotated fields into a tensorclass. A tensorclass is a dataclass whose instances behave like a TensorDict: they have a batch size, and they support indexing, reshaping, to(device), stacking and memory-mapping. For new code, subclass TensorClass instead. It takes the same flags, and type checkers understand it without a plugin. This decorator is kept for existing code and for code that moves from @dataclass. See TensorClass. Parameters: cls (type, optional) \u2013 the class to decorate, passed by @tensorclass without parentheses. Keyword Arguments: autocast (bool, optional) \u2013 if True, when a field is set, the value is converted to the annotated type. Exclusive with nocast and tensor_only. Defaults to False. frozen (bool, optional) \u2013 if True, assigning a field raises dataclasses.FrozenInstanceError, as with @dataclass(frozen=True). To block writes on one instance only, call lock_() on it or pass lock=True to the constructor: writes then raise a RuntimeError. Defaults to False. nocast (bool, optional) \u2013 if True, Tensor-compatible types such as int, np.ndarray and the like are not cast to a tensor type. Exclusive with autocast and tensor_only. Defaults to False. shadow (bool, optional) \u2013 if True, fields can have the name of a tensorclass member (batch_size, sum, \u2026), and hide that member. If False, such a name raises an AttributeError when the class is defined. Defaults to False. tensor_only (bool, optional) \u2013 if True, every field annotation must be a tensor type or a tensor collection. Values that can be cast to a tensor are cast. Reading a field then skips the lookup in the non-tensor storage. Exclusive with autocast and nocast. Defaults to False. skip_post_init_on_rebuild (bool, optional) \u2013 if True, __post_init__ runs in the generated __init__, from_tensordict, from_dict, the other constructors such as from_any or fromkeys, and when the data is loaded or received from another process, but not when tensordict makes a new instance from the data of an existing one, as in indexing, clone, to, apply or torch.stack. Defaults to False: __post_init__ also runs on these rebuilds, except on the shells that empty() builds. On a lazy stack it runs on each stacked instance. cast_filter (Callable, optional) \u2013 the default cast_filter of to() and of the dtype shorthands (float(), bfloat16(), \u2026) on the instances of the class: a predicate fn(key, value) -\u003e bool that selects the tensor leaves a dtype cast applies to, key being the nested key as a tuple of str. A cast_filter passed to the call overrides it, and cast_filter=None there casts every leaf. Subclasses inherit it. It applies to calls on the tensorclass itself, not when the tensorclass is a value of another tensordict or tensorclass that is cast. Defaults to None: every leaf is cast. kw_only (bool, optional) \u2013 if True, the fields of the class are keyword-only arguments of __init__, as with @dataclass(kw_only=True). The fields of a subclass are not, unless it sets the option too. Defaults to False. Returns: The tensorclass, or a decorator if the flags are given without a class (@tensorclass(autocast=True)). Examples tensorclass can be used with or without arguments: \u003e\u003e\u003e from typing import Any \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import tensorclass \u003e\u003e\u003e @tensorclass ... class X: ... y: int \u003e\u003e\u003e X(torch.ones(())).y tensor(1.) \u003e\u003e\u003e @tensorclass(autocast=False) ... class X: ... y: int \u003e\u003e\u003e X(torch.ones(())).y tensor(1.) \u003e\u003e\u003e @tensorclass(autocast=True) ... class X: ... y: int \u003e\u003e\u003e X(torch.ones(())).y 1 \u003e\u003e\u003e @tensorclass(nocast=True) ... class X: ... y: Any \u003e\u003e\u003e X(1).y 1 \u003e\u003e\u003e @tensorclass(nocast=False) ... class X: ... y: Any \u003e\u003e\u003e X(1).y tensor(1) A tensorclass can have methods. Fields that are not tensors are stored as NonTensorData: \u003e\u003e\u003e @tensorclass ... class MyData: ... X: torch.Tensor ... y: torch.Tensor ... z: str ... def expand_and_mask(self): ... X = self.X.unsqueeze(-1).expand_as(self.y) ... X = X[self.y] ... return X ... \u003e\u003e\u003e data = MyData( ... X=torch.ones(3, 4, 1), ... y=torch.zeros(3, 4, 2, 2, dtype=torch.bool), ... z=\"test\", ... batch_size=[3, 4]) \u003e\u003e\u003e print(data) MyData(batch_size=[3,4], fields={X: f32[1], y: bool[2,2], z: str}) \u003e\u003e\u003e print(data.expand_and_mask()) tensor([]) A tensorclass instance can be a field of another tensorclass: \u003e\u003e\u003e @tensorclass ... class NestingMyData: ... nested: MyData ... \u003e\u003e\u003e nesting_data = NestingMyData(nested=data, batch_size=[3, 4]) \u003e\u003e\u003e # although the data is stored as a TensorDict, the type hint helps us \u003e\u003e\u003e # to appropriately cast the data to the right type \u003e\u003e\u003e assert isinstance(nesting_data.nested, type(data)) skip_post_init_on_rebuild checks the data once, when it comes in: \u003e\u003e\u003e @tensorclass(skip_post_init_on_rebuild=True) ... class Ragged: ... offsets: torch.Tensor ... indices: torch.Tensor ... def __post_init__(self): ... if int(self.offsets[-1]) != len(self.indices): ... raise ValueError(\"the last offset must be len(indices)\") \u003e\u003e\u003e r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3)) \u003e\u003e\u003e r.clone().offsets # not checked again tensor([0, 2, 3]) cast_filter keeps the integer and boolean fields out of dtype casts: \u003e\u003e\u003e from tensordict import is_inexact \u003e\u003e\u003e @tensorclass(cast_filter=is_inexact) ... class Mesh: ... points: torch.Tensor ... cells: torch.Tensor \u003e\u003e\u003e mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long)) \u003e\u003e\u003e mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype (torch.bfloat16, torch.int64) \u003e\u003e\u003e mesh.bfloat16(cast_filter=None).cells.dtype # cast every leaf torch.bfloat16",
+       "articleBody": "tensorclass# tensordict.tensorclass(cls: T = None, /, *, autocast: bool = False, frozen: bool = False, nocast: bool = False, shadow: bool = False, tensor_only: bool = False, skip_post_init_on_rebuild: bool = False, cast_filter: Callable | None = None, kw_only: bool = False) \u2192 T | None# A decorator that turns a class with annotated fields into a tensorclass. A tensorclass is a dataclass whose instances behave like a TensorDict: they have a batch size, and they support indexing, reshaping, to(device), stacking and memory-mapping. For new code, subclass TensorClass instead. It takes the same flags, and type checkers understand it without a plugin. This decorator is kept for existing code and for code that moves from @dataclass. See TensorClass: a dataclass of tensors. Parameters: cls (type, optional) \u2013 the class to decorate, passed by @tensorclass without parentheses. Keyword Arguments: autocast (bool, optional) \u2013 if True, when a field is set, the value is converted to the annotated type. Exclusive with nocast and tensor_only. Defaults to False. frozen (bool, optional) \u2013 if True, assigning a field raises dataclasses.FrozenInstanceError, as with @dataclass(frozen=True). To block writes on one instance only, call lock_() on it or pass lock=True to the constructor: writes then raise a RuntimeError. Defaults to False. nocast (bool, optional) \u2013 if True, Tensor-compatible types such as int, np.ndarray and the like are not cast to a tensor type. Exclusive with autocast and tensor_only. Defaults to False. shadow (bool, optional) \u2013 if True, fields can have the name of a tensorclass member (batch_size, sum, \u2026), and hide that member. If False, such a name raises an AttributeError when the class is defined. Defaults to False. tensor_only (bool, optional) \u2013 if True, every field annotation must be a tensor type or a tensor collection. Values that can be cast to a tensor are cast. Reading a field then skips the lookup in the non-tensor storage. Exclusive with autocast and nocast. Defaults to False. skip_post_init_on_rebuild (bool, optional) \u2013 if True, __post_init__ runs in the generated __init__, from_tensordict, from_dict, the other constructors such as from_any or fromkeys, and when the data is loaded or received from another process, but not when tensordict makes a new instance from the data of an existing one, as in indexing, clone, to, apply or torch.stack. Defaults to False: __post_init__ also runs on these rebuilds, except on the shells that empty() builds. On a lazy stack it runs on each stacked instance. cast_filter (Callable, optional) \u2013 the default cast_filter of to() and of the dtype shorthands (float(), bfloat16(), \u2026) on the instances of the class: a predicate fn(key, value) -\u003e bool that selects the tensor leaves a dtype cast applies to, key being the nested key as a tuple of str. A cast_filter passed to the call overrides it, and cast_filter=None there casts every leaf. Subclasses inherit it. It applies to calls on the tensorclass itself, not when the tensorclass is a value of another tensordict or tensorclass that is cast. Defaults to None: every leaf is cast. kw_only (bool, optional) \u2013 if True, the fields of the class are keyword-only arguments of __init__, as with @dataclass(kw_only=True). The fields of a subclass are not, unless it sets the option too. Defaults to False. Returns: The tensorclass, or a decorator if the flags are given without a class (@tensorclass(autocast=True)). Examples tensorclass can be used with or without arguments: \u003e\u003e\u003e from typing import Any \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import tensorclass \u003e\u003e\u003e @tensorclass ... class X: ... y: int \u003e\u003e\u003e X(torch.ones(())).y tensor(1.) \u003e\u003e\u003e @tensorclass(autocast=False) ... class X: ... y: int \u003e\u003e\u003e X(torch.ones(())).y tensor(1.) \u003e\u003e\u003e @tensorclass(autocast=True) ... class X: ... y: int \u003e\u003e\u003e X(torch.ones(())).y 1 \u003e\u003e\u003e @tensorclass(nocast=True) ... class X: ... y: Any \u003e\u003e\u003e X(1).y 1 \u003e\u003e\u003e @tensorclass(nocast=False) ... class X: ... y: Any \u003e\u003e\u003e X(1).y tensor(1) A tensorclass can have methods. Fields that are not tensors are stored as NonTensorData: \u003e\u003e\u003e @tensorclass ... class MyData: ... X: torch.Tensor ... y: torch.Tensor ... z: str ... def expand_and_mask(self): ... X = self.X.unsqueeze(-1).expand_as(self.y) ... X = X[self.y] ... return X ... \u003e\u003e\u003e data = MyData( ... X=torch.ones(3, 4, 1), ... y=torch.zeros(3, 4, 2, 2, dtype=torch.bool), ... z=\"test\", ... batch_size=[3, 4]) \u003e\u003e\u003e print(data) MyData(batch_size=[3,4], fields={X: f32[1], y: bool[2,2], z: str}) \u003e\u003e\u003e print(data.expand_and_mask()) tensor([]) A tensorclass instance can be a field of another tensorclass: \u003e\u003e\u003e @tensorclass ... class NestingMyData: ... nested: MyData ... \u003e\u003e\u003e nesting_data = NestingMyData(nested=data, batch_size=[3, 4]) \u003e\u003e\u003e # although the data is stored as a TensorDict, the type hint helps us \u003e\u003e\u003e # to appropriately cast the data to the right type \u003e\u003e\u003e assert isinstance(nesting_data.nested, type(data)) skip_post_init_on_rebuild checks the data once, when it comes in: \u003e\u003e\u003e @tensorclass(skip_post_init_on_rebuild=True) ... class Ragged: ... offsets: torch.Tensor ... indices: torch.Tensor ... def __post_init__(self): ... if int(self.offsets[-1]) != len(self.indices): ... raise ValueError(\"the last offset must be len(indices)\") \u003e\u003e\u003e r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3)) \u003e\u003e\u003e r.clone().offsets # not checked again tensor([0, 2, 3]) cast_filter keeps the integer and boolean fields out of dtype casts: \u003e\u003e\u003e from tensordict import is_inexact \u003e\u003e\u003e @tensorclass(cast_filter=is_inexact) ... class Mesh: ... points: torch.Tensor ... cells: torch.Tensor \u003e\u003e\u003e mesh = Mesh(points=torch.zeros(4, 3), cells=torch.zeros(2, 3, dtype=torch.long)) \u003e\u003e\u003e mesh.bfloat16().points.dtype, mesh.bfloat16().cells.dtype (torch.bfloat16, torch.int64) \u003e\u003e\u003e mesh.bfloat16(cast_filter=None).cells.dtype # cast every leaf torch.bfloat16",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

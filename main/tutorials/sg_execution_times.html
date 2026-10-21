@@ -77,7 +77,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6319+g86c941a37.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6320+gcb8e61631.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="tutorial">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -183,7 +183,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6319+g86c941a37.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6320+gcb8e61631.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -543,6 +543,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -607,7 +613,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1076,6 +1082,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1140,7 +1152,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1509,6 +1521,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
@@ -1520,7 +1533,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
@@ -1689,7 +1702,7 @@ document.write(`
                   
   <section id="computation-times">
 <span id="sphx-glr-tutorials-sg-execution-times"></span><h1>Computation times<a class="headerlink" href="#computation-times" title="Link to this heading">#</a></h1>
-<p><strong>01:26.609</strong> total execution time for 14 files <strong>from tutorials</strong>:</p>
+<p><strong>01:24.787</strong> total execution time for 14 files <strong>from tutorials</strong>:</p>
 <div class="docutils container">
 <style scoped>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
@@ -1711,35 +1724,35 @@ $(document).ready( function () {
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="serialization_speed.html#sphx-glr-tutorials-serialization-speed-py"><span class="std std-ref">Benchmarking TensorDict serialization speed</span></a> (<code class="docutils literal notranslate"><span class="pre">serialization_speed.py</span></code>)</p></td>
-<td><p>00:41.819</p></td>
+<td><p>00:39.783</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="tensordict_module.html#sphx-glr-tutorials-tensordict-module-py"><span class="std std-ref">Building models with TensorDictModule</span></a> (<code class="docutils literal notranslate"><span class="pre">tensordict_module.py</span></code>)</p></td>
-<td><p>00:17.155</p></td>
+<td><p>00:17.175</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="data_fashion.html#sphx-glr-tutorials-data-fashion-py"><span class="std std-ref">Using TensorDict for datasets</span></a> (<code class="docutils literal notranslate"><span class="pre">data_fashion.py</span></code>)</p></td>
-<td><p>00:15.032</p></td>
+<td><p>00:14.878</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py"><span class="std std-ref">Building tensordicts from streams</span></a> (<code class="docutils literal notranslate"><span class="pre">streamed_tensordict.py</span></code>)</p></td>
-<td><p>00:06.350</p></td>
+<td><p>00:06.365</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py"><span class="std std-ref">Using tensorclasses for datasets</span></a> (<code class="docutils literal notranslate"><span class="pre">tensorclass_fashion.py</span></code>)</p></td>
-<td><p>00:04.095</p></td>
+<td><p>00:04.434</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py"><span class="std std-ref">Batched data loading with tensorclasses</span></a> (<code class="docutils literal notranslate"><span class="pre">tensorclass_imagenet.py</span></code>)</p></td>
-<td><p>00:01.537</p></td>
+<td><p>00:01.523</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py"><span class="std std-ref">Changing the shape of a TensorDict</span></a> (<code class="docutils literal notranslate"><span class="pre">tensordict_shapes.py</span></code>)</p></td>
-<td><p>00:00.350</p></td>
+<td><p>00:00.361</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="export.html#sphx-glr-tutorials-export-py"><span class="std std-ref">Exporting tensordict modules</span></a> (<code class="docutils literal notranslate"><span class="pre">export.py</span></code>)</p></td>
-<td><p>00:00.129</p></td>
+<td><p>00:00.127</p></td>
 <td><p>0.0</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="zarr_storage.html#sphx-glr-tutorials-zarr-storage-py"><span class="std std-ref">Storing TensorDicts in zarr</span></a> (<code class="docutils literal notranslate"><span class="pre">zarr_storage.py</span></code>)</p></td>
@@ -2078,7 +2091,7 @@ $(document).ready( function () {
        "headline": "Computation times",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Computation times",
        "url": "/tutorials/sg_execution_times.html",
-       "articleBody": "Computation times# 01:26.609 total execution time for 14 files from tutorials: $(document).ready( function () { $(\u0027table.sg-datatable\u0027).DataTable({order: [[1, \u0027desc\u0027]]}); } ); Example Time Mem (MB) Benchmarking TensorDict serialization speed (serialization_speed.py) 00:41.819 0.0 Building models with TensorDictModule (tensordict_module.py) 00:17.155 0.0 Using TensorDict for datasets (data_fashion.py) 00:15.032 0.0 Building tensordicts from streams (streamed_tensordict.py) 00:06.350 0.0 Using tensorclasses for datasets (tensorclass_fashion.py) 00:04.095 0.0 Batched data loading with tensorclasses (tensorclass_imagenet.py) 00:01.537 0.0 Changing the shape of a TensorDict (tensordict_shapes.py) 00:00.350 0.0 Exporting tensordict modules (export.py) 00:00.129 0.0 Storing TensorDicts in zarr (zarr_storage.py) 00:00.112 0.0 Functional calls and ensembles with TensorDict (functional.py) 00:00.009 0.0 Getting, setting, and nesting keys (tensordict_keys.py) 00:00.008 0.0 Devices and memory-mapped tensors (tensordict_memory.py) 00:00.006 0.0 Slicing, indexing, and masking (tensordict_slicing.py) 00:00.004 0.0 Filling a TensorDict row by row (tensordict_preallocation.py) 00:00.003 0.0",
+       "articleBody": "Computation times# 01:24.787 total execution time for 14 files from tutorials: $(document).ready( function () { $(\u0027table.sg-datatable\u0027).DataTable({order: [[1, \u0027desc\u0027]]}); } ); Example Time Mem (MB) Benchmarking TensorDict serialization speed (serialization_speed.py) 00:39.783 0.0 Building models with TensorDictModule (tensordict_module.py) 00:17.175 0.0 Using TensorDict for datasets (data_fashion.py) 00:14.878 0.0 Building tensordicts from streams (streamed_tensordict.py) 00:06.365 0.0 Using tensorclasses for datasets (tensorclass_fashion.py) 00:04.434 0.0 Batched data loading with tensorclasses (tensorclass_imagenet.py) 00:01.523 0.0 Changing the shape of a TensorDict (tensordict_shapes.py) 00:00.361 0.0 Exporting tensordict modules (export.py) 00:00.127 0.0 Storing TensorDicts in zarr (zarr_storage.py) 00:00.112 0.0 Functional calls and ensembles with TensorDict (functional.py) 00:00.009 0.0 Getting, setting, and nesting keys (tensordict_keys.py) 00:00.008 0.0 Devices and memory-mapped tensors (tensordict_memory.py) 00:00.006 0.0 Slicing, indexing, and masking (tensordict_slicing.py) 00:00.004 0.0 Filling a TensorDict row by row (tensordict_preallocation.py) 00:00.003 0.0",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

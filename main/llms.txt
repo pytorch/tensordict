@@ -5,6 +5,7 @@
 ## Docs
 
 - [Which container should I use?](https://docs.pytorch.org/tensordict/stable/choosing_a_container.md)
+- [Coming from a hand-written dataclass](https://docs.pytorch.org/tensordict/stable/coming_from_dataclass.md)
 - [Coming from JAX pytrees](https://docs.pytorch.org/tensordict/stable/coming_from_jax.md)
 - [Containers on storage backends](https://docs.pytorch.org/tensordict/stable/compatibility.md)
 - [torch.compile, torch.func, torch.export, and CUDA graphs](https://docs.pytorch.org/tensordict/stable/compile.md)
@@ -544,7 +545,7 @@
 - [The on-disk format](https://docs.pytorch.org/tensordict/stable/saving_format.md)
 - [Computation times](https://docs.pytorch.org/tensordict/stable/sg_execution_times.md)
 - [Large datasets and storage backends](https://docs.pytorch.org/tensordict/stable/storage.md)
-- [TensorClass](https://docs.pytorch.org/tensordict/stable/tensorclass.md)
+- [TensorClass: a dataclass of tensors](https://docs.pytorch.org/tensordict/stable/tensorclass.md)
 - [Train at scale](https://docs.pytorch.org/tensordict/stable/training_at_scale.md)
 - [Using TensorDict for datasets](https://docs.pytorch.org/tensordict/stable/tutorials/data_fashion.md)
 - [Exporting tensordict modules](https://docs.pytorch.org/tensordict/stable/tutorials/export.md)

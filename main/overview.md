@@ -203,7 +203,7 @@ reductions, gradients, and the in-place conventions.
 - [Devices, dtypes, and memory](concepts/devices.html#devices): devices, dtypes, and memory.
 - [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data): strings and other Python objects, and entries outside
 the batch size.
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
 typed fields. [Which container should I use?](choosing_a_container.html#choosing-a-container) compares them.
 - [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide): [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) and the other
 modules that read and write tensordicts.

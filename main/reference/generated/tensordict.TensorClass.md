@@ -26,7 +26,7 @@ checkers to know the fields, or when you want to add methods. Use a
 [`TypedTensorDict`](tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) instead if you need a
 [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass (`state["key"]`,
 `**state` unpacking). [Which container should I use?](../../choosing_a_container.html#choosing-a-container) compares the
-containers, and [TensorClass](../../tensorclass.html#tensorclass-guide) is the user guide.
+containers, and [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide) is the user guide.
 
 The constructor of a subclass takes the fields, by name or in order, and
 these keyword arguments: `Foo(tensor=..., batch_size=[3])`.

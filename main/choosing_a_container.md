@@ -52,7 +52,7 @@ key, or `update(d, inplace=True)`, instead of `update_()`.
 - If your program chooses the keys at run time, use a
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict). See [What is TensorDict?](overview.html#overview).
 - If you know the fields and want methods of your own and completion in your
-editor, use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass). See [TensorClass](tensorclass.html#tensorclass-guide).
+editor, use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass). See [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide).
 - If you want declared fields on an object that is a `TensorDictBase`, use
 a [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict). It accepts `state["key"]` and
 `**state`, and a function that takes a tensordict accepts it. See
@@ -117,7 +117,7 @@ Use `TypedTensorDict` if:
 ## See also
 
 - [What is TensorDict?](overview.html#overview): what a tensordict is.
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
 containers.
 - [Stacking and variable-size data](concepts/stacking.html#stacking): lazy stacks and data of variable size.
 - [Large datasets and storage backends](storage.html#storage) and [Save and load tensordicts](saving.html#saving): the backends on disk and on servers.

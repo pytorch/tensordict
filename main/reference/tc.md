@@ -5,7 +5,7 @@ tensordict, and the classes for non-tensor data and unbatched entries. A
 *tensorclass* is a class that you declare like a dataclass, with typed fields
 and methods, and that has the tensor operations of a
 [`TensorDict`](generated/tensordict.TensorDict.html#tensordict.TensorDict). For a guide to fields, auto-casting, the
-class options, and static type checking, see [TensorClass](../tensorclass.html#tensorclass-guide).
+class options, and static type checking, see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide).
 
 To declare a tensorclass, subclass [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass). The
 [`tensorclass()`](generated/tensordict.tensorclass.html#tensordict.tensorclass) decorator is the original way, kept for
@@ -66,7 +66,7 @@ Operations on its data, such as arithmetic or
 
 ## See also
 
-- [TensorClass](../tensorclass.html#tensorclass-guide): declare and use a tensorclass.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide): declare and use a tensorclass.
 - [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict`, or
 `TensorDict`.
 - [TypedTensorDict](ttd.html#api-typed-tensordict): the other container with typed fields.

@@ -8,7 +8,7 @@ the whole group of tensors, and the result keeps the keys and the batch size
 
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) has the same operations, so a method that
 you write with them runs on one element or on a whole batch (see
-[TensorClass](../tensorclass.html#tensorclass-guide)).
+[TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Pointwise operations
 

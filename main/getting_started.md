@@ -210,7 +210,7 @@ below shows.
 - [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) reads its data from an HDF5 or
 Zarr file on disk.
 
-[TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and [Which container should I use?](choosing_a_container.html#choosing-a-container)
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) explains TensorClass, and [Which container should I use?](choosing_a_container.html#choosing-a-container)
 compares the containers.
 
 ## Nested TensorDicts and tuple keys

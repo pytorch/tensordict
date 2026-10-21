@@ -59,7 +59,7 @@ key, or `update(d, inplace=True)`, instead of `update_()`.
 - If your program chooses the keys at run time, use a
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict). See [What is TensorDict?](overview.html#overview).
 - If you know the fields and want methods of your own and completion in your
-editor, use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass). See [TensorClass](tensorclass.html#tensorclass-guide).
+editor, use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass). See [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide).
 - If you want declared fields on an object that is a `TensorDictBase`, use
 a [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict). It accepts `state["key"]` and
 `**state`, and a function that takes a tensordict accepts it. See
@@ -124,7 +124,7 @@ Use `TypedTensorDict` if:
 ## See also
 
 - [What is TensorDict?](overview.html#overview): what a tensordict is.
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
 containers.
 - [Stacking and variable-size data](concepts/stacking.html#stacking): lazy stacks and data of variable size.
 - [Large datasets and storage backends](storage.html#storage) and [Save and load tensordicts](saving.html#saving): the backends on disk and on servers.
@@ -132,6 +132,432 @@ containers.
 - [Coming from JAX pytrees](coming_from_jax.html#coming-from-jax): the containers for users of JAX pytrees.
 - [tensordict: containers and functions](reference/td.html#api-tensordict), [tensorclass and non-tensor data](reference/tc.html#api-tensorclass), and
 [TypedTensorDict](reference/ttd.html#api-typed-tensordict): the API reference.
+
+---
+
+# Coming from a hand-written dataclass
+
+Many PyTorch projects keep a batch in a `@dataclass` of tensors, and then
+write the operations that the batch needs: a `to(device)` and a
+`pin_memory()` that move every field, a `__getitem__` that slices every
+field, and a `stack` or `collate_fn` helper for the
+[`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Each new field means an edit to each of
+these methods. A [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) declares its fields in the
+same way, and has these operations for all its fields, nested ones too. It is
+also a pytree, so [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) and
+[`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) accept it.
+
+This page shows each hand-written method next to what replaces it, then three
+worked examples: a rollout batch for RL post-training, a ray bundle for
+rendering, and a batch of images with nested targets. Run the examples in
+order in one Python session:
+
+```
+>>> import torch
+>>> from torch.utils.data import DataLoader
+>>> from tensordict import TensorClass, TensorDict, collate
+>>> _ = torch.manual_seed(0)
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+```
+
+## The mapping
+
+| Hand-written | TensorClass |
+| --- | --- |
+| `@dataclass` with tensor fields | A subclass of [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) with the same annotations, and a `batch_size` |
+| `def to(self, device)`, `def cuda(self)` | `batch.to(device)`, `batch.to(device, non_blocking=True)`, `batch.cuda()` |
+| `def pin_memory(self)` | `batch.pin_memory()` |
+| `def __getitem__(self, idx)` that slices every field | `batch[idx]`, with an int, a slice, a boolean mask or an index tensor |
+| `def __len__(self)` | `len(batch)`, the first dimension of `batch.batch_size` |
+| A `stack` or `cat` helper | `torch.stack(items)`, `torch.cat(batches)` |
+| A `collate_fn` for the `DataLoader` | `collate_fn=tensordict.collate` (see [`collate()`](reference/generated/tensordict.collate.html#tensordict.collate)) |
+| A helper that splits a batch into minibatches | `batch.split(size)`, `batch.chunk(n)` |
+| A field that holds another dataclass of tensors | A field annotated with another `TensorClass` |
+| `dataclasses.replace(batch, ...)` | `batch.replace(...)` |
+| `torch.utils._pytree.register_pytree_node(...)` | No call: defining the class registers it |
+| A `@dataclass` that you cannot change | [`from_dataclass()`](reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) |
+
+## Declare the fields
+
+A hand-written batch often starts like this:
+
+```
+@dataclass
+class Batch:
+ images: torch.Tensor # [B, 3, H, W]
+ labels: torch.Tensor # [B]
+```
+
+A tensorclass has the same annotations. The constructor also takes the
+*batch size*: the leading dimensions that all the fields share (see
+[Batch size, shapes, and indexing](concepts/batch_size.html#batch-size)). The operations below apply to these dimensions:
+
+```
+>>> class Batch(TensorClass):
+... images: torch.Tensor # [*batch, 3, H, W]
+... labels: torch.Tensor # [*batch]
+>>> batch = Batch(
+... images=torch.randn(16, 3, 8, 8),
+... labels=torch.randint(10, (16,)),
+... batch_size=[16],
+... )
+>>> len(batch)
+16
+```
+
+A field with a wrong batch dimension raises an error when you build the
+batch, not later in the model:
+
+```
+>>> Batch(images=torch.randn(16, 3, 8, 8), labels=torch.zeros(15), batch_size=[16])
+Traceback (most recent call last):
+...
+RuntimeError: batch dimension mismatch, ...
+```
+
+## Move to a device and pin memory
+
+The hand-written methods list every field:
+
+```
+def to(self, device, non_blocking=False):
+ return Batch(
+ images=self.images.to(device, non_blocking=non_blocking),
+ labels=self.labels.to(device, non_blocking=non_blocking),
+ )
+
+def pin_memory(self):
+ return Batch(images=self.images.pin_memory(), labels=self.labels.pin_memory())
+```
+
+A tensorclass has [`to()`](reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to),
+[`cuda()`](reference/generated/tensordict.TensorDictBase.cuda.html#tensordict.TensorDictBase.cuda) and
+[`pin_memory()`](reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory). They move every field and return
+a `Batch`:
+
+```
+>>> if device == "cuda":
+... batch = batch.pin_memory()
+>>> on_device = batch.to(device, non_blocking=True)
+>>> type(on_device).__name__, on_device.images.device.type == device
+('Batch', True)
+```
+
+[Devices, dtypes, and memory](concepts/devices.html#devices) covers the other options of `to`.
+
+## Slice every field
+
+A `__getitem__` that slices the batch repeats the index for each field:
+
+```
+def __getitem__(self, idx):
+ return Batch(images=self.images[idx], labels=self.labels[idx])
+```
+
+An index on a tensorclass applies to the batch dimensions of every field.
+An int, a slice, a boolean mask and an index tensor all return a `Batch`:
+
+```
+>>> batch[:4].images.shape
+torch.Size([4, 3, 8, 8])
+>>> keep = torch.tensor([True, False] * 8)
+>>> batch[keep].batch_size
+torch.Size([8])
+>>> shuffled = batch[torch.randperm(len(batch))]
+>>> [mb.batch_size for mb in shuffled.split(6)]
+[torch.Size([6]), torch.Size([6]), torch.Size([4])]
+```
+
+`reshape`, `unsqueeze`, `flatten` and the other shape operations also
+apply to the batch dimensions (see [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations)).
+
+## Stack and collate
+
+A dataset that returns one sample at a time needs a function that stacks the
+samples into a batch, often a static method passed as `collate_fn`:
+
+```
+@staticmethod
+def collate(samples):
+ return Batch(
+ images=torch.stack([s.images for s in samples]),
+ labels=torch.stack([s.labels for s in samples]),
+ )
+```
+
+[`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) and [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) accept a list of tensorclasses
+and return one. For a `DataLoader`, pass [`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) as
+`collate_fn`. A sample here has an empty batch size:
+
+```
+>>> samples = [Batch(images=torch.randn(3, 8, 8), labels=torch.tensor(i)) for i in range(10)]
+>>> torch.stack(samples[:3]).batch_size
+torch.Size([3])
+>>> loader = DataLoader(samples, batch_size=4, collate_fn=collate)
+>>> first = next(iter(loader))
+>>> type(first).__name__, first.labels
+('Batch', tensor([0, 1, 2, 3]))
+```
+
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) also pads the fields whose length differs
+between samples, as the last worked example shows. [Load data and share it between processes](data_loading.html#data-loading)
+covers worker processes and pinned memory.
+
+## Nested batches
+
+A batch often holds other dataclasses, and each hand-written method then
+calls the same method on them. Annotate a field with another tensorclass
+instead. Indexing, `to` and stacking reach the nested fields, and the
+fields that are not tensors keep their value:
+
+```
+>>> class Camera(TensorClass):
+... intrinsics: torch.Tensor # [*batch, 3, 3]
+... pose: torch.Tensor # [*batch, 4, 4]
+>>> class Frames(TensorClass):
+... images: torch.Tensor # [*batch, 3, H, W]
+... camera: Camera
+... scene: str
+>>> frames = Frames(
+... images=torch.randn(5, 3, 8, 8),
+... camera=Camera(intrinsics=torch.eye(3).expand(5, 3, 3), pose=torch.eye(4).expand(5, 4, 4)),
+... scene="kitchen",
+... batch_size=[5],
+... )
+>>> frames[1:3].camera.pose.shape, frames[1:3].scene
+(torch.Size([2, 4, 4]), 'kitchen')
+>>> type(frames.to(device).camera).__name__
+'Camera'
+```
+
+The nested `Camera` takes the batch size of `Frames`, so it needs no
+`batch_size` of its own.
+
+## Convert a dataclass that you keep
+
+If you cannot change the class, [`from_dataclass()`](reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) converts a
+dataclass type or instance to a tensorclass (see
+[Converting a dataclass](tensorclass.html#tensorclass-from-dataclass)):
+
+```
+>>> from dataclasses import dataclass
+>>> from tensordict import from_dataclass
+>>> @dataclass
+... class Pair:
+... x: torch.Tensor
+... y: torch.Tensor
+>>> pair = from_dataclass(Pair(x=torch.zeros(4, 2), y=torch.ones(4)), batch_size=[4])
+>>> pair[:2].x.shape
+torch.Size([2, 2])
+```
+
+## Worked example: a rollout batch for RL post-training
+
+The rollout batch of an RL post-training loop for a language model holds the
+token ids of the prompts and of the sampled responses, the log-probabilities
+of the response tokens under the policy that sampled them, an advantage for
+each response, and an id for each row, such as the id of the prompt. The
+trainer moves the batch to the GPU, shuffles it, and splits it into
+minibatches. Hand-written, that is a dataclass with `to_device`,
+`pin_memory` and a split helper that list every field. With a tensorclass,
+the loss is a method:
+
+```
+>>> class Rollout(TensorClass):
+... prompt_ids: torch.Tensor # [*batch, prompt_len]
+... response_ids: torch.Tensor # [*batch, response_len]
+... response_mask: torch.Tensor # [*batch, response_len], False on padding
+... logprobs: torch.Tensor # [*batch, response_len], from the sampling policy
+... advantages: torch.Tensor # [*batch]
+... uid: str
+...
+... def policy_loss(self, new_logprobs: torch.Tensor, clip: float = 0.2) -> torch.Tensor:
+... ratio = (new_logprobs - self.logprobs).exp()
+... adv = self.advantages.unsqueeze(-1)
+... loss = -torch.minimum(ratio * adv, ratio.clamp(1 - clip, 1 + clip) * adv)
+... mask = self.response_mask.float()
+... return (loss * mask).sum() / mask.sum()
+```
+
+Each row comes from one generation. [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) makes the batch, and
+the `str` field becomes one value for each row:
+
+```
+>>> rows = [
+... Rollout(
+... prompt_ids=torch.randint(1000, (6,)),
+... response_ids=torch.randint(1000, (10,)),
+... response_mask=torch.arange(10) < 4 + i % 6,
+... logprobs=-torch.rand(10),
+... advantages=torch.randn(()),
+... uid=f"prompt-{i // 2}", # two responses for each prompt
+... )
+... for i in range(8)
+... ]
+>>> rollout = torch.stack(rows)
+>>> rollout.batch_size
+torch.Size([8])
+>>> list(rollout[:4].uid)
+['prompt-0', 'prompt-0', 'prompt-1', 'prompt-1']
+```
+
+Normalize the advantages, move the batch, and loop over shuffled
+minibatches. Each minibatch is a `Rollout` and keeps its ids:
+
+```
+>>> rollout.advantages = (rollout.advantages - rollout.advantages.mean()) / rollout.advantages.std()
+>>> rollout = rollout.to(device)
+>>> for mb in rollout[torch.randperm(len(rollout))].split(4):
+... new_logprobs = mb.logprobs + 0.01 * torch.randn_like(mb.logprobs) # the policy's output
+... loss = mb.policy_loss(new_logprobs)
+>>> type(mb).__name__, mb.batch_size, len(mb.uid)
+('Rollout', torch.Size([4]), 4)
+```
+
+The method compiles with `fullgraph=True`:
+
+```
+>>> policy_loss = torch.compile(Rollout.policy_loss, fullgraph=True)
+>>> torch.testing.assert_close(policy_loss(mb, new_logprobs), mb.policy_loss(new_logprobs))
+```
+
+## Worked example: a ray bundle for rendering
+
+A renderer such as a NeRF casts one ray per pixel. A ray bundle holds the
+origin and the direction of each ray, the near and far bounds of the samples
+along it, and other values for each ray, such as the index of the camera.
+Renderers keep the bundle in the shape of the image, flatten it to sample
+random rays for training, and split it into chunks that fit in memory for
+rendering. A `metadata` field that is a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict)
+holds the other values, with keys that you choose at run time:
+
+```
+>>> class RayBundle(TensorClass):
+... origins: torch.Tensor # [*batch, 3]
+... directions: torch.Tensor # [*batch, 3]
+... near: torch.Tensor # [*batch, 1]
+... far: torch.Tensor # [*batch, 1]
+... metadata: TensorDict # [*batch], per-ray values
+...
+... def sample_points(self, num_samples: int) -> torch.Tensor:
+... t = torch.linspace(0, 1, num_samples, device=self.origins.device)
+... depths = self.near + (self.far - self.near) * t # [*batch, num_samples]
+... return self.origins.unsqueeze(-2) + depths.unsqueeze(-1) * self.directions.unsqueeze(-2)
+```
+
+The rays of one 4 x 6 image from camera 2:
+
+```
+>>> H, W = 4, 6
+>>> directions = torch.nn.functional.normalize(torch.randn(H, W, 3), dim=-1)
+>>> rays = RayBundle(
+... origins=torch.zeros(H, W, 3),
+... directions=directions,
+... near=torch.full((H, W, 1), 0.1),
+... far=torch.full((H, W, 1), 4.0),
+... metadata=TensorDict(camera_idx=torch.full((H, W), 2)),
+... batch_size=[H, W],
+... )
+>>> rays.sample_points(8).shape
+torch.Size([4, 6, 8, 3])
+```
+
+The method runs on the whole image, on one row of pixels, or on a random
+set of rays for a training step:
+
+```
+>>> rays[0].sample_points(8).shape
+torch.Size([6, 8, 3])
+>>> train_rays = rays.reshape(-1)[torch.randint(H * W, (10,))]
+>>> train_rays.batch_size, train_rays.metadata["camera_idx"].shape
+(torch.Size([10]), torch.Size([10]))
+```
+
+To render the image in chunks, flatten it, split it, and put the outputs
+back in the shape of the image:
+
+```
+>>> chunks = [chunk.sample_points(8).mean(-2) for chunk in rays.reshape(-1).split(10)]
+>>> torch.cat(chunks).reshape(H, W, 3).shape
+torch.Size([4, 6, 3])
+```
+
+## Worked example: images with nested targets
+
+A detection or segmentation model takes a batch of images and, for each
+image, targets: the boxes and the labels of the objects in it. The number of
+objects differs between images, so the hand-written collate function pads
+each target field and builds a mask of the valid objects. With tensorclasses,
+the targets are a nested class:
+
+```
+>>> from functools import partial
+>>> from typing import Optional
+>>> class Targets(TensorClass):
+... boxes: torch.Tensor # [*batch, num_objects, 4]
+... labels: torch.Tensor # [*batch, num_objects]
+>>> class Datapoint(TensorClass):
+... image: torch.Tensor # [*batch, 3, H, W]
+... targets: Targets
+... image_id: str
+... mask: Optional[TensorDict] = None # filled by collate
+```
+
+A dataset returns one `Datapoint` for each image, with an empty batch size:
+
+```
+>>> def load(i):
+... num_objects = i % 3 + 1
+... return Datapoint(
+... image=torch.randn(3, 16, 16),
+... targets=Targets(boxes=torch.rand(num_objects, 4), labels=torch.arange(num_objects)),
+... image_id=f"img-{i}",
+... )
+>>> dataset = [load(i) for i in range(6)]
+```
+
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) with `pad_keys` pads the target fields to the
+image with the most objects, each with its own padding value. With
+`mask_key`, it stores the masks of the valid objects in the `mask`
+field:
+
+```
+>>> collate_fn = partial(
+... collate,
+... pad_keys={("targets", "boxes"): 0.0, ("targets", "labels"): -1},
+... mask_key="mask",
+... )
+>>> loader = DataLoader(dataset, batch_size=3, collate_fn=collate_fn)
+>>> batch = next(iter(loader))
+>>> batch.targets.boxes.shape
+torch.Size([3, 3, 4])
+>>> batch.targets.labels[1]
+tensor([ 0, 1, -1])
+>>> batch.mask["targets", "labels"].sum(-1)
+tensor([1, 2, 3])
+```
+
+The batch moves to the device and slices as one object, nested targets,
+masks and image ids included:
+
+```
+>>> batch = batch.to(device)
+>>> one = batch[1]
+>>> one.image_id, one.targets.boxes.shape, one.mask["targets", "labels"].tolist()
+('img-1', torch.Size([3, 4]), [True, True, False])
+```
+
+Without `pad_keys`, [`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) keeps each image's targets
+as they are, in a lazy stack (see [Variable-size data](concepts/stacking.html#stacking-variable-size)).
+
+## See also
+
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide): the fields, methods and options of a
+tensorclass.
+- [Load data and share it between processes](data_loading.html#data-loading): datasets, `collate_fn`, worker processes and pinned
+memory.
+- [Coming from JAX pytrees](coming_from_jax.html#coming-from-jax): the JAX pytree idioms in tensordict.
+- [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile): [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) with tensorclasses.
 
 ---
 
@@ -457,7 +883,7 @@ torch.Size([2, 4])
 ```
 
 A method written for one element then runs on a batch of any shape (see
-[TensorClass](tensorclass.html#tensorclass-guide)). The rest of tensordict builds on the batch size:
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)). The rest of tensordict builds on the batch size:
 
 - Lazy stacks hold elements of different shapes, such as sequences of
 different lengths, and pad them on request (see
@@ -477,7 +903,7 @@ the tree is consolidated (see [Devices, dtypes, and memory](concepts/devices.htm
 
 ## See also
 
-- [TensorClass](tensorclass.html#tensorclass-guide): the dataclass form in full.
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide): the dataclass form in full.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): TensorDict, TensorClass, and the other
 containers.
 - [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations): `apply` and the other operations on all the leaves.
@@ -775,7 +1201,7 @@ see [pre-allocating on Redis](storage.html#compat-redis-prealloc).
 
 ## See also
 
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
 containers.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use, and the
 `TensorClass` and `TypedTensorDict` comparison.
@@ -1170,7 +1596,7 @@ torch.Size([])
 in the batch (here 6), not the number of values in the tensors.
 
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) has a batch size too, with the same rules
-for its typed fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+for its typed fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 The leading dimensions of each entry must be equal to the batch size. If they
 are not, the constructor and each write raise a `RuntimeError` that names the
@@ -1869,7 +2295,7 @@ These docs build every TensorDict from a dict.
 
 If you know the keys when you write the code, a
 [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) gives you typed attributes in place of string
-keys, and your editor completes them (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+keys, and your editor completes them (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Valid keys
 
@@ -2681,7 +3107,7 @@ For a plain tensordict, both [`get()`](../reference/generated/tensordict.TensorD
 ```
 
 For a tensorclass, both attribute access and `get()` also return the
-[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) wrapper (see [TensorClass](../tensorclass.html#tensorclass-guide)):
+[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) wrapper (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)):
 
 ```
 >>> from tensordict import TensorClass
@@ -2716,7 +3142,7 @@ one, and it warns.
 [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack),
 [`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData), and [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor).
 - [Stacking and variable-size data](stacking.html#stacking): stacks of tensordicts, and variable-size data.
-- [TensorClass](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
 - [Save and load tensordicts](../saving.html#saving): how non-tensor entries are saved.
 
 ---
@@ -2731,7 +3157,7 @@ the whole group of tensors, and the result keeps the keys and the batch size
 
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) has the same operations, so a method that
 you write with them runs on one element or on a whole batch (see
-[TensorClass](../tensorclass.html#tensorclass-guide)).
+[TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Pointwise operations
 
@@ -5561,7 +5987,7 @@ below shows.
 - [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) reads its data from an HDF5 or
 Zarr file on disk.
 
-[TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and [Which container should I use?](choosing_a_container.html#choosing-a-container)
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) explains TensorClass, and [Which container should I use?](choosing_a_container.html#choosing-a-container)
 compares the containers.
 
 ## Nested TensorDicts and tuple keys
@@ -5988,7 +6414,7 @@ torch.Size([64, 1000])
 
 The fields are class attributes, so your editor completes `systems.pos`.
 Indexing, stacking, `.to(device)`, and saving work as for a TensorDict.
-[TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) explains TensorClass, and
 [Which container should I use?](choosing_a_container.html#choosing-a-container) helps you choose between the two forms.
 
 ## Install
@@ -6005,6 +6431,9 @@ nightly builds, the optional dependencies, conda-forge, and source installs.
 - [Getting started](getting_started.html#getting-started): a one-hour tour, with examples
 that you can run. Start here.
 - [Coming from JAX](coming_from_jax.html#coming-from-jax): JAX pytree idioms in tensordict.
+- [Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass): what
+replaces a hand-written `to`, `pin_memory`, `__getitem__` and
+`collate_fn`.
 - [User guide](overview.html#overview): one page for each concept, from the batch
 size to TensorClass and `tensordict.nn`.
 - [How-to guides](saving.html#saving): one page for each task, such as saving,
@@ -6730,7 +7159,7 @@ outputs into it, and returns it.
 ### Run a module on a tensorclass
 
 A module also runs on a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) instance, the class
-form of a tensordict with typed fields (see [TensorClass](tensorclass.html#tensorclass-guide)). It
+form of a tensordict with typed fields (see [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)). It
 reads and writes the fields named in `in_keys` and `out_keys`, and
 returns the same instance:
 
@@ -6979,7 +7408,7 @@ all in the list.
 
 [`TensorClassModuleBase`](reference/generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase) defines a module whose input
 and output are [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) instances instead of
-tensordicts with string keys (see [TensorClass](tensorclass.html#tensorclass-guide)). The class gives
+tensordicts with string keys (see [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)). The class gives
 its input and output types as generic parameters. A type checker or an IDE
 then knows the fields that `forward` reads and writes. If you rename a
 field, the type checker finds the code that still uses the old name.
@@ -7668,7 +8097,7 @@ reductions, gradients, and the in-place conventions.
 - [Devices, dtypes, and memory](concepts/devices.html#devices): devices, dtypes, and memory.
 - [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data): strings and other Python objects, and entries outside
 the batch size.
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
 typed fields. [Which container should I use?](choosing_a_container.html#choosing-a-container) compares them.
 - [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide): [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) and the other
 modules that read and write tensordicts.
@@ -11024,7 +11453,7 @@ checkers to know the fields, or when you want to add methods. Use a
 [`TypedTensorDict`](tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) instead if you need a
 [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass (`state["key"]`,
 `**state` unpacking). [Which container should I use?](../../choosing_a_container.html#choosing-a-container) compares the
-containers, and [TensorClass](../../tensorclass.html#tensorclass-guide) is the user guide.
+containers, and [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide) is the user guide.
 
 The constructor of a subclass takes the fields, by name or in order, and
 these keyword arguments: `Foo(tensor=..., batch_size=[3])`.
@@ -29049,6 +29478,11 @@ result is an instance of a new `<name>_tc` tensorclass, or of
 converts a dataclass instance to a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict)
 instead.
 
+To write the class as a tensorclass, a dataclass of tensors with
+`to(device)`, `pin_memory()`, slicing and stacking for all its
+fields, see [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide). [Coming from a hand-written dataclass](../../coming_from_dataclass.html#coming-from-dataclass) shows
+what replaces each method of a hand-written dataclass of tensors.
+
 Parameters:
 
 **obj** (*Any*) - the dataclass instance or type to convert.
@@ -32468,7 +32902,7 @@ without it has no `input_type` and `output_type`, and its
 When both types are tensorclasses, `as_td_module()` returns a
 module that takes and returns a tensordict, for example to put the
 module in a [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). See
-[TensorClass](../../tensorclass.html#tensorclass-guide).
+[TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide).
 
 Variables:
 
@@ -37532,7 +37966,7 @@ indexing, reshaping, `to(device)`, stacking and memory-mapping. For new
 code, subclass [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) instead. It takes the same
 flags, and type checkers understand it without a plugin. This decorator
 is kept for existing code and for code that moves from
-`@dataclass`. See [TensorClass](../../tensorclass.html#tensorclass-guide).
+`@dataclass`. See [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide).
 
 Parameters:
 
@@ -38720,7 +39154,7 @@ tensordict, and the classes for non-tensor data and unbatched entries. A
 *tensorclass* is a class that you declare like a dataclass, with typed fields
 and methods, and that has the tensor operations of a
 [`TensorDict`](generated/tensordict.TensorDict.html#tensordict.TensorDict). For a guide to fields, auto-casting, the
-class options, and static type checking, see [TensorClass](../tensorclass.html#tensorclass-guide).
+class options, and static type checking, see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide).
 
 To declare a tensorclass, subclass [`TensorClass`](generated/tensordict.TensorClass.html#tensordict.TensorClass). The
 [`tensorclass()`](generated/tensordict.tensorclass.html#tensordict.tensorclass) decorator is the original way, kept for
@@ -38781,7 +39215,7 @@ Operations on its data, such as arithmetic or
 
 ## See also
 
-- [TensorClass](../tensorclass.html#tensorclass-guide): declare and use a tensorclass.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide): declare and use a tensorclass.
 - [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict`, or
 `TensorDict`.
 - [TypedTensorDict](ttd.html#api-typed-tensordict): the other container with typed fields.
@@ -40623,18 +41057,18 @@ have a different layout that this page does not specify.
 
 # Computation times
 
-**01:26.609** total execution time for 14 files **from all galleries**:
+**01:24.787** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:41.819 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:17.155 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.032 | 0.0 |
-| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.350 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.095 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.537 | 0.0 |
-| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.350 | 0.0 |
-| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.129 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:39.783 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:17.175 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:14.878 | 0.0 |
+| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.365 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.434 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.523 | 0.0 |
+| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.361 | 0.0 |
+| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.127 | 0.0 |
 | [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.112 | 0.0 |
 | [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.008 | 0.0 |
@@ -41174,14 +41608,19 @@ them between processes.
 
 ---
 
-# TensorClass
+# TensorClass: a dataclass of tensors
 
-A *tensorclass* is a class for tensor data. You declare its fields with type
-annotations, as in a [`dataclass()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass), and you write its methods
-once. A method then runs on one item or on a batch of any shape, and compiles
-with `torch.compile(fullgraph=True)`. The instances have the tensor
-operations of a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict): indexing, reshaping,
-`to(device)`, `torch.stack`, `torch.cat`, and saving to disk.
+A *tensorclass* is a dataclass of tensors. You declare its fields with type
+annotations, as in a [`dataclass()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass), and it has the
+operations that such a class otherwise writes by hand: `.to(device)`,
+`pin_memory()`, slicing of every field with `batch[idx]`,
+`torch.stack` and `torch.cat`, and a `collate_fn` for the
+[`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) ([`collate()`](reference/generated/tensordict.collate.html#tensordict.collate)). It is
+registered as a pytree, so `torch.utils._pytree`, [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) and
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) accept it. You write its methods once: a method runs
+on one item or on a batch of any shape, and compiles with
+`torch.compile(fullgraph=True)`. The instances have the other operations of
+a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), such as reshaping and saving to disk.
 
 ```
 >>> import torch
@@ -41228,7 +41667,9 @@ constructor (see Static type checking).
 Read the quick start and Methods first. Each later section
 describes one feature: read it when you need that feature. To compare a
 tensorclass with a `TensorDict` and the other containers, see
-[Which container should I use?](choosing_a_container.html#choosing-a-container).
+[Which container should I use?](choosing_a_container.html#choosing-a-container). If you have a dataclass with a hand-written
+`to`, `pin_memory`, `__getitem__` or collate function,
+[Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass) shows what replaces each one.
 
 ## Quick start
 
@@ -42092,6 +42533,8 @@ non-tensor classes.
 - [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): typed fields on a
 [`TensorDictBase`](reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use.
+- [Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass): the methods of a hand-written dataclass of
+tensors, and the tensorclass operations that replace them.
 - [Coming from JAX pytrees](coming_from_jax.html#coming-from-jax): the JAX pytree idioms in tensorclass terms.
 - [Containers on storage backends](compatibility.html#compatibility): tensorclasses on HDF5, Redis, lazy stacks, and
 memory-mapped tensordicts.
@@ -42564,30 +43007,31 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:17, 340kB/s]
- 1%| | 229k/26.4M [00:00<00:40, 640kB/s]
- 3%|▎ | 918k/26.4M [00:00<00:12, 1.98MB/s]
- 13%|█▎ | 3.38M/26.4M [00:00<00:02, 7.69MB/s]
- 24%|██▍ | 6.42M/26.4M [00:00<00:01, 13.7MB/s]
- 38%|███▊ | 10.1M/26.4M [00:00<00:00, 18.0MB/s]
- 53%|█████▎ | 14.0M/26.4M [00:01<00:00, 21.1MB/s]
- 68%|██████▊ | 18.0M/26.4M [00:01<00:00, 25.9MB/s]
- 81%|████████▏ | 21.5M/26.4M [00:01<00:00, 28.2MB/s]
- 98%|█████████▊| 25.8M/26.4M [00:01<00:00, 32.1MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 19.2MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:18, 337kB/s]
+ 1%| | 197k/26.4M [00:00<00:49, 535kB/s]
+ 3%|▎ | 721k/26.4M [00:00<00:13, 1.95MB/s]
+ 6%|▌ | 1.57M/26.4M [00:00<00:08, 3.08MB/s]
+ 15%|█▍ | 3.90M/26.4M [00:00<00:02, 8.16MB/s]
+ 29%|██▉ | 7.73M/26.4M [00:00<00:01, 16.1MB/s]
+ 43%|████▎ | 11.4M/26.4M [00:00<00:00, 21.8MB/s]
+ 58%|█████▊ | 15.3M/26.4M [00:01<00:00, 26.5MB/s]
+ 71%|███████ | 18.8M/26.4M [00:01<00:00, 29.0MB/s]
+ 86%|████████▌ | 22.8M/26.4M [00:01<00:00, 32.0MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 19.1MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 307kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 304kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:13, 335kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:07, 535kB/s]
- 13%|█▎ | 557k/4.42M [00:00<00:03, 1.14MB/s]
- 44%|████▍ | 1.97M/4.42M [00:00<00:00, 3.56MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 5.06MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:13, 331kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:08, 526kB/s]
+ 12%|█▏ | 524k/4.42M [00:00<00:02, 1.35MB/s]
+ 27%|██▋ | 1.21M/4.42M [00:00<00:01, 3.00MB/s]
+ 57%|█████▋ | 2.52M/4.42M [00:00<00:00, 6.02MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 5.55MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 48.0MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 40.7MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -42695,8 +43139,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 2.11 s
-TensorDict DataLoader: 0.06 s
+torchvision DataLoader: 2.08 s
+TensorDict DataLoader: 0.07 s
 ```
 
 ## Model
@@ -42858,7 +43302,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 1.5732 s
+TensorDict training done! time: 1.5626 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -42868,7 +43312,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.3246 s
+Training done! time: 4.2491 s
 ```
 
 ## Conclusion
@@ -42897,7 +43341,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.032 seconds)
+**Total running time of the script:** (0 minutes 14.878 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -43256,7 +43700,7 @@ built on `torch.export`.
 [AOTInductor](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html)
 documentation.
 
-**Total running time of the script:** (0 minutes 0.129 seconds)
+**Total running time of the script:** (0 minutes 0.127 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 
@@ -44098,7 +44542,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 41.819 seconds)
+**Total running time of the script:** (0 minutes 39.783 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -44112,18 +44556,18 @@ layouts, and read timings.
 
 # Computation times
 
-**01:26.609** total execution time for 14 files **from tutorials**:
+**01:24.787** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:41.819 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:17.155 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.032 | 0.0 |
-| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.350 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.095 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.537 | 0.0 |
-| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.350 | 0.0 |
-| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.129 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:39.783 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:17.175 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:14.878 | 0.0 |
+| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.365 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.434 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.523 | 0.0 |
+| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.361 | 0.0 |
+| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.127 | 0.0 |
 | [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.112 | 0.0 |
 | [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.008 | 0.0 |
@@ -44224,7 +44668,7 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 
 ```
-TensorDict(batch_size=[2], fields={stream0: f32[j1], stream1: f32[j2]})
+TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
 lengths of stream0: tensor([5, 4])
 ```
 
@@ -44362,7 +44806,7 @@ print("TensorDict from stream", td)
 ```
 
 ```
-TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j3], bucket1: i64[j4]})
+TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j4], bucket1: i64[j3]})
 ```
 
 Print the data of both streams. Each stream counts up from 0, so the values
@@ -44401,7 +44845,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.350 seconds)
+**Total running time of the script:** (0 minutes 6.365 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 
@@ -44667,7 +45111,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 1.6125 s
+Tensorclass training done! time: 1.8265 s
 ```
 
 ## Conclusion
@@ -44680,7 +45124,7 @@ read its fields as attributes.
 
 ## Further reading
 
-- [TensorClass](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
 - [Which container should I use?](../choosing_a_container.html#choosing-a-container) compares `TensorDict`, `TensorClass`, and
 `TypedTensorDict`.
 - [Load data and share it between processes](../data_loading.html#data-loading) explains the ways to load data with tensordict and to
@@ -44688,7 +45132,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.095 seconds)
+**Total running time of the script:** (0 minutes 4.434 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -44724,7 +45168,7 @@ What you will learn:
 - How to compare the loading rate with a regular `torchvision` pipeline.
 
 Before you start, read [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) for
-memory-mapped tensors and [TensorClass](../tensorclass.html#tensorclass-guide) for tensorclasses.
+memory-mapped tensors and [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) for tensorclasses.
 
 The tutorial loads the dataset once into memory-mapped tensors and applies
 the deterministic transforms (resize and center crop) at that time. During
@@ -45051,8 +45495,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 965 images per second, 0.23 s
-train, tensorclass DataLoader: 2538 images per second, 0.09 s
+train, regular DataLoader: 962 images per second, 0.23 s
+train, tensorclass DataLoader: 2478 images per second, 0.09 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -45069,8 +45513,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 585 images per second, 0.22 s
-val, tensorclass DataLoader: 24385 images per second, 0.01 s
+val, regular DataLoader: 599 images per second, 0.22 s
+val, tensorclass DataLoader: 10653 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -45109,7 +45553,7 @@ memory-mapped tensor, instead of opening one file per image.
 
 ## Further reading
 
-- [TensorClass](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
 - [Load data and share it between processes](../data_loading.html#data-loading) shows other ways to load data with tensordict and to
 share it between processes.
 - [Save and load tensordicts](../saving.html#saving) explains how to save memory-mapped tensordicts and load them
@@ -45117,7 +45561,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.537 seconds)
+**Total running time of the script:** (0 minutes 1.523 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -46024,13 +46468,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 137.8 us
- TDM: 150.9 us
- Sequential: 200.9 us
+ Regular: 136.2 us
+ TDM: 148.3 us
+ Sequential: 194.9 us
 Compiled
- Regular: 142.9 us
- TDM: 155.0 us
- Sequential: 161.4 us
+ Regular: 140.1 us
+ TDM: 150.7 us
+ Sequential: 158.7 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -46173,7 +46617,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 17.155 seconds)
+**Total running time of the script:** (0 minutes 17.175 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -46358,7 +46802,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fdcfb164a30>
+<torch._C.Generator object at 0x7fa7dc768a30>
 ```
 
 ## Indexing
@@ -46689,7 +47133,7 @@ the shape for the length of a `with` block, and get the changes back in the
 original tensordict.
 
 The same operations work on a [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass), the class
-form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+form of a tensordict with typed fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Further reading
 
@@ -46699,7 +47143,7 @@ form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#te
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.350 seconds)
+**Total running time of the script:** (0 minutes 0.361 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 
@@ -46876,7 +47320,7 @@ do a tensor, and write a tensordict into another one with an index. An index
 or a mask applies to the batch dimensions of every entry, and keeps the
 other dimensions. The same indexing works on a
 [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass), the class form of a tensordict with typed
-fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Further reading
 
@@ -47294,7 +47738,7 @@ torch.Size([4, 2])
 A `TypedTensorDict` does not support a custom `__init__`, and it does not
 call `__post_init__`. To build an instance from other arguments, write a
 class method that calls the constructor. If you need a custom `__init__`,
-use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) (see [TensorClass](tensorclass.html#tensorclass-guide)).
+use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) (see [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)).
 
 ## Class options
 
@@ -47453,7 +47897,7 @@ access under `torch.compile`.
 
 - [TypedTensorDict](reference/ttd.html#api-typed-tensordict): the reference of
 [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict).
-- [TensorClass](tensorclass.html#tensorclass-guide): typed fields with plain values, custom
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide): typed fields with plain values, custom
 `__init__`, and dataclass features.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use, and the
 `TensorClass` and `TypedTensorDict` comparison.

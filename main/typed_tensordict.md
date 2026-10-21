@@ -166,7 +166,7 @@ torch.Size([4, 2])
 A `TypedTensorDict` does not support a custom `__init__`, and it does not
 call `__post_init__`. To build an instance from other arguments, write a
 class method that calls the constructor. If you need a custom `__init__`,
-use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) (see [TensorClass](tensorclass.html#tensorclass-guide)).
+use a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) (see [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)).
 
 ## Class options
 
@@ -325,7 +325,7 @@ access under `torch.compile`.
 
 - [TypedTensorDict](reference/ttd.html#api-typed-tensordict): the reference of
 [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict).
-- [TensorClass](tensorclass.html#tensorclass-guide): typed fields with plain values, custom
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide): typed fields with plain values, custom
 `__init__`, and dataclass features.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use, and the
 `TensorClass` and `TypedTensorDict` comparison.

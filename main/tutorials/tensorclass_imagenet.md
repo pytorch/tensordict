@@ -22,7 +22,7 @@ What you will learn:
 - How to compare the loading rate with a regular `torchvision` pipeline.
 
 Before you start, read [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) for
-memory-mapped tensors and [TensorClass](../tensorclass.html#tensorclass-guide) for tensorclasses.
+memory-mapped tensors and [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) for tensorclasses.
 
 The tutorial loads the dataset once into memory-mapped tensors and applies
 the deterministic transforms (resize and center crop) at that time. During
@@ -349,8 +349,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 965 images per second, 0.23 s
-train, tensorclass DataLoader: 2538 images per second, 0.09 s
+train, regular DataLoader: 962 images per second, 0.23 s
+train, tensorclass DataLoader: 2478 images per second, 0.09 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -367,8 +367,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 585 images per second, 0.22 s
-val, tensorclass DataLoader: 24385 images per second, 0.01 s
+val, regular DataLoader: 599 images per second, 0.22 s
+val, tensorclass DataLoader: 10653 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -407,7 +407,7 @@ memory-mapped tensor, instead of opening one file per image.
 
 ## Further reading
 
-- [TensorClass](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
 - [Load data and share it between processes](../data_loading.html#data-loading) shows other ways to load data with tensordict and to
 share it between processes.
 - [Save and load tensordicts](../saving.html#saving) explains how to save memory-mapped tensordicts and load them
@@ -415,7 +415,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.537 seconds)
+**Total running time of the script:** (0 minutes 1.523 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 

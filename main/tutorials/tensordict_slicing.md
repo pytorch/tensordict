@@ -163,7 +163,7 @@ do a tensor, and write a tensordict into another one with an index. An index
 or a mask applies to the batch dimensions of every entry, and keeps the
 other dimensions. The same indexing works on a
 [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass), the class form of a tensordict with typed
-fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Further reading
 

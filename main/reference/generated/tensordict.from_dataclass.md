@@ -15,6 +15,11 @@ result is an instance of a new `<name>_tc` tensorclass, or of
 converts a dataclass instance to a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict)
 instead.
 
+To write the class as a tensorclass, a dataclass of tensors with
+`to(device)`, `pin_memory()`, slicing and stacking for all its
+fields, see [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide). [Coming from a hand-written dataclass](../../coming_from_dataclass.html#coming-from-dataclass) shows
+what replaces each method of a hand-written dataclass of tensors.
+
 Parameters:
 
 **obj** (*Any*) - the dataclass instance or type to convert.

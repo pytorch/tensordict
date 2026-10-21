@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6319+g86c941a37.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6320+gcb8e61631.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="tutorial">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6319+g86c941a37.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6320+gcb8e61631.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -545,6 +545,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -609,7 +615,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1078,6 +1084,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1142,7 +1154,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1511,6 +1523,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
@@ -1522,7 +1535,7 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tensorclass.html">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
@@ -1825,7 +1838,7 @@ do a tensor, and write a tensordict into another one with an index. An index
 or a mask applies to the batch dimensions of every entry, and keeps the
 other dimensions. The same indexing works on a
 <a class="reference internal" href="../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a>, the class form of a tensordict with typed
-fields (see <a class="reference internal" href="../tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass</span></a>).</p>
+fields (see <a class="reference internal" href="../tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass: a dataclass of tensors</span></a>).</p>
 </section>
 <section id="further-reading">
 <h2>Further reading<a class="headerlink" href="#further-reading" title="Link to this heading">#</a></h2>
@@ -2210,7 +2223,7 @@ tensordict row by row with an index.</p></li>
        "headline": "Slicing, indexing, and masking",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Slicing, indexing, and masking",
        "url": "/tutorials/tensordict_slicing.html",
-       "articleBody": "Note Go to the end to download the full example code. Slicing, indexing, and masking# Author: Tom Begley One index on a TensorDict indexes every tensor in it in the same way. If you now index the images, the labels, and the weights of a batch one by one, one index replaces these lines. This tutorial is for readers who know how to index a torch.Tensor. What you will learn: How an index applies to the batch dimensions of every entry. How to write a tensordict into another one with an index. How a boolean mask changes the batch size. When you create a TensorDict, you give it a batch_size: the leading dimensions that all its entries share (see Batch size, shapes, and indexing). You can index these batch dimensions as you index a torch.Tensor. The index applies to all the entries of the TensorDict. For example, the tensordict below has two batch dimensions. tensordict[0] returns a new TensorDict with the same keys. Its values are the first \u201crow\u201d of each entry of the original TensorDict. import torch from tensordict import TensorDict tensordict = TensorDict( {\"a\": torch.zeros(3, 4, 5), \"b\": torch.zeros(3, 4)}, batch_size=[3, 4] ) print(tensordict[0]) TensorDict(batch_size=[4], fields={a: f32[5], b: f32[]}) The syntax is the same as for tensors. This index drops the first row of each entry: print(tensordict[1:]) TensorDict(batch_size=[2,4], fields={a: f32[5], b: f32[]}) You can index several dimensions at once: print(tensordict[:, 2:]) TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]}) Ellipsis (...) stands for as many : as needed to index all the batch dimensions (tensordict.batch_dims). print(tensordict[..., 2:]) TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]}) Note An index on a tensordict applies to the batch dimensions only. The tensordict above has batch_size=[3, 4], and \"a\" has shape [3, 4, 5]: tensordict[\"a\"][..., 2:] reads \"a\" and then indexes its last dimension. The result has shape [3, 4, 3]. tensordict[..., 2:][\"a\"] indexes the last batch dimension (dimension 1) and then reads \"a\". The result has shape [3, 2, 5]. assert tensordict[\"a\"][..., 2:].shape == torch.Size([3, 4, 3]) assert tensordict[..., 2:][\"a\"].shape == torch.Size([3, 2, 5]) Setting values with an index# tensordict[index] = other writes the entries of the tensordict other into tensordict at the index. The batch size of other must be the batch size of tensordict[index], or broadcast to it. If it does not, the assignment raises a RuntimeError. tensordict = TensorDict( {\"a\": torch.zeros(3, 4, 5), \"b\": torch.zeros(3, 4)}, batch_size=[3, 4] ) td2 = TensorDict({\"a\": torch.ones(2, 4, 5), \"b\": torch.ones(2, 4)}, batch_size=[2, 4]) tensordict[:-1] = td2 print(tensordict[\"a\"], tensordict[\"b\"]) tensor([[[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.]], [[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.]], [[0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]]]) tensor([[1., 1., 1., 1.], [1., 1., 1., 1.], [0., 0., 0., 0.]]) Masking# A boolean mask works as it does for tensors. The mask has the shape of the batch dimensions that it masks. mask = torch.tensor( [[1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]], dtype=torch.bool, ) masked_tensordict = tensordict[mask] print(masked_tensordict) TensorDict(batch_size=[6], fields={a: f32[5], b: f32[]}) The mask selects 6 of the 12 elements of the batch. As with tensors, the dimensions that the mask covers become one dimension, with one element per True value of the mask. The result has batch_size=[6], and \"a\" has shape [6, 5]: assert masked_tensordict.batch_size == torch.Size([6]) assert masked_tensordict[\"a\"].shape == torch.Size([6, 5]) Conclusion# You can now index, slice, and mask a TensorDict as you do a tensor, and write a tensordict into another one with an index. An index or a mask applies to the batch dimensions of every entry, and keeps the other dimensions. The same indexing works on a TensorClass, the class form of a tensordict with typed fields (see TensorClass). Further reading# Batch size, shapes, and indexing explains batch sizes, shapes, and indexing. Changing the shape of a TensorDict shows the other shape operations: reshape, split, stack, permute. Filling a TensorDict row by row fills an empty tensordict row by row with an index. Indexing, masking, and splitting lists the indexing methods. Total running time of the script: (0 minutes 0.004 seconds) Download Jupyter notebook: tensordict_slicing.ipynb Download Python source code: tensordict_slicing.py Download zipped: tensordict_slicing.zip Gallery generated by Sphinx-Gallery",
+       "articleBody": "Note Go to the end to download the full example code. Slicing, indexing, and masking# Author: Tom Begley One index on a TensorDict indexes every tensor in it in the same way. If you now index the images, the labels, and the weights of a batch one by one, one index replaces these lines. This tutorial is for readers who know how to index a torch.Tensor. What you will learn: How an index applies to the batch dimensions of every entry. How to write a tensordict into another one with an index. How a boolean mask changes the batch size. When you create a TensorDict, you give it a batch_size: the leading dimensions that all its entries share (see Batch size, shapes, and indexing). You can index these batch dimensions as you index a torch.Tensor. The index applies to all the entries of the TensorDict. For example, the tensordict below has two batch dimensions. tensordict[0] returns a new TensorDict with the same keys. Its values are the first \u201crow\u201d of each entry of the original TensorDict. import torch from tensordict import TensorDict tensordict = TensorDict( {\"a\": torch.zeros(3, 4, 5), \"b\": torch.zeros(3, 4)}, batch_size=[3, 4] ) print(tensordict[0]) TensorDict(batch_size=[4], fields={a: f32[5], b: f32[]}) The syntax is the same as for tensors. This index drops the first row of each entry: print(tensordict[1:]) TensorDict(batch_size=[2,4], fields={a: f32[5], b: f32[]}) You can index several dimensions at once: print(tensordict[:, 2:]) TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]}) Ellipsis (...) stands for as many : as needed to index all the batch dimensions (tensordict.batch_dims). print(tensordict[..., 2:]) TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]}) Note An index on a tensordict applies to the batch dimensions only. The tensordict above has batch_size=[3, 4], and \"a\" has shape [3, 4, 5]: tensordict[\"a\"][..., 2:] reads \"a\" and then indexes its last dimension. The result has shape [3, 4, 3]. tensordict[..., 2:][\"a\"] indexes the last batch dimension (dimension 1) and then reads \"a\". The result has shape [3, 2, 5]. assert tensordict[\"a\"][..., 2:].shape == torch.Size([3, 4, 3]) assert tensordict[..., 2:][\"a\"].shape == torch.Size([3, 2, 5]) Setting values with an index# tensordict[index] = other writes the entries of the tensordict other into tensordict at the index. The batch size of other must be the batch size of tensordict[index], or broadcast to it. If it does not, the assignment raises a RuntimeError. tensordict = TensorDict( {\"a\": torch.zeros(3, 4, 5), \"b\": torch.zeros(3, 4)}, batch_size=[3, 4] ) td2 = TensorDict({\"a\": torch.ones(2, 4, 5), \"b\": torch.ones(2, 4)}, batch_size=[2, 4]) tensordict[:-1] = td2 print(tensordict[\"a\"], tensordict[\"b\"]) tensor([[[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.]], [[1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.], [1., 1., 1., 1., 1.]], [[0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]]]) tensor([[1., 1., 1., 1.], [1., 1., 1., 1.], [0., 0., 0., 0.]]) Masking# A boolean mask works as it does for tensors. The mask has the shape of the batch dimensions that it masks. mask = torch.tensor( [[1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]], dtype=torch.bool, ) masked_tensordict = tensordict[mask] print(masked_tensordict) TensorDict(batch_size=[6], fields={a: f32[5], b: f32[]}) The mask selects 6 of the 12 elements of the batch. As with tensors, the dimensions that the mask covers become one dimension, with one element per True value of the mask. The result has batch_size=[6], and \"a\" has shape [6, 5]: assert masked_tensordict.batch_size == torch.Size([6]) assert masked_tensordict[\"a\"].shape == torch.Size([6, 5]) Conclusion# You can now index, slice, and mask a TensorDict as you do a tensor, and write a tensordict into another one with an index. An index or a mask applies to the batch dimensions of every entry, and keeps the other dimensions. The same indexing works on a TensorClass, the class form of a tensordict with typed fields (see TensorClass: a dataclass of tensors). Further reading# Batch size, shapes, and indexing explains batch sizes, shapes, and indexing. Changing the shape of a TensorDict shows the other shape operations: reshape, split, stack, permute. Filling a TensorDict row by row fills an empty tensordict row by row with an index. Indexing, masking, and splitting lists the indexing methods. Total running time of the script: (0 minutes 0.004 seconds) Download Jupyter notebook: tensordict_slicing.ipynb Download Python source code: tensordict_slicing.py Download zipped: tensordict_slicing.zip Gallery generated by Sphinx-Gallery",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

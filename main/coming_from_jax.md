@@ -320,7 +320,7 @@ torch.Size([2, 4])
 ```
 
 A method written for one element then runs on a batch of any shape (see
-[TensorClass](tensorclass.html#tensorclass-guide)). The rest of tensordict builds on the batch size:
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)). The rest of tensordict builds on the batch size:
 
 - Lazy stacks hold elements of different shapes, such as sequences of
 different lengths, and pad them on request (see
@@ -340,7 +340,7 @@ the tree is consolidated (see [Devices, dtypes, and memory](concepts/devices.htm
 
 ## See also
 
-- [TensorClass](tensorclass.html#tensorclass-guide): the dataclass form in full.
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide): the dataclass form in full.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): TensorDict, TensorClass, and the other
 containers.
 - [Arithmetic, apply, reductions, and gradients](concepts/operations.html#operations): `apply` and the other operations on all the leaves.

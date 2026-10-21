@@ -39,7 +39,7 @@ torch.Size([])
 in the batch (here 6), not the number of values in the tensors.
 
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) has a batch size too, with the same rules
-for its typed fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+for its typed fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 The leading dimensions of each entry must be equal to the batch size. If they
 are not, the constructor and each write raise a `RuntimeError` that names the

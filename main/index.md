@@ -111,7 +111,7 @@ torch.Size([64, 1000])
 
 The fields are class attributes, so your editor completes `systems.pos`.
 Indexing, stacking, `.to(device)`, and saving work as for a TensorDict.
-[TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) explains TensorClass, and
 [Which container should I use?](choosing_a_container.html#choosing-a-container) helps you choose between the two forms.
 
 ## Install
@@ -128,6 +128,9 @@ nightly builds, the optional dependencies, conda-forge, and source installs.
 - [Getting started](getting_started.html#getting-started): a one-hour tour, with examples
 that you can run. Start here.
 - [Coming from JAX](coming_from_jax.html#coming-from-jax): JAX pytree idioms in tensordict.
+- [Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass): what
+replaces a hand-written `to`, `pin_memory`, `__getitem__` and
+`collate_fn`.
 - [User guide](overview.html#overview): one page for each concept, from the batch
 size to TensorClass and `tensordict.nn`.
 - [How-to guides](saving.html#saving): one page for each task, such as saving,

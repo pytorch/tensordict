@@ -415,7 +415,7 @@ For a plain tensordict, both [`get()`](../reference/generated/tensordict.TensorD
 ```
 
 For a tensorclass, both attribute access and `get()` also return the
-[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) wrapper (see [TensorClass](../tensorclass.html#tensorclass-guide)):
+[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) wrapper (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)):
 
 ```
 >>> from tensordict import TensorClass
@@ -450,5 +450,5 @@ one, and it warns.
 [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack),
 [`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData), and [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor).
 - [Stacking and variable-size data](stacking.html#stacking): stacks of tensordicts, and variable-size data.
-- [TensorClass](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
 - [Save and load tensordicts](../saving.html#saving): how non-tensor entries are saved.

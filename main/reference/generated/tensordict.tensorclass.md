@@ -10,7 +10,7 @@ indexing, reshaping, `to(device)`, stacking and memory-mapping. For new
 code, subclass [`TensorClass`](tensordict.TensorClass.html#tensordict.TensorClass) instead. It takes the same
 flags, and type checkers understand it without a plugin. This decorator
 is kept for existing code and for code that moves from
-`@dataclass`. See [TensorClass](../../tensorclass.html#tensorclass-guide).
+`@dataclass`. See [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide).
 
 Parameters:
 

@@ -252,7 +252,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 1.6125 s
+Tensorclass training done! time: 1.8265 s
 ```
 
 ## Conclusion
@@ -265,7 +265,7 @@ read its fields as attributes.
 
 ## Further reading
 
-- [TensorClass](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
 - [Which container should I use?](../choosing_a_container.html#choosing-a-container) compares `TensorDict`, `TensorClass`, and
 `TypedTensorDict`.
 - [Load data and share it between processes](../data_loading.html#data-loading) explains the ways to load data with tensordict and to
@@ -273,7 +273,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.095 seconds)
+**Total running time of the script:** (0 minutes 4.434 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
