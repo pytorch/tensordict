@@ -2251,12 +2251,14 @@ def _warn_as_tensor_memmap() -> None:
 
 
 def _warn_index_past_batch_dims(
-    index, write: bool = False, no_batch_dims: bool = False
+    write: bool = False, no_batch_dims: bool = False
 ) -> None:
-    """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
+    """Warns that an index runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
 
     ``write`` is ``True`` for ``td[index] = value``, and ``no_batch_dims`` for
-    such a write into a tensordict without batch dims.
+    such a write into a tensordict without batch dims. The text leaves out the
+    index, so that a filtered warning costs nothing and each call site warns
+    once (#3232).
     """
     if is_compiling():
         return
@@ -2280,7 +2282,7 @@ def _warn_index_past_batch_dims(
             "which keeps the batch size."
         )
     warnings.warn(
-        f"The index {index} {op}runs past the batch dims, and is used on the "
+        f"An index {op}runs past the batch dims, and is used on the "
         "dims of the leaves instead. Starting with TensorDict 0.17, the default "
         "will change to raising an IndexError, as torch does for a tensor of "
         f"the batch size. {replacement}",
@@ -2372,7 +2374,11 @@ def _index_past_batch_dims(td, index):
         leaf = next((v for v in td.values(True, True) if isinstance(v, Tensor)), None)
         if leaf is None:
             return None
-        batch_size = _getitem_batch_size(td.batch_size + leaf.shape[ndim:used], index)
+        sizes = leaf.shape[ndim:used]
+        if any(isinstance(s, torch.SymInt) and s.node.is_nested_int() for s in sizes):
+            # a ragged dim of a jagged leaf has no size to index (#3232)
+            return None
+        batch_size = _getitem_batch_size(td.batch_size + sizes, index)
         return _index_leaves(td, index, batch_size)
     except (IndexError, RuntimeError):
         return None
@@ -3798,9 +3804,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _WRITE_PAST_BATCH_DIMS.active = False
         if _index_runs_past_batch_dims(index, self.batch_dims):
             # warn after the write, so that only the writes that work warn
-            _warn_index_past_batch_dims(
-                index, write=True, no_batch_dims=not self.batch_dims
-            )
+            _warn_index_past_batch_dims(write=True, no_batch_dims=not self.batch_dims)
 
     def _setitem_index(self, index: IndexType, value: Any) -> None:
         """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.
@@ -11849,7 +11853,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result = _index_past_batch_dims(self, index)
                 if result is None:
                     raise
-                _warn_index_past_batch_dims(index)
+                _warn_index_past_batch_dims()
                 return result
 
         if names is None:

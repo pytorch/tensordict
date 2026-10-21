@@ -764,6 +764,21 @@ class TestGeneric:
         assert stacked[:, 1:3].batch_size == (2, 2)
         assert stacked[1, torch.tensor([0, 2])]["ids"].offsets().tolist() == [0, 3, 5]
 
+    def test_index_past_batch_dims_jagged_raises(self):
+        # #3232: an index past the batch dims that reaches the ragged dim of a
+        # jagged leaf raised an AttributeError from the nested int, and raises
+        # an IndexError again, as before #3202
+        for kind in ("ragged_dim_1", "ragged_dim_2"):
+            td = TensorDict(ids=self._jagged(kind), batch_size=[6])
+            for index in [(0, 0), (slice(1, 3), 0), (0, 0, 0)]:
+                if kind == "ragged_dim_2" and len(index) == 2:
+                    # the dim after the batch dim is not ragged here
+                    continue
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error")
+                    with pytest.raises(IndexError):
+                        td[index]
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone_empty(self, recurse):
         td = TensorDict()
@@ -5333,6 +5348,43 @@ class TestGeneric:
             warnings.simplefilter("error")
             with pytest.raises(IndexError):
                 td[0] = 1.0
+
+    def test_past_batch_dims_warning_once_per_call_site(self, monkeypatch):
+        # #3232: the FutureWarning of an index past the batch dims held the
+        # index, so that it formatted every mask, even when filtered out, and
+        # warned once per distinct mask. Its text is fixed: it warns once per
+        # call site, and never formats the index.
+        formatted = []
+        tensor_repr = torch.Tensor.__repr__
+
+        def counting_repr(self, *args, **kwargs):
+            formatted.append(1)
+            return tensor_repr(self, *args, **kwargs)
+
+        monkeypatch.setattr(torch.Tensor, "__repr__", counting_repr)
+        # 50 distinct masks: the bits of 1 to 50
+        masks = [(i >> torch.arange(16)) % 2 == 1 for i in range(1, 51)]
+        td = TensorDict(a=torch.zeros(8, 16), b=torch.zeros(8, 16), batch_size=[8])
+        no_batch_dims = TensorDict(a=torch.zeros(16), b=torch.zeros(16))
+        for action in ("default", "ignore"):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter(action)
+                for mask in masks:
+                    td[:, mask]
+                for mask in masks:
+                    td[:, mask] = 0.0
+                for mask in masks:
+                    no_batch_dims[mask] = 0.0
+            messages = [str(w.message) for w in record]
+            if action == "default":
+                assert len(messages) == 3, messages
+                assert all("runs past the batch dims" in m for m in messages)
+                assert "td.apply(lambda x: x[:, idx])" in messages[0]
+                assert "leaf[:, idx] = value" in messages[1]
+                assert "td[...] = value" in messages[2]
+            else:
+                assert not messages
+        assert not formatted
 
     def test_getitem_slice_no_batch_dims_raises(self):
         # #3202: td[:] on a tensordict without batch dims returned td on 0.14,
