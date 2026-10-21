@@ -11,6 +11,7 @@ import enum
 import gc
 import importlib
 import importlib.util
+import inspect
 
 # JSON backend is now handled by _utils_key_json.json_dumps
 import json
@@ -833,6 +834,33 @@ def _maybe_broadcast_other(
         )
 
     def wrap_func(func):
+        names = None
+
+        def by_keyword(n, kwargs):
+            # The names of the tensordict operands passed by keyword after the
+            # n passed by position. A tensor with dims by keyword keeps its
+            # broadcasting (#3042), and clamp its error for a tensordict next
+            # to a number.
+            nonlocal names
+            if not kwargs or n >= n_other:
+                return ()
+            if names is None:
+                # one assignment, so that threads never see a partial tuple
+                params = list(inspect.signature(func).parameters.values())
+                names = tuple(p.name for p in params[1 : n_other + 1])
+            moved = []
+            for name in names[n:]:
+                if not _is_tensor_collection(type(kwargs.get(name))):
+                    break
+                moved.append(name)
+            for name in names[n + len(moved) :]:
+                value = kwargs.get(name)
+                if (isinstance(value, Tensor) and value.ndim) or (
+                    op == "clamp" and value is not None
+                ):
+                    return ()
+            return moved
+
         @wraps(func)
         def new_func(self, *others, **kwargs):
             others, args = others[:n_other], others[n_other:]
@@ -890,6 +918,12 @@ def _maybe_broadcast_other(
                         return result
             if not need_broadcast:
                 if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
+                    moved = by_keyword(len(others), kwargs)
+                    if moved:
+                        # pair the tensordict operands given by keyword with
+                        # the lazy stack as well (#3193)
+                        operands = [kwargs.pop(k) for k in moved]
+                        return new_func(self, *others, *operands, **kwargs)
                     tensor_kwargs = {
                         k: v.shape
                         for k, v in kwargs.items()
@@ -922,6 +956,16 @@ def _maybe_broadcast_other(
                 except KeyError:
                     # A lazy stack nested in a dense tensordict gives keys such
                     # as ("n", "0", "a"), which a dense operand lacks (#1932).
+                    # The tensordict operands given by keyword skip the
+                    # pairing below: pass them by position (#3193).
+                    moved = by_keyword(len(others), kwargs)
+                    if (
+                        moved
+                        and kwargs.get("default") is None
+                        and _same_leaf_keys(self, [kwargs[k] for k in moved])
+                    ):
+                        operands = [kwargs.pop(k) for k in moved]
+                        return new_func(self, *others, *operands, **kwargs)
                     if kwargs.get("default") is not None or not _same_leaf_keys(
                         self, others
                     ):
