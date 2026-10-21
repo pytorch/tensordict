@@ -606,6 +606,36 @@ class TestLazyStackedTensorDict:
                 member.close()
 
     @pytest.mark.skipif(not _has_h5py, reason="h5py not found")
+    @pytest.mark.parametrize("composition", ["nested_lazy", "mixed"])
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="#3209: a lazy stack of lazy stacks of files, or of a file and an "
+        "in-memory tensordict, reads datasets to list its nested keys",
+    )
+    def test_persistent_keys_do_not_read_data_composed(self, tmp_path, composition):
+        td = TensorDict({"a": {"c": torch.ones(3)}, "e": torch.ones(3)}, [3])
+        members = [
+            PersistentTensorDict.from_dict(td, filename=tmp_path / f"keys-{i}.h5")
+            for i in range(4)
+        ]
+        try:
+            if composition == "nested_lazy":
+                stack = lazy_stack([lazy_stack(members[:2]), lazy_stack(members[2:])])
+            else:
+                stack = lazy_stack([members[0], td.clone()])
+            backend = type(members[0]._backend)
+            with mock.patch.object(
+                backend, "read_full", autospec=True, side_effect=backend.read_full
+            ) as read:
+                assert set(stack.keys(True, True)) == {("a", "c"), "e"}
+                assert stack.entry_class("e") is torch.Tensor
+            assert read.call_count == 0
+        finally:
+            for member in members:
+                member.close()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found")
     @pytest.mark.parametrize(
         "case",
         [
