@@ -17,8 +17,13 @@ one, and a new tensordict is returned, unless `filename`,
 `inplace=True`, `return_early=True` with `num_threads > 1` or a
 `device` other than the CPU is given, or no accelerator is
 available. A `filename` other than its own
-file writes nothing: `td.contiguous().consolidate(filename=other)`
-writes a new file.
+file writes nothing and emits a [`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning):
+`td.contiguous().consolidate(filename=other)` writes a new file. A
+`device` other than the one of the storage, and
+`share_memory=True` with a storage that is not in shared memory,
+are ignored with a [`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning):
+`td.contiguous().consolidate(...)` copies the storage into a new one
+and honours them.
 
 Parameters:
 
