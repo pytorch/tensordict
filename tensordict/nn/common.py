@@ -61,8 +61,8 @@ class dispatch:
     in a new tensordict at the keys of ``source``, calls the function, and
     returns the entries at the keys of ``dest``: one tensor if there is one
     key, else a tuple in the order of the keys. An output key ``"_"`` is
-    skipped. When you call it with a tensordict as first argument, the
-    wrapper passes it on unchanged.
+    skipped. When you call it with a tensordict as first argument, or as the
+    keyword argument ``tensordict``, the wrapper passes it on unchanged.
 
     Tensors are matched to the input keys in two ways:
 
@@ -96,7 +96,9 @@ class dispatch:
 
     .. note::
         An input key cannot hold a tensordict passed as the first positional
-        argument: that tensordict is taken as the input.
+        argument: that tensordict is taken as the input. The keyword
+        argument ``tensordict`` is taken as the input too, unless an input key
+        is named ``"tensordict"``.
 
     .. note::
         To turn keyword calls off for every module, set the environment
@@ -253,6 +255,17 @@ class dispatch:
             if len(args):
                 if is_tensor_collection(args[0]):
                     tensordict, args = args[0], args[1:]
+            elif (
+                "tensordict" in kwargs
+                and is_tensor_collection(kwargs["tensordict"])
+                and all(
+                    self.separator.join(_unravel_key_to_tuple(key)) != "tensordict"
+                    for key in source
+                )
+            ):
+                # ``tensordict=td`` is the positional call by keyword, unless an
+                # input key is named "tensordict"
+                tensordict = kwargs.pop("tensordict")
             if tensordict is None:
                 tensordict_values = {}
                 dest = self.dest

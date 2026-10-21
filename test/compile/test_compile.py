@@ -3037,6 +3037,16 @@ class TestNN:
         mod_compile = torch.compile(mod, fullgraph=True, mode=mode)
         torch.testing.assert_close(mod(x=x, y=y), mod_compile(x=x, y=y))
 
+    def test_dispatch_tensordict_keyword(self, mode):
+        # module(tensordict=td) compiles like module(td) (#3199)
+        module0 = Mod(torch.nn.Linear(4, 5), in_keys=["a"], out_keys=["hidden"])
+        module1 = Mod(torch.nn.Linear(5, 6), in_keys=["hidden"], out_keys=["c"])
+        for module in (module0, Seq(module0, module1)):
+            module_compile = torch.compile(module, fullgraph=True, mode=mode)
+            td = TensorDict({"a": torch.randn(32, 4)}, [32])
+            assert module_compile(tensordict=td) is td
+            assert_close(module(td.copy()), td)
+
     @set_composite_lp_aggregate(False)
     def test_prob_module_with_kwargs(self, mode):
         kwargs = TensorDictParams(

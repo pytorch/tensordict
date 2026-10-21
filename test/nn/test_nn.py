@@ -1316,6 +1316,67 @@ class TestTDModule:
         with pytest.raises(RuntimeError, match="The in keys must be passed"):
             TensorDictModule.forward(None, td)
 
+    @pytest.mark.parametrize("dispatch_mode", [True, False])
+    def test_dispatch_tensordict_keyword(self, dispatch_mode):
+        # ``module(tensordict=td)`` behaves like ``module(td)`` (#3199)
+        linear = nn.Linear(6, 1)
+        tdm = TensorDictModule(linear, in_keys=["x"], out_keys=["q"])
+        seq = TensorDictSequential(tdm)
+        prob = ProbabilisticTensorDictModule(
+            in_keys=["param"], out_keys=["s"], distribution_class=Delta
+        )
+        prob_seq = ProbabilisticTensorDictSequential(
+            TensorDictModule(linear, in_keys=["x"], out_keys=["param"]), prob
+        )
+        wrapper = TensorDictModuleWrapper(tdm)
+        with _set_dispatch_td_nn_modules(dispatch_mode):
+            for module, out_key in [
+                (tdm, "q"),
+                (seq, "q"),
+                (prob_seq, "s"),
+                (wrapper, "q"),
+            ]:
+                td = TensorDict(x=torch.randn(5, 6), batch_size=[5])
+                assert module(tensordict=td) is td
+                assert td[out_key].shape == (5, 1)
+            td = TensorDict(param=torch.randn(5, 1), batch_size=[5])
+            assert prob(tensordict=td) is td
+            assert (td["s"] == td["param"]).all()
+
+            td = TensorDict(x=torch.randn(5, 6), batch_size=[5])
+            td_out = TensorDict(batch_size=[5])
+            assert tdm(tensordict=td, tensordict_out=td_out) is td_out
+            assert "q" in td_out.keys() and "q" not in td.keys()
+
+            td = TensorDict(x=torch.randn(5, 6), q=torch.zeros(5, 1), batch_size=[5])
+            with set_skip_existing(True):
+                assert tdm(tensordict=td) is td
+            assert (td["q"] == 0).all()
+
+            params = dict(tdm.named_parameters())
+            td = TensorDict(x=torch.randn(5, 6), batch_size=[5])
+            out = torch.func.functional_call(tdm, params, (), {"tensordict": td})
+            assert out is td
+            torch.testing.assert_close(td["q"], linear(td["x"]))
+
+            # A decorated function, as in CudaGraphModule
+            @dispatch(source=["x"], dest=["y"])
+            def func(tensordict):
+                return tensordict.set("y", tensordict["x"] + 1)
+
+            assert func(tensordict=td) is td
+            assert (td["y"] == td["x"] + 1).all()
+
+    def test_dispatch_tensordict_keyword_input_key(self):
+        # An input key named "tensordict" keeps taking the keyword argument
+        tdm = TensorDictModule(lambda x: x + 1, in_keys=["tensordict"], out_keys=["y"])
+        assert (tdm(tensordict=torch.zeros(2)) == 1).all()
+        tdm = TensorDictModule(
+            lambda x: x.apply(lambda t: t + 1), in_keys=["tensordict"], out_keys=["y"]
+        )
+        out = tdm(tensordict=TensorDict(a=torch.zeros(2)))
+        assert (out["a"] == 1).all()
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
