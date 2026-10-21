@@ -1671,11 +1671,11 @@ def _tensorclass(
     # user-defined and gets bypassed by the frozen __init__ via
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
-    init_vars = _init_vars(cls)
+    init_vars, needs_init_vars = _init_vars(cls)
     # The defaults of the InitVars, that __post_init__ gets outside __init__
     cls._init_var_defaults = (
         tuple(default for _, default in init_vars)
-        if hasattr(cls, "__post_init__")
+        if needs_init_vars
         and all(default is not dataclasses.MISSING for _, default in init_vars)
         else ()
     )
@@ -1687,7 +1687,7 @@ def _tensorclass(
             if not _has_custom_setattr:
                 # the dataclass __init__ sets the fields: it honours init
                 ignored_options.append("init")
-            if not _follows_signature(cls, init_vars):
+            if not _follows_signature(cls, needs_init_vars):
                 ignored_options.append("kw_only")
         if not {"__eq__", "__ne__"} <= own_operators:
             ignored_options.append("compare")
@@ -1704,6 +1704,7 @@ def _tensorclass(
             _custom_init=user_init is not None,
             _is_non_tensor=_is_non_tensor,
             _init_vars=init_vars,
+            _needs_init_vars=needs_init_vars,
         )
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = classmethod(_from_tensordict_public)
@@ -2108,12 +2109,17 @@ def _pop_instance_attr_traced(obj, name: str) -> Any:
     return value
 
 
-def _init_vars(cls) -> tuple[tuple[str, Any], ...]:
-    """Returns the ``(name, default)`` of the ``dataclasses.InitVar`` fields of ``cls``, which ``__init__`` takes.
+def _init_vars(cls) -> tuple[tuple[tuple[str, Any], ...], bool]:
+    """Returns the ``(name, default)`` of the InitVars that ``__init__`` takes, and whether ``__post_init__`` needs them.
 
-    ``__init__`` passes them to ``__post_init__``, as ``dataclasses`` does. The
-    result is empty if ``__post_init__`` does not take one positional argument
-    per InitVar: such a class behaves as before tensorclasses took InitVars.
+    ``__init__`` takes the ``dataclasses.InitVar`` fields of ``cls`` if the
+    class has no ``__post_init__`` (it drops them), or if ``__post_init__``
+    takes one positional argument per InitVar (it passes them on). The
+    InitVars are needed if ``__post_init__`` cannot be called without them:
+    such a class raised on every construction before #3103. Only then do
+    omitted InitVars and rebuilds give ``__post_init__`` the defaults, and
+    positional arguments follow the signature. The other classes keep their
+    old behaviour for the calls that worked before.
     """
     init_vars = tuple(
         (name, field.default)
@@ -2121,22 +2127,29 @@ def _init_vars(cls) -> tuple[tuple[str, Any], ...]:
         if field._field_type is dataclasses._FIELD_INITVAR
     )
     post_init = getattr(cls, "__post_init__", None)
-    if init_vars and post_init is not None:
-        try:
-            inspect.signature(post_init).bind(None, *(None,) * len(init_vars))
-        except (TypeError, ValueError):
-            return ()
-    return init_vars
+    if not init_vars or post_init is None:
+        return init_vars, False
+    try:
+        signature = inspect.signature(post_init)
+        signature.bind(None, *(None,) * len(init_vars))
+    except (TypeError, ValueError):
+        return (), False
+    try:
+        signature.bind(None)
+    except TypeError:
+        return init_vars, True
+    return init_vars, False
 
 
-def _follows_signature(cls, init_vars) -> bool:
+def _follows_signature(cls, needs_init_vars: bool) -> bool:
     """Whether positional arguments follow the signature of the dataclass ``__init__``.
 
-    They do for a class with InitVars, or with the class option ``kw_only``
-    (in its own definition or in that of a parent). The other classes assign
-    them to the fields in order, keyword-only fields included (#3100).
+    They do for a class whose ``__post_init__`` needs its InitVars, or with
+    the class option ``kw_only`` (in its own definition or in that of a
+    parent). The other classes assign them to the fields in order,
+    keyword-only fields included (#3100).
     """
-    return bool(init_vars) or any(
+    return needs_init_vars or any(
         base.__dict__.get("_kw_only", False) for base in cls.__mro__
     )
 
@@ -2151,6 +2164,7 @@ def _init_wrapper(
     _custom_init: bool = False,
     _is_non_tensor: bool = False,
     _init_vars: tuple = (),
+    _needs_init_vars: bool = False,
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
@@ -2163,8 +2177,9 @@ def _init_wrapper(
     field_names = tuple(field.name for field in fields)
     required_fields = frozenset(field_names)
     init_vars = () if _custom_init else _init_vars
+    needs_init_vars = _needs_init_vars and not _custom_init
     init_var_names = frozenset(name for name, _ in init_vars)
-    if not _custom_init and _follows_signature(cls, init_vars):
+    if not _custom_init and _follows_signature(cls, needs_init_vars):
         # The InitVars are among the positional arguments, and the
         # keyword-only fields are not.
         positional_names = tuple(
@@ -2347,7 +2362,9 @@ def _init_wrapper(
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
                 positional_names
+                # a subclass that is not a tensorclass itself maps as cls
                 if type(self) is cls
+                or type(self).__dataclass_fields__ is cls.__dataclass_fields__
                 else [
                     key
                     for key in type(self).__dataclass_fields__
@@ -2508,10 +2525,12 @@ def _init_wrapper(
             # default-handling above, but the dataclass __init__ would
             # still assign them. Ensure every expected key is present.
             # The InitVars go to __post_init__ only: required ones are in
-            # kwargs, as the check above shows.
+            # kwargs, as the check above shows. If __post_init__ does not
+            # need them, it gets them only when one is given.
             init_var_values = (
                 [kwargs.pop(name, default) for name, default in init_vars]
-                if init_vars
+                if needs_init_vars
+                or (init_vars and any(name in kwargs for name in init_var_names))
                 else ()
             )
             for key in self.__expected_keys__:

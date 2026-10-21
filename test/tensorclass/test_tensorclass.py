@@ -2104,6 +2104,18 @@ class TestTensorClass:
             MyChild(torch.ones(3), torch.ones(3), x=torch.zeros(3))
         assert (child.clone().z == 1).all()
 
+        # A subclass that is not a tensorclass itself maps as its parent
+        if style == "decorator":
+
+            class MyPlain(MyData):
+                pass
+
+            with pytest.raises(
+                TypeError, match="positional arguments but 2 were given"
+            ):
+                MyPlain(torch.zeros(3), batch_size=[3])
+            assert (MyPlain(x=torch.ones(3), batch_size=[3]).x == 1).all()
+
     @pytest.mark.parametrize("style", ["subclass", "decorator"])
     def test_init_var(self, style):
         # __init__ passes an InitVar to __post_init__, as dataclasses does,
@@ -2118,21 +2130,21 @@ class TestTensorClass:
             "__post_init__": __post_init__,
         }
         if style == "subclass":
-            MyData = type("MyData", (TensorClass,), namespace)
+            MyInitVarData = type("MyInitVarData", (TensorClass,), namespace)
         else:
-            MyData = tensorclass(type("MyData", (), namespace))
+            MyInitVarData = tensorclass(type("MyInitVarData", (), namespace))
 
-        assert [field.name for field in dataclasses.fields(MyData)] == ["x"]
-        assert list(inspect.signature(MyData).parameters)[:2] == ["x", "scale"]
+        assert [field.name for field in dataclasses.fields(MyInitVarData)] == ["x"]
+        assert list(inspect.signature(MyInitVarData).parameters)[:2] == ["x", "scale"]
         ones = torch.ones(3)
         torch.testing.assert_close(
-            MyData(x=ones, scale=2.0, batch_size=[3]).x, ones * 2
+            MyInitVarData(x=ones, scale=2.0, batch_size=[3]).x, ones * 2
         )
-        torch.testing.assert_close(MyData(ones, 3.0, batch_size=[3]).x, ones * 3)
-        torch.testing.assert_close(MyData(x=ones, batch_size=[3]).x, ones)
+        torch.testing.assert_close(MyInitVarData(ones, 3.0, batch_size=[3]).x, ones * 3)
+        torch.testing.assert_close(MyInitVarData(x=ones, batch_size=[3]).x, ones)
         with pytest.raises(TypeError, match="takes 3 positional arguments"):
-            MyData(ones, 2.0, ones)
-        data = MyData(x=ones, scale=2.0, batch_size=[3])
+            MyInitVarData(ones, 2.0, ones)
+        data = MyInitVarData(x=ones, scale=2.0, batch_size=[3])
         assert "scale" not in data.to_dict()
         # The rebuilds pass the default, 1.0
         torch.testing.assert_close(data.clone().x, ones * 2)
@@ -2142,11 +2154,11 @@ class TestTensorClass:
         assert isinstance(lazy._tensordict, LazyStackedTensorDict)
         torch.testing.assert_close(lazy.x, ones.expand(2, 3) * 2)
         torch.testing.assert_close(
-            MyData.from_tensordict(TensorDict(x=ones, batch_size=[3])).x, ones
+            MyInitVarData.from_tensordict(TensorDict(x=ones, batch_size=[3])).x, ones
         )
 
         # A subclass inherits the InitVar and the __post_init__ that takes it
-        class MyChild(MyData):
+        class MyChild(MyInitVarData):
             y: torch.Tensor = None
 
         if style == "decorator":
@@ -2154,6 +2166,18 @@ class TestTensorClass:
         child = MyChild(ones, 5.0, ones, batch_size=[3])
         torch.testing.assert_close(child.x, ones * 5)
         torch.testing.assert_close(child.y, ones)
+
+        # So does a subclass that is not a tensorclass itself
+        if style == "decorator":
+
+            class MyPlain(MyInitVarData):
+                pass
+
+            torch.testing.assert_close(MyPlain(ones, 3.0, batch_size=[3]).x, ones * 3)
+            torch.testing.assert_close(
+                MyPlain(x=ones, scale=3.0, batch_size=[3]).x, ones * 3
+            )
+            torch.testing.assert_close(MyPlain(x=ones, batch_size=[3]).x, ones)
 
     def test_init_var_required_and_rebuild(self, tmp_path):
         @tensorclass(skip_post_init_on_rebuild=True)
@@ -2195,14 +2219,45 @@ class TestTensorClass:
         with pytest.raises(AttributeError, match="has no such field"):
             MyData(x=torch.ones(3), scale=2.0, batch_size=[3])
 
-        # Without __post_init__, the InitVar is taken and dropped, as in
-        # dataclasses
+    def test_init_var_no_post_init(self):
+        # Without __post_init__, the InitVar is taken by name and dropped, as
+        # in dataclasses. Positional arguments still go to the fields in
+        # order, as before #3103.
         class MyNoPostInit(TensorClass):
             x: torch.Tensor
             scale: dataclasses.InitVar[float] = 1.0
+            y: torch.Tensor = None
 
+        ones, twos = torch.ones(3), torch.full((3,), 2.0)
+        data = MyNoPostInit(x=ones, scale=2.0, batch_size=[3])
+        torch.testing.assert_close(data.x, ones)
+        assert data.y is None
+        assert "scale" not in data.to_dict()
+        data = MyNoPostInit(ones, twos, batch_size=[3])
+        torch.testing.assert_close(data.x, ones)
+        torch.testing.assert_close(data.y, twos)
+
+    def test_init_var_post_init_default(self):
+        # A __post_init__ that gives the InitVar a default of its own gets
+        # the InitVar only when it is given, so the calls that worked before
+        # #3103 behave as they did.
+        class MyData(TensorClass):
+            x: torch.Tensor
+            scale: dataclasses.InitVar[float] = 1.0
+            y: torch.Tensor = None
+
+            def __post_init__(self, scale=5.0):
+                self.x = self.x * scale
+
+        ones, twos = torch.ones(3), torch.full((3,), 2.0)
+        data = MyData(x=ones, batch_size=[3])
+        torch.testing.assert_close(data.x, ones * 5)
+        torch.testing.assert_close(data.clone().x, ones * 25)
+        data = MyData(ones, twos, batch_size=[3])
+        torch.testing.assert_close(data.x, ones * 5)
+        torch.testing.assert_close(data.y, twos)
         torch.testing.assert_close(
-            MyNoPostInit(torch.ones(3), 2.0, batch_size=[3]).x, torch.ones(3)
+            MyData(x=ones, scale=3.0, batch_size=[3]).x, ones * 3
         )
 
     @pytest.mark.parametrize("inplace", [False, True])
@@ -2232,6 +2287,24 @@ class TestTensorClass:
         cls = from_dataclass(MyDataClass, inplace=inplace)
         expected = ones * 3 if inplace else ones
         torch.testing.assert_close(cls(x=ones, scale=3.0, batch_size=[3]).x, expected)
+
+    def test_init_var_from_dataclass_positional(self):
+        # The class from_dataclass makes has no __post_init__: positional
+        # arguments go to the fields in order, as before #3103
+        MyDataClass = dataclasses.make_dataclass(
+            "MyDataClass",
+            [
+                ("x", torch.Tensor),
+                ("scale", dataclasses.InitVar[float], dataclasses.field(default=1.0)),
+                ("y", torch.Tensor, dataclasses.field(default=None)),
+            ],
+        )
+        cls = from_dataclass(MyDataClass)
+        ones, twos = torch.ones(3), torch.full((3,), 2.0)
+        data = cls(ones, twos, batch_size=[3])
+        torch.testing.assert_close(data.x, ones)
+        torch.testing.assert_close(data.y, twos)
+        torch.testing.assert_close(cls(x=ones, scale=3.0, batch_size=[3]).x, ones)
 
     def test_field_repr_false(self):
         # field(repr=False) leaves the field out of the reprs (#3103)

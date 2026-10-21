@@ -333,8 +333,15 @@ run again with the defaults:
   >>> s.clone().x  # no second call to __post_init__
   tensor([3., 3.])
 
-A class whose ``__post_init__`` does not take its InitVars does not accept
-them as arguments.
+This holds for a class whose ``__post_init__`` cannot be called without its
+InitVars. If ``__post_init__`` gives them defaults of its own, it gets the
+InitVars only when they are given, and the other calls pass none. Without
+``__post_init__``, the InitVars are taken by name and dropped. In both
+cases, positional arguments go to the fields in order, as in earlier
+releases: full dataclass semantics may come with the deprecation planned in
+`#3100 <https://github.com/pytorch/tensordict/issues/3100>`_. A class whose
+``__post_init__`` does not take its InitVars does not accept them as
+arguments.
 
 A custom ``__init__``
 ~~~~~~~~~~~~~~~~~~~~~
