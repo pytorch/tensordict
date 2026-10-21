@@ -269,10 +269,13 @@ formats fit other cases, and tensordict reads or writes some of them:
   ``DataLoader`` workers, which a ``h5py`` object cannot. Close the file
   that you wrote, and open it again with ``mode="r"`` before you train,
   because ``h5py`` locks a file that is open for writing, and the workers
-  then cannot open it. An index returns a lazy view of the rows: to read
-  them in the workers, call :meth:`~tensordict.TensorDictBase.to_tensordict`
-  in the ``collate_fn``. ``operator.methodcaller`` makes a function that
-  pickles. See :ref:`storage`:
+  then cannot open it. An index returns a lazy view of the rows, which
+  pickles as the file name and the index: without a ``collate_fn`` that
+  reads it, the main process reads every batch and the workers save no
+  time. Call :meth:`~tensordict.TensorDictBase.to_tensordict` in the
+  ``collate_fn``, so that the workers read the rows.
+  ``operator.methodcaller`` makes a function that pickles. See
+  :ref:`storage`:
 
     >>> from operator import methodcaller
     >>> from tensordict import PersistentTensorDict
@@ -293,7 +296,8 @@ formats fit other cases, and tensordict reads or writes some of them:
   read a batch, index the rows first, then the key: ``td["image"]`` reads
   the whole array.
   zarr 3 needs Python 3.11 or later (``pip install "tensordict[zarr]"``).
-  See :ref:`storage-zarr`:
+  In a ``DataLoader``, pass the same ``collate_fn`` as for HDF5. See
+  :ref:`storage-zarr`:
 
   .. code-block:: python
 
