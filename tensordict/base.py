@@ -7064,14 +7064,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         tensordict it is added to. An existing entry at ``key`` is replaced.
         For a tuple key, a plain :class:`~tensordict.TensorDict` keeps a
         plain, unlocked ``TensorDict`` already on the path with its entries:
-        ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. A lazy stack of
-        plain ``TensorDict`` instances does this in each member, and a
-        tensorclass or a :class:`~tensordict.nn.TensorDictParams` follows the
-        rule of the tensordict it wraps. Any other entry on the path, such as a
+        ``("a", "b")`` adds ``"b"`` to an existing ``td["a"]``. An indexed view
+        of a plain ``TensorDict`` and a typed tensordict that wraps one do the
+        same; the view keeps the entries in every row of the tensordict it
+        indexes. A lazy stack of plain ``TensorDict`` instances, or of such
+        stacks, does this in each member, and a tensorclass or a
+        :class:`~tensordict.nn.TensorDictParams` follows the rule of the
+        tensordict it wraps. A :class:`~tensordict.PersistentTensorDict` keeps
+        the groups already on the path. Any other entry on the path, such as a
         tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
         tensordict, is replaced by a new empty tensordict, and so is every
         level of the path when the tensordict is of any other type, such as a
-        view, a typed tensordict or a file.
+        lazy view or a store.
 
         Args:
             key (NestedKey): the key of the new tensordict.
@@ -7109,8 +7113,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``TensorDict`` already on the path, so it keeps its entries, and
         replaces any other entry with a new empty tensordict. Every other
         class replaces each level of the path. ``LazyStackedTensorDict``
-        overrides it: a stack of plain ``TensorDict`` instances hands the key
-        to each member.
+        overrides it: a stack of plain ``TensorDict`` instances, or of such
+        stacks, hands the key to each member. ``_SubTensorDict`` and
+        ``TypedTensorDict`` override it to follow the rule of a plain source,
+        and ``PersistentTensorDict`` to keep the groups on the path.
         """
         from tensordict._td import TensorDict
 

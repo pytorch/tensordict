@@ -2246,6 +2246,42 @@ class TestGeneric:
             ("a", "b"),
             ("a", "b", "c"),
         }
+        # A stack of stacks of plain TensorDicts hands the key on to each
+        # member of its members.
+        td = lazy_stack(
+            [
+                lazy_stack([TensorDict(a={"x": torch.zeros(())}) for _ in range(2)]),
+                lazy_stack([TensorDict(a={"x": torch.zeros(())}), TensorDict()]),
+            ]
+        )
+        td.create_nested(("a", "b"))
+        assert set(td[0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1, 0].keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td[1, 1].keys(True)) == {"a", ("a", "b")}
+
+    @pytest.mark.parametrize("idx", [0, (slice(None), 1)])
+    def test_create_nested_sub_tensordict(self, idx):
+        # A view keeps the entries of a plain TensorDict on the path, in every
+        # row of its source (#3008).
+        x = torch.arange(6.0).reshape(3, 2)
+        td = TensorDict(a={"x": x.clone()}, batch_size=[3, 2])
+        sub = td._get_sub_tensordict(idx)
+        assert sub.create_nested(("a", "b")) is sub
+        assert set(sub.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert (td["a", "x"] == x).all()
+        assert td["a", "b"].batch_size == (3, 2)
+
+    def test_create_nested_typed(self):
+        # A typed tensordict keeps a plain TensorDict on the path (#3008).
+        class Typed(TypedTensorDict):
+            a: TensorDictBase
+
+        td = Typed(a=TensorDict(x=torch.ones(3), batch_size=[3]), batch_size=[3])
+        assert td.create_nested(("a", "b")) is td
+        assert type(td.get("a")) is TensorDict
+        assert set(td.keys(True)) == {"a", ("a", "x"), ("a", "b")}
+        assert (td["a", "x"] == 1).all()
 
     @pytest.mark.parametrize("member", ["tensor", "locked"])
     @pytest.mark.parametrize("view", ["sub", "sub_slice", "typed"])
