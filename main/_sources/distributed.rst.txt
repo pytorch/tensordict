@@ -750,6 +750,8 @@ See also
 --------
 
 - :ref:`data-loading`: share tensordicts between processes on one node.
+- :ref:`training-at-scale`: checkpoints with ``torch.distributed.checkpoint``,
+  DTensor leaves, and the cost of each collective.
 - :ref:`storage`: memory-mapped datasets, and Redis stores that processes on
   several nodes share.
 - :ref:`saving`: consolidated tensordicts.

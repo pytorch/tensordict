@@ -369,6 +369,8 @@ Choose an option
   ``get(key, as_padded_tensor=True)`` on a lazy stack.
 - To give a model a nested tensor, use ``get(key, as_nested_tensor=True)`` or
   ``densify(layout=torch.jagged)``.
+- To give a variable-length attention kernel a batch without padding, pack
+  the sequences, as in :ref:`cookbook-packing`.
 - For strings and other Python objects, use a ``NonTensorStack``.
 
 .. _stacking-preallocation:

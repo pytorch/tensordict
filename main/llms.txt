@@ -540,6 +540,7 @@
 - [Computation times](https://docs.pytorch.org/tensordict/stable/sg_execution_times.md)
 - [Large datasets and storage backends](https://docs.pytorch.org/tensordict/stable/storage.md)
 - [TensorClass](https://docs.pytorch.org/tensordict/stable/tensorclass.md)
+- [Train at scale](https://docs.pytorch.org/tensordict/stable/training_at_scale.md)
 - [Using TensorDict for datasets](https://docs.pytorch.org/tensordict/stable/tutorials/data_fashion.md)
 - [Exporting tensordict modules](https://docs.pytorch.org/tensordict/stable/tutorials/export.md)
 - [Functional calls and ensembles with TensorDict](https://docs.pytorch.org/tensordict/stable/tutorials/functional.md)

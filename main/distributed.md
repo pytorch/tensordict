@@ -629,6 +629,8 @@ copy to the CPU.
 ## See also
 
 - [Load data and share it between processes](data_loading.html#data-loading): share tensordicts between processes on one node.
+- [Train at scale](training_at_scale.html#training-at-scale): checkpoints with `torch.distributed.checkpoint`,
+DTensor leaves, and the cost of each collective.
 - [Large datasets and storage backends](storage.html#storage): memory-mapped datasets, and Redis stores that processes on
 several nodes share.
 - [Save and load tensordicts](saving.html#saving): consolidated tensordicts.

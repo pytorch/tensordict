@@ -355,6 +355,8 @@ backends.
 - [Save and load tensordicts](saving.html#saving): memory-mapped directories and the `mode` of
 `load_memmap`.
 - [Distributed tensordicts](distributed.html#distributed): send tensordicts between nodes.
+- [Train at scale](training_at_scale.html#training-at-scale): prefetch batches to the GPU, and resume a data
+loader.
 - The reference of [`share_memory_()`](reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_),
 [`pin_memory()`](reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory),
 [`map()`](reference/generated/tensordict.TensorDictBase.map.html#tensordict.TensorDictBase.map), and [`lazy_stack()`](reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack).

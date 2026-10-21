@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:23.155** total execution time for 14 files **from tutorials**:
+**01:26.813** total execution time for 14 files **from tutorials**:
 
 .. container::
 
@@ -33,44 +33,44 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_serialization_speed.py` (``serialization_speed.py``)
-     - 00:39.440
+     - 00:41.287
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``tensordict_module.py``)
-     - 00:17.145
+     - 00:17.604
      - 0.0
    * - :ref:`sphx_glr_tutorials_data_fashion.py` (``data_fashion.py``)
-     - 00:14.510
+     - 00:15.822
      - 0.0
    * - :ref:`sphx_glr_tutorials_streamed_tensordict.py` (``streamed_tensordict.py``)
-     - 00:06.018
+     - 00:06.023
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``tensorclass_fashion.py``)
-     - 00:04.197
+     - 00:04.257
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``tensorclass_imagenet.py``)
-     - 00:01.550
+     - 00:01.530
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``export.py``)
      - 00:00.130
      - 0.0
    * - :ref:`sphx_glr_tutorials_zarr_storage.py` (``zarr_storage.py``)
-     - 00:00.124
+     - 00:00.114
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_shapes.py` (``tensordict_shapes.py``)
+     - 00:00.011
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``tensordict_keys.py``)
      - 00:00.010
      - 0.0
    * - :ref:`sphx_glr_tutorials_functional.py` (``functional.py``)
-     - 00:00.009
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``tensordict_keys.py``)
-     - 00:00.009
+     - 00:00.010
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_memory.py` (``tensordict_memory.py``)
      - 00:00.006
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_slicing.py` (``tensordict_slicing.py``)
-     - 00:00.005
+     - 00:00.006
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_preallocation.py` (``tensordict_preallocation.py``)
-     - 00:00.003
+     - 00:00.004
      - 0.0

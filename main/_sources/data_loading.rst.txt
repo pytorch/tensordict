@@ -358,6 +358,8 @@ See also
 - :ref:`saving`: memory-mapped directories and the ``mode`` of
   ``load_memmap``.
 - :ref:`distributed`: send tensordicts between nodes.
+- :ref:`training-at-scale`: prefetch batches to the GPU, and resume a data
+  loader.
 - The reference of :meth:`~tensordict.TensorDictBase.share_memory_`,
   :meth:`~tensordict.TensorDictBase.pin_memory`,
   :meth:`~tensordict.TensorDictBase.map`, and :func:`~tensordict.lazy_stack`.
