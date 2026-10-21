@@ -4868,6 +4868,30 @@ class TestTensorClass:
         assert (data2.x[2:] == 0).all()
         assert (data2.y[2:] == 0).all()
 
+    def test_setitem_past_batch_dims_no_batch_dims(self):
+        # #3202: on a tensorclass without batch dims, data[0] = value writes
+        # into the first row of every field, and warns once that it raises
+        # from 0.17, as a tensordict does; data[...] = value does not warn
+        @tensorclass
+        class MyData:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        data = MyData(x=torch.zeros(3), y=torch.zeros(3, 4), batch_size=[])
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            data[0] = 1.0
+        messages = [w for w in record if "runs past the batch dims" in str(w.message)]
+        assert len(messages) == 1
+        assert messages[0].category is FutureWarning
+        assert messages[0].filename == __file__
+        assert (data.x == torch.tensor([1.0, 0.0, 0.0])).all()
+        assert (data.y[0] == 1).all() and (data.y[1:] == 0).all()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            data[...] = 2.0
+        assert (data.x == 2).all() and (data.y == 2).all()
+
     def test_setitem_other_cls(self):
         @tensorclass
         class MyData1:

@@ -5275,16 +5275,74 @@ class TestGeneric:
                 data[:, :, 0] = 1.0
 
     def test_setitem_past_batch_dims_no_batch_dims(self):
-        # #3202: a write into a tensordict without batch dims runs past them,
-        # as the reads that raise a RuntimeError do, but does not warn
-        td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3, 2)))
+        # #3202: on a tensordict without batch dims, a write with an index
+        # runs past them, as the reads that raise a RuntimeError do. It still
+        # writes into the leaves, and warns once that it raises from 0.17.
+        def make():
+            return TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3, 2)))
+
+        for index, value, expected in [
+            (0, 1.0, [1.0, 0.0, 0.0]),
+            (slice(None), 1.0, [1.0, 1.0, 1.0]),
+            ([0, 2], 2.0, [2.0, 0.0, 2.0]),
+            (torch.tensor([0, 2]), 2.0, [2.0, 0.0, 2.0]),
+            (torch.tensor([True, False, True]), 2.0, [2.0, 0.0, 2.0]),
+            (slice(1, 3), 3.0, [0.0, 3.0, 3.0]),
+        ]:
+            td = make()
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                td[index] = value
+            messages = [
+                w for w in record if "runs past the batch dims" in str(w.message)
+            ]
+            assert len(messages) == 1, index
+            assert messages[0].category is FutureWarning
+            assert messages[0].filename == __file__
+            assert "TensorDict 0.17" in str(messages[0].message)
+            assert "leaf[idx] = value" in str(messages[0].message)
+            assert "td[...] = value" in str(messages[0].message)
+            expected = torch.tensor(expected)
+            assert (td["a"] == expected).all(), index
+            assert (td["b", "c"] == expected[:, None]).all(), index
+        # a tensordict value, as in td[:] = other
+        td = make()
+        with pytest.warns(FutureWarning, match="runs past the batch dims"):
+            td[:] = make().apply(lambda x: x + 1)
+        assert (td["a"] == 1).all() and (td["b", "c"] == 1).all()
+        # the spellings that the warning names write the same leaves, without
+        # a warning
+        td = make()
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            td[0] = 1.0
-            td[:] = td.clone()
-            td[[0, 2]] = 2.0
-        assert (td["a"] == torch.tensor([2.0, 0.0, 2.0])).all()
-        assert (td["b", "c"] == torch.tensor([2.0, 0.0, 2.0])[:, None]).all()
+            for leaf in td.values(True, True):
+                leaf[[0, 2]] = 2.0
+            assert (td["a"] == torch.tensor([2.0, 0.0, 2.0])).all()
+            td[...] = make().apply(lambda x: x + 1)
+            assert (td["a"] == 1).all() and (td["b", "c"] == 1).all()
+            # the writes within the batch dims and the key writes do not warn
+            td[...] = 4.0
+            td[()] = 5.0
+            td[None] = 6.0
+            td["a"] = torch.zeros(3)
+            td["b", "c"] = torch.zeros(3, 2)
+            assert (td["a"] == 0).all() and (td["b", "c"] == 0).all()
+        # a write that raises does not warn: a 0-dim leaf has no dim to index
+        td = TensorDict(s=torch.zeros(()), a=torch.zeros(3))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(IndexError):
+                td[0] = 1.0
+
+    def test_getitem_slice_no_batch_dims_raises(self):
+        # #3202: td[:] on a tensordict without batch dims returned td on 0.14,
+        # and raises since 0.15.0 (#1995), as the other indices do
+        td = TensorDict(a=torch.zeros(3))
+        with pytest.raises(RuntimeError, match="td.batch_dims==0 is not permitted"):
+            td[:]
+        with pytest.raises(RuntimeError, match="td.batch_dims==0 is not permitted"):
+            td[0]
+        assert td[...] is not None and td[...].batch_size == torch.Size([])
 
     @pytest.mark.parametrize(
         "index",
