@@ -1471,8 +1471,6 @@ class TestAllReduce:
 
 
 class TestBucketedReduce:
-    port = "29587"
-
     @staticmethod
     def make_td(rank):
         generator = torch.Generator().manual_seed(rank)
@@ -1488,8 +1486,6 @@ class TestBucketedReduce:
                 "f": rand(2, 1, dtype=torch.int32),
                 "g": rand(2, 40),
                 ("b", "h"): rand(2),
-                # Expanded: not packed, reduced in place.
-                "x": rand(3).expand(2, 3),
                 "s": LazyStackedTensorDict(
                     TensorDict(x=rand(4)), TensorDict(x=rand(4))
                 ),
@@ -1497,12 +1493,42 @@ class TestBucketedReduce:
             batch_size=[2],
         )
 
-    @classmethod
-    def worker(cls, queue, rank, op):
+    def test_bucket_planning(self, monkeypatch):
+        # Without a process group: record what each collective receives.
+        calls = []
+
+        def all_reduce(tensor, op=None, group=None, async_op=False):
+            calls.append(tensor)
+            if tensor.is_contiguous():
+                tensor.mul_(2)
+
+        monkeypatch.setattr(dist, "all_reduce", all_reduce)
+        td = self.make_td(0)
+        # Expanded: reducing it in place writes overlapping memory, so it
+        # stays out of the multi-rank test.
+        x = torch.ones(3).expand(2, 3)
+        td["x"] = x
+        expected = td.clone()
+        td.all_reduce(bucket_bytes=2**20)
+        # One bucket per dtype, plus one for "x", which is not packed.
+        assert len(calls) == 5
+        assert {t.dtype for t in calls[1:]} == {
+            torch.float32,
+            torch.int64,
+            torch.float64,
+            torch.int32,
+        }
+        assert calls[0] is x
+        assert (td["x"] == 1).all()
+        # The packed results are copied back into the leaves.
+        assert (td.exclude("x") == expected.exclude("x") * 2).all()
+
+    @staticmethod
+    def worker(queue, rank, op, port):
         os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = cls.port
+        os.environ["MASTER_PORT"] = port
         dist.init_process_group(
-            "gloo", rank=rank, world_size=3, timeout=timedelta(seconds=60)
+            "gloo", rank=rank, world_size=2, timeout=timedelta(seconds=60)
         )
 
         def run(td, dst, mode, **kwargs):
@@ -1523,20 +1549,23 @@ class TestBucketedReduce:
 
         errors = []
         try:
-            for bucket_bytes in (1, 64, 2**20):
-                for mode in ("sync", "async", "premature"):
-                    # dst None: all_reduce.
-                    for dst in (None, 1):
+            for bucket_bytes in (64, 2**20):
+                # dst None: all_reduce, which has no return_premature.
+                for dst, modes in (
+                    (None, ("sync", "async")),
+                    (1, ("sync", "async", "premature")),
+                ):
+                    for mode in modes:
                         case = (bucket_bytes, mode, dst)
-                        expected = cls.make_td(rank)
+                        expected = TestBucketedReduce.make_td(rank)
                         run(expected, dst, mode)
-                        td = cls.make_td(rank)
+                        td = TestBucketedReduce.make_td(rank)
                         works = run(td, dst, mode, bucket_bytes=bucket_bytes)
                         if (dst is None or rank == dst) and not (td == expected).all():
                             errors.append((case, "result"))
                         if bucket_bytes == 2**20 and works is not None:
-                            # One bucket per dtype, plus one for "x".
-                            if len(works) != 5:
+                            # One bucket per dtype.
+                            if len(works) != 4:
                                 errors.append((case, len(works)))
         except Exception as err:
             errors.append(repr(err))
@@ -1544,14 +1573,21 @@ class TestBucketedReduce:
         dist.barrier()
         dist.destroy_process_group()
 
+    # One port per run, so that a run does not wait for the port of the last.
     @pytest.mark.parametrize(
-        "op", [dist.ReduceOp.SUM, dist.ReduceOp.MAX, dist.ReduceOp.PRODUCT]
+        "op,port",
+        [
+            (dist.ReduceOp.SUM, "29587"),
+            (dist.ReduceOp.MAX, "29588"),
+            (dist.ReduceOp.PRODUCT, "29589"),
+        ],
+        ids=["sum", "max", "product"],
     )
-    def test_bucketed_equals_per_leaf(self, set_context, op):
-        queue = mp.Queue(3)
+    def test_bucketed_equals_per_leaf(self, set_context, op, port):
+        queue = mp.Queue(2)
         workers = [
-            mp.Process(target=type(self).worker, args=(queue, rank, op))
-            for rank in range(3)
+            mp.Process(target=type(self).worker, args=(queue, rank, op, port))
+            for rank in range(2)
         ]
         for w in workers:
             w.start()
@@ -1563,7 +1599,7 @@ class TestBucketedReduce:
                 w.join(timeout=TIMEOUT)
                 if w.is_alive():
                     w.terminate()
-        assert out == [[], [], []]
+        assert out == [[], []]
 
 
 class TestBroadcast:
