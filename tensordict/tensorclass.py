@@ -850,6 +850,11 @@ def from_dataclass(
     converts a dataclass instance to a :class:`~tensordict.TensorDict`
     instead.
 
+    To write the class as a tensorclass, a dataclass of tensors with
+    ``to(device)``, ``pin_memory()``, slicing and stacking for all its
+    fields, see :ref:`tensorclass-guide`. :ref:`coming-from-dataclass` shows
+    what replaces each method of a hand-written dataclass of tensors.
+
     Args:
         obj (Any): the dataclass instance or type to convert.
 
