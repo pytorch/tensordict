@@ -89,6 +89,7 @@ from tensordict.base import (
     TensorDictBase,
 )
 from tensordict.memmap import MemoryMappedTensor
+from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
@@ -178,7 +179,14 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         # entries. The default is_leaf rejects every tensor collection, so with
         # it the entry of the first member decides.
         if self.is_leaf is _default_is_leaf:
-            data_type = type(self.tensordict.tensordicts[0].get(key))
+            first = self.tensordict.tensordicts[0]
+            if type(first) is PersistentTensorDict:
+                try:
+                    data_type = first.entry_class(key)
+                except KeyError:
+                    data_type = type(first.get(key))
+            else:
+                data_type = type(first.get(key))
             if _is_tensor_collection(data_type):
                 return LazyStackedTensorDict
             return data_type
@@ -260,10 +268,33 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             and all(type(td) is TensorDict for td in tensordict.tensordicts)
         ):
             return self._iter_members(tensordict, (), tensordict.tensordicts, prefix)
+        if (
+            type(tensordict) is LazyStackedTensorDict
+            and tensordict._hook_out is None
+            and tensordict._hook_in is None
+            and not tensordict._is_vmapped
+            and tensordict.stack_dim >= 0
+            and all(type(td) is PersistentTensorDict for td in tensordict.tensordicts)
+        ):
+            return self._iter_persistent(tensordict, prefix)
         view = _TensorDictKeysView(
             self.tensordict, self.include_nested, self.leaves_only, self.is_leaf
         )
         return view._iter_helper(tensordict, prefix)
+
+    def _iter_persistent(self, tensordict, prefix):
+        for key in tensordict._key_list():
+            try:
+                classes = [td.entry_class(key) for td in tensordict.tensordicts]
+            except KeyError:
+                classes = None
+            if classes is not None and all(cls is Tensor for cls in classes):
+                if not self.leaves_only or self.is_leaf(Tensor):
+                    yield key if prefix is None else prefix + (key,)
+            else:
+                value = tensordict._maybe_get_list(key)
+                if value is not None:
+                    yield from self._iter_entry(key, value, prefix)
 
     def _iter_members(
         self,
@@ -3439,7 +3470,14 @@ class LazyStackedTensorDict(TensorDictBase):
         return [key for key in first_keys if key in keys]
 
     def entry_class(self, key: NestedKey) -> type:
-        data_type = type(self.tensordicts[0].get(key))
+        first = self.tensordicts[0]
+        if type(first) is PersistentTensorDict:
+            try:
+                data_type = first.entry_class(key)
+            except KeyError:
+                data_type = type(first.get(key))
+        else:
+            data_type = type(first.get(key))
         if not _is_tensor_collection(data_type):
             return data_type
         if data_type is TensorDict:

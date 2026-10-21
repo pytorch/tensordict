@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import pathlib
 import shutil
 import time
@@ -13,8 +14,10 @@ from pathlib import Path
 
 import pytest
 import torch
-from tensordict import MemoryMappedTensor, TensorDict
+from tensordict import lazy_stack, MemoryMappedTensor, PersistentTensorDict, TensorDict
 from torch import nn
+
+_has_h5py = importlib.util.find_spec("h5py") is not None
 
 try:
     import zarr
@@ -364,6 +367,43 @@ def test_consolidate_to_file(benchmark, td_consolidate_file, num_threads, tmpdir
         td_consolidate_file.consolidate(filename=filename, num_threads=num_threads)
 
     benchmark.pedantic(consolidate, setup=setup, rounds=_ROUNDS, warmup_rounds=1)
+
+
+@pytest.mark.parametrize("container", ["dense", "ragged_dense", "persistent"])
+@pytest.mark.parametrize("operation", ["keys", "entry_class"])
+def test_lazy_key_metadata(benchmark, tmp_path, container, operation):
+    if container == "persistent" and not _has_h5py:
+        pytest.skip("h5py not found")
+    dense = [
+        TensorDict(
+            {
+                "a": torch.zeros(3, i + 1 if container == "ragged_dense" else 1),
+                "sub": {"x": torch.ones(3)},
+            },
+            [3],
+        )
+        for i in range(2)
+    ]
+    members = []
+    try:
+        if container == "persistent":
+            members = [
+                PersistentTensorDict.from_dict(td, filename=tmp_path / f"keys-{i}.h5")
+                for i, td in enumerate(dense)
+            ]
+        td = lazy_stack(members or dense)
+
+        def run():
+            return (
+                list(td.keys(True, True))
+                if operation == "keys"
+                else td.entry_class("a")
+            )
+
+        benchmark.pedantic(run, rounds=5, iterations=10, warmup_rounds=1)
+    finally:
+        for member in members:
+            member.close()
 
 
 if __name__ == "__main__":

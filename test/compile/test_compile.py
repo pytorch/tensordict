@@ -75,6 +75,24 @@ from torch.utils._pytree import (
     tree_unflatten,
 )
 
+
+@pytest.mark.parametrize("backend", ["eager", "aot_eager"])
+def test_lazy_keys_entry_class_compile(backend):
+    def read(td):
+        assert list(td.keys(True, True)) == ["a"]
+        assert td.entry_class("a") is torch.Tensor
+        return td["a"] + 1
+
+    td = lazy_stack(
+        [
+            TensorDict(a=torch.zeros(3), batch_size=[3]),
+            TensorDict(a=torch.ones(3), batch_size=[3]),
+        ]
+    )
+    compiled = torch.compile(read, backend=backend, fullgraph=True)
+    torch.testing.assert_close(compiled(td), read(td))
+
+
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None

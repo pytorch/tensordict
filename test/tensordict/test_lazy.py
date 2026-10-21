@@ -576,6 +576,106 @@ class TestLazyStackedTensorDict:
         assert len(list(stack.values(include_nested, leaves_only))) == 1
         assert [key for key, _ in stack.items(include_nested, leaves_only)] == ["a"]
 
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found")
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_persistent_keys_do_not_read_data(self, tmp_path, locked):
+        td = TensorDict(
+            {"a.b": torch.zeros(3), "a": {"c": torch.ones(3)}, "e": torch.ones(3)}, [3]
+        )
+        members = [
+            PersistentTensorDict.from_dict(td, filename=tmp_path / f"keys-{i}.h5")
+            for i in range(2)
+        ]
+        try:
+            stack = lazy_stack(members)
+            if locked:
+                stack.lock_()
+            backend = type(members[0]._backend)
+            with mock.patch.object(
+                backend, "read_full", autospec=True, side_effect=backend.read_full
+            ) as read:
+                assert list(stack.keys(True, True)) == [("a", "c"), "a.b", "e"]
+                assert list(stack.keys(True, False)) == [("a", "c"), "a", "a.b", "e"]
+                assert list(stack.keys(False, True)) == ["a.b", "e"]
+                assert stack.entry_class("e") is torch.Tensor
+                for key in ("missing", ("a", "missing"), ("e", "missing")):
+                    assert stack.entry_class(key) is type(None)
+            assert read.call_count == 0
+        finally:
+            for member in members:
+                member.close()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found")
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "numeric",
+            "exclusive",
+            "non_tensor",
+            "mixed",
+            "mixed_reverse",
+            "dense_member",
+        ],
+    )
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    def test_persistent_keys_match_generic(self, tmp_path, case, leaves_only):
+        dense = [
+            TensorDict({"a": torch.zeros(3, i + 1), "sub": {"x": torch.ones(3)}}, [3])
+            for i in range(2)
+        ]
+        if case == "exclusive":
+            dense[1].del_(("sub", "x"))
+        elif case == "non_tensor":
+            for td in dense:
+                td["label"] = "text"
+        elif case in ("mixed", "mixed_reverse"):
+            dense[int(case == "mixed_reverse")]["sub"] = torch.ones(3)
+        members = [
+            PersistentTensorDict.from_dict(td, filename=tmp_path / f"member-{i}.h5")
+            for i, td in enumerate(dense)
+        ]
+        try:
+            stack = lazy_stack(
+                [members[0], dense[1]] if case == "dense_member" else members
+            )
+            for predicate in (_default_is_leaf, is_leaf_nontensor, lambda cls: True):
+
+                def listed(view_type, predicate=predicate):
+                    calls = []
+
+                    def recorded(cls, predicate=predicate):
+                        calls.append(cls)
+                        return predicate(cls)
+
+                    try:
+                        view = view_type(stack, True, leaves_only, recorded)
+                        return list(view), len(view), calls
+                    except Exception as err:
+                        return type(err), str(err), calls
+
+                assert listed(_LazyStackedTensorDictKeysView) == listed(
+                    _TensorDictKeysView
+                )
+        finally:
+            for member in members:
+                member.close()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found")
+    def test_persistent_keys_deleted_during_iteration(self, tmp_path):
+        td = TensorDict({"a": torch.zeros(3), "z": torch.ones(3)}, [3])
+        members = [
+            PersistentTensorDict.from_dict(td, filename=tmp_path / f"delete-{i}.h5")
+            for i in range(2)
+        ]
+        try:
+            keys = iter(lazy_stack(members).keys(True, True))
+            assert next(keys) == "a"
+            members[1].del_("z")
+            assert list(keys) == []
+        finally:
+            for member in members:
+                member.close()
+
     @staticmethod
     def _keys_nested_members(case):
         def member(i):
