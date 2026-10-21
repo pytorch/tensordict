@@ -2,12 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import atexit
 import math
 import pathlib
 import shutil
 import tempfile
+import types
 import warnings
 from functools import wraps
+from unittest import mock
 
 import numpy as np
 import torch
@@ -53,13 +56,36 @@ def streaming_dataset(**kwargs):
     pytest-xdist workers that build one at the same moment pick the same
     prefix, and the second fails with ``FileExistsError``. A lock file in the
     temporary directory makes the workers build theirs one after the other.
+
+    The shared memory a ``StreamingDataset`` creates or attaches to is closed
+    only by the ``atexit`` handlers that ``streaming`` registers, and building
+    one attaches to the shared memory of every live prefix. Each dataset of a
+    test session would leak two file descriptors per block and per earlier
+    prefix, enough to exhaust the default limit of 1024. The handlers of the
+    previous dataset run here instead, so a worker keeps one dataset's blocks.
     """
+    import streaming.base.shared.memory as streaming_memory
     from streaming import StreamingDataset
 
     with FileLock(
         pathlib.Path(tempfile.gettempdir()) / "tensordict_test_streaming.lock"
     ):
-        return StreamingDataset(**kwargs)
+        _release_streaming_shm()
+        with mock.patch.object(
+            streaming_memory,
+            "atexit",
+            types.SimpleNamespace(register=_STREAMING_CLEANUPS.append),
+        ):
+            return StreamingDataset(**kwargs)
+
+
+_STREAMING_CLEANUPS = []
+
+
+@atexit.register
+def _release_streaming_shm():
+    while _STREAMING_CLEANUPS:
+        _STREAMING_CLEANUPS.pop()()
 
 
 def is_npu_available():
