@@ -1514,26 +1514,17 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
 
 
-@pytest.mark.parametrize("scenario", ["import", "find_spec_first", "dynamo_first"])
-def test_import_does_not_load_dynamo(scenario):
-    # Importing torch._dynamo takes about a second (#3090), so tensordict defers
-    # its Dynamo registrations until torch._dynamo is imported. They must be in
-    # place whether Dynamo is imported before tensordict, after it, or after a
-    # lookup that does not import it.
+def test_import_loads_dynamo_before_runtime_wrappers():
+    # #3231: torch has a circular import between
+    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. If
+    # runtime_wrappers is imported first, torch._dynamo stays half-initialized
+    # and every later torch.compile call raises. import tensordict loads
+    # torch._dynamo, so that import order works after it.
     code = (
-        "import importlib.util, sys, torch\n"
-        "if 'torch._dynamo' in sys.modules:\n"
-        "    print('torch loads dynamo')\n"
-        "    sys.exit()\n"
-        f"scenario = {scenario!r}\n"
-        "if scenario == 'dynamo_first':\n"
-        "    import torch._dynamo\n"
-        "import tensordict, tensordict.nn\n"
+        "import torch, tensordict\n"
+        "from torch._functorch._aot_autograd.runtime_wrappers import AOTDispatchAutograd\n"
+        "assert torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1)) == 2\n"
         "from tensordict import base\n"
-        "assert ('torch._dynamo' in sys.modules) == (scenario == 'dynamo_first')\n"
-        "if scenario == 'find_spec_first':\n"
-        "    assert importlib.util.find_spec('torch._dynamo') is not None\n"
-        "    assert 'torch._dynamo' not in sys.modules\n"
         "from torch._dynamo import trace_rules\n"
         "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n"
         "def lock(td):\n"
@@ -1550,8 +1541,6 @@ def test_import_does_not_load_dynamo(scenario):
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
     )
     assert result.returncode == 0, result.stderr
-    if result.stdout.strip() == "torch loads dynamo":
-        pytest.skip("import torch loads torch._dynamo")
     assert result.stdout.strip() == "ok"
 
 
