@@ -304,11 +304,12 @@ directly. Its first dimension is a batch dimension:
   torch.Size([3, 2])
 
 Indexing (with an int, a slice, a mask or a tensor of indices), ``split``,
-``chunk`` and :func:`torch.cat` work along that dimension, although torch does
-not do them on the nested tensor itself. Leaves that share their offsets, such
-as token ids and their attention mask, still share them in the result.
-:func:`torch.stack` raises, because the result would need a second ragged
-dimension: use :func:`~tensordict.lazy_stack` instead.
+``chunk`` and :func:`torch.cat` work along that dimension. On the nested tensor
+itself, torch does only the int index and ``chunk`` along it, and raises for
+the others. Leaves that share their offsets, such as token ids and their
+attention mask, still share them in the result. :func:`torch.stack` raises,
+because the result would need a second ragged dimension: use
+:func:`~tensordict.lazy_stack` instead.
 
   >>> data = torch.cat([data, data[torch.tensor([1])]])
   >>> data.batch_size, [t.shape for t in data[1:]["nodes"].unbind()]
@@ -401,6 +402,8 @@ zeros. A value with another shape raises a ``RuntimeError``. The
 See also
 --------
 
+- :ref:`variable-size-batches`: a how-to for batches of molecules, point
+  clouds or sequences, from the ``DataLoader`` to the model.
 - :class:`~tensordict.LazyStackedTensorDict`, :func:`~tensordict.stack`,
   :func:`~tensordict.lazy_stack`, :func:`~tensordict.maybe_dense_stack`,
   :func:`~tensordict.cat`, and :func:`~tensordict.pad_sequence` in the
