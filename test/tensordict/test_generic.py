@@ -1453,6 +1453,53 @@ class TestGeneric:
         torch.testing.assert_close(loaded[key], torch.tensor([98, 99]))
         assert loaded.batch_size == (2,)
 
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    @pytest.mark.xfail(
+        # the copy reads the source views correctly on macOS (#3197)
+        not _IS_OSX,
+        strict=True,
+        raises=AssertionError,
+        reason="#3197: a file of the same size is written in place while the source "
+        "reads views into it",
+    )
+    def test_consolidated_file_overwrite_same_size_source_view(self, tmp_path):
+        # load a checkpoint, swap two leaves and save it back under the same name
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        original = TensorDict.from_consolidated(filename)
+        saved = TensorDict(
+            a=original["b"], b=original["a"], batch_size=[4]
+        ).consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        for td in (saved, loaded):
+            torch.testing.assert_close(td["a"], torch.ones(4))
+            torch.testing.assert_close(td["b"], torch.zeros(4))
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
+    )
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="#3197: an older result writes its metadata over a newer file of "
+        "the same size",
+    )
+    def test_consolidated_file_stale_refresh_same_size(self, tmp_path):
+        # refresh an older checkpoint's metadata after a newer one was saved
+        filename = tmp_path / "td.bin"
+        previous = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        TensorDict(c=torch.ones(4), batch_size=[4]).consolidate(filename=filename)
+        previous.consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        assert list(loaded.keys()) == ["c"]
+        torch.testing.assert_close(loaded["c"], torch.ones(4))
+
     @pytest.mark.parametrize("existing", [False, True])
     def test_consolidated_file_overwrite_empty(self, tmp_path, existing):
         filename = tmp_path / "td.bin"
