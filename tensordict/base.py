@@ -3110,6 +3110,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by the files and stores, which hold no autograd history: detach_
     # returns without reading their entries.
     _storage_holds_no_gradients: bool = False
+    # Set by the files and stores, whose copy() shares their storage: replace
+    # merges its keyword entries into a to_tensordict() copy of such an
+    # argument, which then does not change (#2984).
+    _copy_shares_storage: bool = False
     # Set by PersistentTensorDict, which writes a constant without reading the
     # array: zero_ fills each entry through _fill_ instead of reading copies.
     _fills_without_reading: bool = False
@@ -6979,10 +6983,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         When both a positional argument and ``**kwargs`` are given, the
         keyword entries are merged into a copy of the positional argument
         (with ``dict`` unpacking for a dictionary, with :meth:`~.copy` and
-        :meth:`~.update` for a tensordict), so the argument does not change.
-        A tensordict backed by a file or a store, such as a
-        :class:`~tensordict.PersistentTensorDict`, shares that storage with
-        its copy and still receives the keyword entries.
+        :meth:`~.update` for a tensordict, and with :meth:`~.to_tensordict`
+        and :meth:`~.update` for a tensordict backed by a file or a store), so
+        the argument does not change. A tensordict backed by a file or a
+        store, such as a :class:`~tensordict.PersistentTensorDict`, shares
+        that storage with its copy: called on one, ``replace`` writes the new
+        entries into the file or store.
 
         Args:
             *args (dict or TensorDictBase): at most one, the entries to write.
@@ -7026,7 +7032,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if isinstance(dict_to_replace, dict):
                     dict_to_replace = {**dict_to_replace, **kwargs}
                 elif is_tensor_collection(dict_to_replace):
-                    dict_to_replace = dict_to_replace.copy()
+                    if dict_to_replace._copy_shares_storage:
+                        dict_to_replace = dict_to_replace.to_tensordict()
+                    else:
+                        dict_to_replace = dict_to_replace.copy()
                     dict_to_replace.update(kwargs)
         else:
             dict_to_replace = kwargs
