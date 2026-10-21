@@ -735,8 +735,14 @@ def _apply_on_members(
     failed: list,
     rejects: Callable | None = None,
     path: tuple = (),
+    aligned: int = 0,
 ) -> TensorDictBase:
     """Returns ``f(leaf, *operands)`` on the member leaves of the lazy stack ``td``, each with its part of the tensors of ``operands`` (#3042).
+
+    The tensors of ``operands`` broadcast from the right with each stacked
+    leaf, as keyword operands do, except the first ``aligned``: these have
+    the batch shape of ``td`` and line up with the leading dims of each leaf,
+    as positional operands do.
 
     Appends to ``failed`` where a leaf has no part of an operand, or has a
     dtype that ``rejects``: the caller then discards the result.
@@ -749,7 +755,9 @@ def _apply_on_members(
         member_path = path + ((stack_dim, i, size),)
         if isinstance(member, LazyStackedTensorDict):
             results.append(
-                _apply_on_members(member, f, operands, failed, rejects, member_path)
+                _apply_on_members(
+                    member, f, operands, failed, rejects, member_path, aligned
+                )
             )
             continue
         cache = {}
@@ -762,15 +770,30 @@ def _apply_on_members(
                     return x
                 ops = cache.get(x.shape)
                 if ops is None:
+                    ndim = x.ndim + len(member_path)
                     ops = cache[x.shape] = [
-                        _keyword_operand(o, x.shape, member_path) for o in operands
+                        _keyword_operand(
+                            o.reshape(o.shape + (1,) * (ndim - o.ndim))
+                            if i < aligned
+                            else o,
+                            x.shape,
+                            member_path,
+                        )
+                        for i, o in enumerate(operands)
                     ]
                     if any(o is None for o in ops):
                         failed.append(x)
-                        ops = cache[x.shape] = operands
+                        # f must not raise where the old per-member call
+                        # returns: keep the parts of the aligned operands
+                        ops = cache[x.shape] = [
+                            s if j < aligned and s is not None else o
+                            for j, (s, o) in enumerate(zip(ops, operands))
+                        ]
                 return f(x, *ops)
             if isinstance(x, LazyStackedTensorDict) and not is_non_tensor(x):
-                return _apply_on_members(x, f, operands, failed, rejects, member_path)
+                return _apply_on_members(
+                    x, f, operands, failed, rejects, member_path, aligned
+                )
             if isinstance(_unwrap(x), LazyStackedTensorDict):
                 # a tensorclass on a lazy stack would lose the stack's path
                 failed.append(x)
@@ -867,7 +890,33 @@ def _maybe_broadcast_other(
                         return result
             if not need_broadcast:
                 if kwargs.get("default") is None and _mixes_lazy_stacks(self, others):
-                    return pointwise(self, others, args, kwargs)
+                    tensor_kwargs = {
+                        k: v.shape
+                        for k, v in kwargs.items()
+                        if isinstance(v, Tensor) and v.ndim
+                    }
+                    if keywords or not tensor_kwargs:
+                        return pointwise(self, others, args, kwargs)
+                    # lerp passes a weight given by keyword on as a positional
+                    # one, which lines up with the batch dims (#3042)
+                    try:
+                        torch.broadcast_shapes(self.shape, *tensor_kwargs.values())
+                    except RuntimeError:
+                        # pointwise pairs it with the trailing dims of each leaf
+                        result = pointwise(self, others, args, kwargs)
+                        warnings.warn(
+                            f"{op}() got {tensor_kwargs} by keyword, which do "
+                            f"not broadcast with the batch size {self.shape}: "
+                            "each leaf broadcasts them from the right, where a "
+                            "tensordict without lazy stacks raises. Starting "
+                            "with TensorDict 0.17, the default will change to "
+                            "raising that error. Pass tensors that line up "
+                            "with the batch dims to get the result of a "
+                            "tensordict without lazy stacks.",
+                            FutureWarning,
+                            stacklevel=2,
+                        )
+                        return result
                 try:
                     return func(self, *others, *args, **kwargs)
                 except KeyError:
@@ -921,6 +970,37 @@ def _maybe_broadcast_other(
                 if isinstance(self_expand, LazyStackedTensorDict) and not is_non_tensor(
                     self_expand
                 ):
+                    tensor_kwargs = [
+                        k for k, v in kwargs.items() if isinstance(v, Tensor) and v.ndim
+                    ]
+                    if (
+                        tensor_kwargs
+                        and not inplace
+                        and all(isinstance(o, Tensor) for o in others_map)
+                    ):
+                        # A tensor passed by keyword broadcasts from the right
+                        # with each leaf: give each member leaf its part of it,
+                        # next to its part of the positional operands (#3042).
+                        n = len(others_map)
+                        rest = {
+                            k: v for k, v in kwargs.items() if k not in tensor_kwargs
+                        }
+                        failed = []
+                        result = _apply_on_members(
+                            self_expand,
+                            lambda x, *ops: leaf_op(
+                                x,
+                                *ops[:n],
+                                *args,
+                                **dict(zip(tensor_kwargs, ops[n:])),
+                                **rest,
+                            ),
+                            [*others_map, *(kwargs[k] for k in tensor_kwargs)],
+                            failed,
+                            aligned=n,
+                        )
+                        if not failed:
+                            return result
                     # The leaves of each member lack the stack dim: give each
                     # member its slice of the operands.
                     stack_dim = self_expand.stack_dim
