@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6365+g27e112064.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6366+gbc9beb4b3.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6365+g27e112064.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6366+gbc9beb4b3.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1760,7 +1760,12 @@ returns a list. See <a class="reference internal" href="../../concepts/keys.html
 <p>Any other index (an int, a slice, a tensor, a boolean mask, <code class="docutils literal notranslate"><span class="pre">...</span></code>,
 <code class="docutils literal notranslate"><span class="pre">None</span></code>, or a tuple of these) applies to the batch dimensions of every
 entry, as it would to a tensor of shape <a class="reference internal" href="tensordict.TensorDictBase.batch_size.html#tensordict.TensorDictBase.batch_size" title="tensordict.TensorDictBase.batch_size"><code class="xref py py-attr docutils literal notranslate"><span class="pre">batch_size</span></code></a>, and
-returns a tensordict. See <a class="reference internal" href="../../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>.</p>
+returns a tensordict. See <a class="reference internal" href="../../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>. An index that runs past
+the batch dimensions with ints, lists, tensors or masks indexes the
+leaves of a tensordict, and grows the batch size to cover their indexed
+dims, with a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>. Starting with TensorDict 0.17, the
+default will change to raising an <code class="docutils literal notranslate"><span class="pre">IndexError</span></code>: to index the leaves,
+write <code class="docutils literal notranslate"><span class="pre">td.apply(lambda</span> <span class="pre">x:</span> <span class="pre">x[:,</span> <span class="pre">idx])</span></code>, which keeps the batch size.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if the key is missing.</p>
@@ -2140,7 +2145,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.__getitem__",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.__getitem__",
        "url": "/reference/generated/tensordict.TensorDictBase.__getitem__.html",
-       "articleBody": "TensorDictBase.__getitem__# TensorDictBase.__getitem__(index: str | tuple[str, ...]) \u2192 Any# TensorDictBase.__getitem__(index: IndexType) \u2192 Self Returns the entry at a key, or the tensordict indexed along its batch dimensions. A string or a tuple of strings reads an entry, as get() does, except that a missing key raises KeyError. A non-tensor entry returns its content (the string, not the NonTensorData), and a stack of non-tensor data returns a list. See Keys, nested keys, and locking. Any other index (an int, a slice, a tensor, a boolean mask, ..., None, or a tuple of these) applies to the batch dimensions of every entry, as it would to a tensor of shape batch_size, and returns a tensordict. See Batch size, shapes, and indexing. Raises: KeyError \u2013 if the key is missing. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"root\": torch.arange(2), (\"nested\", \"entry\"): torch.arange(2)}, [2]) \u003e\u003e\u003e td[\"root\"] tensor([0, 1]) \u003e\u003e\u003e td[\"nested\", \"entry\"] tensor([0, 1]) \u003e\u003e\u003e td[:1].batch_size, td[:1][\"nested\", \"entry\"] (torch.Size([1]), tensor([0])) \u003e\u003e\u003e td[torch.tensor([True, False])][\"root\"] tensor([0]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.__getitem__# TensorDictBase.__getitem__(index: str | tuple[str, ...]) \u2192 Any# TensorDictBase.__getitem__(index: IndexType) \u2192 Self Returns the entry at a key, or the tensordict indexed along its batch dimensions. A string or a tuple of strings reads an entry, as get() does, except that a missing key raises KeyError. A non-tensor entry returns its content (the string, not the NonTensorData), and a stack of non-tensor data returns a list. See Keys, nested keys, and locking. Any other index (an int, a slice, a tensor, a boolean mask, ..., None, or a tuple of these) applies to the batch dimensions of every entry, as it would to a tensor of shape batch_size, and returns a tensordict. See Batch size, shapes, and indexing. An index that runs past the batch dimensions with ints, lists, tensors or masks indexes the leaves of a tensordict, and grows the batch size to cover their indexed dims, with a FutureWarning. Starting with TensorDict 0.17, the default will change to raising an IndexError: to index the leaves, write td.apply(lambda x: x[:, idx]), which keeps the batch size. Raises: KeyError \u2013 if the key is missing. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({\"root\": torch.arange(2), (\"nested\", \"entry\"): torch.arange(2)}, [2]) \u003e\u003e\u003e td[\"root\"] tensor([0, 1]) \u003e\u003e\u003e td[\"nested\", \"entry\"] tensor([0, 1]) \u003e\u003e\u003e td[:1].batch_size, td[:1][\"nested\", \"entry\"] (torch.Size([1]), tensor([0])) \u003e\u003e\u003e td[torch.tensor([True, False])][\"root\"] tensor([0]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
