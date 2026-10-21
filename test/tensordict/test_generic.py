@@ -4940,6 +4940,49 @@ class TestGeneric:
                 with pytest.raises(IndexError):
                     data[index]
 
+    @pytest.mark.parametrize("as_tensor", [False, True])
+    def test_getitem_past_batch_dims_joint_axis(self, as_tensor):
+        # #3202: indexing the joint axis of a proprioception TensorDict, as
+        # EmbodiChain does with get_proprioception()[:, active_joint_ids],
+        # worked on 0.14 and raised an IndexError on 0.15.0: it returns the
+        # 0.14 result, with a FutureWarning, until 0.17
+        num_envs, dof = 4, 3
+        qpos = torch.arange(num_envs * dof, dtype=torch.float).reshape(num_envs, dof)
+        proprio = TensorDict(
+            qpos=qpos, qvel=qpos + 100, qf=qpos + 200, batch_size=[num_envs]
+        )
+        ids = torch.tensor([0, 2]) if as_tensor else [0, 2]
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            robot = proprio[:, ids]
+        messages = [w for w in record if "runs past the batch dims" in str(w.message)]
+        assert len(messages) == 1
+        assert messages[0].category is FutureWarning
+        assert robot.batch_size == (num_envs, 2)
+        for key in ("qpos", "qvel", "qf"):
+            assert torch.equal(robot[key], proprio[key][:, ids])
+        obs = TensorDict({"robot": robot}, batch_size=[num_envs])
+        assert obs.batch_size == (num_envs,)
+        assert obs["robot"].batch_size == (num_envs, 2)
+        assert torch.equal(obs["robot", "qpos"], qpos[:, ids])
+
+    @pytest.mark.parametrize("as_tensor", [False, True])
+    def test_getitem_past_batch_dims_apply_spelling(self, as_tensor):
+        # #3202: the spelling that the FutureWarning names works on 0.14, 0.15
+        # and later, keeps the batch size, and does not warn
+        num_envs, dof = 4, 3
+        qpos = torch.arange(num_envs * dof, dtype=torch.float).reshape(num_envs, dof)
+        proprio = TensorDict(
+            qpos=qpos, qvel=qpos + 100, qf=qpos + 200, batch_size=[num_envs]
+        )
+        ids = torch.tensor([0, 2]) if as_tensor else [0, 2]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            robot = proprio.apply(lambda x: x[:, ids])
+        assert robot.batch_size == (num_envs,)
+        for key in ("qpos", "qvel", "qf"):
+            assert torch.equal(robot[key], proprio[key][:, ids])
+
     @pytest.mark.parametrize(
         "index",
         [
