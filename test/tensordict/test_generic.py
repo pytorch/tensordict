@@ -6638,6 +6638,48 @@ class TestGeneric:
             counts.append(read_full.call_count)
         assert counts == [3, 3]
 
+    @staticmethod
+    def _lazy_stack_of_h5(tmp_path):
+        td = TensorDict(
+            {"a.b": torch.zeros(3), "a": {"c": torch.ones(3)}, "e": torch.ones(3)}, [3]
+        )
+        return lazy_stack(
+            [
+                PersistentTensorDict.from_dict(td, filename=tmp_path / f"td{i}.h5")
+                for i in range(2)
+            ]
+        )
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    def test_state_dict_flat_dotted_key_lazy_stack_h5_reads(self, tmp_path):
+        # A lazy stack of HDF5 files with a dotted key: the collision check
+        # read whole datasets, 11 reads for a flat state dict against 6 for a
+        # nested one (#3204, reported by @akshitkhokhani on #3200)
+        td = self._lazy_stack_of_h5(tmp_path)
+        backend = type(td.tensordicts[0]._backend)
+        counts = []
+        for flatten in (True, False):
+            with mock.patch.object(
+                backend, "read_full", autospec=True, side_effect=backend.read_full
+            ) as read_full:
+                td.state_dict(flatten=flatten)
+            counts.append(read_full.call_count)
+        assert counts == [6, 6]
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+    @pytest.mark.xfail(
+        strict=True,
+        reason="#3203: nested keys of a lazy stack of HDF5 files read every dataset",
+    )
+    def test_nested_keys_lazy_stack_h5_reads(self, tmp_path):
+        td = self._lazy_stack_of_h5(tmp_path)
+        backend = type(td.tensordicts[0]._backend)
+        with mock.patch.object(
+            backend, "read_full", autospec=True, side_effect=backend.read_full
+        ) as read_full:
+            list(td.keys(True, True))
+        assert read_full.call_count == 0
+
     @pytest.mark.parametrize(
         "make_td",
         [
