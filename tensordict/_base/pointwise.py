@@ -1751,7 +1751,12 @@ class _PointwiseOps:
             weight (TensorDictBase, torch.Tensor or float): the interpolation
                 weight: a number for all the leaves, or a tensordict or a
                 tensor paired like ``end``. One of ``end`` and ``weight`` can
-                be a tensordict and the other a tensor.
+                be a tensordict and the other a tensor. Where a lazy stack
+                meets a tensordict that is not one, a ``weight`` tensor that
+                does not broadcast with the batch dims broadcasts with each
+                leaf from the right instead, with a ``FutureWarning``.
+                Starting with TensorDict 0.17, the default will change to
+                raising the error of the other tensordicts.
 
         Examples:
             >>> import torch

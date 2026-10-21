@@ -1237,6 +1237,68 @@ class TestLazyStackedTensorDict:
             assert isinstance(result._source, LazyStackedTensorDict)
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("kind", ["root", "nested", "deep"])
+    def test_pointwise_keyword_tensor_mixed(self, stack_dim, kind):
+        # A positional tensor lines up with the batch dims and a tensor passed
+        # by keyword broadcasts with each leaf from the right, as on the dense
+        # tensordict, when both come in one call (#3042)
+        torch.manual_seed(0)
+        members = [TensorDict(y=torch.randn(4), batch_size=[4]) for _ in range(3)]
+        lazy = lazy_stack(members, stack_dim)
+        if kind == "deep":
+            lazy = lazy_stack([lazy, lazy + 1], 0)
+        shape = lazy.batch_size
+        if kind == "root":
+            td, dense = lazy, lazy.to_tensordict()
+        else:
+            td = TensorDict(n=lazy, batch_size=shape[:1])
+            dense = TensorDict(n=lazy.to_tensordict(), batch_size=shape[:1])
+
+        def check(result, expected):
+            assert set(result.keys(True, True)) == set(expected.keys(True, True))
+            for key, value in expected.items(True, True):
+                torch.testing.assert_close(result.get(key), value)
+
+        lo = torch.rand(td.batch_size) - 0.5
+        for hi in (
+            torch.rand(shape) + 0.5,
+            torch.rand(shape[1:]) + 0.5,
+            torch.rand(shape[:1] + (1,) * (len(shape) - 1)) + 0.5,
+        ):
+            check(td.clamp(lo, max=hi), dense.clamp(lo, max=hi))
+            check(td.lerp(lo, weight=hi - 0.5), dense.lerp(lo, weight=hi - 0.5))
+            if kind == "root":
+                # a dense end next to the lazy stack
+                end = dense + 1
+                check(td.lerp(end, weight=hi - 0.5), dense.lerp(end, weight=hi - 0.5))
+                check(dense.lerp(td + 1, weight=hi), dense.lerp(end, weight=hi))
+        result = td.clamp(lo, max=hi)
+        if kind == "root":
+            assert isinstance(result, LazyStackedTensorDict)
+        else:
+            assert isinstance(result.get("n"), LazyStackedTensorDict)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_lerp_keyword_weight_trailing_dims(self, stack_dim):
+        # With a dense end, a lazy stack paired a weight given by keyword with
+        # the trailing dims of each leaf, where the dense tensordict pairs it
+        # with the batch dims and raises: it keeps that result for now, with
+        # a FutureWarning (#3042)
+        torch.manual_seed(0)
+        members = [TensorDict(y=torch.randn(4, 2), batch_size=[4]) for _ in range(3)]
+        lazy = lazy_stack(members, stack_dim)
+        dense = lazy.to_tensordict()
+        end = dense + 1
+        weight = torch.rand(2)
+        with pytest.raises(RuntimeError):
+            dense.lerp(end, weight=weight)
+        expected = torch.lerp(dense["y"], end["y"], weight)
+        for td, td_end in ((lazy, end), (dense, lazy + 1)):
+            with pytest.warns(FutureWarning, match="TensorDict 0.17"):
+                result = td.lerp(td_end, weight=weight)
+            torch.testing.assert_close(result["y"], expected)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("kind", ["tensorclass", "typed"])
     def test_arithmetic_ops_broadcast_tensor_nested_wrapped(self, stack_dim, kind):
         # A tensorclass or a TypedTensorDict that wraps a lazy stack, nested in
