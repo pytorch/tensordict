@@ -844,7 +844,8 @@ class _Serialization:
                     f"consolidate() ignores {' and '.join(ignored)} on a "
                     "tensordict that is already consolidated, and returns it "
                     "as is. Call td.contiguous().consolidate(...) to copy the "
-                    "storage into a new one that honours them.",
+                    "storage into a new one that honours "
+                    f"{'them' if len(ignored) > 1 else 'it'}.",
                     UserWarning,
                     stacklevel=_user_stacklevel(),
                 )
