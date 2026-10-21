@@ -67,6 +67,8 @@ Some features need other packages. Install them with an extra, for example
      - Parquet files: :meth:`~tensordict.TensorDict.to_parquet` and
        :meth:`~tensordict.TensorDict.from_parquet`. These methods use
        pyarrow, or pandas if pyarrow is not installed.
+       Arrow tables: :func:`~tensordict.from_arrow` and
+       :func:`~tensordict.to_arrow`, which need pyarrow 15 or later.
    * - ``tabular``
      - ``pandas>=1.5`` and ``pyarrow>=10.0``
      - The ``pandas`` and ``parquet`` extras together.

@@ -548,7 +548,7 @@ over the keys.
 - [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) shows the shape operations.
 - [Keys, values, and entries](../reference/td.html#api-methods-keys) lists all the key methods.
 
-**Total running time of the script:** (0 minutes 0.010 seconds)
+**Total running time of the script:** (0 minutes 0.009 seconds)
 
 [`Download Jupyter notebook: tensordict_keys.ipynb`](../_downloads/97d8d73d25e56588177c9d8bc7211dc9/tensordict_keys.ipynb)
 

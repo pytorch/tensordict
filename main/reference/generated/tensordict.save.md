@@ -1,6 +1,6 @@
 # save
 
-tensordict.save(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
+tensordict.save(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Saves a tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -44,6 +44,12 @@ entries: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"` or a
 [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. Only valid for an archive. Defaults to
 `None`, which stores them uncompressed. Only uncompressed
 entries load without a copy.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the directory is written next
+to `prefix` and then renamed to it, so that an error or a crash
+during the write leaves `prefix` as it was. Not supported on
+Windows for a directory. [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)
+gives the details.
+Defaults to `False`.
 
 Returns:
 

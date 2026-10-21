@@ -452,6 +452,58 @@ size when it creates the tensordict:
 (True, True)
 ```
 
+## Arrow tables
+
+[`from_arrow()`](reference/generated/tensordict.from_arrow.html#tensordict.from_arrow) converts an Arrow table to a tensordict, and
+[`to_arrow()`](reference/generated/tensordict.to_arrow.html#tensordict.to_arrow) converts a tensordict back. Numeric columns
+become tensors that view the Arrow memory, list columns become jagged nested
+tensors, struct columns become nested tensordicts, and strings become a
+[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack):
+
+```
+>>> import pyarrow as pa
+>>> from tensordict import from_arrow, to_arrow
+>>> table = pa.table(
+... {
+... "reward": pa.array([0.5, 1.0, 0.0]),
+... "tokens": pa.array([[1, 2], [3], [4, 5, 6]]),
+... "prompt": pa.array(["a", "b", "c"]),
+... }
+... )
+>>> td = from_arrow(table)
+>>> td["tokens"].unbind(0)[2]
+tensor([4, 5, 6])
+>>> to_arrow(td).column_names
+['reward', 'tokens', 'prompt']
+```
+
+Hugging Face `datasets` and Polars hold their data in Arrow tables. After
+`select`, `shuffle` or `filter`, a Hugging Face dataset keeps all the
+rows of its table and a list of the rows it selects: call
+`flatten_indices()` first, so that its table holds only those rows:
+
+```
+>>> import datasets 
+>>> ds = datasets.load_from_disk("my_dataset") 
+>>> ds = ds.shuffle(seed=0).flatten_indices() 
+>>> td = from_arrow(ds.data.table) 
+>>> import polars as pl 
+>>> td = from_arrow(pl.DataFrame({"x": [1.0, 2.0]}).to_arrow())
+```
+
+A dataset loaded from disk is memory-mapped, and its memory is read-only.
+`from_arrow` copies such columns, because an in-place write into a view of
+read-only memory crashes the process. `copy=False` views them anyway: then
+do not write into the tensors. A column with null values raises an error,
+unless you pass `nulls="fill"` or `nulls="mask"`. A tensordict with
+jagged tensors can be indexed with an integer, a slice, an index tensor or a
+boolean mask, and split, chunked, unbound and concatenated along its batch
+dimension, but not stacked. `memmap` does not take jagged tensors: pad them
+first, with [`torch.nested.to_padded_tensor()`](https://docs.pytorch.org/docs/stable/nested.html#torch.nested.to_padded_tensor).
+[`from_parquet()`](reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet) keeps its own conversion, which
+reads list and struct columns as Python objects. To convert a Parquet file
+as `from_arrow` does, read it with `pyarrow.parquet.read_table`.
+
 ## Typed wrappers
 
 [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) and [`TypedTensorDict`](reference/generated/tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) can

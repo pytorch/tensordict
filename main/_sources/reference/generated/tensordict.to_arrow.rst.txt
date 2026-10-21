@@ -1,0 +1,10 @@
+﻿.. currentmodule:: tensordict
+
+
+to_arrow
+========
+
+.. autofunction:: to_arrow
+
+.. minigallery:: tensordict.to_arrow
+    :add-heading: Tutorials that use ``to_arrow``

@@ -6102,7 +6102,7 @@ Some features need other packages. Install them with an extra, for example
 | `h5` | `h5py>=3.8` | HDF5 files: [`to_h5()`](reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5), [`from_h5()`](reference/generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5), and [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). |
 | `zarr` | `zarr>=3.0` | Zarr stores: [`to_zarr()`](reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) and [`from_zarr()`](reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr). zarr 3 needs Python 3.11+. On Python 3.10, this extra installs nothing. |
 | `pandas` | `pandas>=1.5` | DataFrames and CSV files: [`to_pandas()`](reference/generated/tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas), [`from_pandas()`](reference/generated/tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas), [`to_csv()`](reference/generated/tensordict.TensorDictBase.to_csv.html#tensordict.TensorDictBase.to_csv), and [`from_csv()`](reference/generated/tensordict.TensorDictBase.from_csv.html#tensordict.TensorDictBase.from_csv). |
-| `parquet` | `pyarrow>=10.0` | Parquet files: [`to_parquet()`](reference/generated/tensordict.TensorDictBase.to_parquet.html#tensordict.TensorDictBase.to_parquet) and [`from_parquet()`](reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet). These methods use pyarrow, or pandas if pyarrow is not installed. |
+| `parquet` | `pyarrow>=10.0` | Parquet files: [`to_parquet()`](reference/generated/tensordict.TensorDictBase.to_parquet.html#tensordict.TensorDictBase.to_parquet) and [`from_parquet()`](reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet). These methods use pyarrow, or pandas if pyarrow is not installed. Arrow tables: [`from_arrow()`](reference/generated/tensordict.from_arrow.html#tensordict.from_arrow) and [`to_arrow()`](reference/generated/tensordict.to_arrow.html#tensordict.to_arrow), which need pyarrow 15 or later. |
 | `tabular` | `pandas>=1.5` and `pyarrow>=10.0` | The `pandas` and `parquet` extras together. |
 | `onnx` | `onnx`, `onnxscript`, and `onnxruntime` | Export of a [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) to ONNX with [`torch.onnx.export()`](https://docs.pytorch.org/docs/stable/onnx_export.html#torch.onnx.export), and running the result. |
 
@@ -15425,7 +15425,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.dumps
 
-TensorDictBase.dumps(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.dumps(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -15468,6 +15468,12 @@ file. Defaults to `None`, which writes an archive if
 - **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression of the
 archive entries. Defaults to `None`, which stores them
 uncompressed.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the directory is written
+next to `prefix` and then renamed to it, so that an error or
+a crash during the write leaves `prefix` as it was. Not
+supported on Windows for a directory. An archive is always
+written this way.
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) gives the details. Defaults to `False`.
 
 Returns:
 
@@ -20530,7 +20536,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.memmap
 
-TensorDictBase.memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -20596,6 +20602,25 @@ or a [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) 
 decompressed in memory when it is loaded, instead of being
 memory-mapped. Only valid for an archive. Defaults to `None`,
 which stores the entries uncompressed.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the files are written to a
+new directory next to `prefix`, which is then renamed to
+`prefix`, so that an error or a crash during the write
+leaves `prefix` as it was. The new directory is removed if
+the write fails (but not after a crash). An existing directory
+at `prefix` is replaced as a whole once the new one is
+complete, so files that the tensordict does not write are
+removed: it must be empty or hold a saved tensordict (a
+`meta.json` file). Readers see the old or the new directory,
+except for the short time between two renames, during which
+`prefix` is missing. The write needs about twice the disk
+space of the tensordict while it runs, and a leaf that is
+already memory-mapped to a file is copied, which needs
+`copy_existing=True`. The files are not synced to the disk,
+so this guards against a killed process, not against a power
+failure. Not supported with `return_early=True`, nor for a
+directory on Windows, where a directory that holds open files
+cannot be renamed. An archive is always written this way.
+Defaults to `False`.
 
 Returns:
 
@@ -20606,11 +20631,16 @@ A new memory-mapped tensordict, or a
 Raises:
 
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
- `copy_existing=False`, or if a file exists and
- `existsok=False`.
+ `copy_existing=False`, if a file exists and
+ `existsok=False`, or with `atomic=True`, if `prefix` is
+ a non-empty directory and `existsok=False`, or if it holds
+ no saved tensordict.
+- [**NotADirectoryError**](https://docs.python.org/3/builtins/exceptions.html#NotADirectoryError) - if `atomic=True` and `prefix` is a file.
 - [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `compression` is given without an archive, or if
- an archive is requested without `prefix`.
-- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` for an archive.
+ an archive or `atomic=True` is requested without `prefix`.
+- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` for an archive or
+ with `atomic=True`, or `atomic=True` for a directory on
+ Windows.
 
 Note
 
@@ -20651,7 +20681,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.memmap
 
-TensorDictBase.memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*) → Self
+TensorDictBase.memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Writes every leaf to a memory-mapped file in place, and returns `self`.
 
@@ -20701,6 +20731,26 @@ in file and directory names (`"a/b"` is written to
 If `False`, keys are used as file names unchanged, as in the
 legacy layout: do not use it with keys you do not trust.
 `None` is the same as `True`. Defaults to `True`.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the files are written to a
+new directory next to `prefix`, which is then renamed to
+`prefix`, so that an error or a crash during the write
+leaves `prefix` as it was. The new directory is removed if
+the write fails (but not after a crash). An existing directory
+at `prefix` is replaced as a whole once the new one is
+complete, so files that the tensordict does not write are
+removed: it must be empty or hold a saved tensordict (a
+`meta.json` file). Readers see the old or the new directory,
+except for the short time between two renames, during which
+`prefix` is missing. The write needs about twice the disk
+space of the tensordict while it runs, and a leaf that is
+already memory-mapped to a file is copied, which needs
+`copy_existing=True`. The files are not synced to the disk,
+so this guards against a killed process, not against a power
+failure. If the write fails, the leaves already converted map
+deleted files, so a retry needs `copy_existing=True`. Not
+supported with `return_early=True`, nor on Windows, where a
+directory that holds open files cannot be renamed. Defaults
+to `False`.
 
 Returns:
 
@@ -20709,7 +20759,7 @@ Returns:
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
  `copy_existing=False`, if a file exists and
  `existsok=False`, if the tensordict is in shared memory
  (see [`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_)), or if it is a
@@ -20717,7 +20767,14 @@ Raises:
  [`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore), a
  [`LazyStackedTensorDictStore`](tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore) or one of
  their elements. Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to make a memory-mapped
- copy of those.
+ copy of those. With `atomic=True`, also if `prefix` is a
+ non-empty directory and `existsok=False`, or if it holds no
+ saved tensordict.
+- [**NotADirectoryError**](https://docs.python.org/3/builtins/exceptions.html#NotADirectoryError) - if `atomic=True` and `prefix` is a file.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `atomic=True` and there is no directory to write
+ to.
+- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` with
+ `atomic=True`, or `atomic=True` on Windows.
 
 Examples
 
@@ -23428,7 +23485,7 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 # TensorDictBase.save
 
-TensorDictBase.save(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.save(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Saves the tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -23471,6 +23528,12 @@ file. Defaults to `None`, which writes an archive if
 - **compression** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the compression of the
 archive entries. Defaults to `None`, which stores them
 uncompressed.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the directory is written
+next to `prefix` and then renamed to it, so that an error or
+a crash during the write leaves `prefix` as it was. Not
+supported on Windows for a directory. An archive is always
+written this way.
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) gives the details. Defaults to `False`.
 
 Returns:
 
@@ -28205,6 +28268,65 @@ Raises:
 
 ---
 
+# append_memmap
+
+tensordict.append_memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path)*, *rows: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, ***, *allow_pickle: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [None](https://docs.python.org/3/builtins/constants.html#None)
+
+Appends rows to a tensordict saved in a directory, along its first batch dimension.
+
+Each leaf file grows by the bytes of the new rows, and the `meta.json`
+files are rewritten last, each one through a temporary file, so that a
+failed append leaves the saved data as it was. Readers that mapped the
+files before the append keep seeing the old number of rows, and
+[`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) after the append sees the new one. Use one
+writer at a time. Each append maps the whole saved tree, as
+[`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) does, to read its structure, so many small
+appends to a save with many leaves are slow. See [Save and load tensordicts](../../saving.html#saving).
+
+`rows` must have the keys, the classes, the dtypes and the trailing
+shapes of the saved tensordict, and its batch size may differ from the
+saved one in its first dimension only. A non-tensor entry stays as
+saved, and its value in `rows` must be equal to it: either one value or
+a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of equal values. A saved
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), a lazy stack, a nested tensor and an
+archive cannot grow, and raise. Everything is checked before the first
+file is written.
+
+Parameters:
+
+- **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the directory that [`save()`](tensordict.save.html#tensordict.save) or
+[`memmap()`](tensordict.memmap.html#tensordict.memmap) wrote.
+- **rows** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*or**tensorclass*) - the rows to append.
+
+Keyword Arguments:
+
+**allow_pickle** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether the pickled non-tensor entries
+of the saved tensordict, which are compared with those of
+`rows`, may be unpickled, as in
+[`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap). Defaults to `None`.
+
+Raises:
+
+[**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `prefix` is not a directory, or if `rows` cannot be
+ appended to the saved tensordict.
+
+Examples
+
+```
+>>> import tempfile
+>>> import torch
+>>> import tensordict
+>>> from tensordict import TensorDict
+>>> td = TensorDict(a=torch.zeros(3, 2), batch_size=[3])
+>>> with tempfile.TemporaryDirectory() as tmpdir:
+... _ = tensordict.save(td, tmpdir)
+... tensordict.append_memmap(tmpdir, TensorDict(a=torch.ones(2, 2), batch_size=[2]))
+... print(tensordict.load_memmap(tmpdir)["a"].sum(-1).tolist())
+[0.0, 0.0, 0.0, 2.0, 2.0]
+```
+
+---
+
 # assert_allclose_td
 
 tensordict.assert_allclose_td(*actual: T*, *expected: T*, *rtol: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atol: [float](https://docs.python.org/3/builtins/functions.html#float) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *equal_nan: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *intersection: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *msg: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = ''*, *prefix: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) = ()*) → [bool](https://docs.python.org/3/builtins/functions.html#bool)
@@ -28697,6 +28819,97 @@ Examples
 >>> td = from_any({"obs": torch.zeros(3, 4), "pair": (torch.zeros(3), 1)})
 >>> sorted(td.keys(include_nested=True, leaves_only=True), key=str)
 [('pair', '0'), ('pair', '1'), 'obs']
+```
+
+---
+
+# from_arrow
+
+tensordict.from_arrow(*table: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, ***, *copy: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *nulls: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['raise', 'fill', 'mask'] = 'raise'*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
+
+Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can.
+
+Requires pyarrow 15 or later. The columns convert as follows:
+
+- integer and floating-point columns become tensors that view the Arrow
+data through DLPack. Boolean columns are copied, since Arrow packs them
+as bits.
+- `list` and `large_list` columns of one of these types become jagged
+nested tensors (`layout=torch.jagged`) that view the values.
+- `fixed_size_list` and `arrow.fixed_shape_tensor` columns become
+tensors with trailing dimensions.
+- `struct` columns become nested tensordicts.
+- all the other columns, such as strings, binary, dictionaries,
+timestamps, and lists of lists or of strings, become a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of the Python objects of
+`pyarrow.Array.to_pylist`.
+
+A column made of more than one chunk is first concatenated with
+`combine_chunks`, which copies it. The tensors that view the Arrow data
+keep its buffers alive, and so the whole table that they come from.
+
+Parameters:
+
+**table** (*pyarrow.Table**or**pyarrow.RecordBatch*) - the table. Other objects
+go through `pyarrow.table()` first: for example a Polars
+DataFrame, or any object that has an `__arrow_c_stream__`
+method. A Hugging Face dataset holds its table in
+`dataset.data.table`: after `select`, `shuffle` or
+`filter`, call `dataset = dataset.flatten_indices()` first,
+since this table holds all the rows of the original dataset.
+
+Keyword Arguments:
+
+- **copy** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - whether to copy the data. `None` views the
+buffers that Arrow marks as mutable, and copies the immutable
+ones, such as those of a memory-mapped file (for example a Hugging
+Face dataset loaded from disk). `True` copies every column.
+`False` views every column that it can: an in-place write into a
+view of an immutable buffer then crashes the process, since torch
+has no read-only tensors. Defaults to `None`.
+- **nulls** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - what to do with null values. `"raise"`
+raises a `ValueError`. `"fill"` fills them with `NaN` in
+floating-point tensors, `0` (`False`) in the other tensors, an
+empty list in jagged tensors, and `None` in a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack). A null struct makes each of
+its fields null. `"mask"` fills them as `"fill"` does, and adds
+the boolean entry `("_mask", *key)` for each entry `key` that
+has nulls, `True` where the row is not null. Filling copies the
+column. Defaults to `"raise"`.
+- **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
+result. Defaults to `None`, which keeps the tensors on the CPU
+and gives a tensordict without a device.
+
+Returns:
+
+A [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with the batch size `[num_rows]`.
+
+See also
+
+[`to_arrow()`](tensordict.to_arrow.html#tensordict.to_arrow), the reverse conversion.
+
+Examples
+
+```
+>>> import pyarrow as pa
+>>> from tensordict import from_arrow
+>>> table = pa.table(
+... {
+... "x": pa.array([1.0, 2.0, 3.0]),
+... "ids": pa.array([[1, 2], [3], []]),
+... "text": pa.array(["a", "b", "c"]),
+... }
+... )
+>>> td = from_arrow(table)
+>>> td["x"]
+tensor([1., 2., 3.], dtype=torch.float64)
+>>> td["ids"].unbind(0)
+(tensor([1, 2]), tensor([3]), tensor([], dtype=torch.int64))
+>>> td.get("text").tolist()
+['a', 'b', 'c']
+>>> td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
+>>> td["y"], td["_mask", "y"]
+(tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
 ```
 
 ---
@@ -29368,6 +29581,61 @@ torch.Size([3])
 torch.Size([3, 2])
 >>> type(td.to_pytree()["b"]).__name__
 'tuple'
+```
+
+---
+
+# from_safetensors
+
+tensordict.from_safetensors(*path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | Path*, ***, *device: DeviceType | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)
+
+Loads a tensordict from a safetensors file.
+
+A file written by [`to_safetensors()`](tensordict.to_safetensors.html#tensordict.to_safetensors) loads with its
+structure: the batch sizes, dim names, tensorclasses and non-tensor
+values that it was saved with. A tensorclass loads only if the module
+that defines it is imported: tensordict never imports a module by the
+name in a file.
+
+Any other safetensors file, such as a model checkpoint from the Hugging
+Face Hub, loads as a nested [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with an empty
+batch size: each name is split on `"."`. The result has the layout of
+[`from_module()`](tensordict.TensorDict.html#tensordict.TensorDict.from_module), so that
+[`to_module()`](tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module) writes it into the model.
+Requires the `safetensors` package.
+
+Parameters:
+
+**path** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the path of the file.
+
+Keyword Arguments:
+
+**device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**compatible**,**optional*) - the device to load the
+tensors on, which is also the device of the result. Defaults to
+`None`: the tensors load on the CPU, and the result has no
+device.
+
+Returns:
+
+a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or the tensorclass that was saved.
+
+Examples
+
+```
+>>> import tempfile
+>>> from pathlib import Path
+>>> import torch
+>>> from safetensors.torch import save_file
+>>> from tensordict import from_safetensors
+>>> with tempfile.TemporaryDirectory() as tmp:
+... save_file(
+... {"0.weight": torch.ones(4, 3), "0.bias": torch.zeros(4)},
+... Path(tmp) / "model.safetensors",
+... )
+... params = from_safetensors(Path(tmp) / "model.safetensors")
+>>> params["0", "weight"].shape
+torch.Size([4, 3])
+>>> _ = params.to_module(torch.nn.Sequential(torch.nn.Linear(3, 4)))
 ```
 
 ---
@@ -30292,7 +30560,7 @@ Examples
 
 # memmap
 
-tensordict.memmap(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
+tensordict.memmap(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -30337,6 +30605,12 @@ entries: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"` or a
 [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. Only valid for an archive. Defaults to
 `None`, which stores them uncompressed. Only uncompressed
 entries load without a copy.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the directory is written next
+to `prefix` and then renamed to it, so that an error or a crash
+during the write leaves `prefix` as it was. Not supported on
+Windows for a directory. [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)
+gives the details.
+Defaults to `False`.
 
 Returns:
 
@@ -36314,7 +36588,7 @@ None
 
 # save
 
-tensordict.save(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
+tensordict.save(*data: [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)*, *prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → [TensorCollection](tensordict.TensorCollection.html#tensordict.TensorCollection)
 
 Saves a tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -36358,6 +36632,12 @@ entries: `"stored"`, `"deflate"`, `"bzip2"`, `"lzma"` or a
 [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) constant. Only valid for an archive. Defaults to
 `None`, which stores them uncompressed. Only uncompressed
 entries load without a copy.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the directory is written next
+to `prefix` and then renamed to it, so that an error or a crash
+during the write leaves `prefix` as it was. Not supported on
+Windows for a directory. [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)
+gives the details.
+Defaults to `False`.
 
 Returns:
 
@@ -37444,6 +37724,113 @@ tensor([0, 2, 3])
 (torch.bfloat16, torch.int64)
 >>> mesh.bfloat16(cast_filter=None).cells.dtype # cast every leaf
 torch.bfloat16
+```
+
+---
+
+# to_arrow
+
+tensordict.to_arrow(*td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → pyarrow.Table
+
+Converts a tensordict with one batch dimension to an Arrow table, with one column per entry.
+
+Requires pyarrow 15 or later. This is the reverse of
+[`from_arrow()`](tensordict.from_arrow.html#tensordict.from_arrow). The entries convert as follows:
+
+- 1-D tensors become primitive columns. The columns of contiguous numeric
+tensors on the CPU view their data. Boolean tensors are copied.
+- tensors with more dimensions become `arrow.fixed_shape_tensor` columns.
+- jagged nested tensors (`layout=torch.jagged`) become `large_list`
+columns.
+- nested tensordicts become `struct` columns.
+- non-tensor entries, such as a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of
+strings, become columns of the type that `pyarrow.array()` infers
+from their values.
+
+A [`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) with entries of different
+shapes converts after
+`densify(layout=torch.jagged)`.
+
+Parameters:
+
+**td** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict. Its batch size must have one
+dimension: call `td.reshape(-1)` first to flatten a batch with
+more dimensions.
+
+Returns:
+
+A `pyarrow.Table` with `td.batch_size[0]` rows, or no rows if
+`td` has no entries.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict, to_arrow
+>>> td = TensorDict(
+... x=torch.tensor([1.0, 2.0]),
+... image=torch.zeros(2, 3, 4),
+... obs=TensorDict(y=torch.tensor([3, 4]), batch_size=[2]),
+... batch_size=[2],
+... )
+>>> to_arrow(td).schema
+x: float
+image: extension<arrow.fixed_shape_tensor[value_type=float, shape=[3,4], permutation=[0,1]]>
+obs: struct<y: int64>
+ child 0, y: int64
+```
+
+---
+
+# to_safetensors
+
+tensordict.to_safetensors(*data: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *path: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | Path*) → [None](https://docs.python.org/3/builtins/constants.html#None)
+
+Saves a tensordict or a tensorclass to a safetensors file.
+
+Each tensor is saved under its nested key joined with `"."`, the names
+that a model's `state_dict` uses. The structure of the tensordict (the
+batch size and dim names of each level, the class of each tensorclass,
+and the non-tensor values) is saved as one JSON string in the metadata of
+the file, so that [`from_safetensors()`](tensordict.from_safetensors.html#tensordict.from_safetensors) rebuilds it.
+
+Tensors that share memory are saved as separate copies, and a tensordict
+on another device is saved through the CPU. Requires the `safetensors`
+package.
+
+Parameters:
+
+- **data** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)) - the tensordict or tensorclass to save.
+- **path** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path*) - the path of the file.
+
+Raises:
+
+- [**TypeError**](https://docs.python.org/3/builtins/exceptions.html#TypeError) - if a value cannot be stored in safetensors: a nested,
+ jagged or sparse tensor, a non-tensor value that is not JSON
+ (`str`, `int`, `float`, `bool`, `None`, `list` or
+ `dict`), a stack of non-tensor values, a lazy stack whose
+ entries have different keys, or a bare non-tensor value. A lazy
+ stack of tensordicts whose entries have different shapes cannot
+ be saved either.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if two keys have the same name once joined with `"."`,
+ for example `"a.b"` and `("a", "b")`.
+
+Examples
+
+```
+>>> import tempfile
+>>> from pathlib import Path
+>>> import torch
+>>> from tensordict import TensorDict, from_safetensors, to_safetensors
+>>> td = TensorDict(
+... {"weight": torch.ones(2, 3), "sub": {"bias": torch.zeros(2)}},
+... batch_size=[2],
+... )
+>>> with tempfile.TemporaryDirectory() as tmp:
+... to_safetensors(td, Path(tmp) / "td.safetensors")
+... loaded = from_safetensors(Path(tmp) / "td.safetensors")
+>>> loaded.batch_size, loaded["sub", "bias"]
+(torch.Size([2]), tensor([0., 0.]))
 ```
 
 ---
@@ -38977,7 +39364,8 @@ Functions
 
 Save a tensordict to disk and load it again, and write its entries to
 memory-mapped files. Other methods read and write key-value stores, and HDF5,
-zarr, CSV, JSON, Parquet, and MDS files.
+zarr, CSV, JSON, Parquet, and MDS files, and convert to and from Arrow
+tables.
 `memmap(return_early=True)` returns a
 [`TensorDictFuture`](generated/tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture). See [Save and load tensordicts](../saving.html#saving) and
 [Large datasets and storage backends](../storage.html#storage).
@@ -39021,15 +39409,20 @@ Functions
 | [`load`](generated/tensordict.load.html#tensordict.load)(prefix[, device, non_blocking, out, ...]) | Loads a tensordict that [`save()`](generated/tensordict.save.html#tensordict.save) wrote. |
 | [`memmap`](generated/tensordict.memmap.html#tensordict.memmap)(data[, prefix, copy_existing, ...]) | Writes every leaf to a memory-mapped file and returns a new tensordict of them. |
 | [`load_memmap`](generated/tensordict.load_memmap.html#tensordict.load_memmap)(prefix[, device, non_blocking, ...]) | Loads a tensordict that [`memmap()`](generated/tensordict.memmap.html#tensordict.memmap) or [`save()`](generated/tensordict.save.html#tensordict.save) wrote. |
+| [`append_memmap`](generated/tensordict.append_memmap.html#tensordict.append_memmap)(prefix, rows, *[, allow_pickle]) | Appends rows to a tensordict saved in a directory, along its first batch dimension. |
 | [`pack_memmap`](generated/tensordict.pack_memmap.html#tensordict.pack_memmap)(prefix, archive_path, *[, ...]) | Packs a memory-mapped tensordict directory into a single-file zip archive. |
 | [`unpack_memmap`](generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap)(archive_path, prefix) | Extracts a memory-mapped tensordict archive into a directory. |
 | [`is_memmap_archive`](generated/tensordict.is_memmap_archive.html#tensordict.is_memmap_archive)(path) | Whether `path` is a memory-mapped tensordict archive. |
 | [`refresh_archive_checksums`](generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums)(archive_path) | Recomputes the CRC-32 checksums of a memory-mapped archive after in-place writes. |
+| [`to_safetensors`](generated/tensordict.to_safetensors.html#tensordict.to_safetensors)(data, path) | Saves a tensordict or a tensorclass to a safetensors file. |
+| [`from_safetensors`](generated/tensordict.from_safetensors.html#tensordict.from_safetensors)(path, *[, device]) | Loads a tensordict from a safetensors file. |
 | [`from_h5`](generated/tensordict.from_h5.html#tensordict.from_h5)(h5_file, *[, mode, auto_batch_size, ...]) | Opens an HDF5 file as a [`PersistentTensorDict`](generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). |
 | [`from_zarr`](generated/tensordict.from_zarr.html#tensordict.from_zarr)(zarr_file, *[, mode, ...]) | Opens a zarr store as a [`PersistentTensorDict`](generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). |
 | [`from_csv`](generated/tensordict.from_csv.html#tensordict.from_csv)(path, *[, auto_batch_size, ...]) | Reads a CSV file into a tensordict, with one entry per column. |
 | [`from_json`](generated/tensordict.from_json.html#tensordict.from_json)(path, *[, auto_batch_size, ...]) | Reads a JSON file of records into a tensordict, with one entry per field. |
 | [`from_parquet`](generated/tensordict.from_parquet.html#tensordict.from_parquet)(path, *[, auto_batch_size, ...]) | Reads a Parquet file into a tensordict, with one entry per column. |
+| [`from_arrow`](generated/tensordict.from_arrow.html#tensordict.from_arrow)(table, *[, copy, nulls, device]) | Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can. |
+| [`to_arrow`](generated/tensordict.to_arrow.html#tensordict.to_arrow)(td) | Converts a tensordict with one batch dimension to an Arrow table, with one column per entry. |
 
 ### Locking
 
@@ -39293,9 +39686,11 @@ The examples on this page run in order, and share the temporary directory
 | Save a model checkpoint, then load all of it or one sub-module | [`save()`](reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save), [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) | Save a checkpoint |
 | Give the data to someone as one file that loads lazily | `td.save("data.tdz")` | Single-file archives |
 | Open or pickle the data in the shortest time | [`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate), [`from_consolidated()`](reference/generated/tensordict.from_consolidated.html#tensordict.from_consolidated) | Consolidated files |
+| Give the file to code that reads safetensors, such as the Hugging Face libraries, or load a safetensors checkpoint | [`to_safetensors()`](reference/generated/tensordict.to_safetensors.html#tensordict.to_safetensors), [`from_safetensors()`](reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors) | Safetensors files |
 | Give the file to code that calls [`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load) | [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) | torch.save and torch.load |
 | Give the tensors to code that expects a flat state dict | [`state_dict()`](reference/generated/tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict) | state_dict and load_state_dict |
 | Load a file that you did not write | `allow_pickle`, `weights_only` | Load data that you did not write |
+| Add rows to the end of a saved dataset | [`append_memmap()`](reference/generated/tensordict.append_memmap.html#tensordict.append_memmap) | Append rows |
 | Preallocate a dataset on disk and fill it one sample at a time | [`memmap_like()`](reference/generated/tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like), [`from_schema()`](reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema) | [Large datasets and storage backends](storage.html#storage) |
 | Store chunked, compressed, or remote data (HDF5, zarr, Redis) | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | [Large datasets and storage backends](storage.html#storage) |
 
@@ -39379,6 +39774,22 @@ weights of [`torch.nn.Transformer`](https://docs.pytorch.org/docs/stable/generat
 fast as one thread, and saved 2000 small leaves 3 times as slowly. Measure
 both on your data.
 
+A job that is killed while it saves to a directory leaves some files new,
+some old, and some truncated. To avoid this, pass `atomic=True`: the files
+are written to a new directory next to the path, which then replaces the old
+one in two renames. Readers see the old or the new directory, except between
+the two renames, when the path is missing: if the job is killed then, the
+old directory is in `.tdtmp-*/old` next to the path. The save needs about
+twice the disk space while it runs. It is not supported on Windows, which
+cannot rename a directory that holds open files. A `.tdz` archive is always
+written this way.
+
+```
+>>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "ckpt", atomic=True)
+>>> TensorDict.load_memmap(root / "ckpt")["a"]
+MemoryMappedTensor([0., 0., 0.])
+```
+
 If you do not give a path, `memmap` and `memmap_` put each tensor in an
 anonymous temporary file. On Linux, the file is in shared memory
 (`/dev/shm`) if it has room. The file has no name, so `load_memmap`
@@ -39446,6 +39857,36 @@ different nodes then block each other. On Linux, a copy-on-write mapping
 counts against the memory commit limit. If a file is larger than RAM plus
 swap, `mode="r"` can fail to map it. In that case, use the default mode.
 
+## Append rows
+
+[`append_memmap()`](reference/generated/tensordict.append_memmap.html#tensordict.append_memmap) grows a saved directory along its first
+batch dimension. It writes the new rows at the end of each leaf file, and
+then updates the `meta.json` files. Here, 20 particles join the 100 of the
+first example:
+
+```
+>>> import tensordict
+>>> more = TensorDict(
+... {"pos": torch.ones(20, 3), "vel": torch.ones(20, 3)}, batch_size=[20]
+... )
+>>> tensordict.append_memmap(root / "particles", more)
+>>> TensorDict.load_memmap(root / "particles").batch_size
+torch.Size([120])
+```
+
+The rows must have the keys, the classes, the dtypes and the trailing shapes
+of the saved data. `append_memmap` checks this before it writes anything,
+and raises an error if they differ. A non-tensor value, such as a string, is
+saved once for all the rows, so the rows must hold the same value, either
+once or in a stack of equal values. The files
+of a lazy stack, a [`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack), a nested tensor, or
+an archive cannot grow, and `append_memmap` raises an error for them.
+
+`append_memmap` replaces each `meta.json` file last, so a failed append
+leaves the data as it was. A tensordict loaded before the append keeps its
+number of rows, and `load_memmap` after the append sees the new rows.
+Append from one process at a time.
+
 ## Save to one file
 
 A directory has one file for each leaf. To write one file instead, use an
@@ -39455,6 +39896,7 @@ archive, a consolidated file, or [`torch.save()`](https://docs.pytorch.org/docs/
 | --- | --- | --- | --- | --- |
 | Archive (`.tdz`) | `td.save("x.tdz")`, `TensorDict.load_memmap("x.tdz")` | Yes | Yes (`subpath`) | Give a checkpoint or a dataset to other people, or copy it to a network file system |
 | Consolidated file | `td.consolidate("x.bin")`, `from_consolidated("x.bin")` | Yes | No | Open the data in the shortest time |
+| safetensors | `to_safetensors(td, "x.safetensors")`, `from_safetensors("x.safetensors")` | No | No | Give the data to code that reads safetensors |
 | `torch.save` | `torch.save(td, "x.pt")`, `torch.load("x.pt")` | With `torch.load(..., mmap=True)` | No | Give the data to code that calls `torch.load` |
 
 ### Single-file archives
@@ -39577,6 +40019,61 @@ tensordict with 1000 small leaves took 34 ms, and 0.3 ms once consolidated
 layout to send a tensordict as one message. See
 [`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) for its other options
 (`num_threads`, `device`, `pin_memory`, `share_memory`).
+
+### Safetensors files
+
+safetensors is the format of most model weights on the Hugging Face Hub. A
+safetensors file maps names to tensors, and has no pickle.
+[`to_safetensors()`](reference/generated/tensordict.to_safetensors.html#tensordict.to_safetensors) saves each tensor under its nested key
+joined with `"."`, the name that a model's `state_dict` gives it, and
+[`from_safetensors()`](reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors) loads the file. You need the
+`safetensors` package:
+
+```
+>>> from tensordict import from_safetensors, to_safetensors
+>>> to_safetensors(params, root / "model.safetensors")
+>>> from safetensors.torch import load_file
+>>> sorted(load_file(root / "model.safetensors"))
+['0.bias', '0.weight', '2.bias', '2.weight']
+>>> loaded = from_safetensors(root / "model.safetensors")
+>>> _ = loaded.to_module(new_model, inplace=True)
+```
+
+`to_safetensors` also writes the structure of the tensordict in the
+metadata of the file, as one JSON string: the batch size and dim names of
+each level, the class of each tensorclass, and the non-tensor values. So
+`from_safetensors` gives back the tensordict that you saved, also for keys
+that contain `"."`:
+
+```
+>>> from tensordict import NonTensorData
+>>> trial = TensorDict(
+... {"x": torch.zeros(3), "config": NonTensorData({"lr": 0.1}), "a.b": {"c": torch.ones(3)}},
+... batch_size=[3],
+... )
+>>> to_safetensors(trial, root / "trial.safetensors")
+>>> loaded = from_safetensors(root / "trial.safetensors")
+>>> loaded["config"], loaded["a.b"].batch_size
+({'lr': 0.1}, torch.Size([3]))
+```
+
+A file without this metadata, such as a checkpoint from the Hub, loads as a
+nested [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with an empty batch size: each name
+is split on `"."`. Pass `device` to load the tensors on a device.
+
+safetensors holds dense tensors only. `to_safetensors` raises an error for
+a nested or jagged tensor, for a non-tensor value that JSON cannot represent
+exactly (only `str`, `int`, `float`, `bool`, `None`, `list`, and
+`dict` with string keys), for a stack of non-tensor values, and for a lazy
+stack whose entries have different keys. To save a lazy stack whose entries
+have different shapes, pad them first, for example with
+[`pad_sequence()`](reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence). Tensors that share memory, such as
+tied weights, are saved as separate copies, and load as separate tensors.
+
+To load a tensorclass, import the module that defines it first.
+`from_safetensors` never imports a module by the name in a file. The class
+is matched by its full name, so a tensorclass defined in a script
+(`__main__`) loads only in a script that defines it too.
 
 ## torch.save and torch.load
 
@@ -40155,24 +40652,24 @@ have a different layout that this page does not specify.
 
 # Computation times
 
-**01:26.813** total execution time for 14 files **from all galleries**:
+**01:22.869** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:41.287 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:17.604 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.822 | 0.0 |
-| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.023 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.257 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.530 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:37.574 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.989 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.274 | 0.0 |
+| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.351 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.593 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.467 | 0.0 |
+| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.349 | 0.0 |
 | [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.130 | 0.0 |
-| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.114 | 0.0 |
-| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.011 | 0.0 |
-| [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.010 | 0.0 |
-| [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.010 | 0.0 |
+| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.111 | 0.0 |
+| [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
+| [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.009 | 0.0 |
 | [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`reference/generated/tutorials/tensordict_memory.py`) | 00:00.006 | 0.0 |
-| [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.006 | 0.0 |
-| [Filling a TensorDict row by row](tutorials/tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`reference/generated/tutorials/tensordict_preallocation.py`) | 00:00.004 | 0.0 |
+| [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.005 | 0.0 |
+| [Filling a TensorDict row by row](tutorials/tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`reference/generated/tutorials/tensordict_preallocation.py`) | 00:00.003 | 0.0 |
 
 ---
 
@@ -40629,6 +41126,58 @@ size when it creates the tensordict:
 >>> td.is_shared(), td.is_locked
 (True, True)
 ```
+
+## Arrow tables
+
+[`from_arrow()`](reference/generated/tensordict.from_arrow.html#tensordict.from_arrow) converts an Arrow table to a tensordict, and
+[`to_arrow()`](reference/generated/tensordict.to_arrow.html#tensordict.to_arrow) converts a tensordict back. Numeric columns
+become tensors that view the Arrow memory, list columns become jagged nested
+tensors, struct columns become nested tensordicts, and strings become a
+[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack):
+
+```
+>>> import pyarrow as pa
+>>> from tensordict import from_arrow, to_arrow
+>>> table = pa.table(
+... {
+... "reward": pa.array([0.5, 1.0, 0.0]),
+... "tokens": pa.array([[1, 2], [3], [4, 5, 6]]),
+... "prompt": pa.array(["a", "b", "c"]),
+... }
+... )
+>>> td = from_arrow(table)
+>>> td["tokens"].unbind(0)[2]
+tensor([4, 5, 6])
+>>> to_arrow(td).column_names
+['reward', 'tokens', 'prompt']
+```
+
+Hugging Face `datasets` and Polars hold their data in Arrow tables. After
+`select`, `shuffle` or `filter`, a Hugging Face dataset keeps all the
+rows of its table and a list of the rows it selects: call
+`flatten_indices()` first, so that its table holds only those rows:
+
+```
+>>> import datasets 
+>>> ds = datasets.load_from_disk("my_dataset") 
+>>> ds = ds.shuffle(seed=0).flatten_indices() 
+>>> td = from_arrow(ds.data.table) 
+>>> import polars as pl 
+>>> td = from_arrow(pl.DataFrame({"x": [1.0, 2.0]}).to_arrow())
+```
+
+A dataset loaded from disk is memory-mapped, and its memory is read-only.
+`from_arrow` copies such columns, because an in-place write into a view of
+read-only memory crashes the process. `copy=False` views them anyway: then
+do not write into the tensors. A column with null values raises an error,
+unless you pass `nulls="fill"` or `nulls="mask"`. A tensordict with
+jagged tensors can be indexed with an integer, a slice, an index tensor or a
+boolean mask, and split, chunked, unbound and concatenated along its batch
+dimension, but not stacked. `memmap` does not take jagged tensors: pad them
+first, with [`torch.nested.to_padded_tensor()`](https://docs.pytorch.org/docs/stable/nested.html#torch.nested.to_padded_tensor).
+[`from_parquet()`](reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet) keeps its own conversion, which
+reads list and struct columns as Python objects. To convert a Parquet file
+as `from_arrow` does, read it with `pyarrow.parquet.read_table`.
 
 ## Typed wrappers
 
@@ -41966,30 +42515,34 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:10, 374kB/s]
- 1%| | 164k/26.4M [00:00<00:54, 484kB/s]
- 1%| | 229k/26.4M [00:00<01:00, 433kB/s]
- 1%| | 328k/26.4M [00:00<00:54, 483kB/s]
- 3%|▎ | 721k/26.4M [00:00<00:23, 1.12MB/s]
- 9%|▊ | 2.26M/26.4M [00:01<00:06, 3.72MB/s]
- 26%|██▌ | 6.78M/26.4M [00:01<00:01, 10.9MB/s]
- 44%|████▍ | 11.7M/26.4M [00:01<00:00, 16.4MB/s]
- 63%|██████▎ | 16.7M/26.4M [00:01<00:00, 20.1MB/s]
- 82%|████████▏ | 21.7M/26.4M [00:01<00:00, 22.7MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 14.3MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:19, 331kB/s]
+ 1%| | 197k/26.4M [00:00<00:49, 525kB/s]
+ 3%|▎ | 786k/26.4M [00:00<00:15, 1.64MB/s]
+ 8%|▊ | 2.00M/26.4M [00:00<00:05, 4.24MB/s]
+ 16%|█▌ | 4.16M/26.4M [00:00<00:02, 8.78MB/s]
+ 27%|██▋ | 7.21M/26.4M [00:00<00:01, 14.7MB/s]
+ 40%|███▉ | 10.5M/26.4M [00:00<00:00, 19.6MB/s]
+ 51%|█████ | 13.4M/26.4M [00:01<00:00, 22.5MB/s]
+ 63%|██████▎ | 16.6M/26.4M [00:01<00:00, 25.3MB/s]
+ 75%|███████▌ | 19.8M/26.4M [00:01<00:00, 27.2MB/s]
+ 87%|████████▋ | 22.9M/26.4M [00:01<00:00, 28.4MB/s]
+ 99%|█████████▉| 26.3M/26.4M [00:01<00:00, 29.9MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 17.7MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 339kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 298kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:11, 373kB/s]
- 4%|▎ | 164k/4.42M [00:00<00:08, 483kB/s]
- 13%|█▎ | 590k/4.42M [00:00<00:02, 1.37MB/s]
- 54%|█████▍ | 2.39M/4.42M [00:00<00:00, 4.88MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 6.22MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:13, 331kB/s]
+ 4%|▎ | 164k/4.42M [00:00<00:09, 428kB/s]
+ 10%|▉ | 426k/4.42M [00:00<00:04, 837kB/s]
+ 24%|██▍ | 1.08M/4.42M [00:00<00:01, 2.25MB/s]
+ 52%|█████▏ | 2.29M/4.42M [00:00<00:00, 4.83MB/s]
+ 90%|████████▉ | 3.96M/4.42M [00:00<00:00, 8.05MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 4.94MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 41.6MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 42.7MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -42109,7 +42662,7 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 2.16 s
+torchvision DataLoader: 2.13 s
 TensorDict DataLoader: 0.07 s
 ```
 
@@ -42272,7 +42825,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 2.0931 s
+TensorDict training done! time: 1.7305 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -42282,7 +42835,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.2487 s
+Training done! time: 4.2068 s
 ```
 
 ## Conclusion
@@ -42311,7 +42864,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.822 seconds)
+**Total running time of the script:** (0 minutes 15.274 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -42926,7 +43479,7 @@ the other modules of `tensordict.nn`.
 from [`TensorDictModule`](../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 0.010 seconds)
+**Total running time of the script:** (0 minutes 0.009 seconds)
 
 [`Download Jupyter notebook: functional.ipynb`](../_downloads/105b30183ad4a9afd272c38cb842a9b7/functional.ipynb)
 
@@ -43528,7 +44081,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 41.287 seconds)
+**Total running time of the script:** (0 minutes 37.574 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -43542,24 +44095,24 @@ layouts, and read timings.
 
 # Computation times
 
-**01:26.813** total execution time for 14 files **from tutorials**:
+**01:22.869** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:41.287 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:17.604 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.822 | 0.0 |
-| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.023 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.257 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.530 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:37.574 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.989 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.274 | 0.0 |
+| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.351 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.593 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.467 | 0.0 |
+| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.349 | 0.0 |
 | [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.130 | 0.0 |
-| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.114 | 0.0 |
-| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.011 | 0.0 |
-| [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.010 | 0.0 |
-| [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.010 | 0.0 |
+| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.111 | 0.0 |
+| [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
+| [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.009 | 0.0 |
 | [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`tensordict_memory.py`) | 00:00.006 | 0.0 |
-| [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.006 | 0.0 |
-| [Filling a TensorDict row by row](tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`tensordict_preallocation.py`) | 00:00.004 | 0.0 |
+| [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.005 | 0.0 |
+| [Filling a TensorDict row by row](tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`tensordict_preallocation.py`) | 00:00.003 | 0.0 |
 
 ---
 
@@ -43663,8 +44216,8 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 TensorDict(
  fields={
- stream0: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False),
- stream1: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False)},
+ stream0: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False),
+ stream1: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False)},
  batch_size=torch.Size([2]),
  device=None,
  is_shared=False)
@@ -43807,8 +44360,8 @@ print("TensorDict from stream", td)
 ```
 TensorDict from stream TensorDict(
  fields={
- bucket0: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False),
- bucket1: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False)},
+ bucket0: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False),
+ bucket1: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False)},
  batch_size=torch.Size([5]),
  device=None,
  is_shared=False)
@@ -43850,7 +44403,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.023 seconds)
+**Total running time of the script:** (0 minutes 6.351 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 
@@ -44124,7 +44677,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 1.6460 s
+Tensorclass training done! time: 2.1266 s
 ```
 
 ## Conclusion
@@ -44145,7 +44698,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.257 seconds)
+**Total running time of the script:** (0 minutes 4.593 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -44511,8 +45064,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 939 images per second, 0.23 s
-train, tensorclass DataLoader: 2468 images per second, 0.09 s
+train, regular DataLoader: 999 images per second, 0.22 s
+train, tensorclass DataLoader: 2630 images per second, 0.08 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -44529,8 +45082,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 601 images per second, 0.21 s
-val, tensorclass DataLoader: 21304 images per second, 0.01 s
+val, regular DataLoader: 602 images per second, 0.21 s
+val, tensorclass DataLoader: 20787 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -44577,7 +45130,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.530 seconds)
+**Total running time of the script:** (0 minutes 1.467 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -45139,7 +45692,7 @@ over the keys.
 - [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) shows the shape operations.
 - [Keys, values, and entries](../reference/td.html#api-methods-keys) lists all the key methods.
 
-**Total running time of the script:** (0 minutes 0.010 seconds)
+**Total running time of the script:** (0 minutes 0.009 seconds)
 
 [`Download Jupyter notebook: tensordict_keys.ipynb`](../_downloads/97d8d73d25e56588177c9d8bc7211dc9/tensordict_keys.ipynb)
 
@@ -45668,13 +46221,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 133.8 us
- TDM: 147.1 us
- Sequential: 194.6 us
+ Regular: 134.7 us
+ TDM: 147.6 us
+ Sequential: 193.2 us
 Compiled
  Regular: 140.5 us
- TDM: 150.6 us
- Sequential: 159.9 us
+ TDM: 151.9 us
+ Sequential: 158.8 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -45827,7 +46380,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 17.604 seconds)
+**Total running time of the script:** (0 minutes 16.989 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -45980,7 +46533,7 @@ tensors with `memmap_like`.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) fills a memory-mapped
 dataset batch by batch.
 
-**Total running time of the script:** (0 minutes 0.004 seconds)
+**Total running time of the script:** (0 minutes 0.003 seconds)
 
 [`Download Jupyter notebook: tensordict_preallocation.ipynb`](../_downloads/87e90875c043c2567fac8ec8a049a261/tensordict_preallocation.ipynb)
 
@@ -46029,7 +46582,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fbd3ef6ca30>
+<torch._C.Generator object at 0x7f584e164a30>
 ```
 
 ## Indexing
@@ -46387,7 +46940,7 @@ form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#te
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.011 seconds)
+**Total running time of the script:** (0 minutes 0.349 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 
@@ -46605,7 +47158,7 @@ operations: reshape, split, stack, permute.
 tensordict row by row with an index.
 - [Indexing, masking, and splitting](../reference/td.html#api-methods-indexing) lists the indexing methods.
 
-**Total running time of the script:** (0 minutes 0.006 seconds)
+**Total running time of the script:** (0 minutes 0.005 seconds)
 
 [`Download Jupyter notebook: tensordict_slicing.ipynb`](../_downloads/245c7aad3c5052fda391900ac51962d9/tensordict_slicing.ipynb)
 
@@ -46832,7 +47385,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.114 seconds)
+**Total running time of the script:** (0 minutes 0.111 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

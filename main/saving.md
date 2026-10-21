@@ -32,9 +32,11 @@ The examples on this page run in order, and share the temporary directory
 | Save a model checkpoint, then load all of it or one sub-module | [`save()`](reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save), [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) | Save a checkpoint |
 | Give the data to someone as one file that loads lazily | `td.save("data.tdz")` | Single-file archives |
 | Open or pickle the data in the shortest time | [`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate), [`from_consolidated()`](reference/generated/tensordict.from_consolidated.html#tensordict.from_consolidated) | Consolidated files |
+| Give the file to code that reads safetensors, such as the Hugging Face libraries, or load a safetensors checkpoint | [`to_safetensors()`](reference/generated/tensordict.to_safetensors.html#tensordict.to_safetensors), [`from_safetensors()`](reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors) | Safetensors files |
 | Give the file to code that calls [`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load) | [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) | torch.save and torch.load |
 | Give the tensors to code that expects a flat state dict | [`state_dict()`](reference/generated/tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict) | state_dict and load_state_dict |
 | Load a file that you did not write | `allow_pickle`, `weights_only` | Load data that you did not write |
+| Add rows to the end of a saved dataset | [`append_memmap()`](reference/generated/tensordict.append_memmap.html#tensordict.append_memmap) | Append rows |
 | Preallocate a dataset on disk and fill it one sample at a time | [`memmap_like()`](reference/generated/tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like), [`from_schema()`](reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema) | [Large datasets and storage backends](storage.html#storage) |
 | Store chunked, compressed, or remote data (HDF5, zarr, Redis) | [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) | [Large datasets and storage backends](storage.html#storage) |
 
@@ -118,6 +120,22 @@ weights of [`torch.nn.Transformer`](https://docs.pytorch.org/docs/stable/generat
 fast as one thread, and saved 2000 small leaves 3 times as slowly. Measure
 both on your data.
 
+A job that is killed while it saves to a directory leaves some files new,
+some old, and some truncated. To avoid this, pass `atomic=True`: the files
+are written to a new directory next to the path, which then replaces the old
+one in two renames. Readers see the old or the new directory, except between
+the two renames, when the path is missing: if the job is killed then, the
+old directory is in `.tdtmp-*/old` next to the path. The save needs about
+twice the disk space while it runs. It is not supported on Windows, which
+cannot rename a directory that holds open files. A `.tdz` archive is always
+written this way.
+
+```
+>>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "ckpt", atomic=True)
+>>> TensorDict.load_memmap(root / "ckpt")["a"]
+MemoryMappedTensor([0., 0., 0.])
+```
+
 If you do not give a path, `memmap` and `memmap_` put each tensor in an
 anonymous temporary file. On Linux, the file is in shared memory
 (`/dev/shm`) if it has room. The file has no name, so `load_memmap`
@@ -185,6 +203,36 @@ different nodes then block each other. On Linux, a copy-on-write mapping
 counts against the memory commit limit. If a file is larger than RAM plus
 swap, `mode="r"` can fail to map it. In that case, use the default mode.
 
+## Append rows
+
+[`append_memmap()`](reference/generated/tensordict.append_memmap.html#tensordict.append_memmap) grows a saved directory along its first
+batch dimension. It writes the new rows at the end of each leaf file, and
+then updates the `meta.json` files. Here, 20 particles join the 100 of the
+first example:
+
+```
+>>> import tensordict
+>>> more = TensorDict(
+... {"pos": torch.ones(20, 3), "vel": torch.ones(20, 3)}, batch_size=[20]
+... )
+>>> tensordict.append_memmap(root / "particles", more)
+>>> TensorDict.load_memmap(root / "particles").batch_size
+torch.Size([120])
+```
+
+The rows must have the keys, the classes, the dtypes and the trailing shapes
+of the saved data. `append_memmap` checks this before it writes anything,
+and raises an error if they differ. A non-tensor value, such as a string, is
+saved once for all the rows, so the rows must hold the same value, either
+once or in a stack of equal values. The files
+of a lazy stack, a [`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack), a nested tensor, or
+an archive cannot grow, and `append_memmap` raises an error for them.
+
+`append_memmap` replaces each `meta.json` file last, so a failed append
+leaves the data as it was. A tensordict loaded before the append keeps its
+number of rows, and `load_memmap` after the append sees the new rows.
+Append from one process at a time.
+
 ## Save to one file
 
 A directory has one file for each leaf. To write one file instead, use an
@@ -194,6 +242,7 @@ archive, a consolidated file, or [`torch.save()`](https://docs.pytorch.org/docs/
 | --- | --- | --- | --- | --- |
 | Archive (`.tdz`) | `td.save("x.tdz")`, `TensorDict.load_memmap("x.tdz")` | Yes | Yes (`subpath`) | Give a checkpoint or a dataset to other people, or copy it to a network file system |
 | Consolidated file | `td.consolidate("x.bin")`, `from_consolidated("x.bin")` | Yes | No | Open the data in the shortest time |
+| safetensors | `to_safetensors(td, "x.safetensors")`, `from_safetensors("x.safetensors")` | No | No | Give the data to code that reads safetensors |
 | `torch.save` | `torch.save(td, "x.pt")`, `torch.load("x.pt")` | With `torch.load(..., mmap=True)` | No | Give the data to code that calls `torch.load` |
 
 ### Single-file archives
@@ -316,6 +365,61 @@ tensordict with 1000 small leaves took 34 ms, and 0.3 ms once consolidated
 layout to send a tensordict as one message. See
 [`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) for its other options
 (`num_threads`, `device`, `pin_memory`, `share_memory`).
+
+### Safetensors files
+
+safetensors is the format of most model weights on the Hugging Face Hub. A
+safetensors file maps names to tensors, and has no pickle.
+[`to_safetensors()`](reference/generated/tensordict.to_safetensors.html#tensordict.to_safetensors) saves each tensor under its nested key
+joined with `"."`, the name that a model's `state_dict` gives it, and
+[`from_safetensors()`](reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors) loads the file. You need the
+`safetensors` package:
+
+```
+>>> from tensordict import from_safetensors, to_safetensors
+>>> to_safetensors(params, root / "model.safetensors")
+>>> from safetensors.torch import load_file
+>>> sorted(load_file(root / "model.safetensors"))
+['0.bias', '0.weight', '2.bias', '2.weight']
+>>> loaded = from_safetensors(root / "model.safetensors")
+>>> _ = loaded.to_module(new_model, inplace=True)
+```
+
+`to_safetensors` also writes the structure of the tensordict in the
+metadata of the file, as one JSON string: the batch size and dim names of
+each level, the class of each tensorclass, and the non-tensor values. So
+`from_safetensors` gives back the tensordict that you saved, also for keys
+that contain `"."`:
+
+```
+>>> from tensordict import NonTensorData
+>>> trial = TensorDict(
+... {"x": torch.zeros(3), "config": NonTensorData({"lr": 0.1}), "a.b": {"c": torch.ones(3)}},
+... batch_size=[3],
+... )
+>>> to_safetensors(trial, root / "trial.safetensors")
+>>> loaded = from_safetensors(root / "trial.safetensors")
+>>> loaded["config"], loaded["a.b"].batch_size
+({'lr': 0.1}, torch.Size([3]))
+```
+
+A file without this metadata, such as a checkpoint from the Hub, loads as a
+nested [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with an empty batch size: each name
+is split on `"."`. Pass `device` to load the tensors on a device.
+
+safetensors holds dense tensors only. `to_safetensors` raises an error for
+a nested or jagged tensor, for a non-tensor value that JSON cannot represent
+exactly (only `str`, `int`, `float`, `bool`, `None`, `list`, and
+`dict` with string keys), for a stack of non-tensor values, and for a lazy
+stack whose entries have different keys. To save a lazy stack whose entries
+have different shapes, pad them first, for example with
+[`pad_sequence()`](reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence). Tensors that share memory, such as
+tied weights, are saved as separate copies, and load as separate tensors.
+
+To load a tensorclass, import the module that defines it first.
+`from_safetensors` never imports a module by the name in a file. The class
+is matched by its full name, so a tensorclass defined in a script
+(`__main__`) loads only in a script that defines it too.
 
 ## torch.save and torch.load
 
