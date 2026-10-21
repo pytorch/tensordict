@@ -88,13 +88,7 @@ Call this function ``N`` times, and write the results into one
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([10, 3]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[10,3], fields={a: f32[], b: f32[4]})
 
 
 
@@ -129,12 +123,7 @@ an empty :class:`~tensordict.TensorDict`:
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-        },
-        batch_size=torch.Size([10, 3]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[10,3], fields={})
 
 
 
@@ -166,13 +155,7 @@ random values that you wrote.
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([10, 3]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[10,3], fields={a: f32[], b: f32[4]})
 
 
 

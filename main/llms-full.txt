@@ -2393,13 +2393,7 @@ genome of the reads:
 ... },
 ... )
 >>> print(td)
-TensorDict(
- fields={
- genome: NonTensorData(data=hg38, batch_size=torch.Size([]), device=None),
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={genome: str, score: f32[]})
 ```
 
 Indexing with a key (`td["genome"]`) returns the content of the
@@ -2431,26 +2425,14 @@ gets the batch size of the tensordict:
 ... batch_size=[3]
 ... )
 >>> print(td)
-TensorDict(
- fields={
- genome: NonTensorData(data=hg38, batch_size=torch.Size([3]), device=None),
- score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={genome: str, score: f32[]})
 ```
 
 All the elements of the batch have the same value:
 
 ```
 >>> print(td[0])
-TensorDict(
- fields={
- genome: NonTensorData(data=hg38, batch_size=torch.Size([]), device=None),
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={genome: str, score: f32[]})
 ```
 
 If you write a different value into one element, the entry becomes a
@@ -2493,16 +2475,7 @@ To give each element of the batch its own value, use a
 ... batch_size=[3]
 ... )
 >>> print(td)
-TensorDict(
- fields={
- score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- seq: NonTensorStack(
- ['ACGT', 'GGCC', 'TTAG'],
- batch_size=torch.Size([3]),
- device=None)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={score: f32[], seq: NonTensorStack})
 ```
 
 Index the tensordict to get one element. The first element has the first
@@ -2510,13 +2483,7 @@ sequence:
 
 ```
 >>> print(td[0])
-TensorDict(
- fields={
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- seq: NonTensorData(data=ACGT, batch_size=torch.Size([]), device=None)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={score: f32[], seq: str})
 ```
 
 For a stack, `td["seq"]` returns a `tensordict.utils.LinkedList`. It is a
@@ -2550,13 +2517,7 @@ list is one value for the whole batch:
 ... batch_size=[3]
 ... )
 >>> print(td[0])
-TensorDict(
- fields={
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- seq: NonTensorData(data=['ACGT', 'GGCC', 'TTAG'], batch_size=torch.Size([]), device=None)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={score: f32[], seq: list})
 ```
 
 ### Stacking tensordicts with non-tensor data
@@ -2573,16 +2534,7 @@ same:
 ... },
 ... )
 >>> print(torch.stack([td, td]))
-TensorDict(
- fields={
- genome: NonTensorStack(
- ['hg38', 'hg38'],
- batch_size=torch.Size([2]),
- device=None),
- score: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={genome: NonTensorStack, score: f32[]})
 ```
 
 For [`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData) entries, [`stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) returns one
@@ -2599,13 +2551,7 @@ a [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tenso
 ... },
 ... )
 >>> print(torch.stack([td, td]))
-TensorDict(
- fields={
- genome: MetaData(data=hg38, batch_size=torch.Size([2]), device=None),
- score: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={genome: MetaData, score: f32[]})
 >>> equal_lists = [TensorDict({"a": MetaData([1, 2])}), TensorDict({"a": MetaData([1, 2])})]
 >>> type(torch.stack(equal_lists).get("a")).__name__
 'NonTensorStack'
@@ -3557,15 +3503,7 @@ node:
 >>> _ = torch.manual_seed(0)
 >>> graphs = lazy_stack([TensorDict({"nodes": torch.randn(n, 2)}) for n in [2, 3, 1]])
 >>> graphs
-LazyStackedTensorDict(
- fields={
- nodes: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- exclusive_fields={
- },
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False,
- stack_dim=0)
+LazyStackedTensorDict(batch_size=[3], stack_dim=0, fields={nodes: f32[-1,2]})
 >>> [t.shape for t in graphs.get("nodes", as_list=True)]
 [torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])]
 >>> graphs.get("nodes", as_padded_tensor=True).shape
@@ -5416,13 +5354,7 @@ and `bool` values to [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tenso
 >>> from tensordict import TensorDict
 >>> td = TensorDict({"a": 0, "b": torch.ones(3)})
 >>> td
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={a: i64[], b: f32[3]})
 >>> td["a"]
 tensor(0)
 ```
@@ -6350,13 +6282,7 @@ example is small and untrained:
 >>> encoded = tokenizer(texts, padding=True, return_tensors="pt") 
 >>> tokens = TensorDict(encoded, batch_size=[len(texts)]) 
 >>> tokens 
-TensorDict(
- fields={
- attention_mask: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
- input_ids: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={attention_mask: i64[6], input_ids: i64[6]})
 >>> model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=16)) 
 >>> model(**tokens).logits.shape 
 torch.Size([2, 6, 50257])
@@ -6575,13 +6501,7 @@ particles:
 >>> out is td
 True
 >>> td
-TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- pos: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([5]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[5], fields={hidden: f32[4], pos: f32[3]})
 ```
 
 By default, the module writes into the input tensordict and returns it.
@@ -8035,16 +7955,17 @@ A default of `None` that `__post_init__` replaces works too (see
 # Printing and display
 
 `print(td)` shows the structure of a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict)
-without the values of its tensors: one line for each tensor, whatever its
-size. [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) chooses the attributes
+without the values of its tensors: the dtype and shape of each tensor,
+whatever its size. [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) chooses the attributes
 that the display shows, and [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string)
 rebuilds a tensordict from a printed one. All the options are in
 Available options.
 
 ## What `print` shows
 
-By default, the display shows the shape, device, dtype, and `is_shared` of
-each entry, and the batch size, device, and `is_shared` of the tensordict:
+By default, each entry prints as its dtype and its shape after the batch
+dims, and the batch size prints once, at the start. The display stays on one
+line if it fits in 80 columns, and otherwise puts one entry on each line:
 
 ```
 >>> import torch
@@ -8057,6 +7978,59 @@ each entry, and the batch size, device, and `is_shared` of the tensordict:
 ... batch_size=[32],
 ... )
 >>> print(td)
+TensorDict(batch_size=[32], fields={image: f32[3,64,64], label: i64[]})
+>>> sample = TensorDict(
+... points=torch.zeros(1000, 3),
+... cells=torch.zeros(1000, 4, dtype=torch.int64),
+... data=TensorDict(pressure=torch.zeros(1000), mask=torch.zeros(1000, dtype=torch.bool)),
+... batch_size=[1000],
+... device="cpu",
+... )
+>>> print(sample)
+TensorDict(batch_size=[1000], device=cpu, fields={
+ cells: i64[4],
+ data: {mask: bool[], pressure: f32[]},
+ points: f32[3]})
+```
+
+The dtype codes are those of JAX and polars: `f32` for `torch.float32`,
+`i64` for `torch.int64`, `u8`, `c64`, `bf16`, `bool`. The rules:
+
+- A nested tensordict prints as `{...}`, and with its class name when it is
+not a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) (`Mesh{...}` for a tensorclass). A
+nested tensordict with more batch dims than its parent shows them first:
+`sub: [5]{y: f32[3]}`.
+- In a lazy stack, a dim whose size differs between the members prints as
+`-1`, the header shows `stack_dim=`, and the keys that only some members
+have follow under `exclusive_fields=`. A lazy stack nested in another
+entry shows only the keys that all its members have; the detailed display
+(`compact=False`) shows the others.
+- A non-tensor entry prints as the type name of its value (`str`). In a
+[`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), it prints as `NonTensorData` or
+`NonTensorStack` instead, since reading the type of the value would read
+the file.
+- When the tensordict has no device (`device=None`), a leaf that is not on
+the CPU shows its device: `f32[3]@cuda:0`.
+- `show_batch_size`, `show_device`, `show_dtype` and `sort_keys`
+apply; `show_dtype=False` (or `verbose=False`) prints the shapes only,
+as `[3]`. The other options, `plain` included, are ignored.
+- The display reads no data and syncs no device: it uses only the shape,
+dtype and device of each leaf, and stacks no leaf of a lazy stack.
+- A [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and a
+[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) keep their usual display; nested in
+another tensordict, a store prints as its class name (`TensorDictStore`),
+since its entries would read the server.
+
+### The detailed display: `compact=False`
+
+With `compact=False`, the display shows the full shape, device, dtype, and
+`is_shared` of each entry on its own line, and the batch size, device, and
+`is_shared` of the tensordict. This was the default display in earlier releases:
+
+```
+>>> from tensordict import set_printoptions
+>>> with set_printoptions(compact=False):
+... print(td)
 TensorDict(
  fields={
  image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -8068,9 +8042,10 @@ TensorDict(
 
 ## Choose what the display shows
 
-If all your work is on the CPU and nothing is shared, `device=cpu` and
-`is_shared=False` repeat on every line and tell you nothing.
-[`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) selects the attributes that appear. It
+[`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) selects the format and the attributes
+that appear. Most options choose the attributes of the detailed display: if
+all your work is on the CPU and nothing is shared, `device=cpu` and
+`is_shared=False` repeat on every line of it and tell you nothing. It
 works for the whole process, as a context manager, or as a decorator, as
 [`torch.no_grad`](https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html#torch.no_grad) does for the last two. Its role is similar to
 [`torch.set_printoptions()`](https://docs.pytorch.org/docs/stable/generated/torch.set_printoptions.html#torch.set_printoptions), which is only a function.
@@ -8083,8 +8058,8 @@ tensordict, and `show_field_device` and `show_field_is_shared` the
 attributes of each field:
 
 ```
->>> from tensordict import set_printoptions
 >>> set_printoptions(
+... compact=False,
 ... show_device=False,
 ... show_is_shared=False,
 ... show_field_device=False,
@@ -8104,6 +8079,7 @@ back to the defaults, set the changed options again:
 
 ```
 >>> set_printoptions(
+... compact=True,
 ... show_device=True,
 ... show_is_shared=True,
 ... show_field_device=True,
@@ -8117,7 +8093,7 @@ Use the context manager to change the options for one block of code. At the
 end of the block, the previous options come back:
 
 ```
->>> with set_printoptions(show_dtype=False, show_field_is_shared=False):
+>>> with set_printoptions(compact=False, show_dtype=False, show_field_is_shared=False):
 ... print(td) # dtype and per-field is_shared hidden
 TensorDict(
  fields={
@@ -8127,13 +8103,7 @@ TensorDict(
  device=None,
  is_shared=False)
 >>> print(td) # back to defaults
-TensorDict(
- fields={
- image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
- label: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([32]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[32], fields={image: f32[3,64,64], label: i64[]})
 ```
 
 ### For one function
@@ -8142,7 +8112,7 @@ Decorate a function to use the options for every `repr` call in it. Here,
 `show_is_shared=False` hides the `is_shared=` line of the tensordict:
 
 ```
->>> @set_printoptions(show_is_shared=False)
+>>> @set_printoptions(compact=False, show_is_shared=False)
 ... def summarize(td):
 ... print(td)
 >>> summarize(td)
@@ -8157,10 +8127,14 @@ TensorDict(
 ### Shapes only: `verbose=False`
 
 To see only the shapes, pass `verbose=False`. This one argument hides the
-device, the dtype, and `is_shared`:
+dtype in the default display, and the device, the dtype, and `is_shared` in
+the detailed one:
 
 ```
 >>> with set_printoptions(verbose=False):
+... print(td)
+TensorDict(batch_size=[32], fields={image: [3,64,64], label: []})
+>>> with set_printoptions(compact=False, verbose=False):
 ... print(td)
 TensorDict(
  fields={
@@ -8173,7 +8147,7 @@ TensorDict(
 take precedence over `verbose`, so you can mix the two:
 
 ```
->>> with set_printoptions(verbose=False, show_dtype=True):
+>>> with set_printoptions(compact=False, verbose=False, show_dtype=True):
 ... print(td)
 TensorDict(
  fields={
@@ -8181,61 +8155,6 @@ TensorDict(
  label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},
  batch_size=torch.Size([32]))
 ```
-
-### Compact display: `compact=True`
-
-With `compact=True`, each entry prints as its dtype and its shape after
-the batch dims, and the batch size prints once, at the start. The display
-stays on one line if it fits in 80 columns, and otherwise puts one entry on
-each line:
-
-```
->>> with set_printoptions(compact=True):
-... print(td)
-TensorDict(batch_size=[32], fields={image: f32[3,64,64], label: i64[]})
->>> sample = TensorDict(
-... points=torch.zeros(1000, 3),
-... cells=torch.zeros(1000, 4, dtype=torch.int64),
-... data=TensorDict(pressure=torch.zeros(1000), mask=torch.zeros(1000, dtype=torch.bool)),
-... batch_size=[1000],
-... device="cpu",
-... )
->>> with set_printoptions(compact=True):
-... print(sample)
-TensorDict(batch_size=[1000], device=cpu, fields={
- cells: i64[4],
- data: {mask: bool[], pressure: f32[]},
- points: f32[3]})
-```
-
-The dtype codes are those of JAX and polars: `f32` for `torch.float32`,
-`i64` for `torch.int64`, `u8`, `c64`, `bf16`, `bool`. The rules:
-
-- A nested tensordict prints as `{...}`, and with its class name when it is
-not a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) (`Mesh{...}` for a tensorclass). A
-nested tensordict with more batch dims than its parent shows them first:
-`sub: [5]{y: f32[3]}`.
-- In a lazy stack, a dim whose size differs between the members prints as
-`-1`, the header shows `stack_dim=`, and the keys that only some members
-have follow under `exclusive_fields=`. A lazy stack nested in another
-entry shows only the keys that all its members have; the default display
-shows the others.
-- A non-tensor entry prints as the type name of its value (`str`). In a
-[`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), it prints as `NonTensorData` or
-`NonTensorStack` instead, since reading the type of the value would read
-the file.
-- When the tensordict has no device (`device=None`), a leaf that is not on
-the CPU shows its device: `f32[3]@cuda:0`.
-- `show_batch_size`, `show_device`, `show_dtype` and `sort_keys`
-apply; `show_dtype=False` (or `verbose=False`) prints the shapes only,
-as `[3]`. The other options, `plain` included, are ignored.
-- The display reads no data and syncs no device: it uses only the shape,
-dtype and device of each leaf, and stacks no leaf of a lazy stack.
-- A [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and a
-[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) keep their usual display; nested in
-another tensordict, a store prints as its class name (`TensorDictStore`),
-since its entries would read the server.
-[`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string) does not read this format.
 
 ### Notebook display
 
@@ -8263,7 +8182,15 @@ notebook shows the text display instead.
 
 ### Available options
 
-These options control the lines of the outer `TensorDict(...)` block:
+These options choose the format:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `compact` | `True` | Print each entry as its dtype and its shape after the batch dims (`f32[3]`), on one line when it fits. See What print shows. With `False`, print the detailed display that the options below describe. |
+| `html` | `True` | Display tensordicts as HTML in notebooks. See Notebook display. |
+
+These options control the lines of the outer `TensorDict(...)` block of the
+detailed display:
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -8272,7 +8199,8 @@ These options control the lines of the outer `TensorDict(...)` block:
 | `show_is_shared` | `True` | Show the `is_shared=` line. |
 
 These options control the attributes in the `Tensor(...)` description of
-each field:
+each field in the detailed display (`show_dtype` also applies to the compact
+one):
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -8298,8 +8226,6 @@ of the keys:
 | `show_storage_size` | `False` | Show `storage_size=` (bytes). |
 | `plain` | `False` | Append a short value summary (mean/std for floats, min/max for ints). |
 | `sort_keys` | `"alphabetical"` | Key ordering: `"alphabetical"` (default), `"insertion"` (dict order), or a callable passed as `key` to [`sorted()`](https://docs.python.org/3/builtins/functions.html#sorted). |
-| `compact` | `False` | Print each entry as its dtype and its shape after the batch dims (`f32[3]`), on one line when it fits. See Compact display: compact=True. |
-| `html` | `True` | Display tensordicts as HTML in notebooks. See Notebook display. |
 
 ### Read the current options
 
@@ -8318,10 +8244,21 @@ example from a log file or from the terminal of a colleague.
 [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string) builds a
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) from that string. The result has the keys,
 shapes, dtypes, batch size, and device of the printed tensordict. All the
-values are zeros, because the repr does not contain the data:
+values are zeros, because the repr does not contain the data. It reads the
+default display:
 
 ```
 >>> from tensordict import parse_tensor_dict_string
+>>> td = parse_tensor_dict_string(
+... "TensorDict(batch_size=[32], fields={image: f32[3,64,64], label: i64[]})"
+... )
+>>> td["image"].shape, td["label"].dtype
+(torch.Size([32, 3, 64, 64]), torch.int64)
+```
+
+and the detailed one, which older logs hold:
+
+```
 >>> s = """TensorDict(
 ... fields={
 ... image: Tensor(shape=torch.Size([32, 3, 64, 64]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -8337,15 +8274,23 @@ torch.Size([32, 3, 64, 64])
 ```
 
 [`parse_tensor_dict_string()`](reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string) is a debugging aid. It reads
-the default print format, with `shape=`, `device=`, `dtype=`, and
-`is_shared=` for each field. It reads nested tensordicts at any depth, keys
+both formats with the default options: in the detailed one, `shape=`,
+`device=`, `dtype=`, and `is_shared=` for each field. It reads nested tensordicts at any depth, keys
 with any character, such as `my-key`, and devices with an index, such as
 `cuda:0`. It has these limits:
 
 - It reads only tensor fields and nested tensordicts. For a non-tensor field,
-it raises `ValueError: Cannot parse the field ...`.
+a nested tensorclass or lazy stack, or an entry of a lazy stack whose shape
+differs between the members (`-1`), it raises
+`ValueError: Cannot parse the field ...`.
 - If [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) hid a field attribute or added one
-(for example `plain=True`), it raises the same `ValueError`.
+(for example `show_dtype=False`, or `plain=True` in the detailed
+display), it raises the same `ValueError`.
+- The compact display does not show the device of a nested tensordict, so the
+parser puts a nested tensordict, and the leaves without an `@device`
+suffix, on the device of its parent, or on the CPU. It shows an
+[`UnbatchedTensor`](reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) by its full shape, which the parser
+reads as the shape after the batch dims of a batched tensor.
 - It makes each tensor on the printed device. To parse the repr of a CUDA
 tensordict, run it on a machine with CUDA.
 - It does not keep `is_shared`, and it returns a
@@ -11264,13 +11209,7 @@ Examples
 ... nested: Any = None
 >>> foo = Foo(tensor=torch.zeros(3), non_tensor="a string!", batch_size=[3])
 >>> print(foo)
-Foo(
- non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
- tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested=None,
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+Foo(batch_size=[3], fields={non_tensor: str, tensor: f32[], nested: None})
 >>> foo[0].non_tensor
 'a string!'
 >>> foo.reshape(1, 3).batch_size
@@ -16788,13 +16727,7 @@ Examples
 ... _ = data.to_h5(path)
 ... td = TensorDict.from_h5(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the
@@ -17001,13 +16934,7 @@ Examples
 ... )
 >>> params = TensorDict.from_module(module)
 >>> print(params["layers", "0", "linear1"])
-TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={bias: f32[2048], weight: f32[2048,4]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the
@@ -17285,13 +17212,7 @@ Examples
 >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
 >>> td = TensorDict.from_pandas(df)
 >>> print(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={a: i64[], b: f64[]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the
@@ -17839,13 +17760,7 @@ Examples
 ... _ = data.to_zarr(path)
 ... td = TensorDict.from_zarr(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the
@@ -27455,25 +27370,9 @@ Examples
 >>> _ = params.lock_()
 >>> p = TensorDictParams(params)
 >>> print(p)
-TensorDictParams(params=TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- 1: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([4, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False))
+TensorDictParams(params=TensorDict(batch_size=[], fields={
+ 0: {bias: f32[4], weight: f32[4,3]},
+ 1: {bias: f32[4], weight: f32[4,4]}}))
 >>> class CustomModule(nn.Module):
 ... def __init__(self, params):
 ... super().__init__()
@@ -29097,20 +28996,10 @@ Examples
 >>> x = X(0, 0)
 >>> x2 = from_dataclass(x)
 >>> print(x2)
-X_tc(
- a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+X_tc(batch_size=[], fields={a: i64[], b: i64[]})
 >>> X2 = from_dataclass(X, autocast=True)
 >>> print(X2(a=0, b=0))
-X_tc(
- a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
- b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+X_tc(batch_size=[], fields={a: int, b: i64[]})
 ```
 
 ---
@@ -30909,13 +30798,7 @@ Examples
 >>> ensemble = EnsembleModule(mod, num_copies=3)
 >>> data = TensorDict({'a': torch.randn(10, 4)}, batch_size=[10])
 >>> ensemble(data)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([3, 10, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 10]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,10], fields={a: f32[4], b: f32[2]})
 ```
 
 To chain EnsembleModules, set `expand_input=False` on the second one and on those after it.
@@ -30931,14 +30814,7 @@ To chain EnsembleModules, set `expand_input=False` on the second one and on thos
 >>> seq = TensorDictSequential(e0, e1)
 >>> data = TensorDict({'x': torch.randn(5,2)}, batch_size=[5])
 >>> seq(data)
-TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([4, 5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([4, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- y: Tensor(shape=torch.Size([4, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4, 5]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4,5], fields={hidden: f32[3], x: f32[2], y: f32[1]})
 ```
 
 forward(*tensordict: [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
@@ -31404,18 +31280,14 @@ Compute the parameters with a network, in a
 >>> with params.to_module(td_module):
 ... _ = td_module(td)
 >>> print(td)
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- action_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={
+ action: f32[4],
+ action_log_prob: f32[],
+ hidden: f32[8],
+ input: f32[4],
+ loc: f32[4],
+ params: f32[8],
+ scale: f32[4]})
 >>> with params.to_module(td_module):
 ... dist = td_module.get_dist(td)
 >>> print(dist)
@@ -31428,18 +31300,14 @@ Independent(Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4])), 1)
 ... return td_module(td)
 >>> td_vmap = vmap(func, (None, 0))(td, params)
 >>> print(td_vmap)
-TensorDict(
- fields={
- action: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- action_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4,3], fields={
+ action: f32[4],
+ action_log_prob: f32[],
+ hidden: f32[8],
+ input: f32[4],
+ loc: f32[4],
+ params: f32[8],
+ scale: f32[4]})
 ```
 
 build_dist_from_params(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution)
@@ -31907,14 +31775,7 @@ Examples
 >>> input = TensorDict(x=torch.ones(3))
 >>> td = module(input.copy())
 >>> print(td)
-TensorDict(
- fields={
- loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={loc: f32[3], sample: f32[3], x: f32[3]})
 >>> print(module.get_dist(input))
 Normal(loc: torch.Size([3]), scale: torch.Size([3]))
 >>> print(module.log_prob(td))
@@ -31931,16 +31792,12 @@ tensor([-0.9189, -0.9189, -0.9189])
 ... )
 >>> td = module(TensorDict(x=torch.ones(3)))
 >>> print(td)
-TensorDict(
- fields={
- loc2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ loc2: f32[3],
+ loc: f32[3],
+ sample0: f32[3],
+ sample1: f32[3],
+ x: f32[3]})
 >>> print(module.get_dist(input))
 Normal(loc: torch.Size([3]), scale: torch.Size([3]))
 >>> print(module.log_prob(td))
@@ -31958,26 +31815,18 @@ tensor([-0.9189, -0.9189, -0.9189])
 >>> input = TensorDict(x=torch.ones(3))
 >>> td = module(input.copy())
 >>> print(td)
-TensorDict(
- fields={
- loc2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ loc2: f32[3],
+ loc: f32[3],
+ sample0: f32[3],
+ sample1: f32[3],
+ x: f32[3]})
 >>> print(module.get_dist(input))
 CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3])), 'sample1': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
 >>> print(module.log_prob(td))
-TensorDict(
- fields={
- sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample1_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ sample0_log_prob: f32[3],
+ sample1_log_prob: f32[3]})
 >>> # Even a single intermediate distribution is wrapped in a CompositeDistribution when
 >>> # return_composite=True
 >>> module = Seq(
@@ -31989,24 +31838,15 @@ TensorDict(
 ... )
 >>> td = module(TensorDict(x=torch.ones(3)))
 >>> print(td)
-TensorDict(
- fields={
- loc: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- sample0: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- y: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ loc: f32[3],
+ sample0: f32[3],
+ x: f32[3],
+ y: f32[3]})
 >>> print(module.get_dist(input))
 CompositeDistribution({'sample0': Normal(loc: torch.Size([3]), scale: torch.Size([3]))})
 >>> print(module.log_prob(td))
-TensorDict(
- fields={
- sample0_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={sample0_log_prob: f32[3]})
 ```
 
 build_dist_from_params(*tensordict: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [Distribution](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution)
@@ -32921,13 +32761,7 @@ Examples
 >>> data = TensorDict(x=torch.ones(2, 3), batch_size=[2])
 >>> data = module(data)
 >>> print(data)
-TensorDict(
- fields={
- x: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- y: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={x: f32[3], y: f32[4]})
 >>> module(torch.ones(2, 3)).shape
 torch.Size([2, 4])
 ```
@@ -33789,14 +33623,7 @@ Examples
 ... )
 >>> # with tensordict input
 >>> print(module(TensorDict({"x": torch.zeros(3)}, [])))
-TensorDict(
- fields={
- w*(x+1)+b: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- x+1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={w*(x+1)+b: f32[4], x+1: f32[3], x: f32[3]})
 >>> module.in_keys, module.out_keys
 (['x'], ['x+1', 'w*(x+1)+b'])
 >>> # with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"
@@ -33894,12 +33721,7 @@ into it.
 ... ),
 ... inplace=True, )
 >>> print(model(obj))
-MyClass(
- input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+MyClass(batch_size=[2], fields={input: f32[3], output: f32[3]})
 ```
 
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*
@@ -35882,18 +35704,9 @@ Examples
 >>> with set_composite_lp_aggregate(False):
 ... lp = dist.log_prob(sample)
 ... print(lp)
-TensorDict(
- fields={
- cont_log_prob: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- disc_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([4, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4,3], fields={
+ cont_log_prob: f32[4],
+ nested: {disc_log_prob: f32[]}})
 >>> with set_composite_lp_aggregate(True):
 ... lp = dist.log_prob(sample)
 ... print(lp)
@@ -36410,10 +36223,14 @@ dtypes, devices and batch sizes of a printed one, so that you can
 reproduce a tensordict from a log. The values are not in the repr, so
 every tensor of the result is filled with zeros.
 
+It reads both the compact repr, the default, and the one printed with
+`set_printoptions(compact=False)`.
+
 Parameters:
 
 **s** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - the repr of a tensordict, as printed with the default print
-options (see [`set_printoptions()`](tensordict.set_printoptions.html#tensordict.set_printoptions)).
+options or with `compact=False` (see
+[`set_printoptions()`](tensordict.set_printoptions.html#tensordict.set_printoptions)).
 
 Returns:
 
@@ -36812,10 +36629,12 @@ Defaults to `True`.
 `show_is_shared`, `show_shape`, `show_field_device`,
 `show_dtype`, `show_field_is_shared`, `show_grad`,
 `show_is_contiguous`, `show_is_view`, `show_storage_size`,
-`plain`, `sort_keys`, `compact` and `html`. `compact=True`
-prints each entry on one line as its dtype and its feature
-dimensions (`f32[3]`). `html=False` turns off the HTML display
-of notebooks.
+`plain`, `sort_keys`, `compact` and `html`. `compact=True`,
+the default, prints each entry as its dtype and its feature
+dimensions (`f32[3]`); `compact=False` prints each entry as a
+`Tensor(...)` line with its full shape, device, dtype and
+`is_shared`. `html=False` turns off the HTML display of
+notebooks.
 
 Raises:
 
@@ -36827,7 +36646,9 @@ Examples
 >>> import torch
 >>> from tensordict import TensorDict, set_printoptions
 >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
->>> with set_printoptions(verbose=False):
+>>> print(td)
+TensorDict(batch_size=[3], fields={a: f32[]})
+>>> with set_printoptions(compact=False, verbose=False):
 ... print(td)
 TensorDict(
  fields={
@@ -37672,13 +37493,7 @@ as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData):
 ... z="test",
 ... batch_size=[3, 4])
 >>> print(data)
-MyData(
- X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
- z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+MyData(batch_size=[3,4], fields={X: f32[1], y: bool[2,2], z: str})
 >>> print(data.expand_and_mask())
 tensor([])
 ```
@@ -40652,21 +40467,21 @@ have a different layout that this page does not specify.
 
 # Computation times
 
-**01:22.869** total execution time for 14 files **from all galleries**:
+**01:22.875** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:37.574 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:16.989 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.274 | 0.0 |
-| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.351 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.593 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.467 | 0.0 |
-| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.349 | 0.0 |
-| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.130 | 0.0 |
-| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.111 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:35.907 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:17.138 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:17.007 | 0.0 |
+| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.359 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.246 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.568 | 0.0 |
+| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.367 | 0.0 |
+| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.129 | 0.0 |
+| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.123 | 0.0 |
 | [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
-| [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.009 | 0.0 |
+| [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.008 | 0.0 |
 | [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`reference/generated/tutorials/tensordict_memory.py`) | 00:00.006 | 0.0 |
 | [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.005 | 0.0 |
 | [Filling a TensorDict row by row](tutorials/tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`reference/generated/tutorials/tensordict_preallocation.py`) | 00:00.003 | 0.0 |
@@ -41278,14 +41093,11 @@ the values and the batch size to the constructor:
 ... batch_size=[3, 4], # for example, 3 robots and 4 time steps
 ... )
 >>> print(data)
-Reading(
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
- sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- backup=None,
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Reading(batch_size=[3,4], fields={
+ count: i64[1],
+ sensor: str,
+ signal: f32[5],
+ backup: None})
 ```
 
 The `backup` annotation is a string because the class refers to itself.
@@ -41601,12 +41413,7 @@ string as `NonTensorData`:
 >>> slots.X = torch.ones(3, 4, 5)
 >>> slots.y = "testing"
 >>> print(slots)
-Slots(
- X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Slots(batch_size=[3,4], fields={X: f32[5], y: str})
 ```
 
 A `None` field is a key missing from the tensor storage. Setting a field to
@@ -41623,21 +41430,15 @@ field that is not a tensor, the boolean tensor has the batch shape, and it is
 
 ```
 >>> print(data == data2)
-Reading(
- backup=Reading(
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
- backup=None,
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False),
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Reading(batch_size=[3,4], fields={
+ backup: Reading{
+ count: bool[1],
+ sensor: bool[],
+ signal: bool[5],
+ backup: None},
+ count: bool[1],
+ sensor: bool[],
+ signal: bool[5]})
 >>> data2.sensor = "camera"
 >>> (data == data2).sensor.any()
 tensor(False)
@@ -42515,34 +42316,38 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:19, 331kB/s]
- 1%| | 197k/26.4M [00:00<00:49, 525kB/s]
- 3%|▎ | 786k/26.4M [00:00<00:15, 1.64MB/s]
- 8%|▊ | 2.00M/26.4M [00:00<00:05, 4.24MB/s]
- 16%|█▌ | 4.16M/26.4M [00:00<00:02, 8.78MB/s]
- 27%|██▋ | 7.21M/26.4M [00:00<00:01, 14.7MB/s]
- 40%|███▉ | 10.5M/26.4M [00:00<00:00, 19.6MB/s]
- 51%|█████ | 13.4M/26.4M [00:01<00:00, 22.5MB/s]
- 63%|██████▎ | 16.6M/26.4M [00:01<00:00, 25.3MB/s]
- 75%|███████▌ | 19.8M/26.4M [00:01<00:00, 27.2MB/s]
- 87%|████████▋ | 22.9M/26.4M [00:01<00:00, 28.4MB/s]
- 99%|█████████▉| 26.3M/26.4M [00:01<00:00, 29.9MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 17.7MB/s]
+ 0%| | 32.8k/26.4M [00:00<01:51, 236kB/s]
+ 0%| | 65.5k/26.4M [00:00<01:51, 236kB/s]
+ 0%| | 98.3k/26.4M [00:00<01:51, 236kB/s]
+ 1%| | 229k/26.4M [00:00<00:50, 514kB/s]
+ 2%|▏ | 459k/26.4M [00:00<00:28, 923kB/s]
+ 3%|▎ | 918k/26.4M [00:00<00:14, 1.73MB/s]
+ 7%|▋ | 1.84M/26.4M [00:00<00:07, 3.32MB/s]
+ 14%|█▍ | 3.67M/26.4M [00:01<00:03, 6.45MB/s]
+ 28%|██▊ | 7.34M/26.4M [00:01<00:01, 12.7MB/s]
+ 43%|████▎ | 11.4M/26.4M [00:01<00:00, 17.6MB/s]
+ 59%|█████▉ | 15.5M/26.4M [00:01<00:00, 20.9MB/s]
+ 74%|███████▍ | 19.6M/26.4M [00:01<00:00, 23.5MB/s]
+ 90%|████████▉ | 23.7M/26.4M [00:01<00:00, 25.3MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 14.4MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 298kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 209kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 208kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:13, 331kB/s]
- 4%|▎ | 164k/4.42M [00:00<00:09, 428kB/s]
- 10%|▉ | 426k/4.42M [00:00<00:04, 837kB/s]
- 24%|██▍ | 1.08M/4.42M [00:00<00:01, 2.25MB/s]
- 52%|█████▏ | 2.29M/4.42M [00:00<00:00, 4.83MB/s]
- 90%|████████▉ | 3.96M/4.42M [00:00<00:00, 8.05MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 4.94MB/s]
+ 1%| | 32.8k/4.42M [00:00<00:18, 236kB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:18, 236kB/s]
+ 2%|▏ | 98.3k/4.42M [00:00<00:18, 236kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:10, 421kB/s]
+ 9%|▉ | 393k/4.42M [00:00<00:05, 778kB/s]
+ 18%|█▊ | 786k/4.42M [00:00<00:02, 1.47MB/s]
+ 35%|███▍ | 1.54M/4.42M [00:00<00:01, 2.76MB/s]
+ 70%|██████▉ | 3.08M/4.42M [00:01<00:00, 5.41MB/s]
+100%|██████████| 4.42M/4.42M [00:01<00:00, 3.96MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 42.7MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 44.7MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -42594,13 +42399,7 @@ print(training_data_td)
 ```
 
 ```
-TensorDict(
- fields={
- images: MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets: MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([60000]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[60000], fields={images: f32[28,28], targets: i64[]})
 ```
 
 ## DataLoaders
@@ -42638,13 +42437,7 @@ print(next(iter(train_dataloader_td)))
 ```
 
 ```
-TensorDict(
- fields={
- images: Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([64]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[64], fields={images: f32[28,28], targets: i64[]})
 ```
 
 Time one pass over the training data with each data loader, without a
@@ -42825,7 +42618,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 1.7305 s
+TensorDict training done! time: 2.2474 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -42835,7 +42628,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.2068 s
+Training done! time: 4.1916 s
 ```
 
 ## Conclusion
@@ -42864,7 +42657,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.274 seconds)
+**Total running time of the script:** (0 minutes 17.138 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -43223,7 +43016,7 @@ built on `torch.export`.
 [AOTInductor](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html)
 documentation.
 
-**Total running time of the script:** (0 minutes 0.130 seconds)
+**Total running time of the script:** (0 minutes 0.129 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 
@@ -43285,25 +43078,9 @@ print(params)
 ```
 
 ```
-TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- 2: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([1, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ 0: {bias: f32[4], weight: f32[4,3]},
+ 2: {bias: f32[1], weight: f32[1,4]}})
 ```
 
 The [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) holds the same
@@ -44081,7 +43858,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 37.574 seconds)
+**Total running time of the script:** (0 minutes 35.907 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -44095,21 +43872,21 @@ layouts, and read timings.
 
 # Computation times
 
-**01:22.869** total execution time for 14 files **from tutorials**:
+**01:22.875** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:37.574 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:16.989 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.274 | 0.0 |
-| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.351 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.593 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.467 | 0.0 |
-| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.349 | 0.0 |
-| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.130 | 0.0 |
-| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.111 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:35.907 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:17.138 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:17.007 | 0.0 |
+| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.359 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.246 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.568 | 0.0 |
+| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.367 | 0.0 |
+| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.129 | 0.0 |
+| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.123 | 0.0 |
 | [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
-| [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.009 | 0.0 |
+| [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.008 | 0.0 |
 | [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`tensordict_memory.py`) | 00:00.006 | 0.0 |
 | [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.005 | 0.0 |
 | [Filling a TensorDict row by row](tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`tensordict_preallocation.py`) | 00:00.003 | 0.0 |
@@ -44170,16 +43947,9 @@ print(data)
 ```
 
 ```
-LazyStackedTensorDict(
- fields={
- stream0: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, is_shared=False),
- stream1: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},
- exclusive_fields={
- },
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False,
- stack_dim=0)
+LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={
+ stream0: f32[-1],
+ stream1: f32[-1]})
 ```
 
 The result presents the two tensordicts as if they were stacked along
@@ -44214,13 +43984,7 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 
 ```
-TensorDict(
- fields={
- stream0: NestedTensor(shape=torch.Size([2, j1]), device=cpu, dtype=torch.float32, is_shared=False),
- stream1: NestedTensor(shape=torch.Size([2, j2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
 lengths of stream0: tensor([5, 4])
 ```
 
@@ -44358,13 +44122,7 @@ print("TensorDict from stream", td)
 ```
 
 ```
-TensorDict from stream TensorDict(
- fields={
- bucket0: NestedTensor(shape=torch.Size([5, j3]), device=cpu, dtype=torch.int64, is_shared=False),
- bucket1: NestedTensor(shape=torch.Size([5, j4]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([5]),
- device=None,
- is_shared=False)
+TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j4], bucket1: i64[j3]})
 ```
 
 Print the data of both streams. Each stream counts up from 0, so the values
@@ -44403,7 +44161,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.351 seconds)
+**Total running time of the script:** (0 minutes 6.359 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 
@@ -44531,12 +44289,9 @@ print(training_data_tc)
 ```
 
 ```
-FashionMNISTData(
- images=MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets=MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([60000]),
- device=None,
- is_shared=False)
+FashionMNISTData(batch_size=[60000], fields={
+ images: f32[28,28],
+ targets: i64[]})
 ```
 
 ## DataLoaders
@@ -44565,12 +44320,7 @@ print(next(iter(train_dataloader_tc)))
 ```
 
 ```
-FashionMNISTData(
- images=Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([64]),
- device=None,
- is_shared=False)
+FashionMNISTData(batch_size=[64], fields={images: f32[28,28], targets: i64[]})
 ```
 
 ## Model
@@ -44677,7 +44427,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.1266 s
+Tensorclass training done! time: 1.7060 s
 ```
 
 ## Conclusion
@@ -44698,7 +44448,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.593 seconds)
+**Total running time of the script:** (0 minutes 4.246 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -44967,12 +44717,9 @@ print(train_data_tc)
 ```
 
 ```
-ImageNetData(
- images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
- targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([244]),
- device=cpu,
- is_shared=False)
+ImageNetData(batch_size=[244], device=cpu, fields={
+ images: u8[3,256,256],
+ targets: i64[]})
 ```
 
 ## DataLoaders
@@ -45064,8 +44811,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 999 images per second, 0.22 s
-train, tensorclass DataLoader: 2630 images per second, 0.08 s
+train, regular DataLoader: 946 images per second, 0.23 s
+train, tensorclass DataLoader: 2366 images per second, 0.09 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -45082,8 +44829,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 602 images per second, 0.21 s
-val, tensorclass DataLoader: 20787 images per second, 0.01 s
+val, regular DataLoader: 560 images per second, 0.23 s
+val, tensorclass DataLoader: 13420 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -45130,7 +44877,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.467 seconds)
+**Total running time of the script:** (0 minutes 1.568 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -45273,12 +45020,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={b: f32[10]})
 ```
 
 ## Updating multiple values
@@ -45301,14 +45043,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- c: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10], fields={a: f32[], b: f32[], c: f32[]})
 ```
 
 ## Nested values
@@ -45329,24 +45064,9 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- double_nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={
+ a: f32[],
+ nested: [3]{a: f32[], double_nested: {a: f32[]}}})
 ```
 
 To read a nested value, use a tuple of strings:
@@ -45366,26 +45086,9 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- double_nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={
+ a: f32[],
+ nested: [3]{a: f32[], b: f32[], double_nested: {a: f32[], b: f32[]}}})
 ```
 
 ## Iterating over the contents of a TensorDict
@@ -45490,37 +45193,16 @@ print(tensordict.flatten_keys(separator="."))
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- double_nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={
+ a: f32[],
+ nested: [3]{a: f32[], b: f32[], double_nested: {a: f32[], b: f32[]}}})
 
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={
+ a: f32[],
+ nested.a: f32[3],
+ nested.b: f32[3],
+ nested.double_nested.a: f32[3],
+ nested.double_nested.b: f32[3]})
 ```
 
 The `.unflatten_keys()` method does the inverse:
@@ -45532,37 +45214,16 @@ print(flattened_tensordict.unflatten_keys(separator="."))
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={
+ a: f32[],
+ nested.a: f32[3],
+ nested.b: f32[3],
+ nested.double_nested.a: f32[3],
+ nested.double_nested.b: f32[3]})
 
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- double_nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={
+ a: f32[],
+ nested: {a: f32[3], b: f32[3], double_nested: {a: f32[3], b: f32[3]}}})
 ```
 
 `unflatten_keys` works on any flat key names with a separator. For
@@ -45583,37 +45244,11 @@ print(params)
 ```
 
 ```
-TensorDict(
- fields={
- 0: TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([50]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([50, 100]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- 1: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([10, 50]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- 1: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([1, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ 0: {
+ 0: {bias: f32[50], weight: f32[50,100]},
+ 1: {bias: f32[10], weight: f32[10,50]}},
+ 1: {bias: f32[1], weight: f32[1,10]}})
 ```
 
 For modules, [`TensorDict.from_module`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.from_module)
@@ -45644,32 +45279,10 @@ print(tensordict.exclude(("nested", "b"), ("nested", "double_nested")))
 
 ```
 Select:
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={a: f32[], nested: [3]{a: f32[]}})
 
 Exclude:
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
- nested: TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 3]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={a: f32[], nested: [3]{a: f32[]}})
 ```
 
 ## Conclusion
@@ -45692,7 +45305,7 @@ over the keys.
 - [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) shows the shape operations.
 - [Keys, values, and entries](../reference/td.html#api-methods-keys) lists all the key methods.
 
-**Total running time of the script:** (0 minutes 0.009 seconds)
+**Total running time of the script:** (0 minutes 0.008 seconds)
 
 [`Download Jupyter notebook: tensordict_keys.ipynb`](../_downloads/97d8d73d25e56588177c9d8bc7211dc9/tensordict_keys.ipynb)
 
@@ -45736,19 +45349,14 @@ do not set it, the entries can be on different devices.
 The examples of this section need a CUDA device, so this page shows them
 with their output, and does not run them. This example creates a
 [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) with `device="cuda:0"`. The printed
-entries are on the device.
+tensordict shows the device once, for all its entries.
 
 ```
 >>> import torch
 >>> from tensordict import TensorDict
 >>> tensordict = TensorDict({"a": torch.rand(10)}, [10], device="cuda:0")
 >>> print(tensordict)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
- batch_size=torch.Size([10]),
- device=cuda:0,
- is_shared=True)
+TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[]})
 ```
 
 If the device of the [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) is not `None`, it also
@@ -45757,13 +45365,7 @@ moves the new entries to the device.
 ```
 >>> tensordict["b"] = torch.rand(10, 10)
 >>> print(tensordict)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
- b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
- batch_size=torch.Size([10]),
- device=cuda:0,
- is_shared=True)
+TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[], b: f32[10]})
 ```
 
 The `device` attribute gives the device of the
@@ -45783,40 +45385,23 @@ change the original one.
 ```
 >>> tensordict = tensordict.to(torch.device("cpu"))
 >>> print(tensordict)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([10, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: f32[10]})
 >>> tensordict = tensordict.cuda()
 >>> print(tensordict)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
- b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
- batch_size=torch.Size([10]),
- device=cuda:0,
- is_shared=True)
+TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[], b: f32[10]})
 ```
 
 [`TensorDict.to`](../reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to) needs a device as its
 argument. To remove the device of the [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), so
 that its entries can be on different devices, use
 [`TensorDict.clear_device_`](../reference/generated/tensordict.TensorDictBase.clear_device_.html#tensordict.TensorDictBase.clear_device_). The
-entries stay where they are.
+entries stay where they are, and the printed form shows the device of each
+entry that is not on the CPU.
 
 ```
 >>> tensordict = tensordict.clear_device_()
 >>> print(tensordict)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
- b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
- batch_size=torch.Size([10]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10], fields={a: f32[]@cuda:0, b: f32[10]@cuda:0})
 ```
 
 ## Memory-mapped tensors
@@ -45849,18 +45434,7 @@ assert tensordict.is_locked
 ```
 
 ```
-TensorDict(
- fields={
- a: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
- b: TensorDict(
- fields={
- c: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: {c: f32[]}})
 ```
 
 [`TensorDict.memmap_like`](../reference/generated/tensordict.TensorDictBase.memmap_like.html#tensordict.TensorDictBase.memmap_like) creates a
@@ -45932,18 +45506,7 @@ assert (loaded == tensordict).all()
 ```
 
 ```
-TensorDict(
- fields={
- a: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=True),
- b: TensorDict(
- fields={
- c: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=True)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)},
- batch_size=torch.Size([10]),
- device=cpu,
- is_shared=False)
+TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: {c: f32[]}})
 ```
 
 ## Conclusion
@@ -46221,13 +45784,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 134.7 us
- TDM: 147.6 us
- Sequential: 193.2 us
+ Regular: 138.4 us
+ TDM: 152.0 us
+ Sequential: 199.0 us
 Compiled
- Regular: 140.5 us
- TDM: 151.9 us
- Sequential: 158.8 us
+ Regular: 143.9 us
+ TDM: 156.0 us
+ Sequential: 164.1 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -46324,24 +45887,14 @@ print(f"TensorDict after going through module: {td}")
 ```
 
 ```
-TensorDict before going through module: TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
-TensorDict after going through module: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- action_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict before going through module: TensorDict(batch_size=[3], fields={hidden: f32[8], input: f32[4]})
+TensorDict after going through module: TensorDict(batch_size=[3], fields={
+ action: f32[4],
+ action_log_prob: f32[4],
+ hidden: f32[8],
+ input: f32[4],
+ loc: f32[4],
+ scale: f32[4]})
 ```
 
 The default interaction type is deterministic, so `"action"` is equal to
@@ -46380,7 +45933,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.989 seconds)
+**Total running time of the script:** (0 minutes 17.007 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -46441,13 +45994,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,3], fields={a: f32[], b: f32[4]})
 ```
 
 `tensordict` has `batch_size=[N, 3]` and no keys. When the first
@@ -46468,12 +46015,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- },
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,3], fields={})
 ```
 
 After the first iteration, `tensordict` has tensors for `"a"` and
@@ -46491,13 +46033,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,3], fields={a: f32[], b: f32[4]})
 ```
 
 The next iterations write into the same tensors, in place.
@@ -46582,7 +46118,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f584e164a30>
+<torch._C.Generator object at 0x7f9c42f54a30>
 ```
 
 ## Indexing
@@ -46694,16 +46230,9 @@ print(stacked_tensordict)
 ```
 
 ```
-LazyStackedTensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
- exclusive_fields={
- },
- batch_size=torch.Size([2, 3, 4]),
- device=None,
- is_shared=False,
- stack_dim=0)
+LazyStackedTensorDict(batch_size=[2,3,4], stack_dim=0, fields={
+ a: f32[],
+ b: f32[5]})
 ```
 
 Like [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) on tensors, [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) on tensordicts
@@ -46794,19 +46323,9 @@ print(unsqueezed_tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,4], fields={a: f32[]})
 
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 1, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 1, 4, 1]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,1,4,1], fields={a: f32[]})
 ```
 
 Note
@@ -46940,7 +46459,7 @@ form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#te
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.349 seconds)
+**Total running time of the script:** (0 minutes 0.367 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 
@@ -46995,13 +46514,7 @@ print(tensordict[0])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4], fields={a: f32[5], b: f32[]})
 ```
 
 The syntax is the same as for tensors. This index drops the first row of
@@ -47012,13 +46525,7 @@ print(tensordict[1:])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2,4], fields={a: f32[5], b: f32[]})
 ```
 
 You can index several dimensions at once:
@@ -47028,13 +46535,7 @@ print(tensordict[:, 2:])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]})
 ```
 
 `Ellipsis` (`...`) stands for as many `:` as needed to index all the
@@ -47045,13 +46546,7 @@ print(tensordict[..., 2:])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]})
 ```
 
 Note
@@ -47121,13 +46616,7 @@ print(masked_tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([6, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([6]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[6], fields={a: f32[5], b: f32[]})
 ```
 
 The mask selects 6 of the 12 elements of the batch. As with tensors, the
@@ -47385,7 +46874,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.111 seconds)
+**Total running time of the script:** (0 minutes 0.123 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

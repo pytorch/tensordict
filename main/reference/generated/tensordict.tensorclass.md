@@ -121,13 +121,7 @@ as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData):
 ... z="test",
 ... batch_size=[3, 4])
 >>> print(data)
-MyData(
- X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
- y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
- z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+MyData(batch_size=[3,4], fields={X: f32[1], y: bool[2,2], z: str})
 >>> print(data.expand_and_mask())
 tensor([])
 ```

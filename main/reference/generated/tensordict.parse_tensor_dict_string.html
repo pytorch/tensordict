@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6271+g2f669b52d.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6272+g1ee95bb1d.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6271+g2f669b52d.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6272+g1ee95bb1d.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1725,10 +1725,13 @@ document.write(`
 dtypes, devices and batch sizes of a printed one, so that you can
 reproduce a tensordict from a log. The values are not in the repr, so
 every tensor of the result is filled with zeros.</p>
+<p>It reads both the compact repr, the default, and the one printed with
+<code class="docutils literal notranslate"><span class="pre">set_printoptions(compact=False)</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>s</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – the repr of a tensordict, as printed with the default print
-options (see <a class="reference internal" href="tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_printoptions()</span></code></a>).</p>
+options or with <code class="docutils literal notranslate"><span class="pre">compact=False</span></code> (see
+<a class="reference internal" href="tensordict.set_printoptions.html#tensordict.set_printoptions" title="tensordict.set_printoptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_printoptions()</span></code></a>).</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>A new <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
@@ -2112,7 +2115,7 @@ options (see <a class="reference internal" href="tensordict.set_printoptions.htm
        "headline": "parse_tensor_dict_string",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - parse_tensor_dict_string",
        "url": "/reference/generated/tensordict.parse_tensor_dict_string.html",
-       "articleBody": "parse_tensor_dict_string# tensordict.parse_tensor_dict_string(s: str)# Builds a TensorDict from its printed form. It is a debugging tool: it rebuilds a tensordict with the keys, shapes, dtypes, devices and batch sizes of a printed one, so that you can reproduce a tensordict from a log. The values are not in the repr, so every tensor of the result is filled with zeros. Parameters: s (str) \u2013 the repr of a tensordict, as printed with the default print options (see set_printoptions()). Returns: A new TensorDict. Raises: ValueError \u2013 if a field is not a Tensor or a TensorDict printed with the default print options, or if s is the repr of a lazy stack with exclusive keys. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, parse_tensor_dict_string \u003e\u003e\u003e td = TensorDict( ... obs=torch.ones(3, 4), ... next=TensorDict(done=torch.ones(3, 1, dtype=torch.bool)), ... batch_size=[3], ... ) \u003e\u003e\u003e rebuilt = parse_tensor_dict_string(repr(td)) \u003e\u003e\u003e rebuilt[\"next\", \"done\"].dtype, rebuilt.batch_size (torch.bool, torch.Size([3])) \u003e\u003e\u003e rebuilt[\"obs\"].sum() tensor(0.)",
+       "articleBody": "parse_tensor_dict_string# tensordict.parse_tensor_dict_string(s: str)# Builds a TensorDict from its printed form. It is a debugging tool: it rebuilds a tensordict with the keys, shapes, dtypes, devices and batch sizes of a printed one, so that you can reproduce a tensordict from a log. The values are not in the repr, so every tensor of the result is filled with zeros. It reads both the compact repr, the default, and the one printed with set_printoptions(compact=False). Parameters: s (str) \u2013 the repr of a tensordict, as printed with the default print options or with compact=False (see set_printoptions()). Returns: A new TensorDict. Raises: ValueError \u2013 if a field is not a Tensor or a TensorDict printed with the default print options, or if s is the repr of a lazy stack with exclusive keys. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, parse_tensor_dict_string \u003e\u003e\u003e td = TensorDict( ... obs=torch.ones(3, 4), ... next=TensorDict(done=torch.ones(3, 1, dtype=torch.bool)), ... batch_size=[3], ... ) \u003e\u003e\u003e rebuilt = parse_tensor_dict_string(repr(td)) \u003e\u003e\u003e rebuilt[\"next\", \"done\"].dtype, rebuilt.batch_size (torch.bool, torch.Size([3])) \u003e\u003e\u003e rebuilt[\"obs\"].sum() tensor(0.)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

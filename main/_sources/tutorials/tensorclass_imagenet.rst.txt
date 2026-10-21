@@ -388,12 +388,9 @@ the decoding and resizing of each image at every epoch.
 
  .. code-block:: none
 
-    ImageNetData(
-        images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
-        targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
-        batch_size=torch.Size([244]),
-        device=cpu,
-        is_shared=False)
+    ImageNetData(batch_size=[244], device=cpu, fields={
+        images: u8[3,256,256],
+        targets: i64[]})
 
 
 
@@ -528,8 +525,8 @@ first batches include the start of the worker processes.
 
  .. code-block:: none
 
-    train, regular DataLoader: 999 images per second, 0.22 s
-    train, tensorclass DataLoader: 2630 images per second, 0.08 s
+    train, regular DataLoader: 946 images per second, 0.23 s
+    train, tensorclass DataLoader: 2366 images per second, 0.09 s
 
 
 
@@ -560,8 +557,8 @@ loader only normalizes each batch.
 
  .. code-block:: none
 
-    val, regular DataLoader: 602 images per second, 0.21 s
-    val, tensorclass DataLoader: 20787 images per second, 0.01 s
+    val, regular DataLoader: 560 images per second, 0.23 s
+    val, tensorclass DataLoader: 13420 images per second, 0.01 s
 
 
 
@@ -624,7 +621,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.467 seconds)
+   **Total running time of the script:** (0 minutes 1.568 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensorclass_imagenet.py:

@@ -41,13 +41,7 @@ print(tensordict[0])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4], fields={a: f32[5], b: f32[]})
 ```
 
 The syntax is the same as for tensors. This index drops the first row of
@@ -58,13 +52,7 @@ print(tensordict[1:])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2, 4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2,4], fields={a: f32[5], b: f32[]})
 ```
 
 You can index several dimensions at once:
@@ -74,13 +62,7 @@ print(tensordict[:, 2:])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]})
 ```
 
 `Ellipsis` (`...`) stands for as many `:` as needed to index all the
@@ -91,13 +73,7 @@ print(tensordict[..., 2:])
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([3, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,2], fields={a: f32[5], b: f32[]})
 ```
 
 Note
@@ -167,13 +143,7 @@ print(masked_tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([6, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([6]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[6], fields={a: f32[5], b: f32[]})
 ```
 
 The mask selects 6 of the 12 elements of the batch. As with tensors, the

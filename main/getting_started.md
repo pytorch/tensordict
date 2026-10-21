@@ -26,13 +26,7 @@ and `bool` values to [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tenso
 >>> from tensordict import TensorDict
 >>> td = TensorDict({"a": 0, "b": torch.ones(3)})
 >>> td
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={a: i64[], b: f32[3]})
 >>> td["a"]
 tensor(0)
 ```

@@ -73,25 +73,9 @@ Examples
 >>> _ = params.lock_()
 >>> p = TensorDictParams(params)
 >>> print(p)
-TensorDictParams(params=TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- 1: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([4, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False))
+TensorDictParams(params=TensorDict(batch_size=[], fields={
+ 0: {bias: f32[4], weight: f32[4,3]},
+ 1: {bias: f32[4], weight: f32[4,4]}}))
 >>> class CustomModule(nn.Module):
 ... def __init__(self, params):
 ... super().__init__()

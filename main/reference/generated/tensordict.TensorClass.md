@@ -234,13 +234,7 @@ Examples
 ... nested: Any = None
 >>> foo = Foo(tensor=torch.zeros(3), non_tensor="a string!", batch_size=[3])
 >>> print(foo)
-Foo(
- non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
- tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested=None,
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+Foo(batch_size=[3], fields={non_tensor: str, tensor: f32[], nested: None})
 >>> foo[0].non_tensor
 'a string!'
 >>> foo.reshape(1, 3).batch_size

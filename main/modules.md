@@ -26,13 +26,7 @@ particles:
 >>> out is td
 True
 >>> td
-TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- pos: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([5]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[5], fields={hidden: f32[4], pos: f32[3]})
 ```
 
 By default, the module writes into the input tensordict and returns it.

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6271+g2f669b52d.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6272+g1ee95bb1d.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6271+g2f669b52d.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6272+g1ee95bb1d.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1762,13 +1762,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s2">"layers"</span><span class="p">,</span> <span class="s2">"0"</span><span class="p">,</span> <span class="s2">"linear1"</span><span class="p">])</span>
-<span class="go">TensorDict(</span>
-<span class="go">    fields={</span>
-<span class="go">        bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">        weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
-<span class="go">    batch_size=torch.Size([]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="go">TensorDict(batch_size=[], fields={bias: f32[2048], weight: f32[2048,4]})</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2141,7 +2135,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.from_module",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.from_module",
        "url": "/reference/generated/tensordict.TensorDictBase.from_module.html",
-       "articleBody": "TensorDictBase.from_module# classmethod TensorDictBase.from_module(module, as_module: bool = False, lock: bool = True, use_state_dict: bool = False)# Returns a tensordict of the parameters and buffers of a module. The leaves are the parameters and buffers of the module, not copies: an in-place change to a leaf changes the module. Use TensorDict.from_module(module).data.clone() to get independent tensors. Submodules become sub-tensordicts: module.layers[0].weight is the entry (\"layers\", \"0\", \"weight\"). Write the parameters back with to_module(). The result is a TensorDict (or a TensorDictParams with as_module=True), whatever class this method is called on. Note This method locks the result by default (lock=True), but its override TensorDict.from_module does not. Parameters: module (nn.Module) \u2013 the module to get the parameters from. as_module (bool, optional) \u2013 if True, returns a TensorDictParams, which can be stored as a submodule of a torch.nn.Module. Defaults to False. lock (bool, optional) \u2013 if True, the result is locked (see Locking and temporary changes). Defaults to True. use_state_dict (bool, optional) \u2013 if True, reads the module\u2019s state_dict(), so that its state-dict hooks run, and unflattens it into the tree of the submodules. The leaves are then the tensors of the state dict, not the parameters. Defaults to False. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.TransformerDecoder( ... decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4), ... num_layers=1 ... ) \u003e\u003e\u003e params = TensorDict.from_module(module) \u003e\u003e\u003e print(params[\"layers\", \"0\", \"linear1\"]) TensorDict( fields={ bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False), weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_module# Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Getting, setting, and nesting keys Getting, setting, and nesting keys",
+       "articleBody": "TensorDictBase.from_module# classmethod TensorDictBase.from_module(module, as_module: bool = False, lock: bool = True, use_state_dict: bool = False)# Returns a tensordict of the parameters and buffers of a module. The leaves are the parameters and buffers of the module, not copies: an in-place change to a leaf changes the module. Use TensorDict.from_module(module).data.clone() to get independent tensors. Submodules become sub-tensordicts: module.layers[0].weight is the entry (\"layers\", \"0\", \"weight\"). Write the parameters back with to_module(). The result is a TensorDict (or a TensorDictParams with as_module=True), whatever class this method is called on. Note This method locks the result by default (lock=True), but its override TensorDict.from_module does not. Parameters: module (nn.Module) \u2013 the module to get the parameters from. as_module (bool, optional) \u2013 if True, returns a TensorDictParams, which can be stored as a submodule of a torch.nn.Module. Defaults to False. lock (bool, optional) \u2013 if True, the result is locked (see Locking and temporary changes). Defaults to True. use_state_dict (bool, optional) \u2013 if True, reads the module\u2019s state_dict(), so that its state-dict hooks run, and unflattens it into the tree of the submodules. The leaves are then the tensors of the state dict, not the parameters. Defaults to False. Examples \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e module = nn.TransformerDecoder( ... decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4), ... num_layers=1 ... ) \u003e\u003e\u003e params = TensorDict.from_module(module) \u003e\u003e\u003e print(params[\"layers\", \"0\", \"linear1\"]) TensorDict(batch_size=[], fields={bias: f32[2048], weight: f32[2048,4]}) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use from_module# Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Getting, setting, and nesting keys Getting, setting, and nesting keys",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

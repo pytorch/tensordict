@@ -95,18 +95,8 @@ Examples
 >>> x = X(0, 0)
 >>> x2 = from_dataclass(x)
 >>> print(x2)
-X_tc(
- a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+X_tc(batch_size=[], fields={a: i64[], b: i64[]})
 >>> X2 = from_dataclass(X, autocast=True)
 >>> print(X2(a=0, b=0))
-X_tc(
- a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
- b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+X_tc(batch_size=[], fields={a: int, b: i64[]})
 ```

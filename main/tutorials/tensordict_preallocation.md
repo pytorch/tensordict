@@ -47,13 +47,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,3], fields={a: f32[], b: f32[4]})
 ```
 
 `tensordict` has `batch_size=[N, 3]` and no keys. When the first
@@ -74,12 +68,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- },
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,3], fields={})
 ```
 
 After the first iteration, `tensordict` has tensors for `"a"` and
@@ -97,13 +86,7 @@ print(tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([10, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([10, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([10, 3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[10,3], fields={a: f32[], b: f32[4]})
 ```
 
 The next iterations write into the same tensors, in place.

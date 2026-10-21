@@ -72,13 +72,7 @@ Examples
 ... _ = data.to_zarr(path)
 ... td = TensorDict.from_zarr(path)
 ... print(td)
-PersistentTensorDict(
- fields={
- key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the

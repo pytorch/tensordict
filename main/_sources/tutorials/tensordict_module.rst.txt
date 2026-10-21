@@ -417,13 +417,13 @@ It times each version in eager mode, then compiled with
  .. code-block:: none
 
     Eager
-      Regular:      134.7 us
-      TDM:          147.6 us
-      Sequential:   193.2 us
+      Regular:      138.4 us
+      TDM:          152.0 us
+      Sequential:   199.0 us
     Compiled
-      Regular:      140.5 us
-      TDM:          151.9 us
-      Sequential:   158.8 us
+      Regular:      143.9 us
+      TDM:          156.0 us
+      Sequential:   164.1 us
 
 
 
@@ -536,24 +536,14 @@ probability of the sample under ``"action_log_prob"``.
 
  .. code-block:: none
 
-    TensorDict before going through module: TensorDict(
-        fields={
-            hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-            input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([3]),
-        device=None,
-        is_shared=False)
-    TensorDict after going through module: TensorDict(
-        fields={
-            action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-            action_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-            hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-            input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-            loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-            scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([3]),
-        device=None,
-        is_shared=False)
+    TensorDict before going through module: TensorDict(batch_size=[3], fields={hidden: f32[8], input: f32[4]})
+    TensorDict after going through module: TensorDict(batch_size=[3], fields={
+        action: f32[4],
+        action_log_prob: f32[4],
+        hidden: f32[8],
+        input: f32[4],
+        loc: f32[4],
+        scale: f32[4]})
 
 
 
@@ -613,7 +603,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.989 seconds)
+   **Total running time of the script:** (0 minutes 17.007 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_module.py:

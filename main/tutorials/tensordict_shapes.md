@@ -35,7 +35,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f584e164a30>
+<torch._C.Generator object at 0x7f9c42f54a30>
 ```
 
 ## Indexing
@@ -147,16 +147,9 @@ print(stacked_tensordict)
 ```
 
 ```
-LazyStackedTensorDict(
- fields={
- a: Tensor(shape=torch.Size([2, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
- exclusive_fields={
- },
- batch_size=torch.Size([2, 3, 4]),
- device=None,
- is_shared=False,
- stack_dim=0)
+LazyStackedTensorDict(batch_size=[2,3,4], stack_dim=0, fields={
+ a: f32[],
+ b: f32[5]})
 ```
 
 Like [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) on tensors, [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) on tensordicts
@@ -247,19 +240,9 @@ print(unsqueezed_tensordict)
 ```
 
 ```
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,4], fields={a: f32[]})
 
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 1, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 1, 4, 1]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,1,4,1], fields={a: f32[]})
 ```
 
 Note
@@ -393,7 +376,7 @@ form of a tensordict with typed fields (see [TensorClass](../tensorclass.html#te
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.349 seconds)
+**Total running time of the script:** (0 minutes 0.367 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 

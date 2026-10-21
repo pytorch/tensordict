@@ -35,7 +35,7 @@ What you will learn:
   how to allocate an empty memory-mapped buffer with ``memmap_like``.
 - How to save memory-mapped tensors to a directory and load them again.
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-126
+.. GENERATED FROM PYTHON SOURCE LINES 21-98
 
 Devices
 -------
@@ -47,7 +47,7 @@ do not set it, the entries can be on different devices.
 The examples of this section need a CUDA device, so this page shows them
 with their output, and does not run them. This example creates a
 :class:`~tensordict.TensorDict` with ``device="cuda:0"``. The printed
-entries are on the device.
+tensordict shows the device once, for all its entries.
 
 .. code-block::
 
@@ -55,12 +55,7 @@ entries are on the device.
    >>> from tensordict import TensorDict
    >>> tensordict = TensorDict({"a": torch.rand(10)}, [10], device="cuda:0")
    >>> print(tensordict)
-   TensorDict(
-       fields={
-           a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-       batch_size=torch.Size([10]),
-       device=cuda:0,
-       is_shared=True)
+   TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[]})
 
 If the device of the :class:`~tensordict.TensorDict` is not ``None``, it also
 moves the new entries to the device.
@@ -69,13 +64,7 @@ moves the new entries to the device.
 
    >>> tensordict["b"] = torch.rand(10, 10)
    >>> print(tensordict)
-   TensorDict(
-       fields={
-           a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
-           b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-       batch_size=torch.Size([10]),
-       device=cuda:0,
-       is_shared=True)
+   TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[], b: f32[10]})
 
 The ``device`` attribute gives the device of the
 :class:`~tensordict.TensorDict`.
@@ -95,40 +84,23 @@ change the original one.
 
    >>> tensordict = tensordict.to(torch.device("cpu"))
    >>> print(tensordict)
-   TensorDict(
-       fields={
-           a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-           b: Tensor(shape=torch.Size([10, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
-       batch_size=torch.Size([10]),
-       device=cpu,
-       is_shared=False)
+   TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: f32[10]})
    >>> tensordict = tensordict.cuda()
    >>> print(tensordict)
-   TensorDict(
-       fields={
-           a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
-           b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-       batch_size=torch.Size([10]),
-       device=cuda:0,
-       is_shared=True)
+   TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[], b: f32[10]})
 
 :meth:`TensorDict.to <tensordict.TensorDict.to>` needs a device as its
 argument. To remove the device of the :class:`~tensordict.TensorDict`, so
 that its entries can be on different devices, use
 :meth:`TensorDict.clear_device_ <tensordict.TensorDict.clear_device_>`. The
-entries stay where they are.
+entries stay where they are, and the printed form shows the device of each
+entry that is not on the CPU.
 
 .. code-block::
 
    >>> tensordict = tensordict.clear_device_()
    >>> print(tensordict)
-   TensorDict(
-       fields={
-           a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
-           b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-       batch_size=torch.Size([10]),
-       device=None,
-       is_shared=False)
+   TensorDict(batch_size=[10], fields={a: f32[]@cuda:0, b: f32[10]@cuda:0})
 
 Memory-mapped tensors
 ---------------------
@@ -143,7 +115,7 @@ tensors, use :meth:`TensorDict.memmap_ <tensordict.TensorDict.memmap_>`. It
 copies the values into the memory maps, and locks the tensordict: you can
 write into its tensors, but you cannot add or remove keys.
 
-.. GENERATED FROM PYTHON SOURCE LINES 126-141
+.. GENERATED FROM PYTHON SOURCE LINES 98-113
 
 .. code-block:: Python
 
@@ -170,23 +142,12 @@ write into its tensors, but you cannot add or remove keys.
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-            b: TensorDict(
-                fields={
-                    c: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([10]),
-                device=cpu,
-                is_shared=False)},
-        batch_size=torch.Size([10]),
-        device=cpu,
-        is_shared=False)
+    TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: {c: f32[]}})
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 142-150
+.. GENERATED FROM PYTHON SOURCE LINES 114-122
 
 :meth:`TensorDict.memmap_like <tensordict.TensorDict.memmap_like>` creates a
 new tensordict with the same keys and shapes, with
@@ -197,7 +158,7 @@ the output below shows zeros. The new tensordict is also locked.
 - Use ``memmap_like`` to allocate a buffer that you fill later, for example
   a dataset that does not fit in RAM.
 
-.. GENERATED FROM PYTHON SOURCE LINES 150-156
+.. GENERATED FROM PYTHON SOURCE LINES 122-128
 
 .. code-block:: Python
 
@@ -220,11 +181,11 @@ the output below shows zeros. The new tensordict is also locked.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 157-158
+.. GENERATED FROM PYTHON SOURCE LINES 129-130
 
 Write into the buffer with an index, or with an in-place operation:
 
-.. GENERATED FROM PYTHON SOURCE LINES 158-162
+.. GENERATED FROM PYTHON SOURCE LINES 130-134
 
 .. code-block:: Python
 
@@ -239,7 +200,7 @@ Write into the buffer with an index, or with an in-place operation:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 163-184
+.. GENERATED FROM PYTHON SOURCE LINES 135-156
 
 Saving to a directory and loading again
 ---------------------------------------
@@ -263,7 +224,7 @@ follows:
    │ └── meta.json
    └── meta.json
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-189
+.. GENERATED FROM PYTHON SOURCE LINES 156-161
 
 .. code-block:: Python
 
@@ -285,13 +246,13 @@ follows:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 190-193
+.. GENERATED FROM PYTHON SOURCE LINES 162-165
 
 :meth:`TensorDict.load_memmap <tensordict.TensorDict.load_memmap>` loads the
 directory again, in this process or in another one. The entries of the
 result are memory-mapped tensors that read from the files:
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-198
+.. GENERATED FROM PYTHON SOURCE LINES 165-170
 
 .. code-block:: Python
 
@@ -308,23 +269,12 @@ result are memory-mapped tensors that read from the files:
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=True),
-            b: TensorDict(
-                fields={
-                    c: MemoryMappedTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=True)},
-                batch_size=torch.Size([10]),
-                device=cpu,
-                is_shared=False)},
-        batch_size=torch.Size([10]),
-        device=cpu,
-        is_shared=False)
+    TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: {c: f32[]}})
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-217
+.. GENERATED FROM PYTHON SOURCE LINES 171-189
 
 Conclusion
 ----------

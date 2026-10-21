@@ -63,7 +63,7 @@ other dimensions.
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f584e164a30>
+    <torch._C.Generator object at 0x7f9c42f54a30>
 
 
 
@@ -239,16 +239,9 @@ shapes, devices, or keys, or when you read only a few keys of the stack. The
 
  .. code-block:: none
 
-    LazyStackedTensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-            b: Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
-        exclusive_fields={
-        },
-        batch_size=torch.Size([2, 3, 4]),
-        device=None,
-        is_shared=False,
-        stack_dim=0)
+    LazyStackedTensorDict(batch_size=[2,3,4], stack_dim=0, fields={
+        a: f32[],
+        b: f32[5]})
 
 
 
@@ -411,19 +404,9 @@ dimension of size one.
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([3, 4]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[3,4], fields={a: f32[]})
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([3, 1, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([3, 1, 4, 1]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[3,1,4,1], fields={a: f32[]})
 
 
 
@@ -642,7 +625,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.349 seconds)
+   **Total running time of the script:** (0 minutes 0.367 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_shapes.py:

@@ -46,13 +46,7 @@ Examples
 ... )
 >>> params = TensorDict.from_module(module)
 >>> print(params["layers", "0", "linear1"])
-TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={bias: f32[2048], weight: f32[2048,4]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the

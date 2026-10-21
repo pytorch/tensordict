@@ -242,12 +242,7 @@ value stays in the :class:`~tensordict.TensorDict`, under the new key.
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={b: f32[10]})
 
 
 
@@ -284,14 +279,7 @@ the leading dimensions that all the entries share (see :ref:`batch-size`).
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-            b: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-            c: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([10]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[10], fields={a: f32[], b: f32[], c: f32[]})
 
 
 
@@ -326,24 +314,9 @@ nested tensordict has the batch dimensions of its parent, and can have more.
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    double_nested: TensorDict(
-                        fields={
-                            a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([2, 3]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([2, 3]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={
+        a: f32[],
+        nested: [3]{a: f32[], double_nested: {a: f32[]}}})
 
 
 
@@ -389,26 +362,9 @@ To write a nested value, also use a tuple of strings:
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    double_nested: TensorDict(
-                        fields={
-                            a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                            b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([2, 3]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([2, 3]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={
+        a: f32[],
+        nested: [3]{a: f32[], b: f32[], double_nested: {a: f32[], b: f32[]}}})
 
 
 
@@ -595,37 +551,16 @@ joins the parts of each nested key with a separator:
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    double_nested: TensorDict(
-                        fields={
-                            a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                            b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([2, 3]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([2, 3]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={
+        a: f32[],
+        nested: [3]{a: f32[], b: f32[], double_nested: {a: f32[], b: f32[]}}})
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={
+        a: f32[],
+        nested.a: f32[3],
+        nested.b: f32[3],
+        nested.double_nested.a: f32[3],
+        nested.double_nested.b: f32[3]})
 
 
 
@@ -651,37 +586,16 @@ The ``.unflatten_keys()`` method does the inverse:
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.double_nested.a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested.double_nested.b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={
+        a: f32[],
+        nested.a: f32[3],
+        nested.b: f32[3],
+        nested.double_nested.a: f32[3],
+        nested.double_nested.b: f32[3]})
 
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    double_nested: TensorDict(
-                        fields={
-                            a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                            b: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([2]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([2]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={
+        a: f32[],
+        nested: {a: f32[3], b: f32[3], double_nested: {a: f32[3], b: f32[3]}}})
 
 
 
@@ -716,37 +630,11 @@ module:
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            0: TensorDict(
-                fields={
-                    0: TensorDict(
-                        fields={
-                            bias: Parameter(shape=torch.Size([50]), device=cpu, dtype=torch.float32, is_shared=False),
-                            weight: Parameter(shape=torch.Size([50, 100]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False),
-                    1: TensorDict(
-                        fields={
-                            bias: Parameter(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-                            weight: Parameter(shape=torch.Size([10, 50]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False),
-            1: TensorDict(
-                fields={
-                    bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-                    weight: Parameter(shape=torch.Size([1, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={
+        0: {
+            0: {bias: f32[50], weight: f32[50,100]},
+            1: {bias: f32[10], weight: f32[10,50]}},
+        1: {bias: f32[1], weight: f32[1,10]}})
 
 
 
@@ -803,32 +691,10 @@ the keys:
  .. code-block:: none
 
     Select:
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([2, 3]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={a: f32[], nested: [3]{a: f32[]}})
 
     Exclude:
-    TensorDict(
-        fields={
-            a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested: TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([2, 3]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([2]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[2], fields={a: f32[], nested: [3]{a: f32[]}})
 
 
 
@@ -860,7 +726,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.009 seconds)
+   **Total running time of the script:** (0 minutes 0.008 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_keys.py:

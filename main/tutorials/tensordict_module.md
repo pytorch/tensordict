@@ -244,13 +244,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 134.7 us
- TDM: 147.6 us
- Sequential: 193.2 us
+ Regular: 138.4 us
+ TDM: 152.0 us
+ Sequential: 199.0 us
 Compiled
- Regular: 140.5 us
- TDM: 151.9 us
- Sequential: 158.8 us
+ Regular: 143.9 us
+ TDM: 156.0 us
+ Sequential: 164.1 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -347,24 +347,14 @@ print(f"TensorDict after going through module: {td}")
 ```
 
 ```
-TensorDict before going through module: TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
-TensorDict after going through module: TensorDict(
- fields={
- action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- action_log_prob: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
- input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict before going through module: TensorDict(batch_size=[3], fields={hidden: f32[8], input: f32[4]})
+TensorDict after going through module: TensorDict(batch_size=[3], fields={
+ action: f32[4],
+ action_log_prob: f32[4],
+ hidden: f32[8],
+ input: f32[4],
+ loc: f32[4],
+ scale: f32[4]})
 ```
 
 The default interaction type is deterministic, so `"action"` is equal to
@@ -403,7 +393,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.989 seconds)
+**Total running time of the script:** (0 minutes 17.007 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 

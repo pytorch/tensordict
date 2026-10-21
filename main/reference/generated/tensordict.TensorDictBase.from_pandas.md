@@ -67,13 +67,7 @@ Examples
 >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
 >>> td = TensorDict.from_pandas(df)
 >>> print(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={a: i64[], b: f64[]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the

@@ -145,13 +145,7 @@ example is small and untrained:
 >>> encoded = tokenizer(texts, padding=True, return_tensors="pt") 
 >>> tokens = TensorDict(encoded, batch_size=[len(texts)]) 
 >>> tokens 
-TensorDict(
- fields={
- attention_mask: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
- input_ids: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={attention_mask: i64[6], input_ids: i64[6]})
 >>> model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=16)) 
 >>> model(**tokens).logits.shape 
 torch.Size([2, 6, 50257])

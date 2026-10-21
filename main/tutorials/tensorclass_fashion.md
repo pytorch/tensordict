@@ -114,12 +114,9 @@ print(training_data_tc)
 ```
 
 ```
-FashionMNISTData(
- images=MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets=MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([60000]),
- device=None,
- is_shared=False)
+FashionMNISTData(batch_size=[60000], fields={
+ images: f32[28,28],
+ targets: i64[]})
 ```
 
 ## DataLoaders
@@ -148,12 +145,7 @@ print(next(iter(train_dataloader_tc)))
 ```
 
 ```
-FashionMNISTData(
- images=Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([64]),
- device=None,
- is_shared=False)
+FashionMNISTData(batch_size=[64], fields={images: f32[28,28], targets: i64[]})
 ```
 
 ## Model
@@ -260,7 +252,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 2.1266 s
+Tensorclass training done! time: 1.7060 s
 ```
 
 ## Conclusion
@@ -281,7 +273,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.593 seconds)
+**Total running time of the script:** (0 minutes 4.246 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 

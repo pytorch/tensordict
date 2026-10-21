@@ -73,14 +73,11 @@ the values and the batch size to the constructor:
 ... batch_size=[3, 4], # for example, 3 robots and 4 time steps
 ... )
 >>> print(data)
-Reading(
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
- sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- backup=None,
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Reading(batch_size=[3,4], fields={
+ count: i64[1],
+ sensor: str,
+ signal: f32[5],
+ backup: None})
 ```
 
 The `backup` annotation is a string because the class refers to itself.
@@ -396,12 +393,7 @@ string as `NonTensorData`:
 >>> slots.X = torch.ones(3, 4, 5)
 >>> slots.y = "testing"
 >>> print(slots)
-Slots(
- X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Slots(batch_size=[3,4], fields={X: f32[5], y: str})
 ```
 
 A `None` field is a key missing from the tensor storage. Setting a field to
@@ -418,21 +410,15 @@ field that is not a tensor, the boolean tensor has the batch shape, and it is
 
 ```
 >>> print(data == data2)
-Reading(
- backup=Reading(
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
- backup=None,
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False),
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Reading(batch_size=[3,4], fields={
+ backup: Reading{
+ count: bool[1],
+ sensor: bool[],
+ signal: bool[5],
+ backup: None},
+ count: bool[1],
+ sensor: bool[],
+ signal: bool[5]})
 >>> data2.sensor = "camera"
 >>> (data == data2).sensor.any()
 tensor(False)
