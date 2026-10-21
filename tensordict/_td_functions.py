@@ -637,6 +637,7 @@ def save(
     robust_key: bool | None = True,
     archive: bool | None = None,
     compression: str | int | None = None,
+    atomic: bool = False,
 ) -> TensorCollection:
     """Saves a tensordict to disk, and returns a memory-mapped copy of it.
 
@@ -678,6 +679,12 @@ def save(
             :mod:`zipfile` constant. Only valid for an archive. Defaults to
             ``None``, which stores them uncompressed. Only uncompressed
             entries load without a copy.
+        atomic (bool, optional): if ``True``, the directory is written next
+            to ``prefix`` and then renamed to it, so that an error or a crash
+            during the write leaves ``prefix`` as it was. Not supported on
+            Windows for a directory. :meth:`~tensordict.TensorDictBase.memmap`
+            gives the details.
+            Defaults to ``False``.
 
     Returns:
         A new, locked tensordict whose leaves are
@@ -706,6 +713,7 @@ def save(
         robust_key=robust_key,
         archive=archive,
         compression=compression,
+        atomic=atomic,
     )
 
 
@@ -721,6 +729,7 @@ def memmap(
     robust_key: bool | None = True,
     archive: bool | None = None,
     compression: str | int | None = None,
+    atomic: bool = False,
 ) -> TensorCollection:
     """Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -763,6 +772,12 @@ def memmap(
             :mod:`zipfile` constant. Only valid for an archive. Defaults to
             ``None``, which stores them uncompressed. Only uncompressed
             entries load without a copy.
+        atomic (bool, optional): if ``True``, the directory is written next
+            to ``prefix`` and then renamed to it, so that an error or a crash
+            during the write leaves ``prefix`` as it was. Not supported on
+            Windows for a directory. :meth:`~tensordict.TensorDictBase.memmap`
+            gives the details.
+            Defaults to ``False``.
 
     Returns:
         A new, locked tensordict whose leaves are
@@ -790,6 +805,7 @@ def memmap(
         robust_key=robust_key,
         archive=archive,
         compression=compression,
+        atomic=atomic,
     )
 
 

@@ -793,6 +793,7 @@ class TensorCollection:
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def make_memmap(
         self,
@@ -828,6 +829,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def dumps(
         self,
@@ -838,6 +840,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def memmap(
         self,
@@ -849,6 +852,7 @@ class TensorCollection:
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> Self: ...
     def memmap_like(
         self,
