@@ -399,10 +399,6 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.complex32
     TensorDictBase.complex64
     TensorDictBase.complex128
-    TensorDictBase.qint8
-    TensorDictBase.qint32
-    TensorDictBase.quint8
-    TensorDictBase.quint4x2
 
 ``to`` and the dtype shorthands take a ``cast_filter`` predicate
 ``fn(key, value) -> bool`` that selects the leaves to cast. The predicates
@@ -767,6 +763,10 @@ Their pages name the replacement and the release that removes them.
 
     TensorDictBase.load_
     TensorDictBase.pin_memory_
+    TensorDictBase.qint8
+    TensorDictBase.qint32
+    TensorDictBase.quint8
+    TensorDictBase.quint4x2
 
 Other functions
 ---------------

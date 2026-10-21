@@ -1781,9 +1781,29 @@ class TensorClass(_TensorClassInitArgs):
     def int32(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def int64(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def int8(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorClass.qint32() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.qint32)) instead."
+    )
     def qint32(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorClass.qint8() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.qint8)) instead."
+    )
     def qint8(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorClass.quint4x2() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.quint4x2)) instead."
+    )
     def quint4x2(self, *, cast_filter: Callable | None = ...) -> Self: ...
+    @deprecated(
+        "TensorClass.quint8() is deprecated and will be removed in TensorDict 0.18. "
+        "Use td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, "
+        "torch.quint8)) instead."
+    )
     def quint8(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def uint16(self, *, cast_filter: Callable | None = ...) -> Self: ...
     def uint32(self, *, cast_filter: Callable | None = ...) -> Self: ...

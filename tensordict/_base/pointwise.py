@@ -29,6 +29,7 @@ from tensordict.base import (
     _maybe_broadcast_other,
     _mixes_lazy_stacks,
     _NESTED_TENSORS_AS_LISTS,
+    _same_leaf_keys,
     _warn_unsupported_operand,
     _write_back_inplace,
     CompatibleType,
@@ -58,6 +59,21 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
         # same keys in the same order, the common case: no reordering
         return values
     return other._values_list(True, True, sorting_keys=keys)
+
+
+def _apply_pointwise_retry_(
+    td: TensorDictBase, fn: Callable, others: tuple
+) -> TensorDictBase:
+    """Applies the in-place ``fn`` leaf by leaf after the leaves of ``td`` and ``others`` failed to pair by key.
+
+    A lazy stack nested in a dense tensordict gives keys such as
+    ``("n", "0", "a")``, which a dense operand lacks (#1932). The caller checks
+    ``_same_leaf_keys`` first and re-raises its ``KeyError`` when it is false.
+    """
+    # apply_ writes as it goes: raise for a leaf that only some members of a
+    # lazy stack have before any write
+    _apply_pointwise(td, lambda *xs: None, others, False)
+    return _apply_pointwise(td, fn, others, inplace=True)
 
 
 def _clamp_into_out(clamp: Callable) -> Callable:
@@ -227,7 +243,14 @@ class _PointwiseOps:
             return self._compare(other, "__and__", "__and__", default=False)
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(True, True, sorting_keys=keys)
+            try:
+                new_keys, other_val = other._items_list(True, True, sorting_keys=keys)
+            except KeyError:
+                # a lazy stack nested in a dense tensordict gives keys such as
+                # ("n", "0", "a"), which the other operand lacks (#1932)
+                if not _same_leaf_keys(self, (other,)):
+                    raise
+                return _apply_pointwise(self, operator.and_, (other,), False)
             vals = [(v1 & v2) for v1, v2 in zip(vals, other_val)]
         else:
             vals = [(v & other) for v in vals]
@@ -1748,17 +1771,22 @@ class _PointwiseOps:
         keys, vals = self._items_list(True, True)
         if not vals:
             return self
-        if _is_tensor_collection(type(end)):
-            end_val = _values_by_key(end, keys)
-        else:
-            # _foreach_lerp_ takes a list of ends
-            end_val = [end] * len(vals)
-        if isinstance(weight, (float, torch.Tensor)):
-            weight_val = weight
-        elif _is_tensor_collection(type(weight)):
-            weight_val = _values_by_key(weight, keys)
-        else:
-            weight_val = weight
+        try:
+            if _is_tensor_collection(type(end)):
+                end_val = _values_by_key(end, keys)
+            else:
+                # _foreach_lerp_ takes a list of ends
+                end_val = [end] * len(vals)
+            if isinstance(weight, (float, torch.Tensor)):
+                weight_val = weight
+            elif _is_tensor_collection(type(weight)):
+                weight_val = _values_by_key(weight, keys)
+            else:
+                weight_val = weight
+        except KeyError:
+            if not _same_leaf_keys(self, (end, weight)):
+                raise
+            return _apply_pointwise_retry_(self, Tensor.lerp_, (end, weight))
         _foreach("lerp_", vals, end_val, weight_val)
         return self
 
@@ -2308,7 +2336,14 @@ class _PointwiseOps:
             )
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            try:
+                other_val = other._values_list(True, True, sorting_keys=keys)
+            except KeyError:
+                if not _same_leaf_keys(self, (other,)):
+                    raise
+                return _apply_pointwise_retry_(
+                    self, lambda x, y: torch.maximum(x, y, out=x), (other,)
+                )
         else:
             vals = self._values_list(True, True)
             other_val = other
@@ -2419,7 +2454,14 @@ class _PointwiseOps:
             )
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            try:
+                other_val = other._values_list(True, True, sorting_keys=keys)
+            except KeyError:
+                if not _same_leaf_keys(self, (other,)):
+                    raise
+                return _apply_pointwise_retry_(
+                    self, lambda x, y: torch.minimum(x, y, out=x), (other,)
+                )
         else:
             vals = self._values_list(True, True)
             other_val = other
@@ -2528,7 +2570,12 @@ class _PointwiseOps:
             return _apply_pointwise(self, Tensor.clamp_max_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            try:
+                other_val = other._values_list(True, True, sorting_keys=keys)
+            except KeyError:
+                if not _same_leaf_keys(self, (other,)):
+                    raise
+                return _apply_pointwise_retry_(self, Tensor.clamp_max_, (other,))
         else:
             vals = self._values_list(True, True)
             other_val = other
@@ -2653,7 +2700,12 @@ class _PointwiseOps:
             return _apply_pointwise(self, Tensor.clamp_min_, (other,), inplace=True)
         if _is_tensor_collection(type(other)):
             keys, vals = self._items_list(True, True)
-            other_val = other._values_list(True, True, sorting_keys=keys)
+            try:
+                other_val = other._values_list(True, True, sorting_keys=keys)
+            except KeyError:
+                if not _same_leaf_keys(self, (other,)):
+                    raise
+                return _apply_pointwise_retry_(self, Tensor.clamp_min_, (other,))
         else:
             vals = self._values_list(True, True)
             other_val = other
