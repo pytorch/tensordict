@@ -3620,8 +3620,9 @@ class TestExport:
         assert out.get("s").batch_size == torch.Size([4])
         assert out.get_non_tensor("s") == "a string"
 
+    @pytest.mark.parametrize("strict", [False, True])
     @pytest.mark.parametrize("nested", [False, True])
-    def test_export_tc_input_str_dynamic_batch_size(self, nested, monkeypatch):
+    def test_export_tc_input_str_dynamic_batch_size(self, nested, strict, monkeypatch):
         # The str field is held in the TensorDict of the tensorclass, as a
         # non-tensor entry that the pytree rebuilds with its stored batch
         # size: export would specialize the dynamic batch dim to it.
@@ -3646,7 +3647,7 @@ class TestExport:
         if nested:
             dynamic_shapes = [{0: batch}, dynamic_shapes]
         ep = torch.export.export(
-            Mod(), (make(4),), dynamic_shapes=(dynamic_shapes,), strict=False
+            Mod(), (make(4),), dynamic_shapes=(dynamic_shapes,), strict=strict
         )
         tc = make(5)
         out = ep.module()(tc)
