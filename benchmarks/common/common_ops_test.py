@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import collections
 import itertools
+import pickle
 
 import pytest
 import torch
@@ -790,6 +791,25 @@ def test_getitem_non_tensor_rows(benchmark, index):
         mask[rows] = True
         rows = mask
     benchmark(stack.__getitem__, rows)
+
+
+@pytest.mark.parametrize("n", [1024, 16384])
+@pytest.mark.parametrize("op", ["build", "index", "cat", "tolist", "pickle"])
+def test_flat_non_tensor_stack(benchmark, op, n):
+    # a string per row, as prompts or ids in a data pipeline
+    strs = [f"prompt {i}" for i in range(n)]
+    td = TensorDict(x=torch.zeros(n, 4), s=NonTensorStack(*strs), batch_size=[n])
+    if op == "build":
+        benchmark(NonTensorStack, *strs)
+    elif op == "index":
+        rows = torch.randperm(n, generator=torch.Generator().manual_seed(0))
+        benchmark(td.__getitem__, rows[: n // 2])
+    elif op == "cat":
+        benchmark(torch.cat, [td, td])
+    elif op == "tolist":
+        benchmark(td.get("s").tolist)
+    else:
+        benchmark(lambda: pickle.loads(pickle.dumps(td)))
 
 
 def test_setitem(benchmark, td, c):
