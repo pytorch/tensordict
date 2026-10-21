@@ -30,7 +30,7 @@ a [`LinkedList`](generated/tensordict.utils.LinkedList.html#tensordict.utils.Lin
 
 | [`TensorDictFuture`](generated/tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture)(futures, resulting_td) | A tensordict that is still being written by background threads. |
 | --- | --- |
-| [`LinkedList`](generated/tensordict.utils.LinkedList.html#tensordict.utils.LinkedList)(*args, td, **kwargs) | A list of the values of a non-tensor entry that writes item assignments back to the tensordict. |
+| [`LinkedList`](generated/tensordict.utils.LinkedList.html#tensordict.utils.LinkedList)(*args[, td]) | A list of the values of a non-tensor entry that writes item assignments back to the tensordict. |
 
 ## Type aliases
 

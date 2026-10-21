@@ -1,6 +1,6 @@
 # LinkedList
 
-*class*tensordict.utils.LinkedList(**args*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***kwargs*)
+*class*tensordict.utils.LinkedList(**args*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
 
 Bases: [`list`](https://docs.python.org/3/builtins/stdtypes.html#list)
 
@@ -17,6 +17,8 @@ write back. A `LinkedList` compares equal to a list with the same
 items. If the write to the tensordict raises, the list is unchanged.
 `tolist()` returns a plain [`list`](https://docs.python.org/3/builtins/stdtypes.html#list) copy that is not linked to
 the tensordict, as [`tolist()`](tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist) does.
+`LinkedList(iterable)`, without `td`, builds a list that is not
+linked to any tensordict.
 
 Examples
 
