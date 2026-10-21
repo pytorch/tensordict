@@ -745,6 +745,18 @@ class TestArrow:
                 assert torch.equal(x, y), key
         assert td2.get("s").tolist() == ["x", "y", "z"]
 
+    def test_arrow_empty(self):
+        table = _arrow_table().slice(0, 0)
+        td = from_arrow(table)
+        assert td.batch_size == torch.Size([0])
+        for key in td.keys(True, True):
+            assert td.get(key).shape[0] == 0, key
+        assert td.get("s").batch_size == torch.Size([0])
+        assert td["fst"].shape == torch.Size([0, 2, 3])
+        table2 = to_arrow(td)
+        assert table2.num_rows == 0
+        assert table2.schema.field("fst").type == table.schema.field("fst").type
+
     def test_to_arrow_batch_dims(self):
         td = TensorDict(x=torch.zeros(2, 3), batch_size=[2, 3])
         with pytest.raises(ValueError, match="one batch dimension"):

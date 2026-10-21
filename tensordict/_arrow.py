@@ -145,6 +145,9 @@ def _from_array(pa, arr, copy, nulls, key, masks):
         pa, typ.value_type
     ):
         return _to_jagged(pa, arr, copy, nulls, key)
+    if not len(arr):
+        # NonTensorStack(batch_size=[0]) has the batch size [0, 0].
+        return NonTensorStack()
     return NonTensorStack(*arr.to_pylist(), batch_size=[len(arr)])
 
 
@@ -181,7 +184,9 @@ def from_arrow(
             go through :func:`pyarrow.table` first: for example a Polars
             DataFrame, or any object that has an ``__arrow_c_stream__``
             method. A Hugging Face dataset holds its table in
-            ``dataset.data.table``.
+            ``dataset.data.table``: after ``select``, ``shuffle`` or
+            ``filter``, call ``dataset = dataset.flatten_indices()`` first,
+            since this table holds all the rows of the original dataset.
 
     Keyword Args:
         copy (bool, optional): whether to copy the data. ``None`` views the
@@ -279,6 +284,12 @@ def _to_array(pa, value):
         )
     if tensor.ndim == 1:
         return pa.array(tensor.numpy())
+    if not len(tensor):
+        # from_numpy_ndarray raises for an empty array.
+        typ = pa.fixed_shape_tensor(
+            pa.from_numpy_dtype(tensor.numpy().dtype), tensor.shape[1:]
+        )
+        return pa.ExtensionArray.from_storage(typ, pa.array([], typ.storage_type))
     return pa.FixedShapeTensorArray.from_numpy_ndarray(tensor.numpy())
 
 
@@ -308,7 +319,8 @@ def to_arrow(td: TensorDictBase) -> pyarrow.Table:
             more dimensions.
 
     Returns:
-        A ``pyarrow.Table`` with ``td.batch_size[0]`` rows.
+        A ``pyarrow.Table`` with ``td.batch_size[0]`` rows, or no rows if
+        ``td`` has no entries.
 
     Examples:
         >>> import torch
