@@ -3602,7 +3602,8 @@ class TestGeneric:
 
         obj = MyClass(a=0, b=1)
         obj_td = TensorDict.from_dataclass(obj)
-        obj_tc = TensorDict.from_dataclass(obj, as_tensorclass=True)
+        with pytest.warns(FutureWarning, match="keeping the Python value"):
+            obj_tc = TensorDict.from_dataclass(obj, as_tensorclass=True)
         assert is_tensorclass(obj_tc)
         assert not is_tensorclass(obj_td)
 
