@@ -14,8 +14,9 @@ A *tensorclass* is a dataclass of tensors. You declare its fields with type
 annotations, as in a :func:`~dataclasses.dataclass`, and it has the
 operations that such a class otherwise writes by hand: ``.to(device)``,
 ``pin_memory()``, slicing of every field with ``batch[idx]``,
-``torch.stack`` and ``torch.cat``, and a ``collate_fn`` for the
-:class:`~torch.utils.data.DataLoader` (:func:`~tensordict.collate`). It is
+``torch.stack`` and ``torch.cat``, and batching by the default
+``collate_fn`` of a :class:`~torch.utils.data.DataLoader` (or by
+:func:`~tensordict.collate`, which can also pad). It is
 registered as a pytree, so ``torch.utils._pytree``, :mod:`torch.func` and
 :func:`torch.compile` accept it. You write its methods once: a method runs
 on one item or on a batch of any shape, and compiles with
