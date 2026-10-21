@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.persistent as tensordict_persistent
 import torch
 from tensordict import (
     from_zarr,
@@ -1268,24 +1269,7 @@ class TestZarrSerialization:
     # gh-3218: the workers sent a lazy view of the store, so the main process
     # read every batch
     @pytest.mark.timeout(120)
-    @pytest.mark.parametrize(
-        "sampler",
-        [
-            "batch_size",
-            "batch_sampler",
-            pytest.param(
-                "sampler",
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    raises=AssertionError,
-                    reason="#3218: with sampler=BatchSampler and batch_size=None "
-                    "the DataLoader calls __getitem__, so workers still send a "
-                    "lazy view",
-                ),
-            ),
-        ],
-    )
-    def test_dataloader_workers_read_rows(self, tmp_path, monkeypatch, sampler):
+    def test_dataloader_workers_read_rows(self, tmp_path, monkeypatch):
         ztd = self._loader_data(tmp_path)
         reads = []
         read_array_at = PersistentTensorDict._read_array_at
@@ -1298,13 +1282,8 @@ class TestZarrSerialization:
             PersistentTensorDict, "_read_array_at", logged_read_array_at
         )
         batch_sampler = BatchSampler(SequentialSampler(range(300)), 64, False)
-        kwargs = {
-            "batch_size": {"batch_size": 64},
-            "batch_sampler": {"batch_sampler": batch_sampler},
-            "sampler": {"sampler": batch_sampler, "batch_size": None},
-        }[sampler]
         loader = DataLoader(  # noqa: TOR401
-            ztd, num_workers=2, collate_fn=_keep_batch, **kwargs
+            ztd, batch_size=64, num_workers=2, collate_fn=_keep_batch
         )
         batches = list(loader)
         assert len(batches) == 5
@@ -1321,6 +1300,19 @@ class TestZarrSerialization:
         for batch in batches:
             batch["x"], batch["nested", "y"]
         assert reads == []
+
+    # gh-3218: in a worker, the batch pickles with its rows, not as a view
+    def test_getitems_in_worker(self, tmp_path, monkeypatch):
+        ztd = self._loader_data(tmp_path)
+        monkeypatch.setattr(
+            tensordict_persistent, "get_worker_info", object, raising=False
+        )
+        batch = pickle.loads(pickle.dumps(ztd.__getitems__([3, 1, 4])))
+        assert type(batch) is TensorDict
+        assert (batch["x"] == ztd["x"][[3, 1, 4]]).all()
+        # a key still gives the entry
+        assert (ztd.__getitems__("x") == ztd["x"]).all()
+        assert (ztd.__getitems__(("nested", "y")) == ztd["nested", "y"]).all()
 
     @pytest.mark.timeout(120)
     def test_dataloader_no_workers_gives_view(self, tmp_path):

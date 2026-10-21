@@ -1704,7 +1704,7 @@ class PersistentTensorDict(
     # worker.
     def __getitems__(self, indices: IndexType) -> TensorDictBase:
         sub_td = self[indices]
-        if get_worker_info() is None:
+        if get_worker_info() is None or not is_tensor_collection(sub_td):
             return sub_td
         # In a DataLoader worker, read the rows here: the lazy view pickles as
         # the file name, so the main process would read every batch (#3218).

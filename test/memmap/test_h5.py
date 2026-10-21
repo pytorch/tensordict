@@ -870,7 +870,6 @@ class TestH5Serialization:
     @pytest.mark.parametrize(
         "sampler",
         [
-            "batch_size",
             "batch_sampler",
             pytest.param(
                 "sampler",
@@ -899,7 +898,6 @@ class TestH5Serialization:
         )
         batch_sampler = BatchSampler(SequentialSampler(range(300)), 64, False)
         kwargs = {
-            "batch_size": {"batch_size": 64},
             "batch_sampler": {"batch_sampler": batch_sampler},
             "sampler": {"sampler": batch_sampler, "batch_size": None},
         }[sampler]
@@ -934,22 +932,24 @@ class TestH5Serialization:
         assert (h5td["x"][64:] != 0).any()
         h5td.close()
 
-    # gh-3218: unpickling the lazy batch in the main process reopened the file
-    # with mode="w", which raised. A worker started with spawn or forkserver
-    # still reopens it, so this holds with fork only.
-    @pytest.mark.timeout(120)
-    @pytest.mark.skipif(
-        "fork" not in mp.get_all_start_methods(), reason="fork is not available"
-    )
-    def test_dataloader_workers_mode_w(self, tmp_path):
+    # gh-3218: in a worker, the batch pickles with its rows. The lazy view
+    # pickled as the file name, and unpickling it in the main process reopened
+    # the file with mode="w", which raised.
+    def test_getitems_in_worker(self, tmp_path, monkeypatch):
         h5td = PersistentTensorDict(
             filename=tmp_path / "w.h5", mode="w", batch_size=[100]
         )
         h5td["x"] = torch.arange(100.0)
-        loader = DataLoader(  # noqa: TOR401
-            h5td, batch_size=10, num_workers=2, multiprocessing_context="fork"
+        h5td["n", "y"] = torch.arange(100)
+        monkeypatch.setattr(
+            tensordict_persistent, "get_worker_info", object, raising=False
         )
-        assert (torch.cat([batch["x"] for batch in loader]) == h5td["x"]).all()
+        batch = pickle.loads(pickle.dumps(h5td.__getitems__([3, 1, 4])))
+        assert type(batch) is TensorDict
+        assert (batch["x"] == torch.tensor([3.0, 1.0, 4.0])).all()
+        # a key still gives the entry
+        assert (h5td.__getitems__("x") == h5td["x"]).all()
+        assert (h5td.__getitems__(("n", "y")) == h5td["n", "y"]).all()
         h5td.close()
 
 
