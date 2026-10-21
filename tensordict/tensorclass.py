@@ -105,6 +105,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     is_tensorclass,
     LinkedList,
     list_to_stack,
+    TensorDictFuture,
 )
 from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
@@ -3981,6 +3982,16 @@ def _wrap_td_method(
 
             if result is td:
                 return self
+
+            if isinstance(result, TensorDictFuture):
+                # e.g. consolidate(return_early=True): the future gives the class
+                resulting_td = result.resulting_td
+                result.resulting_td = (
+                    self
+                    if resulting_td is td
+                    else deliver_result(self, resulting_td, kwargs)
+                )
+                return result
 
             if isinstance(result, tuple):
                 return _tuple_like(
