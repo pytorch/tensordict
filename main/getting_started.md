@@ -464,8 +464,8 @@ torch.Size([4, 3])
 >>> zeros = params.detach().clone().zero_()
 >>> with zeros.to_module(model):
 ... out = model(torch.ones(3))
->>> out 
-tensor([0., 0.], grad_fn=<...>)
+>>> out
+tensor([0., 0.], grad_fn=<ViewBackward0>)
 ```
 
 Each leaf has its own file, so you can save the parameters with `memmap`
