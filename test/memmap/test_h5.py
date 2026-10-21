@@ -22,10 +22,12 @@ from tensordict import (
     TensorDict,
     TypedTensorDict,
 )
+from tensordict._td import _SubTensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_map
+from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
 TIMEOUT = 100
 
@@ -35,6 +37,10 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
+
+
+def _keep_batch(batch):
+    return batch
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
@@ -843,6 +849,107 @@ class TestH5Serialization:
         assert (nested_out["h", "k", "x"] == 2).all()
         assert (nested_out["tc"].x == 2).all()
         assert (nested_out["typed", "x"] == 2).all()
+        h5td.close()
+
+    @staticmethod
+    def _loader_data(tmp_path, mode="r+"):
+        td = TensorDict(
+            {
+                "x": torch.randn(300, 4),
+                ("nested", "y"): torch.arange(300),
+                "s": "text",
+            },
+            batch_size=[300],
+        )
+        PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5").close()
+        return PersistentTensorDict.from_h5(tmp_path / "file.h5", mode=mode)
+
+    # gh-3218: the workers sent a lazy view of the file, which pickles as the
+    # file name, so the main process read every batch
+    @pytest.mark.timeout(120)
+    @pytest.mark.parametrize(
+        "sampler",
+        [
+            "batch_size",
+            "batch_sampler",
+            pytest.param(
+                "sampler",
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    raises=AssertionError,
+                    reason="#3218: with sampler=BatchSampler and batch_size=None "
+                    "the DataLoader calls __getitem__, so workers still send a "
+                    "lazy view",
+                ),
+            ),
+        ],
+    )
+    def test_dataloader_workers_read_rows(self, tmp_path, monkeypatch, sampler):
+        # with spawn, the workers can open the file only if it is read-only
+        h5td = self._loader_data(tmp_path, mode="r")
+        reads = []
+        read_array_at = PersistentTensorDict._read_array_at
+
+        def logged_read_array_at(self, array, idx):
+            reads.append(array.name)
+            return read_array_at(self, array, idx)
+
+        monkeypatch.setattr(
+            PersistentTensorDict, "_read_array_at", logged_read_array_at
+        )
+        batch_sampler = BatchSampler(SequentialSampler(range(300)), 64, False)
+        kwargs = {
+            "batch_size": {"batch_size": 64},
+            "batch_sampler": {"batch_sampler": batch_sampler},
+            "sampler": {"sampler": batch_sampler, "batch_size": None},
+        }[sampler]
+        loader = DataLoader(  # noqa: TOR401
+            h5td, num_workers=2, collate_fn=_keep_batch, **kwargs
+        )
+        batches = list(loader)
+        assert len(batches) == 5
+        for idx, batch in zip(batch_sampler, batches):
+            assert type(batch) is TensorDict
+            assert type(batch["nested"]) is TensorDict
+            expected = h5td[idx].to_tensordict()
+            assert batch.batch_size == expected.batch_size
+            assert (batch["x"] == expected["x"]).all()
+            assert (batch["nested", "y"] == expected["nested", "y"]).all()
+            assert batch["s"] == expected["s"]
+        # the workers read the rows, the main process none
+        reads.clear()
+        for batch in batches:
+            batch["x"], batch["nested", "y"]
+        assert reads == []
+        h5td.close()
+
+    @pytest.mark.timeout(120)
+    def test_dataloader_no_workers_gives_view(self, tmp_path):
+        h5td = self._loader_data(tmp_path)
+        batch = next(iter(DataLoader(h5td, batch_size=64)))  # noqa: TOR401
+        assert type(batch) is _SubTensorDict
+        # a write to the batch reaches the file
+        batch["x"] = torch.zeros(64, 4)
+        assert (h5td["x"][:64] == 0).all()
+        assert (h5td["x"][64:] != 0).any()
+        h5td.close()
+
+    # gh-3218: unpickling the lazy batch in the main process reopened the file
+    # with mode="w", which raised. A worker started with spawn or forkserver
+    # still reopens it, so this holds with fork only.
+    @pytest.mark.timeout(120)
+    @pytest.mark.skipif(
+        "fork" not in mp.get_all_start_methods(), reason="fork is not available"
+    )
+    def test_dataloader_workers_mode_w(self, tmp_path):
+        h5td = PersistentTensorDict(
+            filename=tmp_path / "w.h5", mode="w", batch_size=[100]
+        )
+        h5td["x"] = torch.arange(100.0)
+        loader = DataLoader(  # noqa: TOR401
+            h5td, batch_size=10, num_workers=2, multiprocessing_context="fork"
+        )
+        assert (torch.cat([batch["x"] for batch in loader]) == h5td["x"]).all()
         h5td.close()
 
 

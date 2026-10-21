@@ -18,11 +18,17 @@ from tensordict import (
     PersistentTensorDict,
     TensorDict,
 )
+from tensordict._td import _SubTensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
+from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
 TIMEOUT = 100
+
+
+def _keep_batch(batch):
+    return batch
 
 
 class _CustomNonTensor:
@@ -1246,6 +1252,85 @@ class TestZarrSerialization:
         assert (ztd2["a"] == ztd["a"]).all()
         assert (ztd2["b", "c"] == ztd["b", "c"]).all()
         assert ztd2["b", "s"] == "text"
+
+    @staticmethod
+    def _loader_data(tmp_path):
+        td = TensorDict(
+            {
+                "x": torch.randn(300, 4),
+                ("nested", "y"): torch.arange(300),
+                "s": "text",
+            },
+            batch_size=[300],
+        )
+        return td.to_zarr(tmp_path / "s.zarr")
+
+    # gh-3218: the workers sent a lazy view of the store, so the main process
+    # read every batch
+    @pytest.mark.timeout(120)
+    @pytest.mark.parametrize(
+        "sampler",
+        [
+            "batch_size",
+            "batch_sampler",
+            pytest.param(
+                "sampler",
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    raises=AssertionError,
+                    reason="#3218: with sampler=BatchSampler and batch_size=None "
+                    "the DataLoader calls __getitem__, so workers still send a "
+                    "lazy view",
+                ),
+            ),
+        ],
+    )
+    def test_dataloader_workers_read_rows(self, tmp_path, monkeypatch, sampler):
+        ztd = self._loader_data(tmp_path)
+        reads = []
+        read_array_at = PersistentTensorDict._read_array_at
+
+        def logged_read_array_at(self, array, idx):
+            reads.append(array.name)
+            return read_array_at(self, array, idx)
+
+        monkeypatch.setattr(
+            PersistentTensorDict, "_read_array_at", logged_read_array_at
+        )
+        batch_sampler = BatchSampler(SequentialSampler(range(300)), 64, False)
+        kwargs = {
+            "batch_size": {"batch_size": 64},
+            "batch_sampler": {"batch_sampler": batch_sampler},
+            "sampler": {"sampler": batch_sampler, "batch_size": None},
+        }[sampler]
+        loader = DataLoader(  # noqa: TOR401
+            ztd, num_workers=2, collate_fn=_keep_batch, **kwargs
+        )
+        batches = list(loader)
+        assert len(batches) == 5
+        for idx, batch in zip(batch_sampler, batches):
+            assert type(batch) is TensorDict
+            assert type(batch["nested"]) is TensorDict
+            expected = ztd[idx].to_tensordict()
+            assert batch.batch_size == expected.batch_size
+            assert (batch["x"] == expected["x"]).all()
+            assert (batch["nested", "y"] == expected["nested", "y"]).all()
+            assert batch["s"] == expected["s"]
+        # the workers read the rows, the main process none
+        reads.clear()
+        for batch in batches:
+            batch["x"], batch["nested", "y"]
+        assert reads == []
+
+    @pytest.mark.timeout(120)
+    def test_dataloader_no_workers_gives_view(self, tmp_path):
+        ztd = self._loader_data(tmp_path)
+        batch = next(iter(DataLoader(ztd, batch_size=64)))  # noqa: TOR401
+        assert type(batch) is _SubTensorDict
+        # a write to the batch reaches the store
+        batch["x"] = torch.zeros(64, 4)
+        assert (ztd["x"][:64] == 0).all()
+        assert (ztd["x"][64:] != 0).any()
 
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")

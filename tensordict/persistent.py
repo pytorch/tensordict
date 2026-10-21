@@ -62,6 +62,7 @@ from tensordict.utils import (
     unravel_key,
 )
 from torch import Tensor
+from torch.utils.data import get_worker_info
 
 _has_h5 = importlib.util.find_spec("h5py", None) is not None
 _has_zarr = importlib.util.find_spec("zarr", None) is not None
@@ -1699,7 +1700,15 @@ class PersistentTensorDict(
             item = torch.tensor(item)
         return self._get_sub_tensordict(item)
 
-    __getitems__ = __getitem__
+    # Override: a view of the file, as an index gives, except in a DataLoader
+    # worker.
+    def __getitems__(self, indices: IndexType) -> TensorDictBase:
+        sub_td = self[indices]
+        if get_worker_info() is None:
+            return sub_td
+        # In a DataLoader worker, read the rows here: the lazy view pickles as
+        # the file name, so the main process would read every batch (#3218).
+        return _read_rows(sub_td)
 
     # Override: writes through a sub-tensordict of the file, and a number into
     # the tensor entries only.
@@ -2655,6 +2664,27 @@ def _source_names(value, names=None):
     if names is None and is_tensor_collection(value) and value._has_names():
         names = value.names
     return names
+
+
+def _read_rows(sub_td: TensorDictBase) -> TensorDict:
+    """Reads an index of a PersistentTensorDict into a TensorDict.
+
+    Gives what ``sub_td.to_tensordict()`` gives, without copying the tensors
+    that were just read from the file.
+    """
+    return TensorDict(
+        {
+            key: (
+                _read_rows(value)
+                if is_tensor_collection(value) and not is_non_tensor(value)
+                else value
+            )
+            for key, value in sub_td.items(is_leaf=_is_leaf_nontensor)
+        },
+        device=sub_td.device,
+        batch_size=sub_td.batch_size,
+        names=sub_td._maybe_names(),
+    )
 
 
 def _is_non_tensor_h5(val):
