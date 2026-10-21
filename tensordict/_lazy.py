@@ -3168,7 +3168,16 @@ class LazyStackedTensorDict(TensorDictBase):
                         raise RuntimeError(
                             f"Cannot densify a tensordict with values with empty shape and exclusive keys: got shape {a_shape}."
                         )
-                    none_shape = a_shape[:-1] + (0,)
+                    # zero rows: the first dim after the batch dims of the
+                    # members is empty, the feature dims are kept (#3215)
+                    rows = self.batch_dims - 1
+                    if len(a_shape) > rows and all(
+                        shape is None or shape[rows + 1 :] == a_shape[rows + 1 :]
+                        for shape in shapes
+                    ):
+                        none_shape = a_shape[:rows] + (0,) + a_shape[rows + 1 :]
+                    else:
+                        none_shape = a_shape[:-1] + (0,)
                     for tensor in list_of_entries:
                         if tensor is not None:
                             a_tensor = tensor.new_zeros(none_shape)

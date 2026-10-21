@@ -5406,7 +5406,8 @@ class TestLazyStackedTensorDict:
         )
         out = td.densify()
         assert type(out) is TensorDict
-        assert [t.shape for t in out.get("b").unbind(0)] == [(2, 3), (2, 0)]
+        # the empty entry has zero rows and keeps the feature dims (#3215)
+        assert [t.shape for t in out.get("b").unbind(0)] == [(2, 3), (0, 3)]
         # a key of empty shape that is exclusive cannot be padded
         td = LazyStackedTensorDict(
             TensorDict(a=torch.ones(3), b=torch.ones(())),
@@ -5443,6 +5444,49 @@ class TestLazyStackedTensorDict:
         # a NonTensorStack is its own dense form
         stack = NonTensorStack("a", "b")
         assert stack.densify() is stack
+
+    @pytest.mark.parametrize("layout", [torch.jagged, torch.strided])
+    @pytest.mark.parametrize("sizes", [(2, 3), (2, 4, 3)])
+    @pytest.mark.parametrize("batch_size", [(), (2,)])
+    def test_densify_exclusive_key_feature_dims(self, layout, sizes, batch_size):
+        # a per-atom key with feature dims that the last sample lacks gets an
+        # empty entry with zero rows and the same feature dims, so the ragged
+        # dim is the first dim after the batch dims, as for the other keys.
+        # It got a placeholder with an empty last dim, which put the ragged
+        # dim last or raised with the jagged layout (#3215)
+        missing = len(sizes) - 1
+        td = LazyStackedTensorDict(
+            *[
+                TensorDict(
+                    pos=torch.zeros(*batch_size, n, 3),
+                    **(
+                        {}
+                        if i == missing
+                        else {
+                            "forces": torch.ones(*batch_size, n, 3),
+                            "charge": torch.ones(*batch_size, n),
+                        }
+                    ),
+                    batch_size=batch_size,
+                )
+                for i, n in enumerate(sizes)
+            ]
+        )
+        out = td.densify(layout=layout)
+        forces, charge = out["forces"], out["charge"]
+        rows = [0 if i == missing else n for i, n in enumerate(sizes)]
+        assert [t.shape for t in forces.unbind(0)] == [
+            (*batch_size, n, 3) for n in rows
+        ]
+        # a 1-d key had the right placeholder already
+        assert [t.shape for t in charge.unbind(0)] == [(*batch_size, n) for n in rows]
+        assert forces.layout == charge.layout == out["pos"].layout == layout
+        assert forces.dim() == out["pos"].dim() and forces.size(-1) == 3
+        if layout is torch.strided:
+            # the padded result is unchanged: all padding for the missing sample
+            padded = torch.nested.to_padded_tensor(forces, -1.0)
+            assert padded.shape == (len(sizes), *batch_size, max(rows), 3)
+            assert (padded[missing] == -1).all()
 
     def test_get_item_shape_heterogeneous(self):
         td = LazyStackedTensorDict(

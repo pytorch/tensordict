@@ -284,8 +284,11 @@ node:
 
 :meth:`~tensordict.LazyStackedTensorDict.densify` turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested
-tensors. Pass ``layout=torch.jagged``: the default, ``torch.strided``, gives a
-warning from PyTorch, which recommends the jagged layout.
+tensors. A key that only some members have is filled with an empty entry (zero
+rows) for the members that lack it, so it appears in the result although
+``keys()`` of the lazy stack leaves it out. Pass ``layout=torch.jagged``: the
+default, ``torch.strided``, gives a warning from PyTorch, which recommends the
+jagged layout.
 
   >>> dense = graphs.densify(layout=torch.jagged)
   >>> type(dense).__name__, dense["nodes"].is_nested
