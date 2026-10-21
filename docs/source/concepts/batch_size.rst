@@ -167,6 +167,13 @@ tensor. Its shape must match those dimensions:
   >>> td[torch.tensor([True, False])].batch_size
   torch.Size([1, 3])
 
+An index that runs past the batch dimensions with integers, lists, tensors or
+masks, such as ``td[:, :, [0, 1]]`` here, indexes the leaves and grows the
+batch size to cover their indexed dimensions, as in TensorDict 0.14, with a
+``FutureWarning``: starting with TensorDict 0.17, the default will change to
+raising an ``IndexError``. To index the leaves, write
+``td.apply(lambda x: x[:, :, [0, 1]])``, which keeps the batch size.
+
 A list of strings is not a key selection. To keep some keys, use
 :meth:`~tensordict.TensorDict.select` (see :ref:`keys`).
 

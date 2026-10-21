@@ -4864,15 +4864,81 @@ class TestGeneric:
         # and raises the error that torch raises
         with pytest.raises(IndexError) as torch_error:
             torch.zeros(3, 4)[index]
+        # the leaf has no dim past the batch dims, which an index that runs
+        # past them would index (#3202)
         for td in (
             TensorDict(batch_size=[3, 4]),
-            TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4]),
+            TensorDict({"a": torch.zeros(3, 4)}, [3, 4]),
         ):
             with pytest.raises(IndexError) as error:
                 td[index]
             assert str(error.value) == str(torch_error.value)
             with pytest.raises(IndexError):
                 td[index] = TensorDict()
+
+    def test_getitem_past_batch_dims_deprecated(self):
+        # TensorDict 0.14 indexed the leaves with an index that runs past the
+        # batch dims, 0.15 raised an IndexError without a warning first: the
+        # result of 0.14 comes back with a FutureWarning, until 0.17 (#3202)
+        @tensorclass
+        class _Leaves:
+            a: torch.Tensor
+            s: str
+
+        leaf = torch.arange(8.0).reshape(4, 2)
+        ids = torch.tensor([0, 1])
+        td = TensorDict(
+            a=leaf,
+            n=TensorDict(b=torch.arange(24.0).reshape(4, 2, 3), batch_size=[4]),
+            s=NonTensorData("x", batch_size=[4]),
+            batch_size=[4],
+        )
+        tc = _Leaves(a=leaf, s="x", batch_size=[4])
+        for index, batch_size in [
+            ((slice(None), [0, 1]), (4, 2)),
+            ((slice(None), ids), (4, 2)),
+            ((slice(None), 1), (4,)),
+            ((slice(None), -1), (4,)),
+            ((slice(None), torch.tensor([True, False])), (4, 1)),
+            ((0, [1, 0]), (2,)),
+            ((None, slice(None), 1), (1, 4)),
+        ]:
+            for data in (tc, td):
+                with warnings.catch_warnings(record=True) as record:
+                    warnings.simplefilter("always")
+                    result = data[index]
+                messages = [
+                    w for w in record if "runs past the batch dims" in str(w.message)
+                ]
+                assert len(messages) == 1
+                assert messages[0].category is FutureWarning
+                assert messages[0].filename == __file__
+                assert "td.apply(lambda x: x[:, idx])" in str(messages[0].message)
+                assert type(result) is type(data)
+                assert result.batch_size == batch_size
+                assert (result.get("a") == leaf[index]).all()
+                entries = result.to_tensordict(retain_none=True)
+                assert entries.get("s").batch_size == batch_size
+                assert entries["s"] == "x"
+            # the tensordict comes last
+            assert (result["n", "b"] == td["n", "b"][index]).all()
+            assert result["n"].batch_size == batch_size
+        # 0.14 gave nothing to keep for a tensordict without entries, a slice
+        # past the batch dims, a leaf too short for the index, and a lazy stack
+        lazy = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(a=torch.zeros(2)) for _ in range(4)]
+        )
+        for data, index in [
+            (TensorDict(batch_size=[4]), (slice(None), 1)),
+            (td, (slice(None), slice(0, 1))),
+            (td, (slice(None), 1, 1)),
+            (td, (slice(None), 2)),
+            (lazy, (slice(None), 1)),
+        ]:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                with pytest.raises(IndexError):
+                    data[index]
 
     @pytest.mark.parametrize(
         "index",

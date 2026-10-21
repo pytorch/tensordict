@@ -58,6 +58,7 @@ from tensordict._indexing import (
     _is_new_dim_index,
     _mask_to_indices,
     _read_element,
+    _read_index,
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
@@ -2249,6 +2250,74 @@ def _warn_as_tensor_memmap() -> None:
     )
 
 
+def _warn_index_past_batch_dims(index) -> None:
+    """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202)."""
+    if is_compiling():
+        return
+    warnings.warn(
+        f"The index {index} runs past the batch dims, and is used on the dims "
+        "of the leaves instead. Starting with TensorDict 0.17, the default will "
+        "change to raising an IndexError, as torch does for a tensor of the "
+        "batch size. To index the leaves, write td.apply(lambda x: x[:, idx]), "
+        "which keeps the batch size.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _index_past_batch_dims(td, index):
+    """Returns ``td[index]`` for an ``index`` that runs past the batch dims, as TensorDict 0.14 did, or ``None`` (#3202).
+
+    Each leaf is indexed with the whole index, and the batch size grows to
+    cover the leaf dims that the index uses. ``None`` is returned where 0.14
+    gave no result to keep: an index that slices a dim past the batch dims, a
+    tensordict without tensor leaves or with dim names, a sub-tensordict with
+    more batch dims than ``td`` or that is not a tensordict or a tensorclass,
+    and a leaf that the index does not fit.
+    """
+    ndim = td.batch_dims
+    try:
+        dims, _, _, used = _read_index(index, ndim)
+        if used <= ndim or any(dim is not None and dim >= ndim for dim, _ in dims):
+            return None
+        leaf = next((v for v in td.values(True, True) if isinstance(v, Tensor)), None)
+        if leaf is None:
+            return None
+        batch_size = _getitem_batch_size(td.batch_size + leaf.shape[ndim:used], index)
+        return _index_leaves(td, index, batch_size)
+    except (IndexError, RuntimeError):
+        return None
+
+
+def _index_leaves(td, index, batch_size):
+    """Indexes each leaf of ``td`` with ``index``, which runs past the batch dims, into a tensordict of ``batch_size`` (#3202)."""
+    if td._has_names():
+        # 0.14 named the dims of these results inconsistently
+        raise IndexError
+    source = {}
+    for key, item in td.items():
+        cls = type(item)
+        if _is_unbatched(item):
+            source[key] = _unbatched_with_batch_size(item, batch_size)
+        elif not _is_tensor_collection(cls):
+            source[key] = item[index]
+            if source[key].shape[: len(batch_size)] != batch_size:
+                raise IndexError
+        elif item.batch_dims != td.batch_dims:
+            raise IndexError
+        elif cls is _TENSORDICT_TYPE:
+            source[key] = _index_leaves(item, index, batch_size)
+        elif _is_tensorclass(cls):
+            # the non-tensor data and the non-tensor fields are kept
+            source[key] = cls._from_tensordict(
+                tensordict=_index_leaves(item._tensordict, index, batch_size),
+                non_tensordict=dict(item._non_tensordict),
+            )
+        else:
+            raise IndexError
+    return td._new_unsafe(source=source, batch_size=batch_size, device=td.device)
+
+
 def _warn_split_keys_kept_in_last() -> None:
     """Warns that ``split_keys(strict=False)`` keeps a named entry that only some members of a lazy stack hold in the last part, until 0.17 (#2827)."""
     if is_compiling():
@@ -3481,7 +3550,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Any other index (an int, a slice, a tensor, a boolean mask, ``...``,
         ``None``, or a tuple of these) applies to the batch dimensions of every
         entry, as it would to a tensor of shape :attr:`~.batch_size`, and
-        returns a tensordict. See :ref:`batch-size`.
+        returns a tensordict. See :ref:`batch-size`. An index that runs past
+        the batch dimensions with ints, lists, tensors or masks indexes the
+        leaves of a tensordict, and grows the batch size to cover their indexed
+        dims, with a ``FutureWarning``. Starting with TensorDict 0.17, the
+        default will change to raising an ``IndexError``: to index the leaves,
+        write ``td.apply(lambda x: x[:, idx])``, which keeps the batch size.
 
         Raises:
             KeyError: if the key is missing.
@@ -11646,7 +11720,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 and not is_compiling()
             ):
                 index = _mask_to_indices(index, batch_size, self.device)
-            batch_size = _getitem_batch_size(batch_size, index)
+            try:
+                batch_size = _getitem_batch_size(batch_size, index)
+            except IndexError:
+                result = _index_past_batch_dims(self, index)
+                if result is None:
+                    raise
+                _warn_index_past_batch_dims(index)
+                return result
 
         if names is None:
             names = self._get_names_idx(index)
