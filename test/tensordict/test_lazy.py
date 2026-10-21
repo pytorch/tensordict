@@ -1544,6 +1544,7 @@ class TestLazyStackedTensorDict:
         "op,args,kwargs",
         [
             ("lerp", (), {"end": "other", "weight": 0.3}),
+            ("lerp", (), {"end": "other", "weight": torch.tensor(0.3)}),
             ("lerp", (), {"end": "other", "weight": "other"}),
             ("lerp", ("other",), {"weight": "other"}),
             ("add", (), {"other": "other", "alpha": 2.0}),

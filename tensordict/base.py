@@ -834,17 +834,20 @@ def _maybe_broadcast_other(
         )
 
     def wrap_func(func):
-        names = []
+        names = None
 
         def by_keyword(n, kwargs):
             # The names of the tensordict operands passed by keyword after the
-            # n passed by position. A tensor by keyword keeps its broadcasting
-            # (#3042), and clamp its error for a tensordict next to a number.
+            # n passed by position. A tensor with dims by keyword keeps its
+            # broadcasting (#3042), and clamp its error for a tensordict next
+            # to a number.
+            nonlocal names
             if not kwargs or n >= n_other:
                 return ()
-            if not names:
+            if names is None:
+                # one assignment, so that threads never see a partial tuple
                 params = list(inspect.signature(func).parameters.values())
-                names.extend(p.name for p in params[1 : n_other + 1])
+                names = tuple(p.name for p in params[1 : n_other + 1])
             moved = []
             for name in names[n:]:
                 if not _is_tensor_collection(type(kwargs.get(name))):
@@ -852,7 +855,9 @@ def _maybe_broadcast_other(
                 moved.append(name)
             for name in names[n + len(moved) :]:
                 value = kwargs.get(name)
-                if isinstance(value, Tensor) or (op == "clamp" and value is not None):
+                if (isinstance(value, Tensor) and value.ndim) or (
+                    op == "clamp" and value is not None
+                ):
                     return ()
             return moved
 
