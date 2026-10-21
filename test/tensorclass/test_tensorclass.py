@@ -4965,6 +4965,14 @@ class TestTensorClass:
         with pytest.raises(RuntimeError, match="locked"):
             tc.update({"x": tc}, inplace=True)
 
+    def test_set_non_tensor_data_to_itself(self):
+        # a NonTensorData set to itself keeps its data, as before #2741's check
+        nd = NonTensorData("hi")
+        nd.set("data", nd)
+        assert nd.data == "hi"
+        nd.data = nd
+        assert nd.data == "hi"
+
     def test_update_ignore_lock_deprecated(self):
         # #2260: ignore_lock=True warns once per call, also when the update
         # goes on into the tensordict of the tensorclass and its nested entries

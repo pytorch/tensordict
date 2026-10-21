@@ -5175,8 +5175,9 @@ def _set(
             non_blocking=non_blocking,
             non_tensor=False,
         ):
-            # checked on the value stored, after the field check and casting
-            if value is self:
+            # checked on the value stored, after the field check and casting;
+            # a NonTensorData set to itself unwraps to its own data below
+            if value is self and not self_is_non_tensor:
                 raise ValueError(_SELF_NESTING_ERROR.format(key))
             if self_is_non_tensor:
                 while is_non_tensor(value):
