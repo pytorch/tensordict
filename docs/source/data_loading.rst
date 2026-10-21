@@ -104,6 +104,15 @@ pairs, which ``torch.stack`` cannot stack:
   >>> type(batch).__name__
   'LazyStackedTensorDict'
 
+The default ``collate_fn`` gives the same batches, so you need to pass
+:func:`~tensordict.collate` only for its keyword arguments, shown below:
+
+  >>> features, labels = next(iter(DataLoader(pairs, batch_size=4)))
+  >>> type(features).__name__, labels
+  ('TensorDict', tensor([0, 1, 2, 3]))
+  >>> type(next(iter(DataLoader(clouds, batch_size=4)))).__name__
+  'LazyStackedTensorDict'
+
 To pad some entries instead, each with its own value, or to stack them as
 jagged nested tensors, pass the keyword arguments of
 :func:`~tensordict.collate` with :func:`functools.partial`. The other

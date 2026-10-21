@@ -16,7 +16,7 @@ What you will learn:
 - How to convert a ``torchvision`` dataset into a tensordict of
   :class:`~tensordict.MemoryMappedTensor` entries, once.
 - How to pass a tensordict to a ``DataLoader`` as a map-style dataset, and
-  why it needs ``collate_fn=lambda x: x``.
+  what ``collate_fn`` it takes.
 - How to read the batches in a training loop.
 
 Before you start, read :ref:`sphx_glr_tutorials_tensordict_memory.py` for
