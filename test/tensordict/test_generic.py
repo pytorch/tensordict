@@ -12569,6 +12569,21 @@ class TestGeneric:
             assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
             assert parameter.default is None
 
+    @pytest.mark.parametrize("name", ["qint32", "qint8", "quint4x2", "quint8"])
+    def test_quantized_dtype_shorthand_deprecated(self, name):
+        # A cast cannot supply the scale and zero point of a quantized tensor,
+        # so these raise for any float leaf (#3150)
+        @tensorclass
+        class MyClass:
+            pass
+
+        match = rf"{name}\(\) is deprecated and will be removed in TensorDict 0\.18\..*quantize_per_tensor"
+        for obj in (TensorDict(batch_size=[3]), MyClass(batch_size=[3])):
+            with pytest.warns(DeprecationWarning, match=match):
+                out = getattr(obj, name)()
+            assert type(out) is type(obj)
+            assert out.batch_size == (3,)
+
     def test_to_cast_filter_integer_target(self):
         # An integer target does not raise: the filter does what it says
         td = self._cast_filter_td()

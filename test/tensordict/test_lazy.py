@@ -1303,8 +1303,10 @@ class TestLazyStackedTensorDict:
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("lazy_first", [True, False])
-    def test_and_with_dense(self, stack_dim, lazy_first):
-        # & pairs the leaves by key, as | and ^ do (#1932)
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_and_with_dense(self, stack_dim, lazy_first, nested):
+        # & pairs the leaves by key, as | and ^ do, also with the lazy stack
+        # nested in a dense tensordict (#1932)
         def make_dense():
             return TensorDict(
                 a=torch.rand(2, 3) > 0.5,
@@ -1315,6 +1317,9 @@ class TestLazyStackedTensorDict:
         stack = lazy_stack(list(make_dense().unbind(stack_dim)), stack_dim)
         dense = make_dense()
         self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        if nested:
+            self_td = TensorDict(n=self_td, batch_size=[2, 3])
+            other = TensorDict(n=other, batch_size=[2, 3])
         expected = self_td.to_tensordict() & other.to_tensordict()
 
         out = self_td & other
@@ -1354,7 +1359,18 @@ class TestLazyStackedTensorDict:
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize(
-        "op,args", [("add", ()), ("mul", ()), ("lerp", (0.3,)), ("add_", ())]
+        "op,args",
+        [
+            ("add", ()),
+            ("mul", ()),
+            ("lerp", (0.3,)),
+            ("add_", ()),
+            ("maximum_", ()),
+            ("minimum_", ()),
+            ("clamp_max_", ()),
+            ("clamp_min_", ()),
+            ("lerp_", (0.3,)),
+        ],
     )
     @pytest.mark.parametrize("lazy_first", [True, False])
     def test_arithmetic_with_nested_dense(self, stack_dim, op, args, lazy_first):
@@ -1392,9 +1408,20 @@ class TestLazyStackedTensorDict:
             other + self_td
         with pytest.raises(KeyError):
             self_td.add_(other)
+        for op in ["maximum_", "minimum_", "clamp_max_", "clamp_min_"]:
+            with pytest.raises(KeyError):
+                getattr(self_td, op)(other)
+            with pytest.raises(KeyError):
+                getattr(other, op)(self_td)
+        with pytest.raises(KeyError):
+            self_td.lerp_(other, 0.3)
+        with pytest.raises(KeyError):
+            self_td.bool() & other.bool()
         assert (self_td["n", "a"] == 1).all()
 
-    @pytest.mark.parametrize("op", ["add", "add_", "mul_"])
+    @pytest.mark.parametrize(
+        "op", ["add", "add_", "mul_", "maximum_", "clamp_max_", "clamp_min_"]
+    )
     def test_arithmetic_with_nested_dense_member_key(self, op):
         # A key that only one member of the lazy stack has raises with that
         # key, and an in-place op writes nothing first
