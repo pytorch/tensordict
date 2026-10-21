@@ -89,7 +89,7 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 
 ```
-TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
+TensorDict(batch_size=[2], fields={stream0: f32[j1], stream1: f32[j2]})
 lengths of stream0: tensor([5, 4])
 ```
 
@@ -266,7 +266,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.363 seconds)
+**Total running time of the script:** (0 minutes 6.386 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 

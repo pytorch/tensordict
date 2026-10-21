@@ -217,9 +217,9 @@ when this page is tested:
 >>> batch = next(iter(loader)).to("cuda", non_blocking=True)
 ```
 
-Without a `DataLoader`, `td.to("cuda", non_blocking_pin=True)` pins the
-leaves with several threads (`num_threads`), and copies them to the GPU
-(see [Devices, dtypes, and memory](concepts/devices.html#devices)).
+Without a `DataLoader`, `td.to("cuda", non_blocking_pin=True)` pins each
+leaf on the calling thread and copies it to the GPU (see [Devices, dtypes, and memory](concepts/devices.html#devices)).
+For leaves of a few KiB, a plain `td.to("cuda")` is usually faster.
 
 ## Share a tensordict between processes
 
