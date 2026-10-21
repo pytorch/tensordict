@@ -144,7 +144,7 @@ entry. :func:`torch.nested.nested_tensor_from_jagged` goes back:
 
 Indexing, ``split``, and :func:`torch.cat` work along the first dimension of
 such a tensordict, so you can select or split the sequences before you pack
-them, as the next recipe does.
+them, as `Split and balance the sequences`_ below does.
 
 From a padded batch with a mask
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -170,7 +170,8 @@ Split and balance the sequences
 To keep each micro-batch under a token budget, compute the number of
 sequences of each micro-batch in a loop, and pass the list to ``split``. The
 loop keeps the order of the sequences, and starts a new micro-batch when the
-next sequence would go over the budget:
+next sequence would go over the budget. A sequence longer than the budget gets
+a micro-batch of its own, which goes over:
 
   >>> def budget_sizes(lengths, budget):
   ...     sizes, tokens = [], 0
