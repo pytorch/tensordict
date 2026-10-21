@@ -315,6 +315,22 @@ def _constructor(cls):
 def _tensorclass_constructor(
     *, cls, keys, values, batch_size, names, device, non_tensor_items
 ):
+    # The non-tensor fields that the tensorclass holds in its TensorDict are
+    # children without tensors, rebuilt with their stored, static batch size.
+    # Set them again with the batch size of the tensorclass, as
+    # _tensordict_constructor does with the non-tensor entries of a
+    # tensordict: otherwise torch.export with a dynamic batch dimension
+    # specializes it to the example's size. Setting them again is slow: skip
+    # it when the batch sizes are equal and static (Dynamo shows SymInts as
+    # ints, hence the is_compiling() check).
+    reset = is_compiling() or any(isinstance(dim, torch.SymInt) for dim in batch_size)
+    td_non_tensor = tuple(
+        (key, value.data)
+        for key, value in zip(keys, values)
+        if is_non_tensor(value)
+        and not isinstance(value, LazyStackedTensorDict)
+        and (reset or value.batch_size != batch_size)
+    )
     result = _tensordict_constructor(
         cls=TensorDict,
         keys=keys,
@@ -322,7 +338,7 @@ def _tensorclass_constructor(
         batch_size=batch_size,
         names=names,
         device=device,
-        non_tensor_items=(),
+        non_tensor_items=td_non_tensor,
     )
     result = cls._from_tensordict(result, dict(non_tensor_items))
     return result
