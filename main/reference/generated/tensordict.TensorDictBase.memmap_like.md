@@ -99,6 +99,11 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 ## Tutorials that use `memmap_like`
 
+![](../../_images/sphx_glr_tensorclass_particles_thumb.png)
+
+[Simulating particles with a tensorclass](../../tutorials/tensorclass_particles.html)
+
+Simulating particles with a tensorclass
 ![](../../_images/sphx_glr_tensordict_memory_thumb.png)
 
 [Devices and memory-mapped tensors](../../tutorials/tensordict_memory.html)

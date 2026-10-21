@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6322+g04544cac7.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6323+gcb1fee007.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6322+g04544cac7.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6323+gcb1fee007.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -821,6 +821,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1360,6 +1366,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1581,6 +1593,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -1779,6 +1795,12 @@ to write.</p>
 
 <p>Every tensordict class and every tensorclass has this method. For the
 other methods, see <a class="reference internal" href="../td.html#api-tensordict-methods"><span class="std std-ref">Methods by task</span></a>.</p>
+<section id="tutorials-that-use-replace">
+<h2>Tutorials that use <code class="docutils literal notranslate"><span class="pre">replace</span></code><a class="headerlink" href="#tutorials-that-use-replace" title="Link to this heading">#</a></h2>
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="A TensorClass can hold the state of a computation, not only a dataset. This tutorial writes a small gravity simulation: a Particles class with a position, a velocity, and a mass for each particle, and a step method that moves the particles forward in time. The same method runs on one system of particles or on a batch of independent systems. The tutorial is for readers who write simulations or other numerical code in PyTorch, and who keep the state in several tensors that must stay aligned."><img alt="" src="../../_images/sphx_glr_tensorclass_particles_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensorclass_particles.html"><span class="doc">Simulating particles with a tensorclass</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Simulating particles with a tensorclass</div>
+</div></div></section>
 </section>
 
 
@@ -1899,6 +1921,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict.TensorDictBase.replace"><code class="docutils literal notranslate"><span class="pre">TensorDictBase.replace()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tutorials-that-use-replace">Tutorials that use <code class="docutils literal notranslate"><span class="pre">replace</span></code></a></li>
 </ul>
   </nav></div>
     
@@ -2135,7 +2158,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.replace",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.replace",
        "url": "/reference/generated/tensordict.TensorDictBase.replace.html",
-       "articleBody": "TensorDictBase.replace# TensorDictBase.replace(*args, **kwargs)# Returns a shallow copy of the tensordict with some entries replaced. The copy is made with copy(), and the new entries are written into it with update(): nested tensordicts are merged, and the tensordict does not change. With no entry to write, replace returns self. When both a positional argument and **kwargs are given, the keyword entries are merged into a copy of the positional argument (with dict unpacking for a dictionary, with copy() and update() for a tensordict, and with to_tensordict() and update() for a file or a store, such as a PersistentTensorDict, or an indexed view of one), so the argument does not change. A file or a store shares its storage with its copy: called on one, replace writes the new entries into the file or store. So does a lazy stack of files or a tensordict that holds a file as a nested entry: passed as the argument, it still receives the keyword entries. Parameters: *args (dict or TensorDictBase) \u2013 at most one, the entries to write. **kwargs \u2013 top-level entries to write, by key. They take precedence over the entries of the positional argument. Returns: A shallow copy of the tensordict, or self if there is no entry to write. Raises: RuntimeError \u2013 if more than one positional argument is passed, or if it is not a dictionary or a tensordict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e new = td.replace(a=torch.ones(3)) \u003e\u003e\u003e new[\"a\"], td[\"a\"], new[\"b\"] is td[\"b\"] (tensor([1., 1., 1.]), tensor([0., 0., 0.]), True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.replace# TensorDictBase.replace(*args, **kwargs)# Returns a shallow copy of the tensordict with some entries replaced. The copy is made with copy(), and the new entries are written into it with update(): nested tensordicts are merged, and the tensordict does not change. With no entry to write, replace returns self. When both a positional argument and **kwargs are given, the keyword entries are merged into a copy of the positional argument (with dict unpacking for a dictionary, with copy() and update() for a tensordict, and with to_tensordict() and update() for a file or a store, such as a PersistentTensorDict, or an indexed view of one), so the argument does not change. A file or a store shares its storage with its copy: called on one, replace writes the new entries into the file or store. So does a lazy stack of files or a tensordict that holds a file as a nested entry: passed as the argument, it still receives the keyword entries. Parameters: *args (dict or TensorDictBase) \u2013 at most one, the entries to write. **kwargs \u2013 top-level entries to write, by key. They take precedence over the entries of the positional argument. Returns: A shallow copy of the tensordict, or self if there is no entry to write. Raises: RuntimeError \u2013 if more than one positional argument is passed, or if it is not a dictionary or a tensordict. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), b=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e new = td.replace(a=torch.ones(3)) \u003e\u003e\u003e new[\"a\"], td[\"a\"], new[\"b\"] is td[\"b\"] (tensor([1., 1., 1.]), tensor([0., 0., 0.]), True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use replace# Simulating particles with a tensorclass Simulating particles with a tensorclass",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

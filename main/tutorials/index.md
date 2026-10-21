@@ -88,6 +88,11 @@ Using tensorclasses for datasets
 [Batched data loading with tensorclasses](tensorclass_imagenet.html)
 
 Batched data loading with tensorclasses
+![](../_images/sphx_glr_tensorclass_particles_thumb.png)
+
+[Simulating particles with a tensorclass](tensorclass_particles.html)
+
+Simulating particles with a tensorclass
 
 [`Download all examples in Python source code: tutorials_python.zip`](../_downloads/315c4c52fb68082a731b192d944e2ede/tutorials_python.zip)
 

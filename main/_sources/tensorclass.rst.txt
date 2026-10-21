@@ -910,5 +910,6 @@ See also
 - :ref:`coming-from-jax`: the JAX pytree idioms in tensorclass terms.
 - :ref:`compatibility`: tensorclasses on HDF5, Redis, lazy stacks, and
   memory-mapped tensordicts.
-- The tutorials :doc:`tutorials/tensorclass_fashion` and
-  :doc:`tutorials/tensorclass_imagenet`.
+- The tutorials :doc:`tutorials/tensorclass_fashion`,
+  :doc:`tutorials/tensorclass_imagenet`, and
+  :doc:`tutorials/tensorclass_particles`.

@@ -928,5 +928,6 @@ tensors, and the tensorclass operations that replace them.
 - [Coming from JAX pytrees](coming_from_jax.html#coming-from-jax): the JAX pytree idioms in tensorclass terms.
 - [Containers on storage backends](compatibility.html#compatibility): tensorclasses on HDF5, Redis, lazy stacks, and
 memory-mapped tensordicts.
-- The tutorials [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html) and
-[Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html).
+- The tutorials [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html),
+[Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html), and
+[Simulating particles with a tensorclass](tutorials/tensorclass_particles.html).

@@ -271,6 +271,23 @@ The sidebar lists the tutorials in four groups, in reading order:
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A TensorClass can hold the state of a computation, not only a dataset. This tutorial writes a small gravity simulation: a Particles class with a position, a velocity, and a mass for each particle, and a step method that moves the particles forward in time. The same method runs on one system of particles or on a batch of independent systems. The tutorial is for readers who write simulations or other numerical code in PyTorch, and who keep the state in several tensors that must stay aligned.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensorclass_particles_thumb.png
+    :alt:
+
+  :doc:`/tutorials/tensorclass_particles`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Simulating particles with a tensorclass</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -295,6 +312,7 @@ The sidebar lists the tutorials in four groups, in reading order:
    /tutorials/data_fashion
    /tutorials/tensorclass_fashion
    /tutorials/tensorclass_imagenet
+   /tutorials/tensorclass_particles
 
 
 .. only:: html

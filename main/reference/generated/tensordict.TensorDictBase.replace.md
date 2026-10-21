@@ -50,3 +50,11 @@ Examples
 
 Every tensordict class and every tensorclass has this method. For the
 other methods, see [Methods by task](../td.html#api-tensordict-methods).
+
+## Tutorials that use `replace`
+
+![](../../_images/sphx_glr_tensorclass_particles_thumb.png)
+
+[Simulating particles with a tensorclass](../../tutorials/tensorclass_particles.html)
+
+Simulating particles with a tensorclass

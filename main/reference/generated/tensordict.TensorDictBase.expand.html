@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6322+g04544cac7.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6323+gcb1fee007.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6322+g04544cac7.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6323+gcb1fee007.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -821,6 +821,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1360,6 +1366,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1581,6 +1593,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -1771,7 +1787,10 @@ allocated, and the expanded leaves are not contiguous. Call
 other methods, see <a class="reference internal" href="../td.html#api-tensordict-methods"><span class="std std-ref">Methods by task</span></a>.</p>
 <section id="tutorials-that-use-expand">
 <h2>Tutorials that use <code class="docutils literal notranslate"><span class="pre">expand</span></code><a class="headerlink" href="#tutorials-that-use-expand" title="Link to this heading">#</a></h2>
-<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="A TensorDict has the shape operations of a tensor, such as reshape, split, stack, and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor."><img alt="" src="../../_images/sphx_glr_tensordict_shapes_thumb.png" />
+<div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="A TensorClass can hold the state of a computation, not only a dataset. This tutorial writes a small gravity simulation: a Particles class with a position, a velocity, and a mass for each particle, and a step method that moves the particles forward in time. The same method runs on one system of particles or on a batch of independent systems. The tutorial is for readers who write simulations or other numerical code in PyTorch, and who keep the state in several tensors that must stay aligned."><img alt="" src="../../_images/sphx_glr_tensorclass_particles_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensorclass_particles.html"><span class="doc">Simulating particles with a tensorclass</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Simulating particles with a tensorclass</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A TensorDict has the shape operations of a tensor, such as reshape, split, stack, and permute. Each call changes every tensor in it in the same way, so you write the call once, and the tensors stay aligned. This tutorial is for readers who know these operations on a torch.Tensor."><img alt="" src="../../_images/sphx_glr_tensordict_shapes_thumb.png" />
 <p><a class="reference internal" href="../../tutorials/tensordict_shapes.html"><span class="doc">Changing the shape of a TensorDict</span></a></p>
   <div class="sphx-glr-thumbnail-title">Changing the shape of a TensorDict</div>
 </div></div></section>
@@ -2132,7 +2151,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.expand",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.expand",
        "url": "/reference/generated/tensordict.TensorDictBase.expand.html",
-       "articleBody": "TensorDictBase.expand# TensorDictBase.expand(*args, **kwargs) \u2192 Self# Returns a tensordict whose batch dimensions are expanded to shape. The new shape is the new batch size, and the leaves keep their feature dimensions. As for torch.Tensor.expand(), it can add leading dimensions and expand the dimensions of size 1, and -1 keeps the size of a dimension. The other dimensions must keep their size. The new leading dimensions have no name. The result holds views of the original tensors: no memory is allocated, and the expanded leaves are not contiguous. Call clone() or contiguous() before you write into them. Parameters: *shape (int) \u2013 the new batch size, as integers or as one torch.Size, list or tuple. Raises: RuntimeError \u2013 if shape has fewer dimensions than the batch size, or changes the size of a dimension that is not 1. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027a\u0027: torch.zeros(3, 4, 5), ... \u0027b\u0027: torch.zeros(3, 4, 10)}, batch_size=[3, 4]) \u003e\u003e\u003e td_expand = td.expand(10, 3, 4) \u003e\u003e\u003e td_expand.batch_size, td_expand[\"a\"].shape (torch.Size([10, 3, 4]), torch.Size([10, 3, 4, 5])) \u003e\u003e\u003e td.expand(2, -1, -1).batch_size torch.Size([2, 3, 4]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use expand# Changing the shape of a TensorDict Changing the shape of a TensorDict",
+       "articleBody": "TensorDictBase.expand# TensorDictBase.expand(*args, **kwargs) \u2192 Self# Returns a tensordict whose batch dimensions are expanded to shape. The new shape is the new batch size, and the leaves keep their feature dimensions. As for torch.Tensor.expand(), it can add leading dimensions and expand the dimensions of size 1, and -1 keeps the size of a dimension. The other dimensions must keep their size. The new leading dimensions have no name. The result holds views of the original tensors: no memory is allocated, and the expanded leaves are not contiguous. Call clone() or contiguous() before you write into them. Parameters: *shape (int) \u2013 the new batch size, as integers or as one torch.Size, list or tuple. Raises: RuntimeError \u2013 if shape has fewer dimensions than the batch size, or changes the size of a dimension that is not 1. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \u0027a\u0027: torch.zeros(3, 4, 5), ... \u0027b\u0027: torch.zeros(3, 4, 10)}, batch_size=[3, 4]) \u003e\u003e\u003e td_expand = td.expand(10, 3, 4) \u003e\u003e\u003e td_expand.batch_size, td_expand[\"a\"].shape (torch.Size([10, 3, 4]), torch.Size([10, 3, 4, 5])) \u003e\u003e\u003e td.expand(2, -1, -1).batch_size torch.Size([2, 3, 4]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use expand# Simulating particles with a tensorclass Simulating particles with a tensorclass Changing the shape of a TensorDict Changing the shape of a TensorDict",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

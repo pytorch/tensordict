@@ -556,6 +556,7 @@
 - [Building tensordicts from streams](https://docs.pytorch.org/tensordict/stable/tutorials/streamed_tensordict.md)
 - [Using tensorclasses for datasets](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_fashion.md)
 - [Batched data loading with tensorclasses](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_imagenet.md)
+- [Simulating particles with a tensorclass](https://docs.pytorch.org/tensordict/stable/tutorials/tensorclass_particles.md)
 - [Getting, setting, and nesting keys](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_keys.md)
 - [Devices and memory-mapped tensors](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_memory.md)
 - [Building models with TensorDictModule](https://docs.pytorch.org/tensordict/stable/tutorials/tensordict_module.md)

@@ -70,5 +70,6 @@ Operations on its data, such as arithmetic or
 - [Which container should I use?](../choosing_a_container.html#choosing-a-container): tensorclass, `TypedTensorDict`, or
 `TensorDict`.
 - [TypedTensorDict](ttd.html#api-typed-tensordict): the other container with typed fields.
-- The tutorials [Using tensorclasses for datasets](../tutorials/tensorclass_fashion.html) and
-[Batched data loading with tensorclasses](../tutorials/tensorclass_imagenet.html).
+- The tutorials [Using tensorclasses for datasets](../tutorials/tensorclass_fashion.html),
+[Batched data loading with tensorclasses](../tutorials/tensorclass_imagenet.html), and
+[Simulating particles with a tensorclass](../tutorials/tensorclass_particles.html).

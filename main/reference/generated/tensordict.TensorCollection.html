@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6322+g04544cac7.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6323+gcb1fee007.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6322+g04544cac7.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6323+gcb1fee007.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -821,6 +821,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1360,6 +1366,12 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1581,6 +1593,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
 </ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
+</ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -1777,6 +1793,9 @@ use <a class="reference internal" href="tensordict.is_tensor_collection.html#ten
 </div><div class="sphx-glr-thumbcontainer" tooltip="A torchvision image pipeline opens, decodes, and transforms each image file again at every epoch, one image at a time. This tutorial stores the images once in the memory-mapped fields of a TensorClass, then reads and transforms whole batches. A memory-mapped tensor is a tensor whose values are stored in a file and read through the page cache of the operating system. This tutorial is for readers who train from a folder of image files."><img alt="" src="../../_images/sphx_glr_tensorclass_imagenet_thumb.png" />
 <p><a class="reference internal" href="../../tutorials/tensorclass_imagenet.html"><span class="doc">Batched data loading with tensorclasses</span></a></p>
   <div class="sphx-glr-thumbnail-title">Batched data loading with tensorclasses</div>
+</div><div class="sphx-glr-thumbcontainer" tooltip="A TensorClass can hold the state of a computation, not only a dataset. This tutorial writes a small gravity simulation: a Particles class with a position, a velocity, and a mass for each particle, and a step method that moves the particles forward in time. The same method runs on one system of particles or on a batch of independent systems. The tutorial is for readers who write simulations or other numerical code in PyTorch, and who keep the state in several tensors that must stay aligned."><img alt="" src="../../_images/sphx_glr_tensorclass_particles_thumb.png" />
+<p><a class="reference internal" href="../../tutorials/tensorclass_particles.html"><span class="doc">Simulating particles with a tensorclass</span></a></p>
+  <div class="sphx-glr-thumbnail-title">Simulating particles with a tensorclass</div>
 </div><div class="sphx-glr-thumbcontainer" tooltip="A TensorDict stores tensors under string keys, as a Python dict does, and a value can be another TensorDict. If you know dict, most of this tutorial is familiar. It shows where a TensorDict is different: what a missing key returns, what a for loop gives, and how tuples of strings address nested entries."><img alt="" src="../../_images/sphx_glr_tensordict_keys_thumb.png" />
 <p><a class="reference internal" href="../../tutorials/tensordict_keys.html"><span class="doc">Getting, setting, and nesting keys</span></a></p>
   <div class="sphx-glr-thumbnail-title">Getting, setting, and nesting keys</div>
@@ -2156,7 +2175,7 @@ use <a class="reference internal" href="tensordict.is_tensor_collection.html#ten
        "headline": "TensorCollection",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorCollection",
        "url": "/reference/generated/tensordict.TensorCollection.html",
-       "articleBody": "TensorCollection# class tensordict.TensorCollection(*args, **kwargs)# Bases: object The abstract base class of tensordicts and tensorclasses. TensorDictBase and TensorClass inherit from it. It cannot be instantiated. Use it in type hints and isinstance checks for \u201ca tensordict or a tensorclass\u201d. Classes decorated with @tensorclass do not inherit from it, only subclasses of TensorClass do; to check both, use is_tensor_collection(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass, TensorCollection, TensorDict \u003e\u003e\u003e class Data(TensorClass): ... x: torch.Tensor \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e isinstance(td, TensorCollection) True \u003e\u003e\u003e isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection) True \u003e\u003e\u003e isinstance(torch.zeros(3), TensorCollection) False Tutorials that use TensorCollection# Using TensorDict for datasets Using TensorDict for datasets Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Building tensordicts from streams Building tensordicts from streams Using tensorclasses for datasets Using tensorclasses for datasets Batched data loading with tensorclasses Batched data loading with tensorclasses Getting, setting, and nesting keys Getting, setting, and nesting keys Devices and memory-mapped tensors Devices and memory-mapped tensors Building models with TensorDictModule Building models with TensorDictModule Filling a TensorDict row by row Filling a TensorDict row by row Changing the shape of a TensorDict Changing the shape of a TensorDict Slicing, indexing, and masking Slicing, indexing, and masking Storing TensorDicts in zarr Storing TensorDicts in zarr",
+       "articleBody": "TensorCollection# class tensordict.TensorCollection(*args, **kwargs)# Bases: object The abstract base class of tensordicts and tensorclasses. TensorDictBase and TensorClass inherit from it. It cannot be instantiated. Use it in type hints and isinstance checks for \u201ca tensordict or a tensorclass\u201d. Classes decorated with @tensorclass do not inherit from it, only subclasses of TensorClass do; to check both, use is_tensor_collection(). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass, TensorCollection, TensorDict \u003e\u003e\u003e class Data(TensorClass): ... x: torch.Tensor \u003e\u003e\u003e td = TensorDict(x=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e isinstance(td, TensorCollection) True \u003e\u003e\u003e isinstance(Data(x=torch.zeros(3), batch_size=[3]), TensorCollection) True \u003e\u003e\u003e isinstance(torch.zeros(3), TensorCollection) False Tutorials that use TensorCollection# Using TensorDict for datasets Using TensorDict for datasets Functional calls and ensembles with TensorDict Functional calls and ensembles with TensorDict Benchmarking TensorDict serialization speed Benchmarking TensorDict serialization speed Building tensordicts from streams Building tensordicts from streams Using tensorclasses for datasets Using tensorclasses for datasets Batched data loading with tensorclasses Batched data loading with tensorclasses Simulating particles with a tensorclass Simulating particles with a tensorclass Getting, setting, and nesting keys Getting, setting, and nesting keys Devices and memory-mapped tensors Devices and memory-mapped tensors Building models with TensorDictModule Building models with TensorDictModule Filling a TensorDict row by row Filling a TensorDict row by row Changing the shape of a TensorDict Changing the shape of a TensorDict Slicing, indexing, and masking Slicing, indexing, and masking Storing TensorDicts in zarr Storing TensorDicts in zarr",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
