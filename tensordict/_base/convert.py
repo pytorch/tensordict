@@ -2065,6 +2065,15 @@ class _Conversion:
         ``GenericDict``, whose fields are the keys. The ``None`` fields of
         tensorclasses are dropped.
 
+        On a tensorclass, the top level is a plain :class:`tuple`, also with
+        ``dest_cls``: it holds the values of ``to_dict(retain_none=False)``,
+        in the same order, without the field names. The nested tensordicts
+        and tensorclasses in it are still named tuples. A plain tuple of
+        tensors can be pickled and loaded with
+        ``torch.load(weights_only=True)``, while a ``GenericDict`` cannot be
+        pickled, since its class is made at each call. To keep the field
+        names, call ``to_dict()``, or ``to_tensordict().to_namedtuple()``.
+
         Args:
             dest_cls (type, optional): the named tuple class of the result. A
                 nested tensordict is converted to ``dest_cls`` too if
@@ -2082,6 +2091,16 @@ class _Conversion:
             ...     "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
             >>> data.to_namedtuple()
             GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
+
+            On a tensorclass, the top level is a plain tuple:
+
+            >>> from tensordict import tensorclass
+            >>> @tensorclass
+            ... class Data:
+            ...     a_tensor: torch.Tensor
+            ...     a_string: str
+            >>> Data(a_tensor=torch.zeros(3), a_string="zero!", batch_size=[3]).to_namedtuple()
+            (tensor([0., 0., 0.]), 'zero!')
 
         """
         return _dict_to_namedtuple(self.to_dict(retain_none=False), dest_cls, root=True)
@@ -2932,6 +2951,13 @@ class _Conversion:
         converted to NumPy arrays. Non-tensor data becomes a column of Python
         values. Requires pandas.
 
+        A nested tensorclass gives one column per leaf with a ``separator``,
+        as a nested tensordict does. Without a ``separator``, where a nested
+        tensordict raises, a nested tensorclass becomes one column of
+        objects that holds the tensorclass of each row. It also stays one
+        such column with a ``separator`` if it has no leaves, or a leaf of
+        more than one dimension.
+
         Keyword Args:
             separator (str, optional): if given, joins the keys of nested
                 entries with it to build the column names: with
@@ -2956,6 +2982,20 @@ class _Conversion:
             0  0  0.0
             1  1  0.0
             2  2  0.0
+
+            A nested tensorclass without a ``separator``:
+
+            >>> from tensordict import tensorclass
+            >>> @tensorclass
+            ... class Point:
+            ...     x: torch.Tensor
+            ...     y: torch.Tensor
+            >>> td = TensorDict(p=Point(x=torch.zeros(3), y=torch.ones(3), batch_size=[3]), batch_size=[3])
+            >>> df = td.to_pandas()
+            >>> df["p"].dtype, type(df["p"][0]).__name__, df["p"][0].y
+            (dtype('O'), 'Point', tensor(1.))
+            >>> list(td.to_pandas(separator=".").columns)
+            ['p.x', 'p.y']
         """
         return _tensordict_to_dataframe(self, separator=separator)
 
