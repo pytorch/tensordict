@@ -2299,8 +2299,16 @@ def _may_index_past_batch_dims(index, batch_dims: int) -> bool:
     """
     if not batch_dims:
         return False
-    if type(index) is not tuple:
-        index = (index,)
+    cls = type(index)
+    if cls is not tuple:
+        # one element: only a mask can use more than one dim
+        if cls is int or cls is slice or cls is range or index is None:
+            return False
+        if cls is Tensor:
+            return index.ndim > batch_dims and index.dtype is torch.bool
+        if cls is np.ndarray:
+            return index.ndim > batch_dims and index.dtype == np.bool_
+        return not (cls is list and (not index or type(index[0]) is int))
     used = 0
     # a loop with type tests, not a helper per element: setitem is a hot path
     for idx in index:
