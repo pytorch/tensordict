@@ -1539,6 +1539,61 @@ class TestLazyStackedTensorDict:
             assert out is self_td
         assert_allclose_td(out.to_tensordict(), expected)
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "op,args,kwargs",
+        [
+            ("lerp", (), {"end": "other", "weight": 0.3}),
+            ("lerp", (), {"end": "other", "weight": "other"}),
+            ("lerp", ("other",), {"weight": "other"}),
+            ("add", (), {"other": "other", "alpha": 2.0}),
+            ("add_", (), {"other": "other"}),
+            ("maximum", (), {"other": "other"}),
+            ("clamp_min", (), {"other": "other"}),
+            ("clamp", ("other",), {"max": "other"}),
+            ("pow", (), {"other": "other"}),
+            ("addcmul", (), {"other1": "other", "other2": "other"}),
+            ("addcdiv_", ("other",), {"other2": "other"}),
+        ],
+    )
+    @pytest.mark.parametrize("lazy_first", [True, False])
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_arithmetic_with_dense_by_keyword(
+        self, stack_dim, op, args, kwargs, lazy_first, nested
+    ):
+        # A tensordict operand passed by keyword pairs a lazy stack with a
+        # dense tensordict by key, as one passed by position does (#3193)
+        def make_dense():
+            return TensorDict(
+                a=torch.rand(2, 3) + 1,
+                nested=TensorDict(b=torch.rand(2, 3, 4) + 1, batch_size=[2, 3]),
+                batch_size=[2, 3],
+            )
+
+        stack = lazy_stack(list(make_dense().unbind(stack_dim)), stack_dim)
+        dense = make_dense()
+        self_td, other = (stack, dense) if lazy_first else (dense, stack)
+        if nested:
+            self_td = TensorDict(n=self_td, batch_size=[2, 3])
+            other = TensorDict(n=other, batch_size=[2, 3])
+
+        def fill(td):
+            return (
+                [td if arg == "other" else arg for arg in args],
+                {k: td if v == "other" else v for k, v in kwargs.items()},
+            )
+
+        dense_args, dense_kwargs = fill(other.to_tensordict())
+        expected = getattr(self_td.to_tensordict(), op)(*dense_args, **dense_kwargs)
+        lazy_args, lazy_kwargs = fill(other)
+
+        out = getattr(self_td, op)(*lazy_args, **lazy_kwargs)
+
+        if op.endswith("_"):
+            assert out is self_td
+        assert isinstance(out, type(self_td))
+        assert_allclose_td(out.to_tensordict(), expected)
+
     def test_arithmetic_with_nested_dense_mismatched_keys(self):
         # A key that only one operand has still raises, before any write
         dense = TensorDict(a=torch.ones(2, 3), z=torch.ones(2, 3), batch_size=[2, 3])
