@@ -53,7 +53,7 @@ import numpy as np
 import torch
 from tensordict import base as _td_base
 from tensordict._deprecation import deprecated, warn_deprecated
-from tensordict._lazy import _GATHER, LazyStackedTensorDict
+from tensordict._lazy import _GATHER, _where_selects_whole, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
@@ -4136,6 +4136,26 @@ def _wrap_td_method(
                     if cast_filter is not None:
                         kwargs["cast_filter"] = cast_filter
                 return uncast_func(self, *args, **kwargs)
+
+            return wrapped_func
+        if funcname == "where":
+            unfiltered_func = wrapped_func
+
+            def wrapped_func(self, condition, other, **kwargs):
+                td = self._tensordict
+                if (
+                    kwargs.get("pad") is not None
+                    and isinstance(td, LazyStackedTensorDict)
+                    and _is_tensor_collection(type(other))
+                    and not is_non_tensor(other)
+                    and isinstance(condition, Tensor)
+                    and _where_selects_whole(td, condition)
+                ):
+                    # The lazy stack pads a member it selects whole with the
+                    # entries of other: it gets the fields only, since a
+                    # tensorclass cannot hold the other keys
+                    other = other.select(*type(self).__expected_keys__, strict=False)
+                return unfiltered_func(self, condition, other, **kwargs)
 
             return wrapped_func
         if funcname not in _FIELD_KEY_ARGUMENT:
