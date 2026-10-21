@@ -2152,7 +2152,8 @@ class PersistentTensorDict(
     def _create_nested_tuple(self, key):
         # a sub-tensordict read before at this key would keep a replaced group
         self._forget_nested(key)
-        if len(key) > 1:
+        # a read-only file raises from creating the first level, as before
+        if len(key) > 1 and not self._storage_is_read_only():
             group = self._get_array(key[0], None)
             if group is not None and not self._backend.is_array(group):
                 td = self._get_str(key[0], NO_DEFAULT)

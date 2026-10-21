@@ -843,6 +843,19 @@ class TestZarrWriteOps:
         ztd.create_nested("b")
         assert set(ztd.keys(True)) == {"a", "b"}
 
+    def test_create_nested_read_only(self, ztd, tmp_path):
+        # a read-only store raises the errors of zarr's create_group at the
+        # first level of the key, as before #3008's fix
+        ro = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        for key in ("b", ("b", "c"), ("b", "d")):
+            with pytest.raises(zarr.errors.ContainsGroupError):
+                ro.create_nested(key)
+        with pytest.raises(zarr.errors.ContainsArrayError):
+            ro.create_nested(("a", "x"))
+        with pytest.raises(ValueError, match="read-only"):
+            ro.create_nested(("new", "y"))
+        assert set(ro.keys(True)) == {"a", "b", ("b", "c")}
+
     def test_kwargs_passthrough(self, tmp_path):
         td = TensorDict({"a": torch.randn(64, 64)}, batch_size=[64])
         td.to_zarr(tmp_path / "s.zarr", chunks=(16, 64))
