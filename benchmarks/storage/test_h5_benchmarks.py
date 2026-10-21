@@ -15,7 +15,7 @@ import importlib
 import numpy as np
 import pytest
 import torch
-from tensordict import PersistentTensorDict, TensorDict
+from tensordict import lazy_stack, PersistentTensorDict, TensorDict
 
 _has_h5py = importlib.util.find_spec("h5py", None) is not None
 
@@ -72,6 +72,25 @@ def test_h5_index_large_arrays(benchmark, large_arrays, idx):
 
 def test_h5_to_tensordict_many_keys(benchmark, many_keys):
     benchmark(many_keys.to_tensordict)
+
+
+@pytest.fixture(scope="module")
+def lazy_stack_h5(tmp_path_factory):
+    # two files of about 2.8 MB each: big enough that reading the datasets shows
+    return lazy_stack(
+        [
+            _make_h5td(tmp_path_factory, n_keys=10, n_rows=1000, feat=64)
+            for _ in range(2)
+        ]
+    )
+
+
+@pytest.mark.parametrize("operation", ["keys", "entry_class"])
+def test_h5_lazy_stack_key_metadata(benchmark, lazy_stack_h5, operation):
+    if operation == "keys":
+        benchmark(lambda: list(lazy_stack_h5.keys(True, True)))
+    else:
+        benchmark(lambda: lazy_stack_h5.entry_class("key_0"))
 
 
 @pytest.fixture(scope="module")
