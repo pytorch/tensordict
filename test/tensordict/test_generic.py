@@ -1066,7 +1066,7 @@ class TestGeneric:
         assert td.consolidate() is td
         assert td.consolidate(pin_memory=True, inplace=True) is td
         assert td.consolidate(pin_memory=True, num_threads=2, return_early=True) is td
-        with pytest.warns(UserWarning, match="ignores device='cuda'"):
+        with pytest.warns(FutureWarning, match="ignores device='cuda'"):
             assert td.consolidate(pin_memory=True, device="cuda") is td
         filename = Path(tmpdir) / "file.td"
         td_file = td.contiguous().consolidate(filename=filename)
@@ -1077,11 +1077,14 @@ class TestGeneric:
 
     def test_consolidate_consolidated_ignored_args_warn(self, tmpdir):
         # An already consolidated tensordict returns self and ignores device,
-        # share_memory and another filename: it warns about them (#3116)
+        # share_memory and another filename: it warns about them, and announces
+        # that device and share_memory are honoured from TensorDict 0.17 (#3116)
         td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(3)}).consolidate()
-        with pytest.warns(UserWarning, match="ignores device='meta'"):
+        with pytest.warns(
+            FutureWarning, match="ignores device='meta'.*TensorDict 0.17"
+        ):
             assert td.consolidate(device="meta") is td
-        with pytest.warns(UserWarning, match="ignores share_memory=True"):
+        with pytest.warns(FutureWarning, match="ignores share_memory=True"):
             assert td.consolidate(share_memory=True) is td
         filename = Path(tmpdir) / "file.td"
         td_file = td.contiguous().consolidate(filename=filename)

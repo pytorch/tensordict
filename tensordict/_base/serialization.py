@@ -692,9 +692,11 @@ class _Serialization:
         ``td.contiguous().consolidate(filename=other)`` writes a new file. A
         ``device`` other than the one of the storage, and
         ``share_memory=True`` with a storage that is not in shared memory,
-        are ignored with a :class:`UserWarning`:
-        ``td.contiguous().consolidate(...)`` copies the storage into a new one
-        and honours them.
+        are ignored with a :class:`FutureWarning`. Starting with TensorDict
+        0.17, the default will change to honouring them, as for a tensordict
+        that is not consolidated: the call will return a new consolidated
+        tensordict. ``td.contiguous().consolidate(...)`` gives that result
+        now.
 
         Args:
             filename (str or Path, optional): a file to use as the storage. The
@@ -843,10 +845,13 @@ class _Serialization:
                 warnings.warn(
                     f"consolidate() ignores {' and '.join(ignored)} on a "
                     "tensordict that is already consolidated, and returns it "
-                    "as is. Call td.contiguous().consolidate(...) to copy the "
-                    "storage into a new one that honours "
-                    f"{'them' if len(ignored) > 1 else 'it'}.",
-                    UserWarning,
+                    "as is. Starting with TensorDict 0.17, the default will "
+                    "change to honouring "
+                    f"{'them' if len(ignored) > 1 else 'it'}, as for a "
+                    "tensordict that is not consolidated, and returning a new "
+                    "consolidated tensordict. Call "
+                    "td.contiguous().consolidate(...) to get that result now.",
+                    FutureWarning,
                     stacklevel=_user_stacklevel(),
                 )
             return self
