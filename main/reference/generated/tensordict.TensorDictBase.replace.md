@@ -12,10 +12,14 @@ returns `self`.
 When both a positional argument and `**kwargs` are given, the
 keyword entries are merged into a copy of the positional argument
 (with `dict` unpacking for a dictionary, with [`copy()`](tensordict.TensorDictBase.copy.html#tensordict.TensorDictBase.copy) and
-[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) for a tensordict), so the argument does not change.
-A tensordict backed by a file or a store, such as a
-[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), shares that storage with
-its copy and still receives the keyword entries.
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) for a tensordict, and with [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict)
+and [`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) for a file or a store, such as a
+[`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict), or an indexed view of one),
+so the argument does not change. A file or a store shares its storage
+with its copy: called on one, `replace` writes the new entries into
+the file or store. So does a lazy stack of files or a tensordict that
+holds a file as a nested entry: passed as the argument, it still
+receives the keyword entries.
 
 Parameters:
 
