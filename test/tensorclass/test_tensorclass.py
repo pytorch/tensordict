@@ -7421,6 +7421,38 @@ class TestDeprecations:
             assert MyClass(x=torch.zeros(())).n == torch.tensor(3)
         assert MyClass(x=torch.zeros(4), batch_size=[4]).n == 3
 
+    @pytest.mark.parametrize("entry", ["tensor", "non_tensor"])
+    @pytest.mark.parametrize("op", ["set_inplace", "set_", "update", "update_"])
+    def test_scalar_field_inplace_raises(self, entry, op):
+        # A write in place raises as before, with a non-empty batch size
+        class MyClass(TensorClass):
+            a: int
+
+        if entry == "tensor":
+            a = torch.zeros(2, dtype=torch.long)
+        else:
+            a = NonTensorData(1, batch_size=[2])
+        c = MyClass(a=a, batch_size=[2])
+        with pytest.raises(RuntimeError) as err:
+            if op == "set_inplace":
+                c.set("a", 3, inplace=True)
+            elif op == "set_":
+                c.set_("a", 3)
+            elif op == "update":
+                c.update({"a": 3}, inplace=True)
+            else:
+                c.update_({"a": 3})
+        # the exception of the TensorDict, as before #1199
+        assert type(err.value) is RuntimeError
+        assert str(err.value) == (
+            "batch dimension mismatch, got self.batch_size=torch.Size([2]) and "
+            "value.shape=torch.Size([]) for key 'a'. The leading dimensions of "
+            "a value must match the batch size. Python scalars are stored as "
+            "0-dim tensors: to store a scalar in a tensordict with a non-empty "
+            "batch size, expand it to the batch size or wrap it in NonTensorData "
+            "(in a tensorclass, the nocast option stores scalars as they are)."
+        )
+
     def test_scalar_field_over_non_tensor(self):
         # over a NonTensorData entry, only the warning of TensorDict.set (#2432)
         class MyClass(TensorClass):

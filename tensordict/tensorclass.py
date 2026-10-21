@@ -5078,8 +5078,10 @@ def _set(
                 if self._tensordict.batch_dims:
                     # A 0-d tensor would not fit the batch size and raise:
                     # keep the Python value, as all batch sizes will from 0.17.
-                    return set_tensor(non_tensor=True)
-                if not is_dynamo_compiling():
+                    # A write in place still raises the batch-size mismatch.
+                    if not inplace:
+                        return set_tensor(non_tensor=True)
+                elif not is_dynamo_compiling():
                     dest = self._tensordict._get_str(key, None)
                     # over a NonTensorData entry, TensorDict.set warns (#2432)
                     if inplace or not (is_non_tensor(dest) and is_tensorclass(dest)):
