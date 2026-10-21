@@ -46,6 +46,7 @@ from tensordict import (
     PackLayout,
     PersistentTensorDict,
     set_capture_non_tensor_stack,
+    set_printoptions,
     TensorClass,
     tensorclass,
     TensorDict,
@@ -12212,6 +12213,7 @@ class TestGeneric:
         torch.testing.assert_close(td.get("key1")[:, 0], y)
         torch.testing.assert_close(td.get("key1")[:, 0], td[:, 0].get("key1"))
 
+    @set_printoptions(compact=False)
     def test_tensordict_prealloc_nested(self):
         N = 3
         B = 5
@@ -13940,11 +13942,13 @@ class TestGeneric:
 
     @pytest.mark.parametrize("fixture", list(_UPDATE_FIXTURES))
     @pytest.mark.parametrize("case", list(_UPDATE_CASES))
+    @set_printoptions(compact=False)
     def test_update_fast_path_matches_general(self, fixture, case):
         # TensorDict.update writes a dict or TensorDict of tensors, and merges
         # its sub-tensordicts, without the per-key loop of the general path,
         # which a subclass of TensorDict takes. Both give the same result,
-        # errors, warnings, storage sharing and merged sub-tensordicts.
+        # errors, warnings, storage sharing and merged sub-tensordicts. The
+        # verbose repr in the errors does not wrap by the class name's length.
         make, call = self._UPDATE_FIXTURES[fixture], self._UPDATE_CASES[case]
         expected = self._update_outcome(self._SlowPathTensorDict, make, call)
         assert self._update_outcome(TensorDict, make, call) == expected

@@ -28,7 +28,7 @@ What you will learn:
 # The examples of this section need a CUDA device, so this page shows them
 # with their output, and does not run them. This example creates a
 # :class:`~tensordict.TensorDict` with ``device="cuda:0"``. The printed
-# entries are on the device.
+# tensordict shows the device once, for all its entries.
 #
 # .. code-block::
 #
@@ -36,12 +36,7 @@ What you will learn:
 #    >>> from tensordict import TensorDict
 #    >>> tensordict = TensorDict({"a": torch.rand(10)}, [10], device="cuda:0")
 #    >>> print(tensordict)
-#    TensorDict(
-#        fields={
-#            a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-#        batch_size=torch.Size([10]),
-#        device=cuda:0,
-#        is_shared=True)
+#    TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[]})
 #
 # If the device of the :class:`~tensordict.TensorDict` is not ``None``, it also
 # moves the new entries to the device.
@@ -50,13 +45,7 @@ What you will learn:
 #
 #    >>> tensordict["b"] = torch.rand(10, 10)
 #    >>> print(tensordict)
-#    TensorDict(
-#        fields={
-#            a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
-#            b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-#        batch_size=torch.Size([10]),
-#        device=cuda:0,
-#        is_shared=True)
+#    TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[], b: f32[10]})
 #
 # The ``device`` attribute gives the device of the
 # :class:`~tensordict.TensorDict`.
@@ -76,40 +65,23 @@ What you will learn:
 #
 #    >>> tensordict = tensordict.to(torch.device("cpu"))
 #    >>> print(tensordict)
-#    TensorDict(
-#        fields={
-#            a: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-#            b: Tensor(shape=torch.Size([10, 10]), device=cpu, dtype=torch.float32, is_shared=False)},
-#        batch_size=torch.Size([10]),
-#        device=cpu,
-#        is_shared=False)
+#    TensorDict(batch_size=[10], device=cpu, fields={a: f32[], b: f32[10]})
 #    >>> tensordict = tensordict.cuda()
 #    >>> print(tensordict)
-#    TensorDict(
-#        fields={
-#            a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
-#            b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-#        batch_size=torch.Size([10]),
-#        device=cuda:0,
-#        is_shared=True)
+#    TensorDict(batch_size=[10], device=cuda:0, fields={a: f32[], b: f32[10]})
 #
 # :meth:`TensorDict.to <tensordict.TensorDict.to>` needs a device as its
 # argument. To remove the device of the :class:`~tensordict.TensorDict`, so
 # that its entries can be on different devices, use
 # :meth:`TensorDict.clear_device_ <tensordict.TensorDict.clear_device_>`. The
-# entries stay where they are.
+# entries stay where they are, and the printed form shows the device of each
+# entry that is not on the CPU.
 #
 # .. code-block::
 #
 #    >>> tensordict = tensordict.clear_device_()
 #    >>> print(tensordict)
-#    TensorDict(
-#        fields={
-#            a: Tensor(shape=torch.Size([10]), device=cuda:0, dtype=torch.float32, is_shared=True),
-#            b: Tensor(shape=torch.Size([10, 10]), device=cuda:0, dtype=torch.float32, is_shared=True)},
-#        batch_size=torch.Size([10]),
-#        device=None,
-#        is_shared=False)
+#    TensorDict(batch_size=[10], fields={a: f32[]@cuda:0, b: f32[10]@cuda:0})
 #
 # Memory-mapped tensors
 # ---------------------

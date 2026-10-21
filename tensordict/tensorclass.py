@@ -916,20 +916,10 @@ def from_dataclass(
         >>> x = X(0, 0)
         >>> x2 = from_dataclass(x)
         >>> print(x2)
-        X_tc(
-            a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        X_tc(batch_size=[], fields={a: i64[], b: i64[]})
         >>> X2 = from_dataclass(X, autocast=True)
         >>> print(X2(a=0, b=0))
-        X_tc(
-            a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
-            b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
-            batch_size=torch.Size([]),
-            device=None,
-            is_shared=False)
+        X_tc(batch_size=[], fields={a: int, b: i64[]})
 
     """
     from dataclasses import asdict, make_dataclass
@@ -1157,13 +1147,7 @@ def tensorclass(
         ...     z="test",
         ...     batch_size=[3, 4])
         >>> print(data)
-        MyData(
-            X=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-            y=Tensor(shape=torch.Size([3, 4, 2, 2]), device=cpu, dtype=torch.bool, is_shared=False),
-            z=NonTensorData(data=test, batch_size=torch.Size([3, 4]), device=None),
-            batch_size=torch.Size([3, 4]),
-            device=None,
-            is_shared=False)
+        MyData(batch_size=[3,4], fields={X: f32[1], y: bool[2,2], z: str})
         >>> print(data.expand_and_mask())
         tensor([])
 
@@ -6254,13 +6238,7 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
         ...     nested: Any = None
         >>> foo = Foo(tensor=torch.zeros(3), non_tensor="a string!", batch_size=[3])
         >>> print(foo)
-        Foo(
-            non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
-            tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-            nested=None,
-            batch_size=torch.Size([3]),
-            device=None,
-            is_shared=False)
+        Foo(batch_size=[3], fields={non_tensor: str, tensor: f32[], nested: None})
         >>> foo[0].non_tensor
         'a string!'
         >>> foo.reshape(1, 3).batch_size

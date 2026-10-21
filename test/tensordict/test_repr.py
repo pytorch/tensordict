@@ -94,6 +94,17 @@ elif is_npu_available():
     npu_device_count = torch.npu.device_count()
 
 
+@pytest.fixture(autouse=True)
+def _verbose_repr(request):
+    # Most tests here check the format of compact=False; TestCompactRepr checks
+    # the default, the compact repr.
+    if request.cls is TestCompactRepr:
+        yield
+        return
+    with set_printoptions(compact=False):
+        yield
+
+
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
 class TestTensorDictRepr:
@@ -873,12 +884,92 @@ def _mesh():
 
 
 class TestCompactRepr:
-    """Tests for ``set_printoptions(compact=True)``."""
+    """Tests for ``set_printoptions(compact=True)``, the default."""
 
-    def test_compact_default_off(self):
-        assert get_printoptions()["compact"] is False
+    def test_compact_default_on(self):
+        assert get_printoptions()["compact"] is True
         td = _mesh_sample()
-        assert repr(td).startswith("TensorDict(\n    fields={")
+        assert repr(td) == str(td)
+        with set_printoptions(compact=True):
+            assert repr(td) == str(td) == repr(_mesh_sample())
+        assert repr(td).startswith("TensorDict(batch_size=[1000], device=cpu, fields={")
+        # compact=False brings back the verbose format, as a context manager
+        # and with set()
+        with set_printoptions(compact=False):
+            verbose = repr(td)
+        assert verbose.startswith("TensorDict(\n    fields={")
+        assert "is_shared=False" in verbose
+        options = set_printoptions(compact=False)
+        options.set()
+        try:
+            assert repr(td) == verbose
+        finally:
+            options.__exit__(None, None, None)
+        assert get_printoptions()["compact"] is True
+
+    def test_compact_default_containers(self):
+        # the repr of each container under the default options
+        from tensordict import NonTensorData, NonTensorStack, UnbatchedTensor
+
+        mesh = _mesh()
+        lazy = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.zeros(3))]
+        )
+        td = TensorDict(
+            u=UnbatchedTensor(torch.zeros(5)),
+            s="name",
+            mesh=mesh[:2],
+            batch_size=[2],
+        )
+        assert repr(mesh) == (
+            "Mesh(batch_size=[1000], device=cpu, fields={cells: i64[4], points: f32[3]})"
+        )
+        assert repr(lazy) == (
+            "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={a: f32[3]})"
+        )
+        assert repr(td) == (
+            "TensorDict(batch_size=[2], fields={\n"
+            "    mesh: Mesh{cells: i64[4], points: f32[3]},\n"
+            "    s: str,\n"
+            "    u: f32[5]})"
+        )
+        typed = _TypedMesh(
+            points=torch.zeros(2, 3),
+            cells=torch.zeros(2, 4, dtype=torch.long),
+            batch_size=[2],
+        )
+        assert repr(typed) == (
+            "_TypedMesh(batch_size=[2], fields={cells: i64[4], points: f32[3]})"
+        )
+        memmap = TensorDict(a=torch.zeros(2, 3), batch_size=[2]).memmap_()
+        assert (
+            repr(memmap) == "TensorDict(batch_size=[2], device=cpu, fields={a: f32[3]})"
+        )
+        # the non-tensor classes keep their own repr
+        with set_printoptions(compact=False):
+            expected = repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))
+        assert (repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))) == expected
+
+    def test_compact_default_reads_no_nested_store_leaf(self):
+        # A nested TensorDictStore has its own _repr_parts and reads its
+        # leaves from a server: the default repr must not fetch them.
+        calls = []
+
+        class _Store(TensorDict):
+            def _repr_parts(self):
+                return [f"keys={sorted(self.keys())}"]
+
+            def _get_str(self, key, *args, **kwargs):
+                calls.append(key)
+                return super()._get_str(key, *args, **kwargs)
+
+        store = _Store(a=torch.zeros(2, 3), b=torch.zeros(2), batch_size=[2])
+        td = TensorDict(store=store, batch_size=[2])
+        with set_printoptions(compact=False):
+            repr(td)
+        assert not calls
+        repr(td)
+        assert not calls
 
     def test_compact_sample(self):
         with set_printoptions(compact=True):
