@@ -211,6 +211,12 @@ def _leaf_storage(td, key):
     return _leaf_storage(value, key[1:])
 
 
+@tensorclass
+class _AppendMemmapRows:
+    x: torch.Tensor
+    label: str
+
+
 class TestGeneric:
     # Generic, type-insensitive teests
 
@@ -10055,6 +10061,183 @@ class TestGeneric:
             assert (d2[:, 0] == a.zero_()).all()
         else:
             assert (d2[:, 0] == a).all()
+
+    @staticmethod
+    def _append_memmap_rows(num_rows, value):
+        return TensorDict(
+            a=torch.full((num_rows, 2), value),
+            nested=TensorDict(
+                b=torch.full((num_rows, 3, 4), value, dtype=torch.int8),
+                c=TensorDict(
+                    d=torch.full((num_rows, 3), value, dtype=torch.bool),
+                    batch_size=[num_rows, 3],
+                ),
+                batch_size=[num_rows],
+            ),
+            empty=torch.zeros(num_rows, 0),
+            label="run",
+            tc=_AppendMemmapRows(
+                x=torch.full((num_rows,), value), label="tc", batch_size=[num_rows]
+            ),
+            batch_size=[num_rows],
+        )
+
+    @pytest.mark.parametrize("num_saved", [3, 0])
+    def test_append_memmap(self, tmpdir, num_saved):
+        # https://github.com/pytorch/tensordict/issues/3093
+        parts = [
+            self._append_memmap_rows(num_saved, 0),
+            self._append_memmap_rows(2, 1),
+            self._append_memmap_rows(4, 2),
+        ]
+        parts[0].memmap(tmpdir)
+        before = tensordict.load_memmap(tmpdir)
+        assert tensordict.append_memmap(tmpdir, parts[1]) is None
+        tensordict.append_memmap(tmpdir, parts[2])
+        loaded = tensordict.load_memmap(tmpdir)
+        expected = torch.cat(parts)
+        assert loaded.batch_size == (num_saved + 6,)
+        assert loaded["nested", "c"].batch_size == (num_saved + 6, 3)
+        assert (loaded == expected).all()
+        assert type(loaded["tc"]) is _AppendMemmapRows
+        assert loaded["label"] == "run"
+        assert loaded["tc"].label == "tc"
+        # A tensordict loaded before the append keeps its rows.
+        assert before.batch_size == (num_saved,)
+        assert (before == parts[0]).all()
+
+    def test_append_memmap_tensorclass(self, tmpdir):
+        @tensorclass
+        class Sample:
+            x: torch.Tensor
+
+        Sample(x=torch.zeros(2, 3), batch_size=[2]).memmap(tmpdir)
+        tensordict.append_memmap(tmpdir, Sample(x=torch.ones(1, 3), batch_size=[1]))
+        loaded = Sample.load_memmap(tmpdir)
+        assert loaded.x.tolist() == [[0.0] * 3, [0.0] * 3, [1.0] * 3]
+        with pytest.raises(ValueError, match="Cannot append a TensorDict"):
+            tensordict.append_memmap(
+                tmpdir, TensorDict(x=torch.ones(1, 3), batch_size=[1])
+            )
+
+    @staticmethod
+    def _read_tree(path):
+        return {p: p.read_bytes() for p in sorted(Path(path).rglob("*")) if p.is_file()}
+
+    @pytest.mark.parametrize(
+        "change,match",
+        [
+            (lambda td: td.exclude("a"), "keys"),
+            (lambda td: td.set("a", td["a"].double()), "dtype torch.float64"),
+            (lambda td: td.set("a", torch.zeros(2, 3)), r"shape \(2, 3\)"),
+            (lambda td: td.set(("nested", "e"), torch.zeros(2)), "keys"),
+            (lambda td: td.set("label", "other"), "same value, not 'other'"),
+            (lambda td: td.set("a", TensorDict(batch_size=[2])), "a tensor"),
+            (
+                lambda td: td.set(
+                    ("nested", "c"),
+                    TensorDict(
+                        d=torch.zeros(2, 4, dtype=torch.bool), batch_size=[2, 4]
+                    ),
+                ),
+                "beyond the first dimension",
+            ),
+            (lambda td: td[0], "first batch dimension"),
+        ],
+    )
+    def test_append_memmap_mismatch(self, tmpdir, change, match):
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        with pytest.raises(ValueError, match=match):
+            tensordict.append_memmap(tmpdir, change(self._append_memmap_rows(2, 1)))
+        assert self._read_tree(tmpdir) == files
+
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("entry", ["non_tensor_stack", "lazy_stack", "nested"])
+    def test_append_memmap_unsupported(self, tmpdir, entry):
+        def make(num_rows):
+            if entry == "non_tensor_stack":
+                value = NonTensorStack(*[str(i) for i in range(num_rows)])
+            elif entry == "lazy_stack":
+                value = lazy_stack(
+                    [TensorDict(x=torch.zeros(i + 1)) for i in range(num_rows)]
+                )
+            else:
+                value = torch.nested.nested_tensor(
+                    [torch.zeros(i + 1) for i in range(num_rows)], layout=torch.strided
+                )
+            return TensorDict(
+                a=torch.zeros(num_rows), entry=value, batch_size=[num_rows]
+            )
+
+        make(3).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        with pytest.raises(ValueError, match="cannot grow"):
+            tensordict.append_memmap(tmpdir, make(2))
+        assert self._read_tree(tmpdir) == files
+
+    @set_capture_non_tensor_stack(False)
+    @pytest.mark.parametrize("stack", [torch.stack, lazy_stack])
+    def test_append_memmap_stacked_rows(self, tmpdir, stack):
+        TensorDict(a=torch.zeros(2), s="hi", batch_size=[2]).memmap(tmpdir)
+        rows = stack([TensorDict(a=torch.ones(()), s="hi") for _ in range(3)])
+        assert isinstance(rows.get("s"), NonTensorStack)
+        tensordict.append_memmap(tmpdir, rows)
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded["a"].tolist() == [0.0, 0.0, 1.0, 1.0, 1.0]
+        assert loaded["s"] == "hi"
+        rows = stack([TensorDict(a=torch.ones(()), s=s) for s in ("hi", "ho")])
+        with pytest.raises(ValueError, match="same value"):
+            tensordict.append_memmap(tmpdir, rows)
+
+    def test_append_memmap_archive(self, tmpdir):
+        archive = Path(tmpdir) / "data.tdz"
+        TensorDict(a=torch.zeros(3), batch_size=[3]).save(archive)
+        with pytest.raises(ValueError, match="An archive cannot grow"):
+            tensordict.append_memmap(
+                archive, TensorDict(a=torch.zeros(1), batch_size=[1])
+            )
+
+    def test_append_memmap_failure_restores_files(self, tmpdir, monkeypatch):
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        tensor_chunks = tensordict._td_functions._tensor_chunks
+        calls = []
+
+        def failing_tensor_chunks(tensor):
+            calls.append(None)
+            if len(calls) == 3:
+                raise OSError("disk full")
+            return tensor_chunks(tensor)
+
+        monkeypatch.setattr(
+            tensordict._td_functions, "_tensor_chunks", failing_tensor_chunks
+        )
+        with pytest.raises(OSError, match="disk full"):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        assert self._read_tree(tmpdir) == files
+        assert (tensordict.load_memmap(tmpdir) == self._append_memmap_rows(3, 0)).all()
+
+    def test_append_memmap_interrupted_replace(self, tmpdir, monkeypatch):
+        # An interrupt after the first meta.json was replaced puts it back.
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        replace = os.replace
+        calls = []
+
+        def failing_replace(src, dst):
+            calls.append(None)
+            if len(calls) == 2:
+                raise KeyboardInterrupt
+            return replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", failing_replace)
+        with pytest.raises(KeyboardInterrupt):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        assert len(calls) == 2
+        assert self._read_tree(tmpdir) == files
+        assert (tensordict.load_memmap(tmpdir) == self._append_memmap_rows(3, 0)).all()
 
     def test_memmap_format_version(self, tmp_path):
         td = TensorDict(

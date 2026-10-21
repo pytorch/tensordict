@@ -61,6 +61,9 @@ Choose a format
    * - Load a file that you did not write
      - ``allow_pickle``, ``weights_only``
      - `Load data that you did not write`_
+   * - Add rows to the end of a saved dataset
+     - :func:`~tensordict.append_memmap`
+     - `Append rows`_
    * - Preallocate a dataset on disk and fill it one sample at a time
      - :meth:`~tensordict.TensorDictBase.memmap_like`,
        :meth:`~tensordict.TensorDictBase.from_schema`
@@ -220,6 +223,35 @@ fault on a shared writable mapping takes a write lock. Readers on
 different nodes then block each other. On Linux, a copy-on-write mapping
 counts against the memory commit limit. If a file is larger than RAM plus
 swap, ``mode="r"`` can fail to map it. In that case, use the default mode.
+
+Append rows
+-----------
+
+:func:`~tensordict.append_memmap` grows a saved directory along its first
+batch dimension. It writes the new rows at the end of each leaf file, and
+then updates the ``meta.json`` files. Here, 20 particles join the 100 of the
+first example:
+
+  >>> import tensordict
+  >>> more = TensorDict(
+  ...     {"pos": torch.ones(20, 3), "vel": torch.ones(20, 3)}, batch_size=[20]
+  ... )
+  >>> tensordict.append_memmap(root / "particles", more)
+  >>> TensorDict.load_memmap(root / "particles").batch_size
+  torch.Size([120])
+
+The rows must have the keys, the classes, the dtypes and the trailing shapes
+of the saved data. ``append_memmap`` checks this before it writes anything,
+and raises an error if they differ. A non-tensor value, such as a string, is
+saved once for all the rows, so the rows must hold the same value, either
+once or in a stack of equal values. The files
+of a lazy stack, a :class:`~tensordict.NonTensorStack`, a nested tensor, or
+an archive cannot grow, and ``append_memmap`` raises an error for them.
+
+``append_memmap`` replaces each ``meta.json`` file last, so a failed append
+leaves the data as it was. A tensordict loaded before the append keeps its
+number of rows, and ``load_memmap`` after the append sees the new rows.
+Append from one process at a time.
 
 Save to one file
 ----------------

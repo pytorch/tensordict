@@ -4352,6 +4352,7 @@ _register_tensor_class(_SubTensorDict)
 
 
 from tensordict._td_functions import (  # noqa: F401
+    append_memmap,
     cat,
     from_consolidated,
     from_module,
