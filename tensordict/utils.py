@@ -4759,8 +4759,11 @@ class LinkedList(list):
     def __ne__(self, other: Any) -> bool:
         return list(self) != other
 
-    def __getstate__(self) -> object:
-        return list(self).__getstate__()
+    def __reduce__(self):
+        # A copy is not linked to the tensordict (a weakref does not pickle).
+        # Python 3.10 has no object.__getstate__, which a list subclass would
+        # need for the default reduction.
+        return type(self), (list(self),)
 
     def __iadd__(self, other: Any) -> Any:
         self._td = lambda: None
