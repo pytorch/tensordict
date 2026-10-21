@@ -250,8 +250,12 @@ torch.Size([3, 2])
 
 [`densify()`](../reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify) turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested
-tensors. Pass `layout=torch.jagged`: the default, `torch.strided`, gives a
-warning from PyTorch, which recommends the jagged layout.
+tensors. A key that only some members have is filled with an empty entry for
+the members that lack it (zero rows when the members that have it agree on its
+feature dims), so it appears in the result although `keys()` of the lazy
+stack leaves it out. Pass `layout=torch.jagged`: the
+default, `torch.strided`, gives a warning from PyTorch, which recommends the
+jagged layout.
 
 ```
 >>> dense = graphs.densify(layout=torch.jagged)

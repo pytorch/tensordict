@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6366+gbc9beb4b3.d20261021)">
+<meta name="llm:version" content="main (0.15.0.dev6369+g65dc79fa1.d20261021)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6366+gbc9beb4b3.d20261021)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6369+g65dc79fa1.d20261021)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1752,7 +1752,11 @@ document.write(`
 <dd><p>Returns the tensordict with its lazy stacks replaced by dense tensordicts.</p>
 <p>The entries of a lazy stack are stacked into one tensor when their
 shapes match, and into a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>) along the
-stack dimension otherwise. A tensordict that holds no lazy stack is
+stack dimension otherwise. A key that only some members of a lazy
+stack have is filled with an empty entry for the members that lack it
+(zero rows when the members that have it agree on its feature dims),
+so it appears in the result although <code class="docutils literal notranslate"><span class="pre">keys()</span></code> of the lazy stack
+leaves it out. A tensordict that holds no lazy stack is
 returned as it is.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2139,7 +2143,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.densify",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.densify",
        "url": "/reference/generated/tensordict.TensorDictBase.densify.html",
-       "articleBody": "TensorDictBase.densify# TensorDictBase.densify(layout: layout = torch.strided)# Returns the tensordict with its lazy stacks replaced by dense tensordicts. The entries of a lazy stack are stacked into one tensor when their shapes match, and into a nested tensor (torch.nested) along the stack dimension otherwise. A tensordict that holds no lazy stack is returned as it is. Parameters: layout (layout, optional) \u2013 the layout of the nested tensors, torch.strided or torch.jagged. Defaults to torch.strided. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e stack = TensorDict.lazy_stack( ... [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(4))] ... ) \u003e\u003e\u003e dense = stack.densify(layout=torch.jagged) \u003e\u003e\u003e type(dense).__name__, dense[\"a\"].is_nested (\u0027TensorDict\u0027, True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use densify# Building tensordicts from streams Building tensordicts from streams",
+       "articleBody": "TensorDictBase.densify# TensorDictBase.densify(layout: layout = torch.strided)# Returns the tensordict with its lazy stacks replaced by dense tensordicts. The entries of a lazy stack are stacked into one tensor when their shapes match, and into a nested tensor (torch.nested) along the stack dimension otherwise. A key that only some members of a lazy stack have is filled with an empty entry for the members that lack it (zero rows when the members that have it agree on its feature dims), so it appears in the result although keys() of the lazy stack leaves it out. A tensordict that holds no lazy stack is returned as it is. Parameters: layout (layout, optional) \u2013 the layout of the nested tensors, torch.strided or torch.jagged. Defaults to torch.strided. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e stack = TensorDict.lazy_stack( ... [TensorDict(a=torch.zeros(3)), TensorDict(a=torch.ones(4))] ... ) \u003e\u003e\u003e dense = stack.densify(layout=torch.jagged) \u003e\u003e\u003e type(dense).__name__, dense[\"a\"].is_nested (\u0027TensorDict\u0027, True) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task. Tutorials that use densify# Building tensordicts from streams Building tensordicts from streams",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
