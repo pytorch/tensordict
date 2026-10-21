@@ -1457,6 +1457,8 @@ class TestGeneric:
         _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
     )
     @pytest.mark.xfail(
+        # the copy reads the source views correctly on macOS (#3197)
+        not _IS_OSX,
         strict=True,
         raises=AssertionError,
         reason="#3197: a file of the same size is written in place while the source "
