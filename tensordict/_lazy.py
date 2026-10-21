@@ -639,6 +639,45 @@ def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     return True
 
 
+def _where_split_differs(td: TensorDictBase, ndim: int) -> bool:
+    """Whether lazy where with a tensor ``other`` of ``ndim`` dims differs from TensorDict.where.
+
+    The lazy stack splits ``other`` along the stack dim. The pieces line up
+    with the leaves as in TensorDict.where, which aligns ``other`` with each
+    leaf from the right, only for the leaves with ``ndim`` dims.
+    """
+    if isinstance(td, LazyStackedTensorDict):
+        # This runs on every lazy where with a tensor `other`. The leaves of a
+        # member have one dim less than those of the stack.
+        dims = {ndim - 1}
+        for member in td.tensordicts:
+            if type(member) is TensorDict:
+                try:
+                    # a member of tensors only, checked without a Python loop
+                    if not dims.issuperset(
+                        map(Tensor.dim, member._tensordict.values())
+                    ):
+                        return True
+                    continue
+                except TypeError:
+                    # a sub-tensordict or non-tensor data
+                    pass
+            if _where_split_differs(member, ndim - 1):
+                return True
+        return False
+    for value in td.values():
+        if isinstance(value, Tensor):
+            if value.ndim != ndim:
+                return True
+        elif (
+            _is_tensor_collection(type(value))
+            and not is_non_tensor(value)
+            and _where_split_differs(value, ndim)
+        ):
+            return True
+    return False
+
+
 def _broadcasts_to(shape: torch.Size, target: torch.Size) -> bool:
     """Whether ``shape`` broadcasts to ``target``, without growing it."""
     try:
@@ -4988,6 +5027,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"{self.shape[: self.stack_dim + 1]}, got shape {other.shape}. "
                     f"Expand it to the batch shape {self.shape} first."
                 )
+            other_tensor = other if isinstance(other, Tensor) else None
             other = other.unbind(self.stack_dim)
 
             def where(td, cond, other, pad):
@@ -5010,6 +5050,25 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim,
                 stack_dim_name=self._td_dim_name,
             )
+            # once the result exists: a call that raises does not warn
+            if (
+                other_tensor is not None
+                and not is_compiling()
+                and _where_split_differs(self, other_tensor.ndim)
+            ):
+                warnings.warn(
+                    "LazyStackedTensorDict.where splits a tensor `other` of shape "
+                    f"{tuple(other_tensor.shape)} along the stack dim and gives "
+                    "each member its piece, which differs from TensorDict.where "
+                    f"for the leaves that do not have {other_tensor.ndim} dims. "
+                    "Starting with TensorDict 0.17, the default will change to "
+                    "broadcasting like TensorDict.where, which aligns `other` with "
+                    "each leaf from the right. To keep the current result, add "
+                    "size-1 dims to `other` after its stack dim until it has the "
+                    "dims of the leaves, or pass a tensordict.",
+                    FutureWarning,
+                    stacklevel=_user_stacklevel(),
+                )
         else:
             result = LazyStackedTensorDict.lazy_stack(
                 [

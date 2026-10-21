@@ -6475,6 +6475,48 @@ class TestLazyStackedTensorDict:
         assert (dense_other["a"] == -torch.arange(1.0, 4.0)).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_where_tensor_other_leaf_dims(self, stack_dim):
+        # A tensor `other` with the dims of the leaves gives what
+        # TensorDict.where gives, without a warning
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.full((3,), 11.0 * i), batch_size=[3])
+                for i in range(3)
+            ],
+            stack_dim,
+        )
+        cond = torch.eye(3, dtype=torch.bool)
+        other = -torch.arange(1.0, 10.0).view(3, 3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            result = lazy.where(cond, other)
+        assert (result == lazy.to_tensordict().where(cond, other)).all()
+
+    def test_where_tensor_other_fewer_dims(self):
+        # A tensor `other` with fewer dims than a leaf is split along the stack
+        # dim as before, which differs from TensorDict.where (#2056)
+        lazy = lazy_stack(
+            [TensorDict(a=torch.full((3,), 11.0 * i), batch_size=[3]) for i in range(3)]
+        )
+        cond = torch.eye(3, dtype=torch.bool)
+        other = -torch.arange(1.0, 4.0)
+        match = "the default will change to broadcasting like TensorDict.where"
+        with pytest.warns(FutureWarning, match=match):
+            result = lazy.where(cond, other)
+        assert (result["a"] == torch.where(cond, lazy["a"], other[:, None])).all()
+        assert not (result == lazy.to_tensordict().where(cond, other)).all()
+        # Members with feature dims, where TensorDict.where raises
+        lazy = lazy_stack([TensorDict(a=torch.full((4,), float(i))) for i in range(3)])
+        cond = torch.tensor([True, False, True])
+        with pytest.warns(FutureWarning, match=match):
+            result = lazy.where(cond, other)
+        assert (
+            result["a"] == torch.where(cond[:, None], lazy["a"], other[:, None])
+        ).all()
+        with pytest.raises(RuntimeError):
+            lazy.to_tensordict().where(cond, other)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_where_condition_fewer_dims(self, stack_dim):
         # A condition with fewer dims than the batch is expanded on the right
         lazy = lazy_stack(

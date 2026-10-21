@@ -3210,6 +3210,12 @@ class _PointwiseOps:
                 that starts with the batch shape up to the stack dimension is
                 split along that dimension, one piece per member, so it must
                 have the stack size there: expand it to the batch shape first.
+                The pieces line up with the leaves as in
+                :class:`~tensordict.TensorDict` only for the leaves with as
+                many dims as ``other``; for the others the lazy stack emits a
+                :class:`FutureWarning`: starting with TensorDict 0.17, the
+                default will change to broadcasting like TensorDict.where,
+                which aligns ``other`` with each leaf from the right.
 
         Keyword Args:
             out (TensorDictBase, optional): the tensordict to write the result
