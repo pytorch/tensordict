@@ -2315,7 +2315,14 @@ def _index_leaves(td, index, batch_size):
             )
         else:
             raise IndexError
-    return td._new_unsafe(source=source, batch_size=batch_size, device=td.device)
+    result = td._new_unsafe(source=source, batch_size=batch_size, device=td.device)
+    if td._is_memmap and _index_preserve_data_ptr(index):
+        result._is_memmap = True
+        result.lock_()
+    elif td._is_shared and _index_preserve_data_ptr(index):
+        result._is_shared = True
+        result.lock_()
+    return result
 
 
 def _warn_split_keys_kept_in_last() -> None:

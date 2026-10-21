@@ -4864,12 +4864,15 @@ class TestGeneric:
         # and raises the error that torch raises
         with pytest.raises(IndexError) as torch_error:
             torch.zeros(3, 4)[index]
-        # the leaf has no dim past the batch dims, which an index that runs
-        # past them would index (#3202)
-        for td in (
+        # (0, 0, 0) runs past the batch dims and indexes a leaf that has a dim
+        # past them, with a FutureWarning (#3202)
+        tds = [
             TensorDict(batch_size=[3, 4]),
             TensorDict({"a": torch.zeros(3, 4)}, [3, 4]),
-        ):
+        ]
+        if not (type(index) is tuple and index == (0, 0, 0)):
+            tds.append(TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4]))
+        for td in tds:
             with pytest.raises(IndexError) as error:
                 td[index]
             assert str(error.value) == str(torch_error.value)
@@ -4923,6 +4926,12 @@ class TestGeneric:
             # the tensordict comes last
             assert (result["n", "b"] == td["n", "b"][index]).all()
             assert result["n"].batch_size == batch_size
+        # an int keeps the views of a shared tensordict, which stays locked
+        shared = td.exclude("s").clone().share_memory_()
+        with pytest.warns(FutureWarning, match="runs past the batch dims"):
+            result = shared[:, 1]
+        assert result._is_shared and result.is_locked
+        assert result["n"]._is_shared
         # 0.14 gave nothing to keep for a tensordict without entries, a slice
         # past the batch dims, a leaf too short for the index, and a lazy stack
         lazy = LazyStackedTensorDict.lazy_stack(
