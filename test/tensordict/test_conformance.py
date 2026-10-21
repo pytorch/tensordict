@@ -684,7 +684,7 @@ _ALLOWED_OVERRIDES = {
     },
     "PersistentTensorDict": {
         "__getitem__": "an index gives a writable view of the file",
-        "__getitems__": "an index gives a writable view of the file",
+        "__getitems__": "a view of the file; in a DataLoader worker, the rows in memory",
         "__getstate__": "replaces the open file with what its backend can pickle",
         "__setstate__": "reopens the file, and reads the pickles of TensorDict 0.14",
         "batch_size": "checks the new batch size against the file",
