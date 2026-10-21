@@ -20,6 +20,7 @@ from tensordict import (
     PersistentTensorDict,
     TensorClass,
     TensorDict,
+    TypedTensorDict,
 )
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
@@ -714,6 +715,134 @@ class TestH5Serialization:
             assert out.batch_size == sub.batch_size
             assert set(out.keys()) == {"a", "b", "nested"}
             assert (out["b"] == 1).all()
+        h5td.close()
+
+    def test_replace_does_not_write_into_nested_file_of_arg(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/2984
+        class Data(TensorClass):
+            a: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+
+        files = [
+            PersistentTensorDict.from_dict(
+                TensorDict(a=torch.zeros(3), batch_size=[3]),
+                filename=tmp_path / f"file{i}.h5",
+            )
+            for i in range(6)
+        ]
+        # A lazy stack writes each entry into every member.
+        stack = lazy_stack(files[:2])
+        out = TensorDict(batch_size=[2, 3]).replace(stack, b=torch.ones(2, 3))
+        assert [set(f.keys()) for f in files[:2]] == [{"a"}, {"a"}]
+        assert set(out.keys()) == {"a", "b"}
+        assert (out["b"] == 1).all()
+        # A nested file that the keyword entries merge into, also deeper (by
+        # a nested key) and inside a lazy stack; a nested tensorclass beside
+        # it keeps its type.
+        arg = TensorDict(
+            h=files[2],
+            tc=Data(a=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = TensorDict(batch_size=[3]).replace(arg, h={"b": torch.ones(3)})
+        assert set(files[2].keys()) == {"a"}
+        assert set(out["h"].keys()) == {"a", "b"}
+        assert (out["h", "b"] == 1).all()
+        assert type(out["tc"]) is Data
+        arg = lazy_stack(
+            [TensorDict(n={"h": files[3]}, batch_size=[3]) for _ in range(2)]
+        )
+        out = TensorDict(batch_size=[2, 3]).replace(
+            arg, n={("h", "b"): torch.ones(2, 3)}
+        )
+        assert set(files[3].keys()) == {"a"}
+        assert (out["n", "h", "b"] == 1).all()
+        # A tensorclass or a TypedTensorDict over a nested file keeps its type.
+        arg = TensorDict(
+            tc=Data.from_tensordict(files[4]),
+            typed=Typed.from_tensordict(files[5]),
+            batch_size=[3],
+        )
+        out = TensorDict(batch_size=[3]).replace(
+            arg, tc={"a": torch.ones(3)}, typed={"b": torch.ones(3)}
+        )
+        assert type(out["tc"]) is Data
+        assert type(out["typed"]) is Typed
+        assert (out["tc"].a == 1).all()
+        assert (out["typed", "b"] == 1).all()
+        assert (files[4]["a"] == 0).all()
+        assert set(files[5].keys()) == {"a"}
+        # As the argument, it is read into a TensorDict, which takes any key.
+        out = TensorDict(batch_size=[3]).replace(
+            Data.from_tensordict(files[4]), b=torch.ones(3)
+        )
+        assert set(out.keys()) == {"a", "b"}
+        assert set(files[4].keys()) == {"a"}
+        for f in files:
+            f.close()
+
+    def test_replace_keeps_untouched_entries_of_arg_live(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/2984: the keyword
+        # entries go into new containers only along the keys they touch, and
+        # the other entries of the file stay live views of the type they had.
+        class Data(TensorClass):
+            x: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            x: torch.Tensor
+
+        h5td = PersistentTensorDict.from_dict(
+            TensorDict(
+                a=torch.zeros(3),
+                g={"x": torch.zeros(3), "gg": {"y": torch.zeros(3)}},
+                k={"x": torch.zeros(3)},
+                batch_size=[3],
+            ),
+            filename=tmp_path / "file.h5",
+        )
+        keys = set(h5td.keys(True))
+        out = TensorDict(batch_size=[3]).replace(
+            h5td, b=torch.ones(3), g={"z": torch.ones(3)}
+        )
+        assert type(out["g"]) is TensorDict
+        assert type(out["g", "gg"]) is PersistentTensorDict
+        assert type(out["k"]) is PersistentTensorDict
+        assert (out["g", "z"] == 1).all()
+        sub_out = TensorDict(batch_size=[2]).replace(h5td[:2], b=torch.ones(2))
+        assert type(sub_out["g"]) is type(h5td[:2]["g"])
+        stack_out = TensorDict(batch_size=[2, 3]).replace(
+            lazy_stack([h5td, h5td]), b=torch.ones(2, 3)
+        )
+        assert (stack_out["b"] == 1).all()
+        arg = TensorDict(
+            h=h5td,
+            tc=Data.from_tensordict(h5td["k"]),
+            typed=Typed.from_tensordict(h5td["k"]),
+            batch_size=[3],
+        )
+        nested_out = TensorDict(batch_size=[3]).replace(
+            arg, h={("g", "gg", "w"): torch.ones(3)}
+        )
+        assert type(nested_out["h", "g", "gg"]) is TensorDict
+        assert set(nested_out["h", "g", "gg"].keys()) == {"y", "w"}
+        assert type(nested_out["h", "k"]) is PersistentTensorDict
+        assert type(nested_out["tc"]) is Data
+        assert type(nested_out["tc"]._tensordict) is PersistentTensorDict
+        assert type(nested_out["typed"]) is Typed
+        assert set(h5td.keys(True)) == keys
+        # a later write to the file shows through the untouched entries
+        h5td["g", "gg", "y"] = torch.full((3,), 2.0)
+        h5td["k", "x"] = torch.full((3,), 2.0)
+        h5td["g", "x"] = torch.full((3,), 2.0)
+        assert (out["g", "gg", "y"] == 2).all()
+        assert (out["k", "x"] == 2).all()
+        assert (sub_out["g", "x"] == 2).all()
+        assert (stack_out["g", "x"] == 2).all()
+        assert (nested_out["h", "k", "x"] == 2).all()
+        assert (nested_out["tc"].x == 2).all()
+        assert (nested_out["typed", "x"] == 2).all()
         h5td.close()
 
 
