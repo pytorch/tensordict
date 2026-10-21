@@ -979,6 +979,8 @@ def print_section(name, result):
         if "values" in table:
             print("| | |\n|---|---|")
             for key, value in table["values"].items():
+                # an error message can hold a "|", which would end the cell
+                value = str(value).replace("|", "\\|")
                 print(f"| {key} | {value} |")
             print()
             continue
