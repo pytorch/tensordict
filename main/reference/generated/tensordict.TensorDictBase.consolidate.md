@@ -21,9 +21,11 @@ file writes nothing and emits a [`UserWarning`](https://docs.python.org/3/builti
 `td.contiguous().consolidate(filename=other)` writes a new file. A
 `device` other than the one of the storage, and
 `share_memory=True` with a storage that is not in shared memory,
-are ignored with a [`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning):
-`td.contiguous().consolidate(...)` copies the storage into a new one
-and honours them.
+are ignored with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict
+0.17, the default will change to honouring them, as for a tensordict
+that is not consolidated: the call will return a new consolidated
+tensordict. `td.contiguous().consolidate(...)` gives that result
+now.
 
 Parameters:
 
