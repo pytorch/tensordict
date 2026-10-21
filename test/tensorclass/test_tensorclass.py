@@ -2179,6 +2179,25 @@ class TestTensorClass:
             )
             torch.testing.assert_close(MyPlain(x=ones, batch_size=[3]).x, ones)
 
+            # One that replaces __post_init__ with one that takes no InitVar
+            # keeps the behaviour from before #3103
+            class MyOverride(MyInitVarData):
+                def __post_init__(self):
+                    self.x = self.x + 10
+
+            data = MyOverride(x=ones, batch_size=[3])
+            torch.testing.assert_close(data.x, ones + 10)
+            torch.testing.assert_close(MyOverride(ones, batch_size=[3]).x, ones + 10)
+            torch.testing.assert_close(data.clone().x, ones + 20)
+            torch.testing.assert_close(data[0].x, torch.tensor(21.0))
+            other = MyOverride(x=ones, batch_size=[3])
+            torch.testing.assert_close(
+                lazy_stack([data, other]).x, ones.expand(2, 3) + 20
+            )
+            torch.testing.assert_close(
+                MyOverride.from_dict({"x": ones}, batch_size=[3]).x, ones + 10
+            )
+
     def test_init_var_required_and_rebuild(self, tmp_path):
         @tensorclass(skip_post_init_on_rebuild=True)
         class MyData:
@@ -2255,6 +2274,29 @@ class TestTensorClass:
         torch.testing.assert_close(data.clone().x, ones * 25)
         data = MyData(ones, twos, batch_size=[3])
         torch.testing.assert_close(data.x, ones * 5)
+        torch.testing.assert_close(data.y, twos)
+        torch.testing.assert_close(
+            MyData(x=ones, scale=3.0, batch_size=[3]).x, ones * 3
+        )
+
+    def test_init_var_custom_setattr(self):
+        # With a custom __setattr__, the dataclass __init__ passes the InitVar
+        # to __post_init__, and positional arguments go to the fields in
+        # order, as before #3103
+        class MyData(TensorClass):
+            x: torch.Tensor
+            scale: dataclasses.InitVar[float] = 1.0
+            y: torch.Tensor = None
+
+            def __post_init__(self, scale):
+                self.x = self.x * scale
+
+            def __setattr__(self, key, value):
+                super().__setattr__(key, value)
+
+        ones, twos = torch.ones(3), torch.full((3,), 2.0)
+        data = MyData(ones, twos, batch_size=[3])
+        torch.testing.assert_close(data.x, ones)
         torch.testing.assert_close(data.y, twos)
         torch.testing.assert_close(
             MyData(x=ones, scale=3.0, batch_size=[3]).x, ones * 3

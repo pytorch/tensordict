@@ -1323,9 +1323,7 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "_from_dict_defaults",
         "_from_tensordict",
         "_frozen",
-        "_init_var_defaults",
         "_is_tensorclass",
-        "_kw_only",
         "_nocast",
         "_set_dict_warn_msg",
         "_shadow",
@@ -1579,7 +1577,9 @@ def _tensorclass(
     cls = dataclass(cls, frozen=frozen, kw_only=kw_only)
     # Positional arguments skip the keyword-only fields of a class with the
     # class option kw_only, and of its subclasses (see _init_wrapper).
-    cls._kw_only = kw_only or cls.__dict__.get("_kw_only", False)
+    cls.__tensorclass_kw_only__ = kw_only or cls.__dict__.get(
+        "__tensorclass_kw_only__", False
+    )
     for name in own_operators:
         if name in cls.__dict__ and name not in attrs_before:
             # dataclass() replaced an inherited __repr__ or __eq__
@@ -1672,12 +1672,14 @@ def _tensorclass(
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
     init_vars, needs_init_vars = _init_vars(cls)
-    # The defaults of the InitVars, that __post_init__ gets outside __init__
-    cls._init_var_defaults = (
+    # The defaults of the InitVars, that __post_init__ gets outside __init__,
+    # and the __post_init__ they are for (see _post_init_args)
+    cls.__tensorclass_init_var_defaults__ = (
+        getattr(cls, "__post_init__", None),
         tuple(default for _, default in init_vars)
         if needs_init_vars
         and all(default is not dataclasses.MISSING for _, default in init_vars)
-        else ()
+        else (),
     )
     if "_is_tensorclass" not in cls.__dict__:
         # Warn about the field options that the class ignores, except where
@@ -1687,7 +1689,7 @@ def _tensorclass(
             if not _has_custom_setattr:
                 # the dataclass __init__ sets the fields: it honours init
                 ignored_options.append("init")
-            if not _follows_signature(cls, needs_init_vars):
+            if not _follows_signature(cls, needs_init_vars and not _has_custom_setattr):
                 ignored_options.append("kw_only")
         if not {"__eq__", "__ne__"} <= own_operators:
             ignored_options.append("compare")
@@ -2150,8 +2152,18 @@ def _follows_signature(cls, needs_init_vars: bool) -> bool:
     keyword-only fields included (#3100).
     """
     return needs_init_vars or any(
-        base.__dict__.get("_kw_only", False) for base in cls.__mro__
+        base.__dict__.get("__tensorclass_kw_only__", False) for base in cls.__mro__
     )
+
+
+def _post_init_args(cls) -> tuple:
+    """The InitVar defaults that ``cls.__post_init__`` gets outside ``__init__``.
+
+    A subclass that is not a tensorclass itself and replaces the
+    ``__post_init__`` they are for gets none, as before #3103.
+    """
+    post_init, defaults = cls.__tensorclass_init_var_defaults__
+    return defaults if cls.__post_init__ is post_init else ()
 
 
 def _init_wrapper(
@@ -2177,16 +2189,27 @@ def _init_wrapper(
     field_names = tuple(field.name for field in fields)
     required_fields = frozenset(field_names)
     init_vars = () if _custom_init else _init_vars
-    needs_init_vars = _needs_init_vars and not _custom_init
+    # The dataclass __init__ of a custom __setattr__ passes the InitVars on
+    # itself, and positional arguments go to the fields in order, as before.
+    needs_init_vars = _needs_init_vars and not _custom_init and not _has_custom_setattr
+    # a subclass that replaces this __post_init__ keeps the old behaviour
+    post_init = getattr(cls, "__post_init__", None)
     init_var_names = frozenset(name for name, _ in init_vars)
-    if not _custom_init and _follows_signature(cls, needs_init_vars):
-        # The InitVars are among the positional arguments, and the
-        # keyword-only fields are not.
-        positional_names = tuple(
-            p.name for p in params[1:] if p.kind is p.POSITIONAL_OR_KEYWORD
-        )
-    else:
-        positional_names = field_names
+    signature_names = tuple(
+        p.name for p in params[1:] if p.kind is p.POSITIONAL_OR_KEYWORD
+    )
+    # The InitVars are among the positional arguments that follow the
+    # signature, and the keyword-only fields are not.
+    positional_names = (
+        signature_names
+        if not _custom_init and _follows_signature(cls, needs_init_vars)
+        else field_names
+    )
+    old_positional_names = (
+        signature_names
+        if not _custom_init and _follows_signature(cls, False)
+        else field_names
+    )
     # Specialize only complete schemas without defaults or user initialization
     # hooks. All other constructors retain the general field-setting path.
     can_init_tensors = (
@@ -2358,10 +2381,13 @@ def _init_wrapper(
             lock = kwargs.pop("lock", None)
         if lock is None:
             lock = frozen
+        uses_init_vars = needs_init_vars and (
+            type(self) is cls or type(self).__post_init__ is post_init
+        )
         if args:
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
-                positional_names
+                (positional_names if uses_init_vars else old_positional_names)
                 # a subclass that is not a tensorclass itself maps as cls
                 if type(self) is cls
                 or type(self).__dataclass_fields__ is cls.__dataclass_fields__
@@ -2529,7 +2555,7 @@ def _init_wrapper(
             # need them, it gets them only when one is given.
             init_var_values = (
                 [kwargs.pop(name, default) for name, default in init_vars]
-                if needs_init_vars
+                if uses_init_vars
                 or (init_vars and any(name in kwargs for name in init_var_names))
                 else ()
             )
@@ -2969,7 +2995,7 @@ def _from_tensordict(
             # fields it sets go to the members, which the stack holds.
             _post_init_members(cls, tensordict, non_tensordict)
         else:
-            tc.__post_init__(*cls._init_var_defaults)
+            tc.__post_init__(*_post_init_args(cls))
     return tc
 
 
@@ -2986,7 +3012,7 @@ def _post_init_members(cls, tensordict: LazyStackedTensorDict, non_tensordict: d
         tc = cls.__new__(cls)
         object.__setattr__(tc, "_tensordict", member)
         object.__setattr__(tc, "_non_tensordict", dict(non_tensordict))
-        tc.__post_init__(*cls._init_var_defaults)
+        tc.__post_init__(*_post_init_args(cls))
 
 
 def _tensorclass_keys(cls, tensordict: TensorDict) -> list[str]:
