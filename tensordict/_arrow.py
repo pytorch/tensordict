@@ -236,6 +236,12 @@ def from_arrow(
         (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
     """
     pa = _import_pyarrow()
+    # pyarrow 10 to 14 give tensors that torch.from_dlpack rejects; to_arrow works there
+    if int(pa.__version__.split(".")[0]) < 15:
+        raise ImportError(
+            f"from_arrow needs pyarrow 15 or later, got pyarrow=={pa.__version__}. "
+            "Upgrade with `pip install 'pyarrow>=15'`."
+        )
     if nulls not in _NULLS:
         raise ValueError(f"nulls must be one of {_NULLS}, got {nulls!r}.")
     if not isinstance(table, (pa.Table, pa.RecordBatch)):

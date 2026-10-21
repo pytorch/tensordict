@@ -763,6 +763,18 @@ class TestArrow:
             to_arrow(td)
         assert to_arrow(td.reshape(-1)).num_rows == 6
 
+    def test_from_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: pyarrow 10 to 14 failed with "from_dlpack received an invalid capsule"
+        import pyarrow as pa
+
+        table = pa.table({"x": pa.array([1, 2])})
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"pyarrow 15 or later.*14\.0\.2"):
+            from_arrow(table)
+        assert to_arrow(TensorDict(x=torch.arange(2), batch_size=[2])).num_rows == 2
+        monkeypatch.setattr(pa, "__version__", "15.0.0")
+        assert from_arrow(table)["x"].tolist() == [1, 2]
+
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
 class TestJSON:
