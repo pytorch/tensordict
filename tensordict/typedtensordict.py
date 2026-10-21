@@ -1536,6 +1536,7 @@ _WRAP_DELEGATES = [
     "contiguous",
     "masked_fill",
     "masked_select",
+    "_softmax",
 ]
 
 # In-place: delegate to _source, return self

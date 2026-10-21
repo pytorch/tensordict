@@ -221,6 +221,7 @@ is `TensorDictStore`, *lazy store* is `LazyStackedTensorDictStore`,
 | `_where(condition, other, *, out, pad, update_batch_size)` | `where`, without `_masking_on_dense_copy` | return the result, written into `out` if given | lazy, params, typed |
 | `_reduction_parts()` | `all()`, `any()` without a dim | return the parts to reduce: the values, or the members of a lazy stack | lazy |
 | `_reduced_names(dim)` | `all(dim)`, `any(dim)` | return the names of the result | lazy |
+| `_softmax(dim, dtype)` | `softmax` | return the softmax along the batch dim `dim`; the default calls `softmax` on the nested lazy stacks, whose members lack the stack dim | lazy, typed |
 | `_masked_fill_(mask, value)` | `masked_fill_` | fill in place where `mask` is True | sub, lazy, file, lazy store, params, typed |
 | `_masked_fill(mask, value)` | `masked_fill`, without `_masking_on_dense_copy` | return a filled copy; the default fills a clone in place | lazy |
 | `_fill_(key, value)` | `fill_`, and `zero_` with `_fills_without_reading` | fill the entry at the tuple `key`; raise `KeyError` if it is missing | file |

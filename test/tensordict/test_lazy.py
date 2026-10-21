@@ -4600,6 +4600,100 @@ class TestLazyStackedTensorDict:
             with pytest.raises(ValueError, match="split_size must be positive"):
                 td.split(0, stack_dim)
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("inner_stack_dim", [0, 1])
+    @pytest.mark.parametrize("dim", [0, 1, 2, -1])
+    def test_softmax_nested(self, stack_dim, inner_stack_dim, dim):
+        # The members of a lazy stack, and their leaves, lack the stack dim:
+        # a lazy stack of lazy stacks, and one nested in a tensordict, a
+        # tensorclass or a TypedTensorDict, give the result of their dense
+        # copy (#2359).
+        class Holder(TensorClass):
+            n: TensorDict
+
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+            n: TensorDict
+
+        dense = TensorDict(
+            a=torch.randn(2, 3, 4, 5),
+            n=TensorDict(b=torch.randn(2, 3, 4), batch_size=[2, 3, 4]),
+            batch_size=[2, 3, 4],
+        )
+        lazy = lazy_stack(
+            [
+                lazy_stack(td.unbind(inner_stack_dim), inner_stack_dim)
+                for td in dense.unbind(stack_dim)
+            ],
+            stack_dim,
+        )
+        expected = dense.softmax(dim)
+        result = lazy.softmax(dim)
+        assert isinstance(result, LazyStackedTensorDict)
+        assert all(isinstance(td, LazyStackedTensorDict) for td in result.tensordicts)
+        for key, value in expected.items(True, True):
+            torch.testing.assert_close(result.get(key), value)
+        holder = TensorDict(
+            lazy=lazy,
+            h=Holder(n=lazy, batch_size=[2, 3, 4]),
+            t=Typed.from_tensordict(lazy),
+            batch_size=[2, 3],
+        )
+        result = holder.softmax(dim % 2)
+        expected = dense.softmax(dim % 2)
+        assert isinstance(result["lazy"], LazyStackedTensorDict)
+        assert isinstance(result["h"], Holder)
+        assert isinstance(result["t"], Typed)
+        for key, value in expected.items(True, True):
+            torch.testing.assert_close(result["lazy"].get(key), value)
+            torch.testing.assert_close(result["h"].n.get(key), value)
+            torch.testing.assert_close(result["t"].get(key), value)
+        result = Typed.from_tensordict(lazy).softmax(dim)
+        assert isinstance(result, Typed)
+        for key, value in dense.softmax(dim).items(True, True):
+            torch.testing.assert_close(result.get(key), value)
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_softmax_vmap(self, stack_dim):
+        # vmap over the dim that is not the stack dim leaves a lazy stack
+        # whose members lack the stack dim
+        dense = TensorDict(a=torch.randn(2, 3, 4), batch_size=[2, 3])
+        lazy = lazy_stack(dense.unbind(stack_dim), stack_dim)
+        in_dim = 1 - stack_dim
+
+        def fn(td):
+            return td.softmax(0)
+
+        result = torch.vmap(fn, (in_dim,), (in_dim,))(lazy)
+        expected = torch.vmap(fn, (in_dim,), (in_dim,))(dense)
+        torch.testing.assert_close(result["a"], expected["a"])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_softmax_stack_dim_ragged(self, stack_dim):
+        # Along the stack dim, members whose entries have different shapes
+        # have no dense copy: each leaf of each member is normalised along its
+        # own dim, as before (#2359). That holds for a nested lazy stack too.
+        lazy = lazy_stack(
+            [
+                TensorDict(a=torch.randn(3, 4), b=torch.randn(3, 2), batch_size=[3]),
+                TensorDict(a=torch.randn(3, 5), b=torch.randn(3, 2), batch_size=[3]),
+            ],
+            stack_dim,
+        )
+        holder = TensorDict(n=lazy, batch_size=lazy.shape)
+        outer = lazy_stack([lazy, lazy.clone()], 0)
+        for result, dim in (
+            (lazy.softmax(stack_dim), stack_dim),
+            (holder.softmax(stack_dim)["n"], stack_dim),
+            (outer.softmax(0)[0], 0),
+        ):
+            for td, member in zip(result.tensordicts, lazy.tensordicts):
+                for key in ("a", "b"):
+                    torch.testing.assert_close(td[key], member[key].softmax(dim))
+        result = lazy.softmax(1 - stack_dim)
+        for td, member in zip(result.tensordicts, lazy.tensordicts):
+            torch.testing.assert_close(td["a"], member["a"].softmax(0))
+
     def test_split_lazy(self):
         td = LazyStackedTensorDict(
             TensorDict({"a": torch.zeros(2, 3), "b": "a string!"}, batch_size=[2]),
