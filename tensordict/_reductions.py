@@ -7,6 +7,7 @@ from __future__ import annotations
 import copyreg
 from multiprocessing import reduction
 
+import tensordict.base as _td_base
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
@@ -19,6 +20,23 @@ CLS_MAP = {
     "NonTensorData": NonTensorData,
     "NonTensorStack": NonTensorStack,
 }
+
+
+def _consolidated_cls(name: str) -> type:
+    """Returns the class that consolidated metadata names, by its key in ``CLS_MAP`` or, for a tensorclass, by ``str(cls)``."""
+    cls = CLS_MAP.get(name)
+    if cls is not None:
+        return cls
+    # Look the tensorclass up among the defined ones, as load_memmap does,
+    # rather than import a module that the file names.
+    for cls in _td_base._ACCEPTED_CLASSES:
+        if str(cls) == name and _is_tensorclass(cls):
+            return cls
+    saved_name = name.removeprefix("<class '").removesuffix("'>")
+    raise RuntimeError(
+        f"Could not find the class {saved_name} of a consolidated tensordict. "
+        "Import the module that defines it, or define it, before loading the file."
+    )
 
 
 def _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared: bool = False):
@@ -140,7 +158,11 @@ def _rebuild_tensordict_files_consolidated(
                 parent=consolidated,
             )
         if isinstance(cls, str):
-            cls = CLS_MAP[cls]
+            cls = _consolidated_cls(cls)
+            if _is_tensorclass(cls):
+                # Hold the class, as in memory, so that a pickle of the result
+                # names it by reference rather than by a string to look up
+                consolidated["metadata"]["cls"] = cls
         result = cls._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result = result.lock_()

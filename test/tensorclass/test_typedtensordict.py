@@ -280,6 +280,9 @@ def consume(state: State) -> int:
 
 state = State(observation=1, reward=2, batch_size=[], device="cpu")
 child = ChildState(observation=1, reward=2, done=0)
+ChildState(
+    observation=1, reward=2, done=0, names=["n"], non_blocking=False, lock=True
+)
 assert_type(state.observation, int)
 assert_type(state.optional, int | None)
 assert_type(consume(child), int)

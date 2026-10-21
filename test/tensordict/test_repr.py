@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import html
 import importlib.util
 import os
 import platform
+import re
 import sys
 
 import pytest
@@ -837,6 +840,26 @@ class _TypedMesh(TypedTensorDict):
     cells: torch.Tensor
 
 
+class _CountingStore(TensorDict):
+    # keeps its own repr, as TensorDictStore does, and counts its leaf reads
+    reads = []
+
+    def _repr_parts(self):
+        return [f"keys={sorted(self.keys())}"]
+
+    def _get_str(self, key, *args, **kwargs):
+        type(self).reads.append(key)
+        return super()._get_str(key, *args, **kwargs)
+
+
+def _nested_store():
+    store = _CountingStore(x=torch.zeros(3, 2), y=torch.zeros(3), batch_size=[3])
+    td = TensorDict(s=store, z=torch.zeros(3), batch_size=[3])
+    assert type(td.get("s")) is _CountingStore
+    _CountingStore.reads.clear()
+    return td
+
+
 def _mesh_sample():
     return TensorDict(
         points=torch.zeros(1000, 3),
@@ -1241,6 +1264,14 @@ class TestCompactRepr:
             r == "TensorDict(batch_size=[], fields={c: f32[2], a: f32[2], b: f32[2]})"
         )
 
+    def test_compact_nested_own_repr(self):
+        # a nested store shows its class name and reads none of its leaves
+        td = _nested_store()
+        with set_printoptions(compact=True):
+            r = repr(td)
+        assert not _CountingStore.reads
+        assert r == "TensorDict(batch_size=[3], fields={s: _CountingStore, z: f32[]})"
+
     def test_compact_non_tensor_stack_keeps_repr(self):
         from tensordict import NonTensorStack
 
@@ -1261,6 +1292,188 @@ class TestCompactRepr:
         assert r == (
             "TensorDict(batch_size=[], fields={a: bf16[1], b: u8[1], c: c64[1], d: f16[1]})"
         )
+
+
+class TestHtmlRepr:
+    """Tests for ``_repr_html_``, the display of notebooks."""
+
+    @staticmethod
+    def _items(out):
+        # the text of each entry, without the tags
+        return [
+            re.sub("<[^>]+>", "", item.split("</li>")[0].split("<ul")[0])
+            for item in out.split("<li>")[1:]
+        ]
+
+    def test_html_sample(self):
+        td = _mesh_sample()
+        td.refine_names("points")
+        out = td._repr_html_()
+        assert out.startswith("<div ")
+        assert "<b>TensorDict</b>" in out
+        assert "batch_size=[1000], names=[points], device=cpu" in out
+        assert self._items(out) == [
+            "cells: i64[4]",
+            "data: 2 entries",
+            "mask: bool[]",
+            "pressure: f32[]",
+            "points: f32[3]",
+        ]
+        assert out.count("<details open>") == 2
+
+    def test_html_escapes(self):
+        td = TensorDict({"<b>&": torch.zeros(()), "x": "<script>"})
+        td["<i>"] = TensorDict({"a&b": torch.zeros(())})
+        out = td._repr_html_()
+        assert "<b>&" not in out and "<i>" not in out and "a&b" not in out
+        assert "&lt;b&gt;&amp;: " in out and "&lt;i&gt;: " in out
+        assert "a&amp;b: " in out
+
+    def test_html_lazy_stack(self, monkeypatch):
+        td = LazyStackedTensorDict.lazy_stack(
+            [
+                TensorDict(points=torch.zeros(10, 3), label=torch.tensor(0)),
+                TensorDict(points=torch.zeros(12, 3), extra=torch.zeros(2)),
+            ]
+        )
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(*args, **kwargs):
+            calls.append(args)
+            return stack(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "stack", counting_stack)
+        out = td._repr_html_()
+        assert not calls
+        assert "<b>LazyStackedTensorDict</b>" in out
+        assert "batch_size=[2], stack_dim=0" in out
+        assert ">exclusive_fields</i></summary>" in out
+        assert self._items(out) == [
+            "points: f32[-1,3]",
+            "0: 1 entry",
+            "label: i64[]",
+            "1: 1 entry",
+            "extra: f32[2]",
+        ]
+
+    def test_html_tensorclass(self):
+        td = TensorDict(mesh=_mesh(), batch_size=[1000])
+        assert self._items(td._repr_html_()) == [
+            "mesh: Mesh 2 entries",
+            "cells: i64[4]",
+            "points: f32[3]",
+        ]
+        out = _mesh()._repr_html_()
+        assert "<b>Mesh</b>" in out
+        assert self._items(out) == ["cells: i64[4]", "points: f32[3]"]
+
+    @pytest.mark.parametrize("flag", ["tensor_only", "shadow"])
+    def test_html_tensorclass_flags(self, flag):
+        @tensorclass(**{flag: True})
+        class Points:
+            x: torch.Tensor
+
+        p = Points(x=torch.zeros(2, 3), batch_size=[2])
+        assert self._items(p._repr_html_()) == ["x: f32[3]"]
+        assert [field.name for field in dataclasses.fields(Points)] == ["x"]
+
+    def test_html_tensorclass_own(self):
+        @tensorclass
+        class Points:
+            x: torch.Tensor
+
+            def _repr_html_(self):
+                return "own"
+
+        assert Points(x=torch.zeros(2))._repr_html_() == "own"
+
+    def test_html_tensorclass_own_repr(self):
+        @tensorclass
+        class Points:
+            x: torch.Tensor
+
+            def __repr__(self):
+                return "<own>"
+
+        @tensorclass
+        class SubPoints(Points):
+            y: torch.Tensor
+
+        assert Points(x=torch.zeros(2))._repr_html_() == "<pre>&lt;own&gt;</pre>"
+        out = SubPoints(x=torch.zeros(2), y=torch.zeros(2))._repr_html_()
+        assert out == "<pre>&lt;own&gt;</pre>"
+
+    def test_html_nested_own_repr(self):
+        td = _nested_store()
+        out = td._repr_html_()
+        assert not _CountingStore.reads
+        assert self._items(out) == ["s: _CountingStore", "z: f32[]"]
+        assert td.get("s")._repr_html_().startswith("<pre>_CountingStore(")
+
+    def test_html_meta_device(self):
+        # meta tensors have no data: the display reads none
+        td = TensorDict(
+            a=torch.empty(1000, 3, device="meta"),
+            sub=TensorDict(b=torch.empty(1000, device="meta"), batch_size=[1000]),
+            batch_size=[1000],
+        )
+        assert self._items(td._repr_html_()) == [
+            "a: f32[3]@meta",
+            "sub: 1 entry",
+            "b: f32[]@meta",
+        ]
+
+    def test_html_truncates(self, monkeypatch):
+        import tensordict.utils
+
+        monkeypatch.setattr(tensordict.utils, "_HTML_MAX_ENTRIES", 3)
+        td = TensorDict({f"k{i}": torch.zeros(()) for i in range(5)})
+        td["z"] = TensorDict({f"k{i}": torch.zeros(()) for i in range(4)})
+        assert self._items(td._repr_html_()) == [
+            "k0: f32[]",
+            "k1: f32[]",
+            "k2: f32[]",
+            "... and 3 more",
+        ]
+        td = TensorDict(a=torch.zeros(()))
+        td["b"] = TensorDict({f"k{i}": torch.zeros(()) for i in range(4)})
+        assert self._items(td._repr_html_()) == [
+            "a: f32[]",
+            "b: 4 entries",
+            "k0: f32[]",
+            "... and 3 more",
+        ]
+
+    def test_html_fallback(self, monkeypatch):
+        import tensordict.utils
+
+        def fail(obj):
+            raise RuntimeError
+
+        td = TensorDict({"<a>": torch.zeros(())})
+        expected = f"<pre>{html.escape(repr(td))}</pre>"
+        monkeypatch.setattr(tensordict.utils, "_compact_parts", fail)
+        assert td._repr_html_() == expected
+
+    def test_html_keeps_own_repr(self):
+        from tensordict import NonTensorData, NonTensorStack
+
+        for obj in (NonTensorStack("a", "b"), NonTensorData("<a>")):
+            assert obj._repr_html_() == f"<pre>{html.escape(repr(obj))}</pre>"
+
+    def test_html_option(self):
+        td = _mesh_sample()
+        assert get_printoptions()["html"] is True
+        with set_printoptions(html=False):
+            assert td._repr_html_() is None
+            assert _mesh()._repr_html_() is None
+        assert td._repr_html_() is not None
+
+    def test_html_follows_options(self):
+        with set_printoptions(show_batch_size=False, show_device=False):
+            out = _mesh_sample()._repr_html_()
+        assert "batch_size" not in out and "device" not in out
 
 
 if __name__ == "__main__":

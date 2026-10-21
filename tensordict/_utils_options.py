@@ -98,6 +98,7 @@ _REPR_OPTIONS = {
     "plain": False,
     "sort_keys": "alphabetical",
     "compact": True,
+    "html": True,
 }
 
 _REPR_OPTIONS_KEYS = frozenset(_REPR_OPTIONS)
@@ -129,10 +130,12 @@ class set_printoptions(_DecoratorContextManager):
             ``show_is_shared``, ``show_shape``, ``show_field_device``,
             ``show_dtype``, ``show_field_is_shared``, ``show_grad``,
             ``show_is_contiguous``, ``show_is_view``, ``show_storage_size``,
-            ``plain``, ``sort_keys`` and ``compact``. ``compact=True``, the
-            default, prints each entry as its dtype and its feature dimensions
-            (``f32[3]``); ``compact=False`` prints each entry as a ``Tensor(...)``
-            line with its full shape, device, dtype and ``is_shared``.
+            ``plain``, ``sort_keys``, ``compact`` and ``html``. ``compact=True``,
+            the default, prints each entry as its dtype and its feature
+            dimensions (``f32[3]``); ``compact=False`` prints each entry as a
+            ``Tensor(...)`` line with its full shape, device, dtype and
+            ``is_shared``. ``html=False`` turns off the HTML display of
+            notebooks.
 
     Raises:
         TypeError: if an option is unknown.

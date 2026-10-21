@@ -479,9 +479,13 @@ Next steps
 
 - The user guide explains each idea of this page in detail. Start with
   :ref:`overview`.
+- :ref:`pitfalls` lists the behaviors that surprise new users most often.
 - The tutorials are scripts that you can run. Start with
   :doc:`tutorials/tensordict_keys`, then :doc:`tutorials/tensordict_slicing`
   and :doc:`tutorials/tensordict_shapes`.
 - The how-to guides solve one task each: :ref:`saving`, :ref:`storage`,
   :ref:`data-loading`, :ref:`distributed`, and :ref:`compile`.
+- :ref:`cookbook` has short recipes for common tasks: batches of
+  different lengths, data loaders, parameter groups, moving averages,
+  checkpoints, and ensembles.
 - :ref:`api-reference` lists every class and method.

@@ -65,7 +65,9 @@ The dtype codes are those of JAX and polars: ``f32`` for ``torch.float32``,
 - The display reads no data and syncs no device: it uses only the shape,
   dtype and device of each leaf, and stacks no leaf of a lazy stack.
 - A :class:`~tensordict.store.TensorDictStore` and a
-  :class:`~tensordict.NonTensorStack` keep their usual display.
+  :class:`~tensordict.NonTensorStack` keep their usual display; nested in
+  another tensordict, a store prints as its class name (``TensorDictStore``),
+  since its entries would read the server.
 
 The detailed display: ``compact=False``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,10 +196,35 @@ take precedence over ``verbose``, so you can mix the two:
             label: Tensor(shape=torch.Size([32]), dtype=torch.int64)},
         batch_size=torch.Size([32]))
 
+Notebook display
+~~~~~~~~~~~~~~~~
+
+In a notebook (Jupyter, VS Code, Colab), a tensordict or a tensorclass that
+ends a cell displays as HTML: the entries of the compact display, one on each
+line, with each nested tensordict in a block that you can fold. The header
+shows the class name, the batch size, the dim names and the device, and a
+nested tensordict shows its class name and number of entries. The display
+uses the colors of the notebook theme, so it reads in light and dark themes.
+
+- It reads the same metadata as the compact display: no data, no device
+  sync, and no stacking of a lazy stack. ``show_batch_size``,
+  ``show_device``, ``show_dtype`` and ``sort_keys`` apply.
+- It shows at most 200 entries; the rest of each block shows as
+  ``... and K more``.
+- A :class:`~tensordict.store.TensorDictStore`, a
+  :class:`~tensordict.NonTensorStack`, a :class:`~tensordict.NonTensorData`,
+  and any tensordict or tensorclass with its own text display (such as
+  :class:`~tensordict.TensorDictParams`, or a class that defines
+  ``__repr__``) keep their text display, as does any tensordict whose HTML
+  display fails. Nested in another tensordict, a
+  :class:`~tensordict.store.TensorDictStore` shows as its class name.
+- ``set_printoptions(html=False)`` turns the HTML display off, and the
+  notebook shows the text display instead.
+
 Available options
 ~~~~~~~~~~~~~~~~~
 
-This option chooses the format:
+These options choose the format:
 
 ====================  ===========  ===================================================
 Option                Default      Description
@@ -207,6 +234,8 @@ Option                Default      Description
                                    when it fits. See `What print shows`_. With
                                    ``False``, print the detailed display that the
                                    options below describe.
+``html``              ``True``     Display tensordicts as HTML in notebooks.
+                                   See `Notebook display`_.
 ====================  ===========  ===================================================
 
 These options control the lines of the outer ``TensorDict(...)`` block of the
