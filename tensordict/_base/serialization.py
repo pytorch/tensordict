@@ -2513,9 +2513,11 @@ def _replace_larger_file(filename, size: int) -> None:
     leaves the old one intact for the tensordicts that map it. A symlink
     keeps pointing at the new file. If the file cannot be replaced, for
     example on Windows while it is open, it is written in place as before.
+    A file the caller cannot write is left as it is, so that writing to it
+    fails as before instead of replacing it.
     """
     try:
-        if os.path.getsize(filename) <= size:
+        if os.path.getsize(filename) <= size or not os.access(filename, os.W_OK):
             return
         target = os.path.realpath(filename)
         # A sibling is on the same file system, so a rename moves it into place.

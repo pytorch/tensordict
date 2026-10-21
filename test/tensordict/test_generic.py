@@ -1377,8 +1377,9 @@ class TestGeneric:
             previous = TensorDict(
                 a=torch.arange(old_count), batch_size=[old_count]
             ).consolidate(filename=filename)
-            if use_buffer:
-                # use_buffer=True truncates the file that previous maps
+            if use_buffer or (_IS_WINDOWS and old_count > new_count):
+                # use_buffer=True truncates the file that previous maps, and
+                # Windows cannot replace a file while previous maps it
                 del previous
                 previous = None
         expected = TensorDict(a=torch.arange(new_count) + 500, batch_size=[new_count])
@@ -1428,6 +1429,9 @@ class TestGeneric:
         assert loaded.names == ["rows"]
         assert_allclose_td(loaded, expected)
 
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
     @pytest.mark.parametrize("num_threads,return_early", [(0, False), (4, True)])
     def test_consolidated_file_overwrite_source_view(
         self, tmp_path, num_threads, return_early
@@ -1484,6 +1488,25 @@ class TestGeneric:
         saved.names = ["x"]
         assert saved.consolidate(filename=filename) is saved
         assert TensorDict.from_consolidated(filename).names == ["x"]
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
+    )
+    def test_consolidated_file_overwrite_read_only(self, tmp_path):
+        # a larger file the caller cannot write is not replaced: the write
+        # fails as before and the file keeps its data
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        filename.chmod(0o444)
+        size = filename.stat().st_size
+        with pytest.raises(RuntimeError):
+            TensorDict(a=torch.tensor([500, 501]), batch_size=[2]).consolidate(
+                filename=filename
+            )
+        assert filename.stat().st_size == size
+        loaded = TensorDict.from_consolidated(filename)
+        assert (loaded["a"] == torch.arange(100)).all()
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
 
     def test_consolidated_file_overwrite_replace_fails(self, tmp_path):
         # if the larger file cannot be replaced (as on Windows while it is
