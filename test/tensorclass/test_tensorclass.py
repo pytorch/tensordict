@@ -7453,6 +7453,50 @@ class TestDeprecations:
             "(in a tensorclass, the nocast option stores scalars as they are)."
         )
 
+    @pytest.mark.parametrize("entry", ["tensor", "non_tensor"])
+    @pytest.mark.parametrize("call", ["dict", "kwargs"])
+    def test_scalar_field_update(self, entry, call):
+        # update() keeps a number given to a scalar field as setattr does, with a
+        # non-empty batch size; it raised the batch-size mismatch before
+        class MyClass(TensorClass):
+            a: int
+            x: torch.Tensor
+
+        def make():
+            if entry == "tensor":
+                a = torch.zeros(2, dtype=torch.long)
+            else:
+                a = NonTensorData(1, batch_size=[2])
+            return MyClass(a=a, x=torch.zeros(2), batch_size=[2])
+
+        c = make()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            if call == "dict":
+                out = c.update({"a": 3, "x": torch.ones(2)})
+            else:
+                out = c.update(a=3, x=torch.ones(2))
+        assert out is c
+        assert isinstance(c._tensordict.get("a"), NonTensorData)
+        assert c.a == 3
+        assert (c.x == 1).all()
+        d = make()
+        d.a = 3
+        assert type(d._tensordict.get("a")) is type(c._tensordict.get("a"))
+        assert d.a == c.a
+
+    def test_scalar_field_update_keys_to_update(self):
+        class MyClass(TensorClass):
+            a: int
+            x: torch.Tensor
+
+        c = MyClass(a=1, x=torch.zeros(2), batch_size=[2])
+        c.update({"a": 3, "x": torch.ones(2)}, keys_to_update=["x"])
+        assert c.a == 1
+        assert (c.x == 1).all()
+        c.update({"a": 4}, keys_to_update=[("a",)])
+        assert c.a == 4
+
     def test_scalar_field_over_non_tensor(self):
         # over a NonTensorData entry, only the warning of TensorDict.set (#2432)
         class MyClass(TensorClass):
