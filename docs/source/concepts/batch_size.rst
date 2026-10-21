@@ -326,8 +326,8 @@ For example:
   True
 
 If a dataset returns tensordicts with no batch dimensions, the default collate
-function of :class:`torch.utils.data.DataLoader` iterates over them and raises
-the same ``TypeError``. :ref:`data-loading` gives the ``collate_fn`` to use.
+function of :class:`torch.utils.data.DataLoader` stacks them into a tensordict
+with one batch dimension (see :ref:`data-loading`).
 
 See also
 --------

@@ -110,6 +110,7 @@ from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.multiprocessing import Manager
 from torch.utils._pytree import tree_is_leaf, tree_map
+from torch.utils.data._utils.collate import default_collate_fn_map
 
 if TYPE_CHECKING:
     from typing import Self
@@ -1407,6 +1408,32 @@ def _unchecked_copy(func: FunctionType) -> FunctionType:
     copied.__qualname__ = f"TensorClass.{func.__name__}"
     copied.__no_type_check__ = True
     return copied
+
+
+def _collate_tensor_collection(batch, *, collate_fn_map=None):
+    # The entry of torch's default_collate_fn_map for tensordicts and
+    # tensorclasses, as tensordict.collate: a batch that a dataset read in one
+    # index operation (__getitems__) is returned as is; a list of samples is
+    # stacked densely if their keys and shapes match, lazily otherwise.
+    if is_tensor_collection(batch):
+        return batch
+    return LazyStackedTensorDict.maybe_dense_stack(batch)
+
+
+class _TensorClassCollateMeta(type):
+    def __instancecheck__(cls, instance):
+        return _is_tensorclass(type(instance))
+
+
+class _TensorClassCollateMarker(metaclass=_TensorClassCollateMeta):
+    # The key of default_collate_fn_map for the @tensorclass classes, which do
+    # not inherit from TensorCollection: one key for all of them, as torch's
+    # collate checks the keys one by one for the types it does not find.
+    pass
+
+
+default_collate_fn_map.setdefault(TensorCollection, _collate_tensor_collection)
+default_collate_fn_map.setdefault(_TensorClassCollateMarker, _collate_tensor_collection)
 
 
 @dataclass_transform()

@@ -33,13 +33,10 @@ Pass ``collate_fn=lambda x: x`` to keep that batch as it is:
   >>> type(batches[0]).__name__, batches[0].batch_size
   ('TensorDict', torch.Size([4]))
 
-The default ``collate_fn`` cannot read a tensordict. It raises
-``TypeError: iteration over a 0-d tensordict``:
+The default ``collate_fn`` returns that batch as it is too:
 
-  >>> next(iter(DataLoader(data, batch_size=4)))
-  Traceback (most recent call last):
-  ...
-  TypeError: iteration over a 0-d tensordict. Use keys(), values() or items() to iterate over its entries.
+  >>> next(iter(DataLoader(data, batch_size=4))).batch_size
+  torch.Size([4])
 
 The same works for a memory-mapped tensordict (see :ref:`saving`). Each batch
 then reads only its rows from disk.
@@ -58,10 +55,23 @@ A dataset that returns tensordicts
 A dataset can return one tensordict for each sample, for example a list of
 tensordicts, or a :class:`~torch.utils.data.Dataset` whose ``__getitem__``
 builds a tensordict. The ``DataLoader`` then gets a list of tensordicts for
-each batch, and the default ``collate_fn`` raises the same ``TypeError``.
-Pass ``collate_fn=torch.stack`` to stack the list into one tensordict:
+each batch. The default ``collate_fn`` stacks them into one tensordict, as
+:func:`~tensordict.collate` does (see below). A batch of tensorclasses keeps
+its class:
 
   >>> samples = [TensorDict({"features": torch.randn(3), "label": i}) for i in range(10)]
+  >>> batch = next(iter(DataLoader(samples, batch_size=4)))
+  >>> batch.batch_size, batch["label"]
+  (torch.Size([4]), tensor([0, 1, 2, 3]))
+  >>> from tensordict import TensorClass
+  >>> class Sample(TensorClass):
+  ...     features: torch.Tensor
+  >>> batch = next(iter(DataLoader([Sample(features=torch.randn(3)) for _ in range(10)], batch_size=4)))
+  >>> type(batch).__name__, batch.features.shape
+  ('Sample', torch.Size([4, 3]))
+
+``collate_fn=torch.stack`` gives the same batches:
+
   >>> batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack)))
   >>> batch.batch_size, batch["label"]
   (torch.Size([4]), tensor([0, 1, 2, 3]))
