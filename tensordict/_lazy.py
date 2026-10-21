@@ -4989,9 +4989,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"for the leaves that do not have {other_tensor.ndim} dims. "
                     "Starting with TensorDict 0.17, the default will change to "
                     "broadcasting like TensorDict.where, which aligns `other` with "
-                    "each leaf from the right. To keep the current result, give "
-                    "`other` the dims of the leaves (e.g. other.unsqueeze(-1)) or "
-                    "pass a tensordict.",
+                    "each leaf from the right. To keep the current result, add "
+                    "size-1 dims to `other` after its stack dim until it has the "
+                    "dims of the leaves, or pass a tensordict.",
                     FutureWarning,
                     stacklevel=_user_stacklevel(),
                 )
