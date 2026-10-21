@@ -660,11 +660,14 @@ def _unwrap_tensorclass(other: Any) -> Any:
 def _copy_for_update(td: Any, entries: Mapping) -> Any:
     """Returns a copy of ``td`` that ``update(entries)`` can write into without writing into a file or store of ``td``.
 
-    A copy of a file or a store shares its storage, so such a tensordict is
-    read into memory with ``to_tensordict()``: ``td`` itself, a member of a
-    lazy stack (a write goes into each member), or a nested tensordict that
-    ``entries`` merge into (#2984). Returns ``None`` when ``td.copy()`` holds
-    no such storage.
+    A copy of a file or a store shares its storage, so new containers are
+    built along the keys that ``entries`` touch, and only there: a file or a
+    store on that path (``td`` itself, a member of a lazy stack, as a write
+    goes into each member, or a nested tensordict that ``entries`` merge
+    into) becomes a :class:`~tensordict.TensorDict` that holds its entries.
+    The entries that ``entries`` do not touch stay the live views of the file
+    or store that ``td.copy()`` holds (#2984). Returns ``None`` when
+    ``td.copy()`` holds no such storage on that path.
     """
     from tensordict._lazy import LazyStackedTensorDict
     from tensordict._td import TensorDict
@@ -680,8 +683,15 @@ def _copy_for_update(td: Any, entries: Mapping) -> Any:
             return type(td)._wrap_td(copy)
         return td._from_tensordict(copy, dict(td._non_tensordict), safe=False)
     if td._copy_shares_storage:
-        return td.to_tensordict()
-    if isinstance(td, LazyStackedTensorDict) and not is_non_tensor(td):
+        # a new container that holds the views of the file or store
+        result = TensorDict._new_unsafe(
+            dict(td.items()),
+            batch_size=td.batch_size,
+            device=td.device,
+            names=td._maybe_names(),
+        )
+        copy_nested = True
+    elif isinstance(td, LazyStackedTensorDict) and not is_non_tensor(td):
         members = [_copy_for_update(member, entries) for member in td.tensordicts]
         if all(member is None for member in members):
             return None
@@ -691,7 +701,10 @@ def _copy_for_update(td: Any, entries: Mapping) -> Any:
             for member, copy in zip(td.tensordicts, members)
         ]
         return result
-    if not isinstance(td, TensorDict):
+    elif isinstance(td, TensorDict):
+        result = td
+        copy_nested = False
+    else:
         return None
     nested = {}
     for key, value in entries.items():
@@ -701,14 +714,18 @@ def _copy_for_update(td: Any, entries: Mapping) -> Any:
             is_tensor_collection(value) and not is_non_tensor(value)
         ):
             continue
-        sub = nested.get(key, td._get_str(key, None))
+        sub = nested.get(key, result._get_str(key, None))
         if is_tensor_collection(sub) and not is_non_tensor(sub):
-            sub = _copy_for_update(sub, value)
-            if sub is not None:
-                nested[key] = sub
-    if not nested:
-        return None
-    result = td.copy()
+            copy = _copy_for_update(sub, value)
+            if copy is None and copy_nested and key not in nested:
+                # a view held by the new container: update writes into it
+                copy = sub.copy()
+            if copy is not None:
+                nested[key] = copy
+    if not copy_nested:
+        if not nested:
+            return None
+        result = td.copy()
     for key, sub in nested.items():
         result._set_str(key, sub, inplace=False, validated=True, non_blocking=False)
     return result
@@ -7139,16 +7156,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         When both a positional argument and ``**kwargs`` are given, the
         keyword entries are merged into a copy of the positional argument
-        (with ``dict`` unpacking for a dictionary, with :meth:`~.copy` and
-        :meth:`~.update` for a tensordict, and with :meth:`~.to_tensordict`
-        and :meth:`~.update` for a file or a store, such as a
-        :class:`~tensordict.PersistentTensorDict`, or an indexed view of one),
-        so the argument does not change. The copy also reads into memory each
-        file or store that is a member of a lazy stack argument, or a nested
-        tensordict that the keyword entries merge into. A file or a store
-        shares its storage with its copy: called on one, or on a tensordict
-        that holds one as a nested entry that the new entries merge into,
-        ``replace`` writes the new entries into the file or store.
+        (with ``dict`` unpacking for a dictionary, and with :meth:`~.copy` and
+        :meth:`~.update` for a tensordict), so the argument does not change.
+        A file or a store, such as a
+        :class:`~tensordict.PersistentTensorDict`, or an indexed view of one,
+        shares its storage with its copy. So where the keyword entries go (the
+        argument itself, each member of a lazy stack, and each nested
+        tensordict that they merge into), a file or a store is replaced by a
+        :class:`~tensordict.TensorDict` that holds its entries; the other
+        entries stay views of the file or store. Called on a file or a
+        store, or on a tensordict that holds one as a nested entry that the
+        new entries merge into, ``replace`` writes the new entries into the
+        file or store.
 
         Args:
             *args (dict or TensorDictBase): at most one, the entries to write.
@@ -7193,9 +7212,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     dict_to_replace = {**dict_to_replace, **kwargs}
                 elif is_tensor_collection(dict_to_replace):
                     if dict_to_replace._copy_shares_storage:
-                        copy = dict_to_replace.to_tensordict()
-                    else:
-                        copy = _copy_for_update(dict_to_replace, kwargs)
+                        # merge into a TensorDict, which takes any key, not
+                        # into a tensorclass or a typed tensordict over it
+                        dict_to_replace = _unwrap_tensorclass(dict_to_replace)
+                        wrapped_attr = type(dict_to_replace)._wrapped_attr
+                        if wrapped_attr is not None:
+                            dict_to_replace = getattr(dict_to_replace, wrapped_attr)
+                    copy = _copy_for_update(dict_to_replace, kwargs)
                     if copy is None:
                         copy = dict_to_replace.copy()
                     dict_to_replace = copy

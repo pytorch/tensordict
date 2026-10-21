@@ -783,6 +783,68 @@ class TestH5Serialization:
         for f in files:
             f.close()
 
+    def test_replace_keeps_untouched_entries_of_arg_live(self, tmp_path):
+        # https://github.com/pytorch/tensordict/issues/2984: the keyword
+        # entries go into new containers only along the keys they touch, and
+        # the other entries of the file stay live views of the type they had.
+        class Data(TensorClass):
+            x: torch.Tensor
+
+        class Typed(TypedTensorDict):
+            x: torch.Tensor
+
+        h5td = PersistentTensorDict.from_dict(
+            TensorDict(
+                a=torch.zeros(3),
+                g={"x": torch.zeros(3), "gg": {"y": torch.zeros(3)}},
+                k={"x": torch.zeros(3)},
+                batch_size=[3],
+            ),
+            filename=tmp_path / "file.h5",
+        )
+        keys = set(h5td.keys(True))
+        out = TensorDict(batch_size=[3]).replace(
+            h5td, b=torch.ones(3), g={"z": torch.ones(3)}
+        )
+        assert type(out["g"]) is TensorDict
+        assert type(out["g", "gg"]) is PersistentTensorDict
+        assert type(out["k"]) is PersistentTensorDict
+        assert (out["g", "z"] == 1).all()
+        sub_out = TensorDict(batch_size=[2]).replace(h5td[:2], b=torch.ones(2))
+        assert type(sub_out["g"]) is type(h5td[:2]["g"])
+        stack_out = TensorDict(batch_size=[2, 3]).replace(
+            lazy_stack([h5td, h5td]), b=torch.ones(2, 3)
+        )
+        assert (stack_out["b"] == 1).all()
+        arg = TensorDict(
+            h=h5td,
+            tc=Data.from_tensordict(h5td["k"]),
+            typed=Typed.from_tensordict(h5td["k"]),
+            batch_size=[3],
+        )
+        nested_out = TensorDict(batch_size=[3]).replace(
+            arg, h={("g", "gg", "w"): torch.ones(3)}
+        )
+        assert type(nested_out["h", "g", "gg"]) is TensorDict
+        assert set(nested_out["h", "g", "gg"].keys()) == {"y", "w"}
+        assert type(nested_out["h", "k"]) is PersistentTensorDict
+        assert type(nested_out["tc"]) is Data
+        assert type(nested_out["tc"]._tensordict) is PersistentTensorDict
+        assert type(nested_out["typed"]) is Typed
+        assert set(h5td.keys(True)) == keys
+        # a later write to the file shows through the untouched entries
+        h5td["g", "gg", "y"] = torch.full((3,), 2.0)
+        h5td["k", "x"] = torch.full((3,), 2.0)
+        h5td["g", "x"] = torch.full((3,), 2.0)
+        assert (out["g", "gg", "y"] == 2).all()
+        assert (out["k", "x"] == 2).all()
+        assert (sub_out["g", "x"] == 2).all()
+        assert (stack_out["g", "x"] == 2).all()
+        assert (nested_out["h", "k", "x"] == 2).all()
+        assert (nested_out["tc"].x == 2).all()
+        assert (nested_out["typed", "x"] == 2).all()
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
