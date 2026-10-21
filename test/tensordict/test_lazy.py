@@ -5488,6 +5488,21 @@ class TestLazyStackedTensorDict:
             assert padded.shape == (len(sizes), *batch_size, max(rows), 3)
             assert (padded[missing] == -1).all()
 
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="#3219: the empty entry takes the batch size of another member",
+    )
+    def test_densify_exclusive_key_member_batch_size(self):
+        # members with different batch sizes: the empty entry of the member
+        # that lacks the key should have that member's batch size
+        a = TensorDict(
+            pos=torch.zeros(2, 5, 3), forces=torch.zeros(2, 5, 3), batch_size=[2]
+        )
+        b = TensorDict(pos=torch.zeros(3, 4, 3), batch_size=[3])
+        out = LazyStackedTensorDict(a, b).densify(layout=torch.strided)
+        assert [t.shape for t in out["forces"].unbind(0)] == [(2, 5, 3), (3, 0, 3)]
+
     def test_get_item_shape_heterogeneous(self):
         td = LazyStackedTensorDict(
             TensorDict(
