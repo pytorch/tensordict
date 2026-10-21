@@ -748,6 +748,7 @@ class _tensorclass_dec:
     tensor_only: bool
     skip_post_init_on_rebuild: bool
     cast_filter: Callable | None
+    kw_only: bool
 
     def __new__(
         cls,
@@ -758,6 +759,7 @@ class _tensorclass_dec:
         tensor_only: bool = False,
         skip_post_init_on_rebuild: bool = False,
         cast_filter: Callable | None = None,
+        kw_only: bool = False,
     ):
         if not isinstance(autocast, bool):
             clz = autocast
@@ -781,6 +783,7 @@ class _tensorclass_dec:
         tensor_only: bool = False,
         skip_post_init_on_rebuild: bool = False,
         cast_filter: Callable | None = None,
+        kw_only: bool = False,
     ):
         if autocast and nocast:
             raise TypeError("autocast is exclusive with nocast.")
@@ -795,11 +798,16 @@ class _tensorclass_dec:
         self.tensor_only = tensor_only
         self.skip_post_init_on_rebuild = skip_post_init_on_rebuild
         self.cast_filter = cast_filter
+        self.kw_only = kw_only
 
     @dataclass_transform()
     def __call__(self, cls: T) -> T:
         clz = _tensorclass(
-            cls, frozen=self.frozen, shadow=self.shadow, tensor_only=self.tensor_only
+            cls,
+            frozen=self.frozen,
+            shadow=self.shadow,
+            tensor_only=self.tensor_only,
+            kw_only=self.kw_only,
         )
         clz._autocast = self.autocast
         clz._nocast = self.nocast
@@ -1044,6 +1052,7 @@ def tensorclass(
     tensor_only: bool = False,
     skip_post_init_on_rebuild: bool = False,
     cast_filter: Callable | None = None,
+    kw_only: bool = False,
 ) -> T | None:
     """A decorator that turns a class with annotated fields into a tensorclass.
 
@@ -1101,6 +1110,10 @@ def tensorclass(
             It applies to calls on the tensorclass itself, not when the
             tensorclass is a value of another tensordict or tensorclass that
             is cast. Defaults to ``None``: every leaf is cast.
+        kw_only (bool, optional): if ``True``, the fields of the class are
+            keyword-only arguments of ``__init__``, as with
+            ``@dataclass(kw_only=True)``. The fields of a subclass are not,
+            unless it sets the option too. Defaults to ``False``.
 
     Returns:
         The tensorclass, or a decorator if the flags are given without a
@@ -1215,6 +1228,7 @@ def tensorclass(
             tensor_only=tensor_only,
             skip_post_init_on_rebuild=skip_post_init_on_rebuild,
             cast_filter=cast_filter,
+            kw_only=kw_only,
         )(cls)
 
     # See if we're being called as @tensorclass or @tensorclass().
@@ -1243,7 +1257,6 @@ def _own_annotation_names(cls: type) -> list[str]:
 # plain dataclass honours, and what the tensorclass does instead (#3073).
 _IGNORED_FIELD_OPTIONS = {
     "init": (False, "__init__ still takes the field as an argument"),
-    "repr": (False, "repr() still shows the field"),
     "compare": (False, "== and != still compare the field"),
     "kw_only": (True, "__init__ still takes the field as a positional argument"),
 }
@@ -1310,7 +1323,9 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
         "_from_dict_defaults",
         "_from_tensordict",
         "_frozen",
+        "_init_var_defaults",
         "_is_tensorclass",
+        "_kw_only",
         "_nocast",
         "_set_dict_warn_msg",
         "_shadow",
@@ -1409,7 +1424,13 @@ def _unchecked_copy(func: FunctionType) -> FunctionType:
 
 @dataclass_transform()
 def _tensorclass(
-    cls: T, *, frozen, shadow: bool, tensor_only: bool, _warn_defaults: bool = True
+    cls: T,
+    *,
+    frozen,
+    shadow: bool,
+    tensor_only: bool,
+    kw_only: bool = False,
+    _warn_defaults: bool = True,
 ) -> T:
     def __torch_function__(
         cls,
@@ -1555,7 +1576,10 @@ def _tensorclass(
 
     # Breaks some tests, don't do that:
     # if not dataclasses.is_dataclass(cls):
-    cls = dataclass(cls, frozen=frozen)
+    cls = dataclass(cls, frozen=frozen, kw_only=kw_only)
+    # Positional arguments skip the keyword-only fields of a class with the
+    # class option kw_only, and of its subclasses (see _init_wrapper).
+    cls._kw_only = kw_only or cls.__dict__.get("_kw_only", False)
     for name in own_operators:
         if name in cls.__dict__ and name not in attrs_before:
             # dataclass() replaced an inherited __repr__ or __eq__
@@ -1647,6 +1671,14 @@ def _tensorclass(
     # user-defined and gets bypassed by the frozen __init__ via
     # object.__setattr__. Only non-frozen classes can have a real custom one.
     _has_custom_setattr = "__setattr__" in cls.__dict__ and not frozen
+    init_vars = _init_vars(cls)
+    # The defaults of the InitVars, that __post_init__ gets outside __init__
+    cls._init_var_defaults = (
+        tuple(default for _, default in init_vars)
+        if hasattr(cls, "__post_init__")
+        and all(default is not dataclasses.MISSING for _, default in init_vars)
+        else ()
+    )
     if "_is_tensorclass" not in cls.__dict__:
         # Warn about the field options that the class ignores, except where
         # a method of the user's replaces the one that ignores them.
@@ -1655,9 +1687,8 @@ def _tensorclass(
             if not _has_custom_setattr:
                 # the dataclass __init__ sets the fields: it honours init
                 ignored_options.append("init")
-            ignored_options.append("kw_only")
-        if "__repr__" not in own_operators and not _is_non_tensor:
-            ignored_options.append("repr")
+            if not _follows_signature(cls, init_vars):
+                ignored_options.append("kw_only")
         if not {"__eq__", "__ne__"} <= own_operators:
             ignored_options.append("compare")
         _warn_ignored_field_options(cls, ignored_options)
@@ -1672,6 +1703,7 @@ def _tensorclass(
             _has_custom_setattr,
             _custom_init=user_init is not None,
             _is_non_tensor=_is_non_tensor,
+            _init_vars=init_vars,
         )
     cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = classmethod(_from_tensordict_public)
@@ -2076,6 +2108,39 @@ def _pop_instance_attr_traced(obj, name: str) -> Any:
     return value
 
 
+def _init_vars(cls) -> tuple[tuple[str, Any], ...]:
+    """Returns the ``(name, default)`` of the ``dataclasses.InitVar`` fields of ``cls``, which ``__init__`` takes.
+
+    ``__init__`` passes them to ``__post_init__``, as ``dataclasses`` does. The
+    result is empty if ``__post_init__`` does not take one positional argument
+    per InitVar: such a class behaves as before tensorclasses took InitVars.
+    """
+    init_vars = tuple(
+        (name, field.default)
+        for name, field in cls.__dataclass_fields__.items()
+        if field._field_type is dataclasses._FIELD_INITVAR
+    )
+    post_init = getattr(cls, "__post_init__", None)
+    if init_vars and post_init is not None:
+        try:
+            inspect.signature(post_init).bind(None, *(None,) * len(init_vars))
+        except (TypeError, ValueError):
+            return ()
+    return init_vars
+
+
+def _follows_signature(cls, init_vars) -> bool:
+    """Whether positional arguments follow the signature of the dataclass ``__init__``.
+
+    They do for a class with InitVars, or with the class option ``kw_only``
+    (in its own definition or in that of a parent). The other classes assign
+    them to the fields in order, keyword-only fields included (#3100).
+    """
+    return bool(init_vars) or any(
+        base.__dict__.get("_kw_only", False) for base in cls.__mro__
+    )
+
+
 def _init_wrapper(
     __init__: Callable,
     cls,
@@ -2085,6 +2150,7 @@ def _init_wrapper(
     _has_custom_setattr: bool = False,
     _custom_init: bool = False,
     _is_non_tensor: bool = False,
+    _init_vars: tuple = (),
 ) -> Callable:
     init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
@@ -2096,6 +2162,16 @@ def _init_wrapper(
     fields = dataclasses.fields(cls)
     field_names = tuple(field.name for field in fields)
     required_fields = frozenset(field_names)
+    init_vars = () if _custom_init else _init_vars
+    init_var_names = frozenset(name for name, _ in init_vars)
+    if not _custom_init and _follows_signature(cls, init_vars):
+        # The InitVars are among the positional arguments, and the
+        # keyword-only fields are not.
+        positional_names = tuple(
+            p.name for p in params[1:] if p.kind is p.POSITIONAL_OR_KEYWORD
+        )
+    else:
+        positional_names = field_names
     # Specialize only complete schemas without defaults or user initialization
     # hooks. All other constructors retain the general field-setting path.
     can_init_tensors = (
@@ -2122,6 +2198,7 @@ def _init_wrapper(
         and not shadow
         and not tensor_only
         and not _has_custom_setattr
+        and not init_vars
         and all(
             field.init and field.default_factory is dataclasses.MISSING
             for field in fields
@@ -2269,7 +2346,7 @@ def _init_wrapper(
         if args:
             # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
             expected_keys_list = (
-                field_names
+                positional_names
                 if type(self) is cls
                 else [
                     key
@@ -2379,7 +2456,11 @@ def _init_wrapper(
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
             expected_keys = self.__expected_keys__
-            unknown = [key for key in kwargs if key not in expected_keys]
+            unknown = [
+                key
+                for key in kwargs
+                if key not in expected_keys and key not in init_var_names
+            ]
             if not unknown:
                 msg = f"{type(self).__name__}.__init__() {missing}"
             else:
@@ -2426,6 +2507,13 @@ def _init_wrapper(
             # Fields with None defaults are intentionally skipped by the
             # default-handling above, but the dataclass __init__ would
             # still assign them. Ensure every expected key is present.
+            # The InitVars go to __post_init__ only: required ones are in
+            # kwargs, as the check above shows.
+            init_var_values = (
+                [kwargs.pop(name, default) for name, default in init_vars]
+                if init_vars
+                else ()
+            )
             for key in self.__expected_keys__:
                 kwargs.setdefault(key, None)
             if tensor_only:
@@ -2458,7 +2546,7 @@ def _init_wrapper(
                 for key, value in kwargs.items():
                     set_value(self, key, value)
             if hasattr(type(self), "__post_init__"):
-                self.__post_init__()
+                self.__post_init__(*init_var_values)
         if lock:
             self._tensordict.lock_()
 
@@ -2862,7 +2950,7 @@ def _from_tensordict(
             # fields it sets go to the members, which the stack holds.
             _post_init_members(cls, tensordict, non_tensordict)
         else:
-            tc.__post_init__()
+            tc.__post_init__(*cls._init_var_defaults)
     return tc
 
 
@@ -2879,7 +2967,7 @@ def _post_init_members(cls, tensordict: LazyStackedTensorDict, non_tensordict: d
         tc = cls.__new__(cls)
         object.__setattr__(tc, "_tensordict", member)
         object.__setattr__(tc, "_non_tensordict", dict(non_tensordict))
-        tc.__post_init__()
+        tc.__post_init__(*cls._init_var_defaults)
 
 
 def _tensorclass_keys(cls, tensordict: TensorDict) -> list[str]:
@@ -4503,15 +4591,29 @@ def _repr_html(self) -> str | None:
     return _html_repr(self)
 
 
+def _repr_hidden_fields(cls) -> list[str]:
+    """Returns the fields of ``cls`` declared with ``field(repr=False)``, which the reprs leave out."""
+    return [name for name, field in cls.__dataclass_fields__.items() if not field.repr]
+
+
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
     if _REPR_OPTIONS["compact"]:
         return _compact_repr(self)
-    fields = _td_fields(self._tensordict, sep="=")
+    hidden = _repr_hidden_fields(type(self))
+    td = self._tensordict
+    non_td = self._non_tensordict
+    keys = None
+    if hidden:
+        keys = [key for key in td.keys() if key not in hidden]
+        non_td = {key: value for key, value in non_td.items() if key not in hidden}
+    fields = _td_fields(td, keys=keys, sep="=")
     field_str = [fields] if fields else []
-    non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
+    non_tensor_fields = _all_non_td_fields_as_str(non_td)
     if not type(self)._is_non_tensor:
-        non_tensor_fields += [f"{key}=None" for key in _none_fields(self)]
+        non_tensor_fields += [
+            f"{key}=None" for key in _none_fields(self) if key not in hidden
+        ]
 
     metadata_fields = []
 
@@ -5938,13 +6040,9 @@ class _TensorClassMeta(abc.ABCMeta):
         shadow=None,
         skip_post_init_on_rebuild=None,
         cast_filter=NO_DEFAULT,
+        kw_only=False,
         **kwargs,
     ):
-        if "kw_only" in kwargs:
-            raise TypeError(
-                f"{name}: tensorclasses do not support the class option kw_only. "
-                "Their __init__ takes every field by name or in order."
-            )
         # Create the class using the ABCMeta's __new__ method
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
@@ -5987,6 +6085,7 @@ class _TensorClassMeta(abc.ABCMeta):
                 shadow=bool(shadow),
                 skip_post_init_on_rebuild=bool(skip_post_init_on_rebuild),
                 cast_filter=cast_filter,
+                kw_only=bool(kw_only),
             )(cls)
 
         return cls
@@ -6067,12 +6166,14 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     these keyword arguments: ``Foo(tensor=..., batch_size=[3])``.
 
     A field declared with :func:`dataclasses.field` keeps its ``default``,
-    ``default_factory`` and ``metadata``. The options ``init=False``,
-    ``repr=False``, ``compare=False`` and ``kw_only=True`` are ignored, and
-    the class warns about each when it is defined, unless a method of the
-    class (``__init__``, ``__repr__``, ``__eq__`` and ``__ne__``) replaces the
-    one that ignores the option. The class option ``kw_only`` raises a
-    ``TypeError``.
+    ``default_factory`` and ``metadata``, and ``repr=False`` leaves it out of
+    the repr. The options ``init=False``, ``compare=False`` and
+    ``kw_only=True`` are ignored, and the class warns about each when it is
+    defined, unless a method of the class (``__init__``, ``__eq__`` and
+    ``__ne__``) replaces the one that ignores the option. The class keyword
+    ``kw_only=True`` makes the fields of the class keyword-only, as in a
+    dataclass. A :class:`dataclasses.InitVar` goes to ``__post_init__``, as
+    in a dataclass. See :ref:`tensorclass-field-options`.
 
     Keyword Args:
         batch_size (torch.Size or list of int, optional): the batch size of

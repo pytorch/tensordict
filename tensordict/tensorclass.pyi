@@ -95,7 +95,8 @@ class _TensorClassInitArgs:
     # Gives the constructor that dataclass_transform synthesizes for each
     # subclass its keyword-only arguments, after the fields. These are plain
     # fields, not InitVars, so that a subclass's __post_init__ need not take
-    # them: the runtime calls __post_init__() without arguments. The
+    # them: the runtime passes __post_init__ only the InitVars of the
+    # subclass. The
     # batch_size, device and names properties of TensorClass override them,
     # with setters that take other types (type: ignore[override] there).
     batch_size: Sequence[int] | torch.Size | int | None = None
@@ -149,6 +150,7 @@ class TensorClass(_TensorClassInitArgs):
         shadow: bool | None = None,
         skip_post_init_on_rebuild: bool | None = None,
         cast_filter: Callable | None = ...,
+        kw_only: bool = False,
         **kwargs: Any,
     ) -> None: ...
     @property
@@ -1815,6 +1817,7 @@ def tensorclass(
     tensor_only: bool = False,
     skip_post_init_on_rebuild: bool = False,
     cast_filter: Callable | None = None,
+    kw_only: bool = False,
 ) -> type[_ClassT]: ...
 @overload
 def tensorclass(
@@ -1828,6 +1831,7 @@ def tensorclass(
     tensor_only: bool = False,
     skip_post_init_on_rebuild: bool = False,
     cast_filter: Callable | None = None,
+    kw_only: bool = False,
 ) -> Callable[[type[_ClassT]], type[_ClassT]]: ...
 def is_non_tensor(obj) -> bool: ...
 def from_dataclass(

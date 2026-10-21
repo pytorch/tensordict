@@ -2448,16 +2448,22 @@ def _compact_entries(td, keys) -> list:
 def _compact_body(td) -> list:
     if not is_tensorclass(td):
         return _compact_entries(td, td.keys())
-    entries = _compact_entries(td._tensordict, td._tensordict.keys())
+    from tensordict.tensorclass import _none_fields, _repr_hidden_fields
+
+    # the fields declared with field(repr=False) are left out
+    hidden = _repr_hidden_fields(type(td))
+    keys = td._tensordict.keys()
+    if hidden:
+        keys = [key for key in keys if key not in hidden]
+    entries = _compact_entries(td._tensordict, keys)
     # the fields that hold no tensor: by type name, as non-tensor entries
     others = [
         (key, "None" if value is None else type(value).__name__)
         for key, value in td._non_tensordict.items()
+        if key not in hidden
     ]
     if not type(td)._is_non_tensor:
-        from tensordict.tensorclass import _none_fields
-
-        others += [(key, "None") for key in _none_fields(td)]
+        others += [(key, "None") for key in _none_fields(td) if key not in hidden]
     return entries + others
 
 

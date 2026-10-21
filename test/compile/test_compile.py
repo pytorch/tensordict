@@ -4282,6 +4282,15 @@ class _SkipRebuildPostInitTC:
         self.x = self.x * 2
 
 
+@tensorclass
+class _InitVarPostInitTC:
+    x: torch.Tensor
+    scale: dataclasses.InitVar[float] = 1.0
+
+    def __post_init__(self, scale):
+        self.x = self.x * scale
+
+
 with warnings.catch_warnings():
     # a shared tensor default, which 0.17 copies for each instance (#3095)
     warnings.filterwarnings("ignore", "The Tensor default", FutureWarning)
@@ -4321,6 +4330,24 @@ class TestTCPostInitCompile:
         inp = torch.ones(3)
         torch.testing.assert_close(_PostInitTC(x=inp).x, torch.full((3,), 2.0))
         torch.testing.assert_close(fn(inp), torch.full((3,), 2.0))
+
+    def test_init_var_under_compile(self):
+        # __init__ passes the InitVar to __post_init__, and from_tensordict
+        # its default
+        def fn(x):
+            td = TensorDict(x=x, batch_size=())
+            return (
+                _InitVarPostInitTC(x=x, scale=3.0).x,
+                _InitVarPostInitTC(x, 4.0).x,
+                _InitVarPostInitTC(x=x).x,
+                _InitVarPostInitTC.from_tensordict(td).x,
+            )
+
+        inp = torch.ones(3)
+        expected = fn(inp)
+        torch.testing.assert_close(expected, (inp * 3, inp * 4, inp, inp))
+        compiled = torch.compile(fn, backend="eager", fullgraph=True)
+        torch.testing.assert_close(compiled(inp), expected)
 
     def test_post_init_runs_under_compile_from_tensordict(self):
         @torch.compile(backend="eager", fullgraph=True)
