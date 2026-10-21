@@ -60,6 +60,7 @@ from tensordict.utils import (
     _is_safe_legacy_key,
     _is_tensorclass,
     _is_unbatched,
+    _pass_through_cls,
     _prefix_last_key,
     _rebuild_njt_from_njt,
     _unravel_key_to_tuple,
@@ -193,24 +194,72 @@ def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
     return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
 
+def _members(td) -> list:
+    """Returns the tensordicts that hold the entries of ``td``: the members of a lazy stack, at any depth, or ``td``.
+
+    The keys of ``td`` are the keys that every member has, in the order of
+    the first one, and the class of an entry of the first member tells a leaf
+    from a level, as in ``keys(include_nested=True)``. Unlike
+    ``LazyStackedTensorDict.entry_class`` and nested key iteration, which get
+    the entries of the members (#3203), the keys and ``entry_class`` of a
+    member read no data from a file.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.base import _unwrap
+
+    td = _unwrap(td)
+    if isinstance(td, LazyStackedTensorDict):
+        return [member for sub in td.tensordicts for member in _members(sub)]
+    return [td]
+
+
 def _writes_state_dict_metadata(td, key: tuple[str, ...]) -> bool:
     """Returns ``False`` for a non-tensor field of a tensorclass, which ``state_dict`` stores in the ``_metadata`` of the tensorclass."""
     parent = td.get(key[:-1]) if len(key) > 1 else td
     return not (
-        _is_tensorclass(type(parent)) and _is_non_tensor(parent.entry_class(key[-1]))
+        _is_tensorclass(type(parent))
+        and _is_non_tensor(_members(parent)[0].entry_class(key[-1]))
     )
 
 
 def _flat_state_dict_entries(td, key: str):
-    """Yields the nested key of ``key`` and of each entry below it, with ``True`` for a leaf."""
-    cls = td.entry_class(key)
+    """Yields the nested key of ``key`` and of each entry below it, with ``True`` for a leaf.
+
+    The entries below ``key`` come in the order of ``keys(include_nested=True)``.
+    No value is read.
+    """
+    members = _members(td)
+    cls = members[0].entry_class(key)
     yield (key,), _default_is_leaf(cls)
     if _default_is_leaf(cls) or _is_non_tensor(cls):
         return
-    sub = td.get(key)
-    leaves = set(sub.keys(True, True))
-    for subkey in sub.keys(True, False):
-        yield (key, *_unravel_key_to_tuple(subkey)), subkey in leaves
+    yield from _nested_state_dict_entries(members, key, ())
+
+
+def _nested_state_dict_entries(members: list, key: str, prefix: tuple[str, ...]):
+    # The entries below key of the tensordicts members: their shared keys,
+    # each after the entries below it, as keys(include_nested=True) lists them
+    from tensordict._td import TensorDict
+
+    members = [sub for td in members for sub in _members(td._get_str(key, NO_DEFAULT))]
+    prefix = prefix + (key,)
+    first = members[0]
+    if len(members) == 1 and type(first) is TensorDict:
+        # Faster than a call to entry_class() per entry
+        classes = ((subkey, type(value)) for subkey, value in first._tensordict.items())
+    else:
+        keys = first.keys()
+        if len(members) > 1:
+            shared = set(keys).intersection(*(td.keys() for td in members[1:]))
+            keys = [subkey for subkey in keys if subkey in shared]
+        classes = ((subkey, first.entry_class(subkey)) for subkey in keys)
+    for subkey, cls in classes:
+        if cls is torch.Tensor:
+            yield prefix + (subkey,), True
+            continue
+        if _is_tensor_collection(cls) and not _pass_through_cls(cls):
+            yield from _nested_state_dict_entries(members, subkey, prefix)
+        yield prefix + (subkey,), _default_is_leaf(cls)
 
 
 def _check_flat_state_dict_keys(td, prefix: str) -> None:
@@ -221,7 +270,11 @@ def _check_flat_state_dict_keys(td, prefix: str) -> None:
     starts with the other followed by ``"."``. Only the entries of such keys
     are compared. A ``""`` key is the other case: when ``prefix`` does not
     end with ``"."``, a ``""`` level gets the ``_metadata`` key of ``td``.
-    The check reads keys only, no values.
+    The check reads keys and entry classes only, no values: it lists the
+    entries of a lazy stack from its members (see :func:`_members`), so that
+    a lazy stack of files reads no data (#3204), unless it is wrapped in a
+    lazy view such as a permuted tensordict, whose ``entry_class`` gets the
+    entry.
     """
     # iter() skips the len() of the key view, which is slow
     keys = sorted(iter(td.keys()))
