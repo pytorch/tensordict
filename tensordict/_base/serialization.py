@@ -272,7 +272,9 @@ def _check_flat_state_dict_keys(td, prefix: str) -> None:
     end with ``"."``, a ``""`` level gets the ``_metadata`` key of ``td``.
     The check reads keys and entry classes only, no values: it lists the
     entries of a lazy stack from its members (see :func:`_members`), so that
-    a lazy stack of files reads no data (#3204).
+    a lazy stack of files reads no data (#3204), unless it is wrapped in a
+    lazy view such as a permuted tensordict, whose ``entry_class`` gets the
+    entry.
     """
     # iter() skips the len() of the key view, which is slow
     keys = sorted(iter(td.keys()))
