@@ -604,6 +604,17 @@ class TestH5Serialization:
         assert (out["a"] == 0).all()
         assert (out["b"] == 1).all()
         assert (out["nested", "y"] == 1).all()
+        # An indexed file is a view that shares the file too.
+        for index in (slice(0, 2), 0, torch.tensor([0, 2])):
+            sub = h5td[index]
+            out = TensorDict(batch_size=sub.batch_size).replace(
+                sub, b=torch.ones(sub.batch_size)
+            )
+            assert set(h5td.keys()) == {"a", "nested"}
+            assert type(out) is TensorDict
+            assert out.batch_size == sub.batch_size
+            assert set(out.keys()) == {"a", "b", "nested"}
+            assert (out["b"] == 1).all()
         h5td.close()
 
 

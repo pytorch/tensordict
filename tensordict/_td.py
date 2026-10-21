@@ -3235,6 +3235,11 @@ class _StateFromSource:
     def _is_memmap(self):
         return self._source._is_memmap
 
+    # Override: the storage is the source's.
+    @property
+    def _copy_shares_storage(self):
+        return self._source._copy_shares_storage
+
     # Override: the names are the source's.
     def _has_names(self):
         return self._source._has_names()

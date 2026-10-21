@@ -6984,11 +6984,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         keyword entries are merged into a copy of the positional argument
         (with ``dict`` unpacking for a dictionary, with :meth:`~.copy` and
         :meth:`~.update` for a tensordict, and with :meth:`~.to_tensordict`
-        and :meth:`~.update` for a tensordict backed by a file or a store), so
-        the argument does not change. A tensordict backed by a file or a
-        store, such as a :class:`~tensordict.PersistentTensorDict`, shares
-        that storage with its copy: called on one, ``replace`` writes the new
-        entries into the file or store.
+        and :meth:`~.update` for a file or a store, such as a
+        :class:`~tensordict.PersistentTensorDict`, or an indexed view of one),
+        so the argument does not change. A file or a store shares its storage
+        with its copy: called on one, ``replace`` writes the new entries into
+        the file or store. So does a lazy stack of files or a tensordict that
+        holds a file as a nested entry: passed as the argument, it still
+        receives the keyword entries.
 
         Args:
             *args (dict or TensorDictBase): at most one, the entries to write.
