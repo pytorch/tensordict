@@ -237,6 +237,27 @@ torch.Size([6])
 Without `dynamic_shapes`, a call with another batch size fails a guard of
 the exported program (`AssertionError: Guard failed`). Both modes accept
 tensordicts with dimension names or non-tensor entries.
+
+A non-tensor entry, such as a string, takes `[]` in `dynamic_shapes`
+(`None` or `{}` raises `ValueError: Node type mismatch`):
+
+```
+>>> class Double(nn.Module):
+... def forward(self, td):
+... return td["a"] * 2
+>>> def make_named(batch):
+... return TensorDict({"a": torch.randn(batch, 3), "name": "run-1"}, batch_size=[batch])
+>>> program = torch.export.export(
+... Double(), (make_named(4),), dynamic_shapes=([{0: batch}, []],)
+... )
+>>> program.module()(make_named(6)).shape
+torch.Size([6, 3])
+```
+
+A tensorclass with a non-tensor field does not keep a dynamic batch dimension
+yet: export raises `Constraints violated`
+([#3163](https://github.com/pytorch/tensordict/issues/3163)).
+
 To export a [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) so that it takes and
 returns plain tensors, see the [Exporting tensordict modules](tutorials/export.html) tutorial.
 

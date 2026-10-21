@@ -1449,6 +1449,27 @@ torch.Size([6])
 Without `dynamic_shapes`, a call with another batch size fails a guard of
 the exported program (`AssertionError: Guard failed`). Both modes accept
 tensordicts with dimension names or non-tensor entries.
+
+A non-tensor entry, such as a string, takes `[]` in `dynamic_shapes`
+(`None` or `{}` raises `ValueError: Node type mismatch`):
+
+```
+>>> class Double(nn.Module):
+... def forward(self, td):
+... return td["a"] * 2
+>>> def make_named(batch):
+... return TensorDict({"a": torch.randn(batch, 3), "name": "run-1"}, batch_size=[batch])
+>>> program = torch.export.export(
+... Double(), (make_named(4),), dynamic_shapes=([{0: batch}, []],)
+... )
+>>> program.module()(make_named(6)).shape
+torch.Size([6, 3])
+```
+
+A tensorclass with a non-tensor field does not keep a dynamic batch dimension
+yet: export raises `Constraints violated`
+([#3163](https://github.com/pytorch/tensordict/issues/3163)).
+
 To export a [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) so that it takes and
 returns plain tensors, see the [Exporting tensordict modules](tutorials/export.html) tutorial.
 
@@ -6597,8 +6618,8 @@ one library, with a short example.
 
 The examples need the other libraries, which tensordict does not install, so
 they are not run when this page is tested. They were run with torch 2.14,
-torchvision 0.29, Lightning 2.6, Transformers 5.20, Datasets 5.1, Pandera
-0.34, JAX 0.12 and xarray 2026.9.
+torchvision 0.29, Lightning 2.6, Accelerate 1.15, Transformers 5.20, Datasets
+5.1, Pandera 0.34, JAX 0.12 and xarray 2026.9.
 
 ## torchvision transforms
 
@@ -6711,12 +6732,104 @@ pinned memory, pass `pin_memory=True` to the `DataLoader` (see
 ['loss', 'loss_epoch', 'loss_step']
 ```
 
-With a tensorclass batch, pass `batch_size` to `self.log` when it
-averages a value over the epoch (`on_epoch=True`, the default in
-`validation_step`). Lightning finds the batch size by iterating over the
-batch. It reads a tensordict as a mapping, but it iterates over the rows of a
-tensorclass, and that raises a `TypeError`. Write, for example,
+Pass `batch_size` to `self.log` when it averages a value over the epoch
+(`on_epoch=True`, the default in `validation_step`) and the batch is a
+tensorclass, or a tensordict that holds one non-tensor value for the whole
+batch, such as a string. Lightning finds the batch size by iterating over the
+batch, and over the values of a mapping. A tensorclass and a non-tensor
+value iterate over their rows, and a row without batch dimensions raises a
+`TypeError` when Lightning iterates over it in turn:
+
+```
+>>> from lightning.pytorch.utilities.data import extract_batch_size 
+>>> extract_batch_size(TensorDict(x=torch.zeros(16, 2), batch_size=[16])) 
+16
+>>> extract_batch_size( 
+... TensorDict(x=torch.zeros(16, 2), name="run-1", batch_size=[16])
+... )
+Traceback (most recent call last):
+...
+TypeError: iteration over a 0-d tensordict. ...
+```
+
+Write, for example,
 `self.log("loss", loss, on_epoch=True, batch_size=batch.batch_size[0])`.
+
+## Hugging Face Accelerate
+
+`Accelerator.prepare` accepts a `DataLoader` of tensorclasses or
+tensordicts, and moves each batch to the device with `batch.to(device)`.
+In this example, a tensorclass is the dataset (see [Load data and share it between processes](data_loading.html#data-loading)):
+
+```
+>>> import tensordict
+>>> from accelerate import Accelerator 
+>>> from tensordict import TensorClass
+>>> class Sample(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+... name: str
+>>> data = Sample(x=torch.randn(64, 2), y=torch.randn(64), name="train", batch_size=[64])
+>>> accelerator = Accelerator() 
+>>> model = torch.nn.Linear(2, 1)
+>>> optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+>>> loader = DataLoader(data, batch_size=16, collate_fn=tensordict.collate)
+>>> model, optimizer, loader = accelerator.prepare(model, optimizer, loader) 
+>>> for batch in loader: 
+... loss = torch.nn.functional.mse_loss(model(batch.x).squeeze(-1), batch.y)
+... accelerator.backward(loss)
+... optimizer.step()
+... optimizer.zero_grad()
+>>> type(batch).__name__, batch.batch_size 
+('Sample', torch.Size([16]))
+```
+
+For an `IterableDataset`, Accelerate uses `dispatch_batches=True` by
+default: the main process reads each batch and sends a slice of it to each
+process. Accelerate can find the batch size of tensors, lists, tuples and
+dicts only, so a tensorclass or a tensordict batch then raises an error, even
+in a single process. Pass `dispatch_batches=False`, so that each process
+reads its own batches:
+
+```
+>>> from accelerate.utils import DataLoaderConfiguration 
+>>> from torch.utils.data import IterableDataset
+>>> class Stream(IterableDataset):
+... def __iter__(self):
+... for i in range(64):
+... yield Sample(x=torch.randn(2), y=torch.randn(()), name=f"sample-{i}")
+>>> accelerator = Accelerator( 
+... dataloader_config=DataLoaderConfiguration(dispatch_batches=False)
+... )
+>>> stream = DataLoader(Stream(), batch_size=16, collate_fn=tensordict.collate)
+>>> [batch.batch_size for batch in accelerator.prepare(stream)] 
+[torch.Size([16]), torch.Size([16]), torch.Size([16]), torch.Size([16])]
+```
+
+Gather tensors with `accelerator.gather_for_metrics`, such as the
+predictions and the targets. Accelerate gathers a tensorclass, or a
+tensordict with a non-tensor value, as a Python object: in a run with
+several processes it returns a list of the rows of all the processes.
+`torch.stack(list(...))` makes one batch of the result, with one process
+or several:
+
+```
+>>> gathered = torch.stack(list(accelerator.gather_for_metrics(batch))) 
+>>> type(gathered).__name__, gathered.batch_size 
+('Sample', torch.Size([16]))
+```
+
+A tensordict that holds only tensors is gathered one tensor at a time. In a
+run with several processes, the tensordict that Accelerate returns has no
+batch dimensions: [`auto_batch_size_()`](reference/generated/tensordict.TensorDictBase.auto_batch_size_.html#tensordict.TensorDictBase.auto_batch_size_) sets them
+again:
+
+```
+>>> preds = TensorDict(x=torch.randn(16, 2), batch_size=[16])
+>>> gathered = accelerator.gather_for_metrics(preds).auto_batch_size_(batch_dims=1) 
+>>> gathered.batch_size 
+torch.Size([16])
+```
 
 ## Hugging Face Transformers and Datasets
 
@@ -6782,6 +6895,73 @@ the dataset, or put them in a lazy stack (see [Variable-size data](concepts/stac
 >>> seqs.get("tokens", as_padded_tensor=True) 
 tensor([[1, 2, 3],
  [4, 5, 0]])
+```
+
+`transformers.Trainer` trains on tensorclass batches with two changes.
+Its default collator expects a `dict` for each sample, so pass
+`data_collator=tensordict.collate`. Its default `compute_loss` calls
+`model(**inputs)`, which needs a mapping, so override it to pass the batch
+to the model. Here the tensorclass `data` of the Accelerate section is the
+dataset:
+
+```
+>>> from transformers import Trainer, TrainingArguments 
+>>> class Regressor(torch.nn.Module):
+... def __init__(self):
+... super().__init__()
+... self.net = torch.nn.Linear(2, 1)
+...
+... def forward(self, batch):
+... return torch.nn.functional.mse_loss(self.net(batch.x).squeeze(-1), batch.y)
+>>> class TensorClassTrainer(Trainer): 
+... def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+... loss = model(inputs)
+... return (loss, {"loss": loss}) if return_outputs else loss
+>>> args = TrainingArguments( 
+... output_dir="trainer-out", max_steps=4, per_device_train_batch_size=16, report_to=[]
+... )
+>>> trainer = TensorClassTrainer( 
+... model=Regressor(), args=args, train_dataset=data, data_collator=tensordict.collate
+... )
+>>> trainer.train().global_step 
+{'train_runtime': ...}
+4
+```
+
+Use a tensorclass for the batch, not a tensordict. The `Trainer` rebuilds
+a mapping batch with `type(batch)({...})`, which gives a tensordict without
+batch dimensions, and then raises because the batch looks empty.
+
+## DistributedDataParallel and pytrees
+
+[`DistributedDataParallel`](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel) passes a tensorclass or a
+tensordict to the `forward` of the module, and returns one if `forward`
+does. Here, with one process, it trains the `Regressor` of the previous
+section:
+
+```
+>>> import torch.distributed as dist
+>>> dist.init_process_group( 
+... "gloo", init_method="tcp://127.0.0.1:29500", rank=0, world_size=1
+... )
+>>> ddp = torch.nn.parallel.DistributedDataParallel(Regressor()) 
+>>> ddp(data[:16]).backward() 
+>>> ddp.module.net.weight.grad.shape 
+torch.Size([1, 2])
+>>> dist.destroy_process_group()
+```
+
+A tensorclass is a pytree. The functions of `torch.utils._pytree` go
+through its tensors, keep its non-tensor fields, and return the same type:
+
+```
+>>> import torch.utils._pytree as pytree
+>>> leaves, spec = pytree.tree_flatten(data)
+>>> [leaf.shape for leaf in leaves]
+[torch.Size([64, 2]), torch.Size([64])]
+>>> zeros = pytree.tree_map(torch.zeros_like, data)
+>>> type(zeros).__name__, zeros.name
+('Sample', 'train')
 ```
 
 ## Validate with Pandera
@@ -41057,23 +41237,23 @@ have a different layout that this page does not specify.
 
 # Computation times
 
-**01:24.787** total execution time for 14 files **from all galleries**:
+**01:23.896** total execution time for 14 files **from all galleries**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:39.783 | 0.0 |
-| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:17.175 | 0.0 |
-| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:14.878 | 0.0 |
-| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.365 | 0.0 |
-| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.434 | 0.0 |
-| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.523 | 0.0 |
-| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.361 | 0.0 |
-| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.127 | 0.0 |
-| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.112 | 0.0 |
+| [Benchmarking TensorDict serialization speed](tutorials/serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`reference/generated/tutorials/serialization_speed.py`) | 00:38.698 | 0.0 |
+| [Building models with TensorDictModule](tutorials/tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`reference/generated/tutorials/tensordict_module.py`) | 00:17.147 | 0.0 |
+| [Using TensorDict for datasets](tutorials/data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`reference/generated/tutorials/data_fashion.py`) | 00:15.066 | 0.0 |
+| [Building tensordicts from streams](tutorials/streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`reference/generated/tutorials/streamed_tensordict.py`) | 00:06.392 | 0.0 |
+| [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`reference/generated/tutorials/tensorclass_fashion.py`) | 00:04.396 | 0.0 |
+| [Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`reference/generated/tutorials/tensorclass_imagenet.py`) | 00:01.526 | 0.0 |
+| [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`reference/generated/tutorials/tensordict_shapes.py`) | 00:00.381 | 0.0 |
+| [Exporting tensordict modules](tutorials/export.html#sphx-glr-tutorials-export-py) (`reference/generated/tutorials/export.py`) | 00:00.130 | 0.0 |
+| [Storing TensorDicts in zarr](tutorials/zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`reference/generated/tutorials/zarr_storage.py`) | 00:00.130 | 0.0 |
 | [Functional calls and ensembles with TensorDict](tutorials/functional.html#sphx-glr-tutorials-functional-py) (`reference/generated/tutorials/functional.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tutorials/tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`reference/generated/tutorials/tensordict_keys.py`) | 00:00.008 | 0.0 |
 | [Devices and memory-mapped tensors](tutorials/tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`reference/generated/tutorials/tensordict_memory.py`) | 00:00.006 | 0.0 |
-| [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.004 | 0.0 |
+| [Slicing, indexing, and masking](tutorials/tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`reference/generated/tutorials/tensordict_slicing.py`) | 00:00.005 | 0.0 |
 | [Filling a TensorDict row by row](tutorials/tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`reference/generated/tutorials/tensordict_preallocation.py`) | 00:00.003 | 0.0 |
 
 ---
@@ -43007,31 +43187,33 @@ test_data = datasets.FashionMNIST(
 
 ```
 0%| | 0.00/26.4M [00:00<?, ?B/s]
- 0%| | 65.5k/26.4M [00:00<01:18, 337kB/s]
- 1%| | 197k/26.4M [00:00<00:49, 535kB/s]
- 3%|▎ | 721k/26.4M [00:00<00:13, 1.95MB/s]
- 6%|▌ | 1.57M/26.4M [00:00<00:08, 3.08MB/s]
- 15%|█▍ | 3.90M/26.4M [00:00<00:02, 8.16MB/s]
- 29%|██▉ | 7.73M/26.4M [00:00<00:01, 16.1MB/s]
- 43%|████▎ | 11.4M/26.4M [00:00<00:00, 21.8MB/s]
- 58%|█████▊ | 15.3M/26.4M [00:01<00:00, 26.5MB/s]
- 71%|███████ | 18.8M/26.4M [00:01<00:00, 29.0MB/s]
- 86%|████████▌ | 22.8M/26.4M [00:01<00:00, 32.0MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 19.1MB/s]
+ 0%| | 65.5k/26.4M [00:00<01:19, 333kB/s]
+ 1%| | 164k/26.4M [00:00<01:01, 430kB/s]
+ 2%|▏ | 524k/26.4M [00:00<00:18, 1.38MB/s]
+ 4%|▍ | 1.08M/26.4M [00:00<00:12, 2.05MB/s]
+ 10%|█ | 2.69M/26.4M [00:00<00:04, 5.54MB/s]
+ 20%|██ | 5.34M/26.4M [00:00<00:01, 11.1MB/s]
+ 32%|███▏ | 8.52M/26.4M [00:00<00:01, 16.7MB/s]
+ 44%|████▍ | 11.7M/26.4M [00:01<00:00, 21.0MB/s]
+ 57%|█████▋ | 15.1M/26.4M [00:01<00:00, 24.6MB/s]
+ 71%|███████ | 18.6M/26.4M [00:01<00:00, 27.6MB/s]
+ 83%|████████▎ | 21.8M/26.4M [00:01<00:00, 28.8MB/s]
+ 95%|█████████▌| 25.1M/26.4M [00:01<00:00, 30.0MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 17.6MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 304kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 307kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:13, 331kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:08, 526kB/s]
- 12%|█▏ | 524k/4.42M [00:00<00:02, 1.35MB/s]
- 27%|██▋ | 1.21M/4.42M [00:00<00:01, 3.00MB/s]
- 57%|█████▋ | 2.52M/4.42M [00:00<00:00, 6.02MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 5.55MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:13, 333kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:08, 528kB/s]
+ 18%|█▊ | 786k/4.42M [00:00<00:02, 1.65MB/s]
+ 51%|█████ | 2.26M/4.42M [00:00<00:00, 4.91MB/s]
+ 99%|█████████▊| 4.36M/4.42M [00:00<00:00, 9.12MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 5.58MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 40.7MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 41.8MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -43139,8 +43321,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 2.08 s
-TensorDict DataLoader: 0.07 s
+torchvision DataLoader: 2.13 s
+TensorDict DataLoader: 0.08 s
 ```
 
 ## Model
@@ -43302,7 +43484,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 1.5626 s
+TensorDict training done! time: 1.6801 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -43312,7 +43494,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.2491 s
+Training done! time: 4.1391 s
 ```
 
 ## Conclusion
@@ -43341,7 +43523,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 14.878 seconds)
+**Total running time of the script:** (0 minutes 15.066 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 
@@ -43700,7 +43882,7 @@ built on `torch.export`.
 [AOTInductor](https://pytorch.org/docs/main/torch.compiler_aot_inductor.html)
 documentation.
 
-**Total running time of the script:** (0 minutes 0.127 seconds)
+**Total running time of the script:** (0 minutes 0.130 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 
@@ -44542,7 +44724,7 @@ tracks these operations with `pytest-benchmark`.
 offline version of the format comparison, with larger payloads, more
 layouts, and read timings.
 
-**Total running time of the script:** (0 minutes 39.783 seconds)
+**Total running time of the script:** (0 minutes 38.698 seconds)
 
 [`Download Jupyter notebook: serialization_speed.ipynb`](../_downloads/7587cc1b855a09e68c4f61c6c20f4220/serialization_speed.ipynb)
 
@@ -44556,23 +44738,23 @@ layouts, and read timings.
 
 # Computation times
 
-**01:24.787** total execution time for 14 files **from tutorials**:
+**01:23.896** total execution time for 14 files **from tutorials**:
 
 | Example | Time | Mem (MB) |
 | --- | --- | --- |
-| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:39.783 | 0.0 |
-| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:17.175 | 0.0 |
-| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:14.878 | 0.0 |
-| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.365 | 0.0 |
-| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.434 | 0.0 |
-| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.523 | 0.0 |
-| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.361 | 0.0 |
-| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.127 | 0.0 |
-| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.112 | 0.0 |
+| [Benchmarking TensorDict serialization speed](serialization_speed.html#sphx-glr-tutorials-serialization-speed-py) (`serialization_speed.py`) | 00:38.698 | 0.0 |
+| [Building models with TensorDictModule](tensordict_module.html#sphx-glr-tutorials-tensordict-module-py) (`tensordict_module.py`) | 00:17.147 | 0.0 |
+| [Using TensorDict for datasets](data_fashion.html#sphx-glr-tutorials-data-fashion-py) (`data_fashion.py`) | 00:15.066 | 0.0 |
+| [Building tensordicts from streams](streamed_tensordict.html#sphx-glr-tutorials-streamed-tensordict-py) (`streamed_tensordict.py`) | 00:06.392 | 0.0 |
+| [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) (`tensorclass_fashion.py`) | 00:04.396 | 0.0 |
+| [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) (`tensorclass_imagenet.py`) | 00:01.526 | 0.0 |
+| [Changing the shape of a TensorDict](tensordict_shapes.html#sphx-glr-tutorials-tensordict-shapes-py) (`tensordict_shapes.py`) | 00:00.381 | 0.0 |
+| [Exporting tensordict modules](export.html#sphx-glr-tutorials-export-py) (`export.py`) | 00:00.130 | 0.0 |
+| [Storing TensorDicts in zarr](zarr_storage.html#sphx-glr-tutorials-zarr-storage-py) (`zarr_storage.py`) | 00:00.130 | 0.0 |
 | [Functional calls and ensembles with TensorDict](functional.html#sphx-glr-tutorials-functional-py) (`functional.py`) | 00:00.009 | 0.0 |
 | [Getting, setting, and nesting keys](tensordict_keys.html#sphx-glr-tutorials-tensordict-keys-py) (`tensordict_keys.py`) | 00:00.008 | 0.0 |
 | [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) (`tensordict_memory.py`) | 00:00.006 | 0.0 |
-| [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.004 | 0.0 |
+| [Slicing, indexing, and masking](tensordict_slicing.html#sphx-glr-tutorials-tensordict-slicing-py) (`tensordict_slicing.py`) | 00:00.005 | 0.0 |
 | [Filling a TensorDict row by row](tensordict_preallocation.html#sphx-glr-tutorials-tensordict-preallocation-py) (`tensordict_preallocation.py`) | 00:00.003 | 0.0 |
 
 ---
@@ -44668,7 +44850,7 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 
 ```
-TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
+TensorDict(batch_size=[2], fields={stream0: f32[j1], stream1: f32[j2]})
 lengths of stream0: tensor([5, 4])
 ```
 
@@ -44845,7 +45027,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.365 seconds)
+**Total running time of the script:** (0 minutes 6.392 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 
@@ -45111,7 +45293,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 1.8265 s
+Tensorclass training done! time: 1.9240 s
 ```
 
 ## Conclusion
@@ -45132,7 +45314,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.434 seconds)
+**Total running time of the script:** (0 minutes 4.396 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
@@ -45495,8 +45677,8 @@ measure(train_dataloader_tc, "train, tensorclass DataLoader")
 ```
 
 ```
-train, regular DataLoader: 962 images per second, 0.23 s
-train, tensorclass DataLoader: 2478 images per second, 0.09 s
+train, regular DataLoader: 947 images per second, 0.23 s
+train, tensorclass DataLoader: 2203 images per second, 0.10 s
 ```
 
 The tensorclass data loader reads `uint8` batches from the memory-mapped
@@ -45513,8 +45695,8 @@ measure(val_dataloader_tc, "val, tensorclass DataLoader")
 ```
 
 ```
-val, regular DataLoader: 599 images per second, 0.22 s
-val, tensorclass DataLoader: 10653 images per second, 0.01 s
+val, regular DataLoader: 587 images per second, 0.22 s
+val, tensorclass DataLoader: 25251 images per second, 0.01 s
 ```
 
 The rates above come from the machine that built this page. They depend on
@@ -45561,7 +45743,7 @@ again.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) applies the same idea to
 a smaller dataset and trains a model on it.
 
-**Total running time of the script:** (0 minutes 1.523 seconds)
+**Total running time of the script:** (0 minutes 1.526 seconds)
 
 [`Download Jupyter notebook: tensorclass_imagenet.ipynb`](../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb)
 
@@ -46468,13 +46650,13 @@ for name, module in [
 
 ```
 Eager
- Regular: 136.2 us
- TDM: 148.3 us
- Sequential: 194.9 us
+ Regular: 137.7 us
+ TDM: 150.5 us
+ Sequential: 197.1 us
 Compiled
- Regular: 140.1 us
- TDM: 150.7 us
- Sequential: 158.7 us
+ Regular: 141.5 us
+ TDM: 153.3 us
+ Sequential: 160.0 us
 ```
 
 The numbers above come from the machine that built this page, which runs on
@@ -46617,7 +46799,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 17.175 seconds)
+**Total running time of the script:** (0 minutes 17.147 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
@@ -46802,7 +46984,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fa7dc768a30>
+<torch._C.Generator object at 0x7f071a758a30>
 ```
 
 ## Indexing
@@ -47143,7 +47325,7 @@ form of a tensordict with typed fields (see [TensorClass: a dataclass of tensors
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.361 seconds)
+**Total running time of the script:** (0 minutes 0.381 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 
@@ -47331,7 +47513,7 @@ operations: reshape, split, stack, permute.
 tensordict row by row with an index.
 - [Indexing, masking, and splitting](../reference/td.html#api-methods-indexing) lists the indexing methods.
 
-**Total running time of the script:** (0 minutes 0.004 seconds)
+**Total running time of the script:** (0 minutes 0.005 seconds)
 
 [`Download Jupyter notebook: tensordict_slicing.ipynb`](../_downloads/245c7aad3c5052fda391900ac51962d9/tensordict_slicing.ipynb)
 
@@ -47558,7 +47740,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.112 seconds)
+**Total running time of the script:** (0 minutes 0.130 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

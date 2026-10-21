@@ -8,8 +8,8 @@ one library, with a short example.
 
 The examples need the other libraries, which tensordict does not install, so
 they are not run when this page is tested. They were run with torch 2.14,
-torchvision 0.29, Lightning 2.6, Transformers 5.20, Datasets 5.1, Pandera
-0.34, JAX 0.12 and xarray 2026.9.
+torchvision 0.29, Lightning 2.6, Accelerate 1.15, Transformers 5.20, Datasets
+5.1, Pandera 0.34, JAX 0.12 and xarray 2026.9.
 
 ## torchvision transforms
 
@@ -122,12 +122,104 @@ pinned memory, pass `pin_memory=True` to the `DataLoader` (see
 ['loss', 'loss_epoch', 'loss_step']
 ```
 
-With a tensorclass batch, pass `batch_size` to `self.log` when it
-averages a value over the epoch (`on_epoch=True`, the default in
-`validation_step`). Lightning finds the batch size by iterating over the
-batch. It reads a tensordict as a mapping, but it iterates over the rows of a
-tensorclass, and that raises a `TypeError`. Write, for example,
+Pass `batch_size` to `self.log` when it averages a value over the epoch
+(`on_epoch=True`, the default in `validation_step`) and the batch is a
+tensorclass, or a tensordict that holds one non-tensor value for the whole
+batch, such as a string. Lightning finds the batch size by iterating over the
+batch, and over the values of a mapping. A tensorclass and a non-tensor
+value iterate over their rows, and a row without batch dimensions raises a
+`TypeError` when Lightning iterates over it in turn:
+
+```
+>>> from lightning.pytorch.utilities.data import extract_batch_size 
+>>> extract_batch_size(TensorDict(x=torch.zeros(16, 2), batch_size=[16])) 
+16
+>>> extract_batch_size( 
+... TensorDict(x=torch.zeros(16, 2), name="run-1", batch_size=[16])
+... )
+Traceback (most recent call last):
+...
+TypeError: iteration over a 0-d tensordict. ...
+```
+
+Write, for example,
 `self.log("loss", loss, on_epoch=True, batch_size=batch.batch_size[0])`.
+
+## Hugging Face Accelerate
+
+`Accelerator.prepare` accepts a `DataLoader` of tensorclasses or
+tensordicts, and moves each batch to the device with `batch.to(device)`.
+In this example, a tensorclass is the dataset (see [Load data and share it between processes](data_loading.html#data-loading)):
+
+```
+>>> import tensordict
+>>> from accelerate import Accelerator 
+>>> from tensordict import TensorClass
+>>> class Sample(TensorClass):
+... x: torch.Tensor
+... y: torch.Tensor
+... name: str
+>>> data = Sample(x=torch.randn(64, 2), y=torch.randn(64), name="train", batch_size=[64])
+>>> accelerator = Accelerator() 
+>>> model = torch.nn.Linear(2, 1)
+>>> optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+>>> loader = DataLoader(data, batch_size=16, collate_fn=tensordict.collate)
+>>> model, optimizer, loader = accelerator.prepare(model, optimizer, loader) 
+>>> for batch in loader: 
+... loss = torch.nn.functional.mse_loss(model(batch.x).squeeze(-1), batch.y)
+... accelerator.backward(loss)
+... optimizer.step()
+... optimizer.zero_grad()
+>>> type(batch).__name__, batch.batch_size 
+('Sample', torch.Size([16]))
+```
+
+For an `IterableDataset`, Accelerate uses `dispatch_batches=True` by
+default: the main process reads each batch and sends a slice of it to each
+process. Accelerate can find the batch size of tensors, lists, tuples and
+dicts only, so a tensorclass or a tensordict batch then raises an error, even
+in a single process. Pass `dispatch_batches=False`, so that each process
+reads its own batches:
+
+```
+>>> from accelerate.utils import DataLoaderConfiguration 
+>>> from torch.utils.data import IterableDataset
+>>> class Stream(IterableDataset):
+... def __iter__(self):
+... for i in range(64):
+... yield Sample(x=torch.randn(2), y=torch.randn(()), name=f"sample-{i}")
+>>> accelerator = Accelerator( 
+... dataloader_config=DataLoaderConfiguration(dispatch_batches=False)
+... )
+>>> stream = DataLoader(Stream(), batch_size=16, collate_fn=tensordict.collate)
+>>> [batch.batch_size for batch in accelerator.prepare(stream)] 
+[torch.Size([16]), torch.Size([16]), torch.Size([16]), torch.Size([16])]
+```
+
+Gather tensors with `accelerator.gather_for_metrics`, such as the
+predictions and the targets. Accelerate gathers a tensorclass, or a
+tensordict with a non-tensor value, as a Python object: in a run with
+several processes it returns a list of the rows of all the processes.
+`torch.stack(list(...))` makes one batch of the result, with one process
+or several:
+
+```
+>>> gathered = torch.stack(list(accelerator.gather_for_metrics(batch))) 
+>>> type(gathered).__name__, gathered.batch_size 
+('Sample', torch.Size([16]))
+```
+
+A tensordict that holds only tensors is gathered one tensor at a time. In a
+run with several processes, the tensordict that Accelerate returns has no
+batch dimensions: [`auto_batch_size_()`](reference/generated/tensordict.TensorDictBase.auto_batch_size_.html#tensordict.TensorDictBase.auto_batch_size_) sets them
+again:
+
+```
+>>> preds = TensorDict(x=torch.randn(16, 2), batch_size=[16])
+>>> gathered = accelerator.gather_for_metrics(preds).auto_batch_size_(batch_dims=1) 
+>>> gathered.batch_size 
+torch.Size([16])
+```
 
 ## Hugging Face Transformers and Datasets
 
@@ -193,6 +285,73 @@ the dataset, or put them in a lazy stack (see [Variable-size data](concepts/stac
 >>> seqs.get("tokens", as_padded_tensor=True) 
 tensor([[1, 2, 3],
  [4, 5, 0]])
+```
+
+`transformers.Trainer` trains on tensorclass batches with two changes.
+Its default collator expects a `dict` for each sample, so pass
+`data_collator=tensordict.collate`. Its default `compute_loss` calls
+`model(**inputs)`, which needs a mapping, so override it to pass the batch
+to the model. Here the tensorclass `data` of the Accelerate section is the
+dataset:
+
+```
+>>> from transformers import Trainer, TrainingArguments 
+>>> class Regressor(torch.nn.Module):
+... def __init__(self):
+... super().__init__()
+... self.net = torch.nn.Linear(2, 1)
+...
+... def forward(self, batch):
+... return torch.nn.functional.mse_loss(self.net(batch.x).squeeze(-1), batch.y)
+>>> class TensorClassTrainer(Trainer): 
+... def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+... loss = model(inputs)
+... return (loss, {"loss": loss}) if return_outputs else loss
+>>> args = TrainingArguments( 
+... output_dir="trainer-out", max_steps=4, per_device_train_batch_size=16, report_to=[]
+... )
+>>> trainer = TensorClassTrainer( 
+... model=Regressor(), args=args, train_dataset=data, data_collator=tensordict.collate
+... )
+>>> trainer.train().global_step 
+{'train_runtime': ...}
+4
+```
+
+Use a tensorclass for the batch, not a tensordict. The `Trainer` rebuilds
+a mapping batch with `type(batch)({...})`, which gives a tensordict without
+batch dimensions, and then raises because the batch looks empty.
+
+## DistributedDataParallel and pytrees
+
+[`DistributedDataParallel`](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel) passes a tensorclass or a
+tensordict to the `forward` of the module, and returns one if `forward`
+does. Here, with one process, it trains the `Regressor` of the previous
+section:
+
+```
+>>> import torch.distributed as dist
+>>> dist.init_process_group( 
+... "gloo", init_method="tcp://127.0.0.1:29500", rank=0, world_size=1
+... )
+>>> ddp = torch.nn.parallel.DistributedDataParallel(Regressor()) 
+>>> ddp(data[:16]).backward() 
+>>> ddp.module.net.weight.grad.shape 
+torch.Size([1, 2])
+>>> dist.destroy_process_group()
+```
+
+A tensorclass is a pytree. The functions of `torch.utils._pytree` go
+through its tensors, keep its non-tensor fields, and return the same type:
+
+```
+>>> import torch.utils._pytree as pytree
+>>> leaves, spec = pytree.tree_flatten(data)
+>>> [leaf.shape for leaf in leaves]
+[torch.Size([64, 2]), torch.Size([64])]
+>>> zeros = pytree.tree_map(torch.zeros_like, data)
+>>> type(zeros).__name__, zeros.name
+('Sample', 'train')
 ```
 
 ## Validate with Pandera
