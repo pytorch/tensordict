@@ -25,10 +25,13 @@ from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _apply_pointwise,
+    _default_is_leaf,
+    _is_leaf_or_lazy_stack,
     _is_tensor_collection,
     _maybe_broadcast_other,
     _mixes_lazy_stacks,
     _NESTED_TENSORS_AS_LISTS,
+    _unwrap,
     _warn_unsupported_operand,
     _write_back_inplace,
     CompatibleType,
@@ -58,6 +61,26 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
         # same keys in the same order, the common case: no reordering
         return values
     return other._values_list(True, True, sorting_keys=keys)
+
+
+def _apply_keyword_tensor(
+    td: TensorCollection, name: str, leaf_fn: Callable, other: Tensor
+) -> TensorCollection:
+    """Returns ``leaf_fn`` on the leaves of ``td``, and the method ``name`` called with ``other=other`` on its nested lazy stacks, tensorclasses and TypedTensorDicts.
+
+    A tensor with dims reaches ``mod``, ``bitwise_and`` and ``logical_and``
+    only by keyword. A nested lazy stack then gives each member leaf its part
+    of it, as the dense tensordict does (#3042).
+    """
+
+    def fn(x):
+        if type(x) is Tensor or _default_is_leaf(type(x)):
+            return leaf_fn(x)
+        return getattr(x, name)(other=other)
+
+    return td._fast_apply(
+        fn, is_leaf=_is_leaf_or_lazy_stack, propagate_lock=True, filter_empty=True
+    )
 
 
 def _clamp_into_out(clamp: Callable) -> Callable:
@@ -1415,6 +1438,10 @@ class _PointwiseOps:
                 the others. A tensor stands in for the missing entry on either
                 side, and the result has the keys of both. Defaults to ``None``.
         """
+        if isinstance(other, Tensor) and other.ndim:
+            return _apply_keyword_tensor(
+                self, "bitwise_and", lambda x: x.bitwise_and(other), other
+            )
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -1475,6 +1502,10 @@ class _PointwiseOps:
                 the others. A tensor stands in for the missing entry on either
                 side, and the result has the keys of both. Defaults to ``None``.
         """
+        if isinstance(other, Tensor) and other.ndim:
+            return _apply_keyword_tensor(
+                self, "logical_and", lambda x: x.logical_and(other), other
+            )
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(
@@ -2160,6 +2191,8 @@ class _PointwiseOps:
                 dimensions of each leaf and expanded over its feature
                 dimensions.
         """
+        if isinstance(other, Tensor) and other.ndim:
+            return _apply_keyword_tensor(self, "mod", lambda x: x % other, other)
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             new_keys, other_val = other._items_list(True, True, sorting_keys=keys)
@@ -2826,7 +2859,18 @@ class _PointwiseOps:
             return self._fast_apply(
                 lambda x, low, high: x.clamp(low, high), min, max, default=None
             )
-        return self._fast_apply(lambda x: x.clamp(min, max))
+
+        def clamp_leaf(x):
+            if type(x) is Tensor or _default_is_leaf(type(x)):
+                return x.clamp(min, max)
+            if _unwrap(x)._lazy:
+                # a nested lazy stack, or a tensorclass or TypedTensorDict on
+                # one, gives each member leaf its part of a tensor bound with
+                # dims, which comes by keyword (#3042)
+                return x.clamp(min=min, max=max)
+            return x._fast_apply(clamp_leaf, is_leaf=_is_leaf_or_lazy_stack)
+
+        return self._fast_apply(clamp_leaf, is_leaf=_is_leaf_or_lazy_stack)
 
     @_write_back_inplace
     @_maybe_broadcast_other("pow_")

@@ -825,7 +825,7 @@ def _maybe_broadcast_other(
                     need_broadcast = True
                     break
             if (
-                self._lazy
+                (self._lazy or type(self)._wrapped_attr is not None)
                 and keywords
                 and kwargs
                 and not need_broadcast
@@ -835,6 +835,16 @@ def _maybe_broadcast_other(
             ):
                 from tensordict._lazy import LazyStackedTensorDict
 
+                wrapped_attr = type(self)._wrapped_attr
+                if wrapped_attr is not None:
+                    source = getattr(self, wrapped_attr)
+                    if isinstance(source, LazyStackedTensorDict) and not is_non_tensor(
+                        source
+                    ):
+                        # A TypedTensorDict on a lazy stack: the op on the
+                        # stack gives each member leaf its part of the operands
+                        result = getattr(source, func.__name__)(*others, **kwargs)
+                        return type(self)._wrap_td(result)
                 operands = [*others, *(kwargs[k] for k in keywords[len(others) :])]
                 if (
                     isinstance(self, LazyStackedTensorDict)
