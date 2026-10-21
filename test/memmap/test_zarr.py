@@ -835,6 +835,11 @@ class TestZarrWriteOps:
         # replaces the existing entry (#3008).
         ztd.create_nested(("b", "d"))
         assert set(ztd.keys(True)) == {"a", "b", ("b", "c"), ("b", "d")}
+        # a group read before it is replaced is not served from the cache
+        ztd["b", "d", "e"] = torch.zeros(3, 4)
+        assert set(ztd["b", "d"].keys()) == {"e"}
+        ztd.create_nested(("b", "d"))
+        assert set(ztd["b", "d"].keys()) == set()
         ztd.create_nested("b")
         assert set(ztd.keys(True)) == {"a", "b"}
 

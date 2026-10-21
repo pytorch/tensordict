@@ -2148,6 +2148,8 @@ class PersistentTensorDict(
 
     # Override: an existing group on the path keeps its entries.
     def _create_nested_tuple(self, key):
+        # a sub-tensordict read before at this key would keep a replaced group
+        self._forget_nested(key)
         if len(key) > 1:
             group = self._get_array(key[0], None)
             if group is not None and not self._backend.is_array(group):

@@ -478,6 +478,11 @@ class TestH5Serialization:
         assert h5td.create_nested(("nested", "b")) is h5td
         assert set(h5td.keys(True)) == {"a", "nested", ("nested", "d"), ("nested", "b")}
         assert (h5td["nested", "d"] == 1).all()
+        # a group read before it is replaced is not served from the cache
+        h5td["nested", "b", "c"] = torch.zeros(3)
+        assert set(h5td["nested", "b"].keys()) == {"c"}
+        h5td.create_nested(("nested", "b"))
+        assert set(h5td["nested", "b"].keys()) == set()
         h5td.create_nested(("a", "b"))
         h5td.create_nested("nested")
         assert set(h5td.keys(True)) == {"a", ("a", "b"), "nested"}
