@@ -72,6 +72,10 @@ Some features need other packages. Install them with an extra, for example
    * - ``tabular``
      - ``pandas>=1.5`` and ``pyarrow>=10.0``
      - The ``pandas`` and ``parquet`` extras together.
+   * - ``safetensors``
+     - ``safetensors>=0.4.5``
+     - safetensors files: :func:`~tensordict.to_safetensors` and
+       :func:`~tensordict.from_safetensors`.
    * - ``onnx``
      - ``onnx``, ``onnxscript``, and ``onnxruntime``
      - Export of a :class:`~tensordict.nn.TensorDictModule` to ONNX with
