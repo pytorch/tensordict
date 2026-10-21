@@ -1278,6 +1278,30 @@ class TestLazyStackedTensorDict:
         else:
             assert isinstance(result.get("n"), LazyStackedTensorDict)
 
+    @pytest.mark.parametrize("hi_shape", [(2, 3, 4, 2), (5, 4, 2), (5, 1, 1)])
+    def test_pointwise_keyword_tensor_mixed_unsliced(self, hi_shape):
+        # A keyword tensor that has no part per member leaf keeps the result
+        # of the call on each member, next to a positional tensor (#3042)
+        torch.manual_seed(0)
+        members = [TensorDict(y=torch.randn(4, 2), batch_size=[4]) for _ in range(3)]
+        lazy = lazy_stack(members, 0)
+        lo = torch.rand(3, 4) - 0.5
+        hi = torch.rand(hi_shape) + 0.5
+        for result, expected in (
+            (
+                lazy.clamp(lo, max=hi),
+                [m.clamp(lo[i], max=hi) for i, m in enumerate(members)],
+            ),
+            (
+                lazy.lerp(lo, weight=hi),
+                [m.lerp(lo[i], weight=hi) for i, m in enumerate(members)],
+            ),
+        ):
+            assert isinstance(result, LazyStackedTensorDict)
+            torch.testing.assert_close(
+                result["y"], torch.stack([e["y"] for e in expected])
+            )
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_lerp_keyword_weight_trailing_dims(self, stack_dim):
         # With a dense end, a lazy stack paired a weight given by keyword with

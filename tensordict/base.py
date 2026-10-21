@@ -783,7 +783,12 @@ def _apply_on_members(
                     ]
                     if any(o is None for o in ops):
                         failed.append(x)
-                        ops = cache[x.shape] = operands
+                        # f must not raise where the old per-member call
+                        # returns: keep the parts of the aligned operands
+                        ops = cache[x.shape] = [
+                            s if j < aligned and s is not None else o
+                            for j, (s, o) in enumerate(zip(ops, operands))
+                        ]
                 return f(x, *ops)
             if isinstance(x, LazyStackedTensorDict) and not is_non_tensor(x):
                 return _apply_on_members(
