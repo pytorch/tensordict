@@ -35,7 +35,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f7e1ad48a90>
+<torch._C.Generator object at 0x7f7e91b5ca90>
 ```
 
 ## Indexing
@@ -376,7 +376,7 @@ form of a tensordict with typed fields (see [TensorClass: a dataclass of tensors
 and writing into a tensordict with an index.
 - [Shape, batch dimensions, and stacking](../reference/td.html#api-methods-shape) lists all the shape methods.
 
-**Total running time of the script:** (0 minutes 0.365 seconds)
+**Total running time of the script:** (0 minutes 0.364 seconds)
 
 [`Download Jupyter notebook: tensordict_shapes.ipynb`](../_downloads/11a23e1bafc489334eaf020bf977a5bb/tensordict_shapes.ipynb)
 
