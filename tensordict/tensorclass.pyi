@@ -1129,6 +1129,8 @@ class TensorClass(_TensorClassInitArgs):
         async_op: bool = False,
         return_premature: bool = False,
         group: Incomplete | None = None,
+        *,
+        bucket_bytes: int | None = None,
     ) -> Self: ...
     def broadcast(
         self,
@@ -1143,6 +1145,7 @@ class TensorClass(_TensorClassInitArgs):
         *,
         group: dist.ProcessGroup | None = None,
         async_op: bool = False,
+        bucket_bytes: int | None = None,
     ) -> None: ...
     def all_gather(
         self,
