@@ -1784,6 +1784,19 @@ class TestTensorClass:
         assert data_load.batch_size == data.batch_size
         assert (data_load == data).all()
 
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_consolidate_return_early_preserves_tensorclass(self, inplace):
+        data = MyData2(
+            torch.ones((2,)), torch.ones((2, 3)) * 2, "a string!", batch_size=[2]
+        )
+        future = data.consolidate(num_threads=2, return_early=True, inplace=inplace)
+        result = future.result()
+        assert isinstance(result, MyData2)
+        assert (result is data) is inplace
+        assert result.z == "a string!"
+        assert result.is_consolidated()
+        torch.testing.assert_close(result.X, data.X)
+
     def test_consolidate_nested_post_init(self):
         # consolidate must not run __post_init__ on an empty tensorclass while
         # it collects the leaves of a nested one
