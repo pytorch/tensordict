@@ -315,6 +315,27 @@ defined: `init=False` and `kw_only=True` on a field (`__init__` still
 takes the field, by name or in order), and `compare=False` (`==` compares
 the fields elementwise and returns a tensorclass).
 
+Positional arguments go to the fields in the order they are declared, as in
+earlier releases, whereas the signature of `__init__`, which [`help()`](https://docs.python.org/3/builtins/functions.html#help)
+and IDEs show, leaves out the `init=False` and keyword-only fields, as in a
+dataclass. A call that the field order makes raise and that the signature
+allows follows the signature. A call that the signature maps differently
+emits a `FutureWarning`: starting with TensorDict 0.17, the default will
+change to positional arguments that follow the signature. Pass those fields by
+keyword to get the same result in every release:
+
+```
+>>> class Sample(TensorClass):
+... label: torch.Tensor = dataclasses.field(default=None, kw_only=True)
+... x: torch.Tensor = None
+>>> Sample(torch.ones(2), label=torch.zeros(2), batch_size=[2]).x
+tensor([1., 1.])
+>>> Sample(torch.ones(2), batch_size=[2]).label # FutureWarning
+tensor([1., 1.])
+>>> Sample(x=torch.ones(2), batch_size=[2]).label is None
+True
+```
+
 A [`dataclasses.InitVar`](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar) is an argument of the generated `__init__`
 that is not a field: `__init__` passes it to `__post_init__`, as in a
 dataclass. The other calls to `__post_init__` (rebuilds,
@@ -341,10 +362,9 @@ This holds for a class whose `__post_init__` cannot be called without its
 InitVars. If `__post_init__` gives them defaults of its own, it gets the
 InitVars only when they are given, and the other calls pass none. Without
 `__post_init__`, the InitVars are taken by name and dropped. In both
-cases, positional arguments go to the fields in order, as in earlier
-releases: full dataclass semantics may come with the deprecation planned in
-[#3100](https://github.com/pytorch/tensordict/issues/3100). A class whose
-`__post_init__` does not take its InitVars does not accept them as
+cases, positional arguments go to the fields in order, as above, and warn
+where the signature, which takes the InitVars, maps them differently. A class
+whose `__post_init__` does not take its InitVars does not accept them as
 arguments.
 
 ### A custom `__init__`

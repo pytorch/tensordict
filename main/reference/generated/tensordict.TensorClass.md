@@ -36,7 +36,9 @@ A field declared with [`dataclasses.field()`](https://docs.python.org/3/library/
 the repr. The options `init=False`, `compare=False` and
 `kw_only=True` are ignored, and the class warns about each when it is
 defined, unless a method of the class (`__init__`, `__eq__` and
-`__ne__`) replaces the one that ignores the option. The class keyword
+`__ne__`) replaces the one that ignores the option. Positional arguments
+go to the fields in the order they are declared, and warn where the
+signature of `__init__` maps them differently. The class keyword
 `kw_only=True` makes the fields of the class keyword-only, as in a
 dataclass. A [`dataclasses.InitVar`](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar) goes to `__post_init__`, as
 in a dataclass. See [Field options, kw_only and InitVar](../../tensorclass.html#tensorclass-field-options).
