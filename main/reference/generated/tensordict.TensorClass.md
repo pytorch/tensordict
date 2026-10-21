@@ -459,6 +459,7 @@ Raises:
 - [**AttributeError**](https://docs.python.org/3/builtins/exceptions.html#AttributeError) - if `key` is not a field of the class.
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensorclass is locked, also with
  `inplace=True`.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `value` is the tensorclass itself.
 
 Examples
 
