@@ -20,6 +20,7 @@ import os.path
 import shutil
 import sys
 import tempfile
+import warnings
 from concurrent.futures import wait
 from copy import copy
 from pathlib import Path
@@ -61,6 +62,7 @@ from tensordict.utils import (
     _prefix_last_key,
     _rebuild_njt_from_njt,
     _unravel_key_to_tuple,
+    _user_stacklevel,
     _zip_strict,
     TensorDictFuture,
     unravel_key,
@@ -686,8 +688,13 @@ class _Serialization:
         ``inplace=True``, ``return_early=True`` with ``num_threads > 1`` or a
         ``device`` other than the CPU is given, or no accelerator is
         available. A ``filename`` other than its own
-        file writes nothing: ``td.contiguous().consolidate(filename=other)``
-        writes a new file.
+        file writes nothing and emits a :class:`UserWarning`:
+        ``td.contiguous().consolidate(filename=other)`` writes a new file. A
+        ``device`` other than the one of the storage, and
+        ``share_memory=True`` with a storage that is not in shared memory,
+        are ignored with a :class:`UserWarning`:
+        ``td.contiguous().consolidate(...)`` copies the storage into a new one
+        and honours them.
 
         Args:
             filename (str or Path, optional): a file to use as the storage. The
@@ -783,6 +790,7 @@ class _Serialization:
         ):
             self._update_consolidated_metadata()
             consolidated = self._consolidated
+            storage = consolidated["storage"]
             if (
                 filename is not None
                 and consolidated.get("filename") == Path(filename).resolve()
@@ -794,6 +802,52 @@ class _Serialization:
                     data_size=consolidated["storage"].numel(),
                 )
                 consolidated["file_id"] = _file_id(filename)
+            elif filename is not None:
+                if consolidated.get("filename") is None:
+                    reason = (
+                        "it has no file of its own to rewrite (it was "
+                        "consolidated in memory or loaded with "
+                        "from_consolidated)"
+                    )
+                else:
+                    reason = "only the file it was consolidated into is rewritten"
+                warnings.warn(
+                    f"consolidate(filename={str(filename)!r}) writes nothing: "
+                    f"the tensordict is already consolidated, and {reason}. "
+                    "Call td.contiguous().consolidate(filename=...) to write a "
+                    "new file.",
+                    UserWarning,
+                    stacklevel=_user_stacklevel(),
+                )
+            ignored = []
+            if device is not None:
+                try:
+                    device = torch.device(device)
+                except (RuntimeError, TypeError):
+                    # An invalid device is ignored as well, as before
+                    device = storage.device
+                if device.type != storage.device.type or (
+                    device.type != "cpu"
+                    and device.index is not None
+                    and device.index != storage.device.index
+                ):
+                    ignored.append(f"device={str(device)!r}")
+            if (
+                share_memory
+                and filename is None
+                and storage.device.type == "cpu"
+                and not storage.is_shared()
+            ):
+                ignored.append("share_memory=True")
+            if ignored:
+                warnings.warn(
+                    f"consolidate() ignores {' and '.join(ignored)} on a "
+                    "tensordict that is already consolidated, and returns it "
+                    "as is. Call td.contiguous().consolidate(...) to copy the "
+                    "storage into a new one that honours them.",
+                    UserWarning,
+                    stacklevel=_user_stacklevel(),
+                )
             return self
 
         (
