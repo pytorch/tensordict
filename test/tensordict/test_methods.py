@@ -5520,6 +5520,50 @@ class TestTensorDicts(TestTensorDictsBase):
         td.update(other_td, keys_to_update=(("My", ("father",), "was"),))
         assert (td["My", "father", "was"] == 1).all()
 
+    @pytest.mark.parametrize("method", ["update_", "update_at_"])
+    def test_update__keys_to_update_narrowed_warns(self, td_name, device, method):
+        # #3217: with a sub-tensordict key and a key under it, update_ and
+        # update_at_ write the whole sub-tensordict, while select and update
+        # keep only the deeper key. They warn where the result changes in 0.17.
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        td.set(("n", "x"), torch.zeros(td.shape, device=device))
+        td.set(("n", "y"), torch.zeros(td.shape, device=device))
+        if method == "update_":
+            ones = torch.ones(td.shape, device=device)
+            written = slice(None)
+        else:
+            ones = torch.ones(td.shape[1:], device=device)
+            written = 0
+        source = {"n": {"x": ones, "y": ones}}
+
+        def call(keys):
+            with torch.no_grad(), warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                if method == "update_":
+                    td.update_(source, keys_to_update=keys)
+                else:
+                    td.update_at_(source, 0, keys_to_update=keys)
+            return any(
+                "keep only the deeper keys" in str(w.message)
+                and issubclass(w.category, FutureWarning)
+                for w in record
+            )
+
+        # the deeper key leaves ("n", "x") out: written today, not from 0.17
+        warned = call(["n", ("n", "y")])
+        assert (td["n", "y"][written] == 1).all()
+        x = td["n", "x"][written]
+        # a file or a store writes only the deeper key already, and is silent
+        assert warned == bool((x == 1).all())
+        assert warned or (x == 0).all()
+        if td_name == "td":
+            assert warned
+        # the results that stay the same
+        assert not call(["n"])
+        assert not call([("n", "x"), ("n", "y")])
+        assert not call(["n", ("n", "x"), ("n", "y")])
+
     @pytest.mark.parametrize(
         "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]
     )

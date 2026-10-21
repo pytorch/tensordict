@@ -68,6 +68,7 @@ from tensordict.base import (
     _warn_lazy_is_empty,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
+    _warn_update_keys_narrowed,
     _wrap_extra_state,
     _write_back_members,
     BEST_ATTEMPT_INPLACE,
@@ -3686,6 +3687,8 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         non_blocking: bool,
         keys_to_update: list[tuple[str, ...]] | None,
     ) -> _SubTensorDict:
+        if keys_to_update is not None and len(keys_to_update) > 1:
+            _warn_update_keys_narrowed("update_", input_dict_or_td, keys_to_update)
         return self._update_source_at_(
             input_dict_or_td,
             self.idx,

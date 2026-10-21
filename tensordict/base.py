@@ -2457,6 +2457,59 @@ def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
     )
 
 
+def _warn_update_keys_narrowed(
+    method: str,
+    source: Any,
+    keys_to_update: list[tuple[str, ...]],
+    dest: TensorDictBase | None = None,
+) -> None:
+    """Warns that ``method`` writes the whole sub-tensordict under a key of ``keys_to_update`` that also lists a deeper key, where ``source`` has entries that the deeper keys leave out, until 0.17 (#3217).
+
+    ``dest`` is given where the route of ``update_`` that follows ``select``
+    already (``_reads_copies_under``) is possible: it does not warn there.
+    """
+    # the keys that another key of keys_to_update is strictly under
+    prefixes = {key[:i] for key in keys_to_update for i in range(1, len(key))}
+    if prefixes.isdisjoint(keys_to_update) or is_compiling():
+        return
+    deeper = [key for key in keys_to_update if key not in prefixes]
+    try:
+        if not _is_tensor_collection(type(source)):
+            source = _TENSORDICT_TYPE(source, batch_size=[])
+        for key in keys_to_update:
+            if key not in prefixes:
+                continue
+            value = source.get(key, None)
+            if value is None or _is_leaf_nontensor(type(value)):
+                continue
+            for leaf in value.keys(True, True, is_leaf=_is_leaf_nontensor):
+                leaf = (*key, *_unravel_key_to_tuple(leaf))
+                if not any(leaf[: len(k)] == k for k in deeper):
+                    break
+            else:
+                continue
+            if dest is not None and _reads_copies_under(dest, keys_to_update):
+                return
+            break
+        else:
+            return
+    except Exception:
+        # a source that the update rejects: it raises its own error
+        return
+    under = [k for k in deeper if k[: len(key)] == key]
+    warnings.warn(
+        f"{method}() got keys_to_update with the key {key!r} and the deeper "
+        f"keys {under!r}, and writes every entry of the sub-tensordict under "
+        f"{key!r}, while select() and update() keep only the deeper keys. "
+        "Starting with TensorDict 0.17, the default will change to writing "
+        "only the deeper keys, as select does. List only the sub-tensordict "
+        "key to keep the current result, or only the deeper keys to get the "
+        "new one now.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
     """Warns that ``op`` (``"__xor__"``, ``"__lt__"``, ...) returns ``result`` for ``other``, which is not a tensor collection, a tensor or a number, until 0.17 (#2979)."""
     if is_compiling():
@@ -6813,7 +6866,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_update (sequence of NestedKey, optional): if passed, only
                 these keys are copied, without the cost of
                 ``td.update_(other.select(*keys_to_update))``. Defaults to
-                ``None``, which copies every entry.
+                ``None``, which copies every entry. If it lists a
+                sub-tensordict key and a key under it, the whole sub-tensordict
+                is copied and the call warns, while ``select`` keeps only the
+                deeper keys; starting with TensorDict 0.17, the default will
+                change to copying only the deeper keys, as ``select`` does.
             **kwargs: entries to copy at the top level, by key.
 
         Returns:
@@ -6906,6 +6963,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
+            )
+        if keys_to_update is not None and len(keys_to_update) > 1:
+            _warn_update_keys_narrowed(
+                "update_", input_dict_or_td, keys_to_update, dest=self
             )
         entries = None
         if (
@@ -7267,7 +7328,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 ``False``.
             keys_to_update (sequence of NestedKey, optional): if passed, only
                 these keys are copied. Defaults to ``None``, which copies every
-                entry.
+                entry. If it lists a sub-tensordict key and a key under it, the
+                whole sub-tensordict is copied and the call warns, while
+                ``select`` keeps only the deeper keys; starting with TensorDict
+                0.17, the default will change to copying only the deeper keys,
+                as ``select`` does.
 
         Returns:
             ``self``.
@@ -7329,6 +7394,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         tuples. The base writes each leaf as :meth:`set_at_` does. Returns
         ``self``.
         """
+        if keys_to_update is not None and len(keys_to_update) > 1:
+            _warn_update_keys_narrowed("update_at_", input_dict_or_td, keys_to_update)
         if isinstance(input_dict_or_td, dict):
             input_dict_or_td = _flatten_nested_dicts(input_dict_or_td)
         for key, value in input_dict_or_td.items():
