@@ -3364,6 +3364,16 @@ class TestFunctional:
         assert (td_zero == 0).all()
 
 
+class _ExportStrTC(TensorClass):
+    x: torch.Tensor
+    name: str
+
+
+class _ExportNestedStrTC(TensorClass):
+    x: torch.Tensor
+    inner: _ExportStrTC
+
+
 class TestExport:
     def test_export_module(self):
         tdm = Mod(lambda x, y: x * y, in_keys=["x", "y"], out_keys=["z"])
@@ -3609,6 +3619,47 @@ class TestExport:
         torch.testing.assert_close(out["a"], td["a"] * 2)
         assert out.get("s").batch_size == torch.Size([4])
         assert out.get_non_tensor("s") == "a string"
+
+    @pytest.mark.parametrize("strict", [False, True])
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_export_tc_input_str_dynamic_batch_size(self, nested, strict, monkeypatch):
+        # The str field is held in the TensorDict of the tensorclass, as a
+        # non-tensor entry that the pytree rebuilds with its stored batch
+        # size: export would specialize the dynamic batch dim to it.
+        # https://github.com/pytorch/tensordict/issues/3163
+        # Checked with TD_CHECK_INVARIANTS on, as CI runs: the pytree builds
+        # the entry with the right batch size before the tensordict.
+        monkeypatch.setattr("tensordict._td._CHECK_INVARIANTS", True)
+
+        class Mod(torch.nn.Module):
+            def forward(self, tc):
+                return tc.apply(lambda x: x * 2)
+
+        def make(n):
+            tc = _ExportStrTC(x=torch.randn(n, 3), name="a string", batch_size=[n])
+            if nested:
+                tc = _ExportNestedStrTC(x=torch.randn(n, 2), inner=tc, batch_size=[n])
+            return tc
+
+        batch = torch.export.Dim("batch", min=2)
+        # The str field is a pytree node without leaves: its entry is [].
+        dynamic_shapes = [{0: batch}, []]
+        if nested:
+            dynamic_shapes = [{0: batch}, dynamic_shapes]
+        ep = torch.export.export(
+            Mod(), (make(4),), dynamic_shapes=(dynamic_shapes,), strict=strict
+        )
+        tc = make(5)
+        out = ep.module()(tc)
+        assert type(out) is type(tc)
+        assert out.batch_size == torch.Size([5])
+        torch.testing.assert_close(out.x, tc.x * 2)
+        if nested:
+            out, tc = out.inner, tc.inner
+            assert out.batch_size == torch.Size([5])
+            torch.testing.assert_close(out.x, tc.x * 2)
+        assert out.name == "a string"
+        assert out._tensordict.get("name").batch_size == torch.Size([5])
 
 
 @pytest.mark.skipif(not _has_onnx, reason="ONNX is not available")

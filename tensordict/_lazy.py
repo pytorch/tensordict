@@ -678,6 +678,82 @@ def _where_split_differs(td: TensorDictBase, ndim: int) -> bool:
     return False
 
 
+def _where_pad_missing(result: TensorDictBase, other: TensorDictBase, pad) -> None:
+    """Adds the entries of ``other`` that ``result`` lacks, filled with ``pad``.
+
+    TensorDict.where gives them pad where the condition does not select
+    ``other``, so all of it when the condition selects ``result`` whole.
+    Nothing is added where the batch sizes differ, or where ``other`` is a
+    lazy stack and ``result`` is not, as without pad.
+    """
+    if result.batch_size != other.batch_size:
+        # The entries of other would not fit the batch size of result
+        return
+    fields = type(result).__expected_keys__ if is_tensorclass(result) else None
+    # Reading a leaf of a lazy stack stacks it, which fails when the members
+    # have leaves of different shapes. A tensorclass may wrap a lazy stack
+    lazy = result._tensordict if fields is not None else result
+    if isinstance(lazy, LazyStackedTensorDict):
+        if fields is not None:
+            other = other.select(*fields, strict=False)
+        for td, _other in zip(lazy.tensordicts, other.unbind(lazy.stack_dim)):
+            _where_pad_missing(td, _other, pad)
+        return
+    if isinstance(
+        other._tensordict if is_tensorclass(other) else other, LazyStackedTensorDict
+    ):
+        # A dense result could not hold leaves of different shapes
+        return
+    for key in other.keys():
+        if fields is not None and key not in fields:
+            # A tensorclass cannot hold it
+            continue
+        dest = result._get_str(key, default=None)
+        if dest is not None and (
+            not _is_tensor_collection(type(dest)) or is_non_tensor(dest)
+        ):
+            # result has this leaf
+            continue
+        value = other._get_str(key, default=None)
+        if isinstance(value, Tensor):
+            if dest is None:
+                result._set_str(
+                    key,
+                    torch.full_like(value, pad),
+                    inplace=False,
+                    validated=True,
+                    non_blocking=False,
+                )
+        elif _is_tensor_collection(type(value)) and not is_non_tensor(value):
+            if dest is None:
+                # keeps the batch size of the sub-tensordict of other
+                dest = value.empty()
+                _where_pad_missing(dest, value, pad)
+                result._set_str(
+                    key, dest, inplace=False, validated=True, non_blocking=False
+                )
+            else:
+                _where_pad_missing(dest, value, pad)
+
+
+def _where_selects_whole(td: LazyStackedTensorDict, condition: Tensor) -> bool:
+    """Whether ``td.where`` with a tensordict ``other`` selects a member whole.
+
+    At any depth of nesting, as ``LazyStackedTensorDict._where`` does for a
+    member whose condition has one element: there it pads the member with the
+    entries of ``other`` that it lacks.
+    """
+    if condition.ndim < td.ndim:
+        condition = expand_right(condition, td.batch_size)
+    for member, cond in zip(td.tensordicts, condition.unbind(td.stack_dim)):
+        if cond.numel() <= 1 or (
+            isinstance(member, LazyStackedTensorDict)
+            and _where_selects_whole(member, cond)
+        ):
+            return True
+    return False
+
+
 def _broadcasts_to(shape: torch.Size, target: torch.Size) -> bool:
     """Whether ``shape`` broadcasts to ``target``, without growing it."""
     try:
@@ -5036,9 +5112,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 # The condition selects a whole member. Copy its tensors so the
                 # result shares no memory with the inputs (clone would also
                 # deep-copy non-tensor data)
-                return (other if not cond else td).apply(
-                    torch.clone, filter_empty=False
-                )
+                chosen, other = (td, other) if cond else (other, td)
+                result = chosen.apply(torch.clone, filter_empty=False)
+                if pad is not None:
+                    _where_pad_missing(result, other, pad)
+                return result
 
             result = LazyStackedTensorDict.lazy_stack(
                 [
