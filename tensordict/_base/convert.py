@@ -249,12 +249,19 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
                         preserve_module_state=preserve_module_state,
                         is_dynamo=False,
                     )
+            else:
+                memo["shared"] = True
         swap[key] = local_out
     return swap
 
 
 def _replaced_entries(
-    swap: dict, td, entries: list, skip_wrappers: bool = False
+    swap: dict,
+    td,
+    entries: list,
+    skip_wrappers: bool = False,
+    seen: dict | None = None,
+    source=None,
 ) -> list:
     """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``.
 
@@ -263,14 +270,27 @@ def _replaced_entries(
     ``nn.Parameter`` that ``to_module`` wraps around a plain tensor, is not
     listed, unless both require grad: the gradient of the value of ``td``
     then lands on the wrapper, which is written back.
+
+    With a ``seen`` dict, given when the module uses a submodule more than
+    once, the submodule holds the values of its first entry in ``td``, the
+    ``source`` of the later entries: these values and their wrappers are not
+    listed for the later entries either, which keep their own values.
     """
     for key, val in swap.items():
         if key == _EXTRA_STATE_KEY_SUFFIX:
             # Restored with set_extra_state, nothing to write.
             continue
         if isinstance(val, dict):
+            sub = td._get_str(key, default=NO_DEFAULT)
+            # to_module swaps a shared submodule once and gives each of its
+            # entries the same dict; it sets memo["shared"] when it does.
             _replaced_entries(
-                val, td._get_str(key, default=NO_DEFAULT), entries, skip_wrappers
+                val,
+                sub,
+                entries,
+                skip_wrappers,
+                seen,
+                None if seen is None else seen.setdefault(id(val), sub),
             )
             continue
         current = td._get_str(key, None)
@@ -285,6 +305,18 @@ def _replaced_entries(
             and val.storage_offset() == current.storage_offset()
             and val.dtype == current.dtype
         ):
+            if source is not None and source is not td:
+                current = source._get_str(key, None)
+                if current is val or (
+                    isinstance(current, Tensor)
+                    and isinstance(val, Tensor)
+                    and torch._C._is_alias_of(val, current)
+                    and val.shape == current.shape
+                    and val.stride() == current.stride()
+                    and val.storage_offset() == current.storage_offset()
+                    and val.dtype == current.dtype
+                ):
+                    continue
             entries.append((td, key, val))
     return entries
 
@@ -304,7 +336,8 @@ def _restore_module(swap, args, kwargs, out):
     current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
     if not isinstance(current, dict):
         return current
-    replaced = _replaced_entries(current, out, [], skip_wrappers=True)
+    seen = {} if "shared" in memo else None
+    replaced = _replaced_entries(current, out, [], True, seen)
     if replaced:
         non_blocking = kwargs.get("non_blocking", False)
         with out.unlock_():
@@ -1661,6 +1694,8 @@ class _Conversion:
                         preserve_module_state=preserve_module_state,
                         is_dynamo=is_dynamo,
                     )
+                else:
+                    memo["shared"] = True
 
             if return_swap:
                 _swap[key] = local_out
@@ -2065,6 +2100,15 @@ class _Conversion:
         ``GenericDict``, whose fields are the keys. The ``None`` fields of
         tensorclasses are dropped.
 
+        On a tensorclass, the top level is a plain :class:`tuple`, also with
+        ``dest_cls``: it holds the values of ``to_dict(retain_none=False)``,
+        in the same order, without the field names. The nested tensordicts
+        and tensorclasses in it are still named tuples. A plain tuple of
+        tensors can be pickled and loaded with
+        ``torch.load(weights_only=True)``, while a ``GenericDict`` cannot be
+        pickled, since its class is made at each call. To keep the field
+        names, call ``to_dict()``, or ``to_tensordict().to_namedtuple()``.
+
         Args:
             dest_cls (type, optional): the named tuple class of the result. A
                 nested tensordict is converted to ``dest_cls`` too if
@@ -2082,6 +2126,16 @@ class _Conversion:
             ...     "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
             >>> data.to_namedtuple()
             GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
+
+            On a tensorclass, the top level is a plain tuple:
+
+            >>> from tensordict import tensorclass
+            >>> @tensorclass
+            ... class Data:
+            ...     a_tensor: torch.Tensor
+            ...     a_string: str
+            >>> Data(a_tensor=torch.zeros(3), a_string="zero!", batch_size=[3]).to_namedtuple()
+            (tensor([0., 0., 0.]), 'zero!')
 
         """
         return _dict_to_namedtuple(self.to_dict(retain_none=False), dest_cls, root=True)
@@ -2932,6 +2986,13 @@ class _Conversion:
         converted to NumPy arrays. Non-tensor data becomes a column of Python
         values. Requires pandas.
 
+        A nested tensorclass gives one column per leaf with a ``separator``,
+        as a nested tensordict does. Without a ``separator``, where a nested
+        tensordict raises, a nested tensorclass becomes one column of
+        objects that holds the tensorclass of each row. It also stays one
+        such column with a ``separator`` if it has no leaves, or a leaf of
+        more than one dimension.
+
         Keyword Args:
             separator (str, optional): if given, joins the keys of nested
                 entries with it to build the column names: with
@@ -2956,6 +3017,20 @@ class _Conversion:
             0  0  0.0
             1  1  0.0
             2  2  0.0
+
+            A nested tensorclass without a ``separator``:
+
+            >>> from tensordict import tensorclass
+            >>> @tensorclass
+            ... class Point:
+            ...     x: torch.Tensor
+            ...     y: torch.Tensor
+            >>> td = TensorDict(p=Point(x=torch.zeros(3), y=torch.ones(3), batch_size=[3]), batch_size=[3])
+            >>> df = td.to_pandas()
+            >>> df["p"].dtype, type(df["p"][0]).__name__, df["p"][0].y
+            (dtype('O'), 'Point', tensor(1.))
+            >>> list(td.to_pandas(separator=".").columns)
+            ['p.x', 'p.y']
         """
         return _tensordict_to_dataframe(self, separator=separator)
 
