@@ -38,6 +38,7 @@ from tensordict._deprecation import deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict._td_memmap import _class_id
 from tensordict.base import (
+    _default_is_leaf,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
@@ -192,6 +193,88 @@ def _memmap_like_stand_in(key: NestedKey, x: torch.Tensor) -> torch.Tensor:
     return torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
 
 
+def _writes_state_dict_metadata(td, key: tuple[str, ...]) -> bool:
+    """Returns ``False`` for a non-tensor field of a tensorclass, which ``state_dict`` stores in the ``_metadata`` of the tensorclass."""
+    parent = td.get(key[:-1]) if len(key) > 1 else td
+    return not (
+        _is_tensorclass(type(parent)) and _is_non_tensor(parent.entry_class(key[-1]))
+    )
+
+
+def _flat_state_dict_entries(td, key: str):
+    """Yields the nested key of ``key`` and of each entry below it, with ``True`` for a leaf."""
+    cls = td.entry_class(key)
+    yield (key,), _default_is_leaf(cls)
+    if _default_is_leaf(cls) or _is_non_tensor(cls):
+        return
+    sub = td.get(key)
+    leaves = set(sub.keys(True, True))
+    for subkey in sub.keys(True, False):
+        yield (key, *_unravel_key_to_tuple(subkey)), subkey in leaves
+
+
+def _check_flat_state_dict_keys(td, prefix: str) -> None:
+    """Raises a ``KeyError`` if two entries of ``td`` get the same key in a flat state dict.
+
+    The flat key of an entry starts with its first key, followed by ``"."``
+    or nothing, so the entries of two first keys can only collide if one
+    starts with the other followed by ``"."``. Only the entries of such keys
+    are compared. A ``""`` key is the other case: when ``prefix`` does not
+    end with ``"."``, a ``""`` level gets the ``_metadata`` key of ``td``.
+    The check reads keys only, no values.
+    """
+    # iter() skips the len() of the key view, which is slow
+    keys = sorted(iter(td.keys()))
+    root_collides = keys[:1] == [""] and not prefix.endswith(".")
+    # If a key starts with another key followed by ".", the key after that
+    # one in sorted order starts with it too. This test runs in C, so the
+    # dotted keys that collide with nothing, as in
+    # TensorDict(module.state_dict()), cost little.
+    if not root_collides and not any(map(str.startswith, keys[1:], keys)):
+        return
+    key_set = set(keys)
+    involved = set()
+    for key in keys:
+        i = key.find(".")
+        while i >= 0:
+            if key[:i] in key_set:
+                involved.update((key[:i], key))
+            i = key.find(".", i + 1)
+    if root_collides:
+        involved.add("")
+    if not involved:
+        return
+    seen_leaves = {}
+    # A "" key gets the _metadata key of td itself, written under the key ()
+    seen_nodes = {prefix: ()} if root_collides else {}
+    entries = (
+        entry
+        for top in td.keys()
+        if top in involved and _writes_state_dict_metadata(td, (top,))
+        for entry in _flat_state_dict_entries(td, top)
+    )
+    # As in state_dict, the leaves are the entries that are not tensor
+    # collections; the other entries are levels with a _metadata key.
+    for key, is_leaf in entries:
+        seen = seen_leaves if is_leaf else seen_nodes
+        flat_key = prefix + ".".join(key)
+        other = seen.setdefault(flat_key, key)
+        if other is key:
+            continue
+        if seen is seen_nodes:
+            if not _writes_state_dict_metadata(td, key):
+                continue
+            if other and not _writes_state_dict_metadata(td, other):
+                seen[flat_key] = key
+                continue
+        conflicts = [k[0] if len(k) == 1 else k for k in (other, key)]
+        raise KeyError(
+            f"Flattening keys in tensordict causes keys {conflicts} to collide "
+            f"in the flat state dict key {flat_key!r}. Use state_dict(flatten=False) "
+            "to keep them apart."
+        )
+
+
 class _Serialization:
     """TensorDict's own storage formats: memory-mapping, saving, loading, consolidation and state dicts."""
 
@@ -232,6 +315,12 @@ class _Serialization:
                 ``"."``. If ``False``, nested tensordicts become nested
                 ``OrderedDict`` instances. Defaults to ``True``.
 
+        Raises:
+            KeyError: if ``flatten=True`` and two entries get the same key, as
+                a dotted key ``"a.b"`` and a nested key ``("a", "b")`` do. The
+                key of a level in ``_metadata`` counts too. Use
+                ``flatten=False`` to keep such entries apart.
+
         Returns:
             ``destination``, or a new ``OrderedDict``.
 
@@ -259,7 +348,10 @@ class _Serialization:
             "device": self.device,
         }
 
+        dotted = False
         for key, item in self.items():
+            if "." in key:
+                dotted = True
             if not _is_tensor_collection(type(item)):
                 if not keep_vars:
                     destination[prefix + key] = item.detach()
@@ -276,6 +368,8 @@ class _Serialization:
                 destination[prefix + key] = item.state_dict(
                     keep_vars=keep_vars, flatten=False
                 )
+        if flatten and (dotted or (not prefix.endswith(".") and "" in self.keys())):
+            _check_flat_state_dict_keys(self, prefix)
 
         return destination
 

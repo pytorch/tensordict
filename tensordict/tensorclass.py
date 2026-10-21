@@ -52,6 +52,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict import base as _td_base
+from tensordict._base.serialization import _check_flat_state_dict_keys
 from tensordict._deprecation import deprecated, warn_deprecated
 from tensordict._lazy import _GATHER, _where_selects_whole, LazyStackedTensorDict
 from tensordict._nestedkey import NestedKey
@@ -5794,7 +5795,10 @@ def _state_dict(
     non_tensor = dict(_non_tensordict)
     if not type(self)._is_non_tensor:
         non_tensor.update(dict.fromkeys(_none_fields(self)))
+    dotted = False
     for key, item in td.items():
+        if "." in key:
+            dotted = True
         if is_non_tensor(item):
             non_tensor[key] = item.data
         elif not _is_tensor_collection(type(item)):
@@ -5823,6 +5827,8 @@ def _state_dict(
         "_type": type(self).__qualname__,
         "_non_tensor": non_tensor,
     }
+    if flatten and (dotted or (not prefix.endswith(".") and "" in td.keys())):
+        _check_flat_state_dict_keys(self, prefix)
 
     return destination
 
