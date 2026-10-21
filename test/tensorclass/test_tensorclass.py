@@ -599,6 +599,11 @@ assert_type(obs == obs, Obs)
 for item in obs:
     assert_type(item, Obs)
 
+# #3237: update takes nested keys and a typed dict.
+data: dict[str, torch.Tensor] = {"a": t}
+assert_type(obs.update({("a", "b"): t}), Obs)
+assert_type(obs.update(data), Obs)
+
 # apply gives None only when fn returns None for every leaf, inplace or not,
 # and filter_empty is not False.
 def double(x: torch.Tensor) -> torch.Tensor:
@@ -734,6 +739,200 @@ TensorDict.from_dict([torch.Tensor()])
     assert len(errors) == 2, errors
     assert 'Argument 1 to "TensorDict" has incompatible type "int"' in errors[0]
     assert 'Argument 1 to "from_dict" of "TensorDict"' in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_common_calls_source_static_types(tmp_path, monkeypatch):
+    # #3237: with py.typed, mypy must accept td.items(), td.update() with a
+    # nested key, TensorDictSequential(m1, m2) and setting out_keys. The
+    # annotations of CompatibleType, update, items, values, out_keys and the
+    # TensorDictSequential overloads are copied from the sources into a
+    # package of their own, with the import cycle of base.py and
+    # _tensorcollection.pyi. Mypy also searches the working directory, which
+    # must not hold the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+
+    def members(path, class_name, names, *, overloads_only=False):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in names
+            and not (
+                overloads_only
+                and "overload" not in map(ast.unparse, node.decorator_list)
+            )
+        ]
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    with open(_TENSORDICT_DIR / "base.py", "r") as f:
+        (compatible_type,) = (
+            ast.unparse(node)
+            for node in ast.parse(f.read()).body
+            if ast.unparse(node).startswith(("CompatibleType =", "CompatibleType:"))
+        )
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    (package / "nn").mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor:
+    shape: Any
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("_nestedkey.pyi").write_text(
+        (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
+    )
+    imports = """from collections.abc import Mapping
+from typing import (
+    Any, Callable, Iterator, List, OrderedDict, overload, Self, Sequence, Tuple,
+    Type, TypeAlias, TypeVar, Union,
+)
+
+from torch import Tensor
+from tensordict._nestedkey import NestedKey
+"""
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""{imports}
+from tensordict.base import TensorDictBase
+
+T = TypeVar("T", bound="TensorCollection")
+CompatibleType: TypeAlias = Tensor
+
+class TensorCollection:
+    def to_tensordict(self) -> TensorDictBase: ...
+{members("_tensorcollection.pyi", "TensorCollection", ("update",))}
+"""
+    )
+    # A module, not a stub, as in the sources: the cycle hides
+    # TensorCollection from a plain alias in a module only.
+    package.joinpath("base.py").write_text(
+        f"""# mypy: disable-error-code="empty-body"
+from __future__ import annotations
+
+{imports}
+from tensordict._tensorcollection import TensorCollection
+
+T = TypeVar("T", bound="TensorCollection")
+
+{compatible_type}
+
+class TensorDictBase(TensorCollection):
+{members("base.py", "TensorDictBase", ("update", "items", "values"))}
+"""
+    )
+    module_names = ("in_keys", "out_keys", "out_keys_source")
+    package.joinpath("nn", "__init__.pyi").write_text(
+        f"""{imports}
+from tensordict.base import TensorDictBase
+
+class TensorDictModuleBase:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+{members("nn/common.py", "TensorDictModuleBase", module_names)}
+
+class TensorDictModuleWrapper(TensorDictModuleBase):
+{members("nn/common.py", "TensorDictModuleWrapper", module_names)}
+
+class TensorDictSequential(TensorDictModuleBase):
+{members("nn/sequence.py", "TensorDictSequential", ("__init__",), overloads_only=True)}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def mypy_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        # Errors in the copied annotations count too.
+        return [line for line in stdout.splitlines() if ": error: " in line]
+
+    # Entering the cycle at _tensorcollection hid CompatibleType from mypy.
+    valid = """from typing import assert_type
+import torch
+from tensordict._tensorcollection import TensorCollection
+from tensordict.base import CompatibleType, TensorDictBase
+from tensordict.nn import (
+    TensorDictModuleBase, TensorDictModuleWrapper, TensorDictSequential,
+)
+
+def check(td: TensorDictBase, tc: TensorCollection, t: torch.Tensor) -> None:
+    for key, value in td.items():
+        assert_type(value, torch.Tensor | TensorCollection)
+    for value in td.values():
+        assert_type(value, torch.Tensor | TensorCollection)
+    x: CompatibleType = t
+    data: dict[str, torch.Tensor] = {"a": t}
+    entries: dict[str, CompatibleType] = {"a": t}
+    nested: dict[tuple[str, str], torch.Tensor] = {("a", "b"): t}
+    td.update(data)
+    td.update(entries)
+    td.update(nested)
+    td.update({("a", "b"): t})
+    td.update({"a": t, ("b", "c"): t})
+    td.update(td)
+    tc.update({("a", "b"): t})
+    tc.update(data)
+
+class Module(TensorDictModuleBase):
+    def __init__(self) -> None:
+        self.in_keys = ["a"]
+        self.out_keys = ["b"]
+
+class Wrapper(TensorDictModuleWrapper):
+    def __init__(self) -> None:
+        self.out_keys = ["b"]
+
+def fn(td: TensorDictBase) -> TensorDictBase:
+    return td
+
+TensorDictSequential(Module(), Module())
+TensorDictSequential(Module(), fn, selected_out_keys=["b"])
+TensorDictSequential([Module(), Module()])
+"""
+    assert mypy_errors(valid) == []
+
+    invalid = """from tensordict.base import TensorDictBase
+from tensordict.nn import TensorDictSequential
+
+def check(td: TensorDictBase) -> None:
+    td.update(3)
+
+TensorDictSequential(3)
+"""
+    errors = mypy_errors(invalid)
+    assert len(errors) == 2, errors
+    assert 'Argument 1 to "update" of "TensorDictBase"' in errors[0]
+    assert "TensorDictSequential" in errors[1]
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
