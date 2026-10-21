@@ -150,8 +150,9 @@ Methods
 
 A tensorclass is a Python class: you can add methods, properties, class
 methods, and class constants to it. Of the dataclass features,
-``__post_init__``, field defaults, and a custom ``__init__`` work, with the
-rules below.
+``__post_init__``, field defaults, ``InitVar``, ``field(repr=False)``, the
+class option ``kw_only``, and a custom ``__init__`` work, with the rules
+below.
 
 Methods and properties
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -279,6 +280,65 @@ its own ``__post_init__`` on ``clone()``. Subclasses inherit the flag:
   >>> r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3))
   >>> r.clone().offsets  # no check, and no device synchronization on CUDA
   tensor([0, 2, 3])
+
+.. _tensorclass-field-options:
+
+Field options, ``kw_only`` and ``InitVar``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A field declared with :func:`dataclasses.field` keeps its ``default``,
+``default_factory`` and ``metadata``, and ``repr=False`` leaves it out of the
+printed instance: the default, the compact and the notebook reprs. The class
+option ``kw_only=True`` (``class Config(TensorClass, kw_only=True)``, or
+``@tensorclass(kw_only=True)``) makes the fields of the class keyword-only, as
+in a dataclass. The fields of a subclass take positional arguments, unless
+the subclass sets the option too:
+
+  >>> class Config(TensorClass, kw_only=True):
+  ...     weights: torch.Tensor
+  ...     note: str = dataclasses.field(default="", repr=False)
+  >>> c = Config(weights=torch.zeros(2), note="tuned", batch_size=[2])
+  >>> "note" in repr(c), c.note
+  (False, 'tuned')
+  >>> Config(torch.zeros(2))
+  Traceback (most recent call last):
+    ...
+  TypeError: Config.__init__() takes 1 positional arguments but 2 were given
+
+The other options are ignored, and the class warns about each when it is
+defined: ``init=False`` and ``kw_only=True`` on a field (``__init__`` still
+takes the field, by name or in order), and ``compare=False`` (``==`` compares
+the fields elementwise and returns a tensorclass).
+
+A :class:`dataclasses.InitVar` is an argument of the generated ``__init__``
+that is not a field: ``__init__`` passes it to ``__post_init__``, as in a
+dataclass. The other calls to ``__post_init__`` (rebuilds,
+``from_tensordict``, loads) pass the defaults of the InitVars, so give each a
+default, and set ``skip_post_init_on_rebuild`` if ``__post_init__`` must not
+run again with the defaults:
+
+  >>> from dataclasses import InitVar
+  >>> class Scaled(TensorClass["skip_post_init_on_rebuild"]):
+  ...     x: torch.Tensor
+  ...     scale: InitVar[float] = 1.0
+  ...
+  ...     def __post_init__(self, scale):
+  ...         self.x = self.x * scale
+  >>> s = Scaled(x=torch.ones(2), scale=3.0, batch_size=[2])
+  >>> s.x
+  tensor([3., 3.])
+  >>> s.clone().x  # no second call to __post_init__
+  tensor([3., 3.])
+
+This holds for a class whose ``__post_init__`` cannot be called without its
+InitVars. If ``__post_init__`` gives them defaults of its own, it gets the
+InitVars only when they are given, and the other calls pass none. Without
+``__post_init__``, the InitVars are taken by name and dropped. In both
+cases, positional arguments go to the fields in order, as in earlier
+releases: full dataclass semantics may come with the deprecation planned in
+`#3100 <https://github.com/pytorch/tensordict/issues/3100>`_. A class whose
+``__post_init__`` does not take its InitVars does not accept them as
+arguments.
 
 A custom ``__init__``
 ~~~~~~~~~~~~~~~~~~~~~

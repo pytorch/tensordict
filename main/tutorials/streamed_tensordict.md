@@ -227,7 +227,7 @@ print("TensorDict from stream", td)
 ```
 
 ```
-TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j3], bucket1: i64[j4]})
+TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j4], bucket1: i64[j3]})
 ```
 
 Print the data of both streams. Each stream counts up from 0, so the values
@@ -266,7 +266,7 @@ operations of a lazy stack.
 - The [torch.nested documentation](https://pytorch.org/docs/stable/nested.html)
 explains the jagged layout of nested tensors.
 
-**Total running time of the script:** (0 minutes 6.352 seconds)
+**Total running time of the script:** (0 minutes 6.379 seconds)
 
 [`Download Jupyter notebook: streamed_tensordict.ipynb`](../_downloads/ea350b8ef859f0797dd9ceffacb742e6/streamed_tensordict.ipynb)
 

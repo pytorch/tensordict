@@ -1,6 +1,6 @@
 # tensorclass
 
-tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *skip_post_init_on_rebuild: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
+tensordict.tensorclass(*cls: T = None*, */*, ***, *autocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *frozen: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *nocast: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *shadow: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *tensor_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *skip_post_init_on_rebuild: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *cast_filter: [Callable](https://docs.python.org/3/library/typing.html#typing.Callable) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *kw_only: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → T | [None](https://docs.python.org/3/builtins/constants.html#None)
 
 A decorator that turns a class with annotated fields into a tensorclass.
 
@@ -60,6 +60,10 @@ str. A `cast_filter` passed to the call overrides it, and
 It applies to calls on the tensorclass itself, not when the
 tensorclass is a value of another tensordict or tensorclass that
 is cast. Defaults to `None`: every leaf is cast.
+- **kw_only** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the fields of the class are
+keyword-only arguments of `__init__`, as with
+`@dataclass(kw_only=True)`. The fields of a subclass are not,
+unless it sets the option too. Defaults to `False`.
 
 Returns:
 

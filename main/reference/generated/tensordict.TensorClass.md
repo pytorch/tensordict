@@ -32,12 +32,14 @@ The constructor of a subclass takes the fields, by name or in order, and
 these keyword arguments: `Foo(tensor=..., batch_size=[3])`.
 
 A field declared with [`dataclasses.field()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.field) keeps its `default`,
-`default_factory` and `metadata`. The options `init=False`,
-`repr=False`, `compare=False` and `kw_only=True` are ignored, and
-the class warns about each when it is defined, unless a method of the
-class (`__init__`, `__repr__`, `__eq__` and `__ne__`) replaces the
-one that ignores the option. The class option `kw_only` raises a
-`TypeError`.
+`default_factory` and `metadata`, and `repr=False` leaves it out of
+the repr. The options `init=False`, `compare=False` and
+`kw_only=True` are ignored, and the class warns about each when it is
+defined, unless a method of the class (`__init__`, `__eq__` and
+`__ne__`) replaces the one that ignores the option. The class keyword
+`kw_only=True` makes the fields of the class keyword-only, as in a
+dataclass. A [`dataclasses.InitVar`](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar) goes to `__post_init__`, as
+in a dataclass. See [Field options, kw_only and InitVar](../../tensorclass.html#tensorclass-field-options).
 
 Keyword Arguments:
 
