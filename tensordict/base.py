@@ -2250,14 +2250,24 @@ def _warn_as_tensor_memmap() -> None:
     )
 
 
-def _warn_index_past_batch_dims(index, write: bool = False) -> None:
+def _warn_index_past_batch_dims(
+    index, write: bool = False, no_batch_dims: bool = False
+) -> None:
     """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
 
-    ``write`` is ``True`` for ``td[index] = value``.
+    ``write`` is ``True`` for ``td[index] = value``, and ``no_batch_dims`` for
+    such a write into a tensordict without batch dims.
     """
     if is_compiling():
         return
-    if write:
+    if write and no_batch_dims:
+        op = "written with td[index] = value "
+        replacement = (
+            "To write into the leaves, write "
+            "for leaf in td.values(True, True): leaf[idx] = value, "
+            "or td[...] = value to write whole leaves."
+        )
+    elif write:
         op = "written with td[index] = value "
         replacement = (
             "To write into the leaves, write "
@@ -2294,10 +2304,18 @@ def _may_index_past_batch_dims(index, batch_dims: int) -> bool:
     A cheap test for ``td[index] = value``, which counts the dims of the
     common elements: an int, a slice, a range, a flat list of ints and an
     integer tensor or array use one dim, a mask as many as it has, and
-    ``None`` none. Any other element returns ``True``. A tensordict without
-    batch dims returns ``False``: its writes do not warn, as on main.
+    ``None`` none. Any other element returns ``True``. Without batch dims,
+    every element but ``None`` and a 0-dim bool may use a dim, as in
+    ``td[0] = value`` and ``td[:] = value``.
     """
     if not batch_dims:
+        for idx in index if type(index) is tuple else (index,):
+            if not (
+                idx is None
+                or type(idx) is bool
+                or (type(idx) is Tensor and idx.dtype is torch.bool and not idx.ndim)
+            ):
+                return True
         return False
     cls = type(index)
     if cls is not tuple:
@@ -3744,7 +3762,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         :class:`FutureWarning` after the write. Starting with TensorDict 0.17,
         the default will change to raising an ``IndexError``: to write into
         the leaves, write ``for leaf in td.values(True, True): leaf[:, idx] =
-        value``. A write into a tensordict without batch dims does not warn.
+        value``. On a tensordict without batch dims, any such index runs past
+        them, as in ``td[0] = value`` and ``td[:] = value``, and warns too: to
+        write whole leaves, write ``td[...] = value``.
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
@@ -3778,7 +3798,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _WRITE_PAST_BATCH_DIMS.active = False
         if _index_runs_past_batch_dims(index, self.batch_dims):
             # warn after the write, so that only the writes that work warn
-            _warn_index_past_batch_dims(index, write=True)
+            _warn_index_past_batch_dims(
+                index, write=True, no_batch_dims=not self.batch_dims
+            )
 
     def _setitem_index(self, index: IndexType, value: Any) -> None:
         """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.

@@ -88,6 +88,11 @@ iterate over it:
   ...
   RuntimeError: indexing a tensordict with td.batch_dims==0 is not permitted. Got index 0.
 
+A write with such an index, as in ``data[0] = 0``, still goes into the first
+row of every entry, and emits a ``FutureWarning``: starting with TensorDict
+0.17, the default will change to raising an ``IndexError``. To write whole
+entries, write ``data[...] = 0``.
+
 ``TensorDict()`` creates a tensordict with no entries and an empty batch size.
 
 Infer the batch size
