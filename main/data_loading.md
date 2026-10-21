@@ -140,17 +140,22 @@ entries are collated as above:
 
 ## Batch samplers
 
-A batch sampler gives the indices of a whole batch. Pass it as `sampler`,
-with `batch_size=None`. The `DataLoader` then calls `data[indices]` with
+A batch sampler gives the indices of a whole batch. Pass it as
+`batch_sampler`. The `DataLoader` then calls `data.__getitems__` with
 the list of indices of each batch, and `collate_fn` gets the tensordict:
 
 ```
 >>> from torch.utils.data import BatchSampler, SequentialSampler
 >>> sampler = BatchSampler(SequentialSampler(data), batch_size=4, drop_last=True)
->>> loader = DataLoader(data, sampler=sampler, batch_size=None, collate_fn=lambda x: x)
+>>> loader = DataLoader(data, batch_sampler=sampler, collate_fn=lambda x: x)
 >>> [batch["label"].tolist() for batch in loader]
 [[0, 1, 2, 3], [4, 5, 6, 7]]
 ```
+
+Passing it as `sampler`, with `batch_size=None`, gives the same batches
+through `data[indices]`, but the workers of the `DataLoader` then send
+an HDF5 or zarr [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) batch as a lazy
+view, which the main process reads.
 
 ## Worker processes and pinned memory
 
@@ -165,6 +170,11 @@ to each worker. A memory-mapped tensordict pickles as its file names, so
 the workers open the same files and do not copy the data. Pickle cannot
 send a `lambda`, so define `collate_fn` as a function at the top level
 of a module.
+
+In a worker, `__getitems__` of an HDF5 or zarr
+[`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) reads the rows into a
+[`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) in memory, so the batch is not a view that
+writes to the file, as it is without workers.
 
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with `python`:
