@@ -2014,7 +2014,7 @@ class TestTensorClass:
                 (
                     "w",
                     "kw_only=True: __init__ still takes the field as a positional "
-                    "argument.",
+                    "argument, and warns when it does.",
                 ),
             ]
         )
@@ -2060,6 +2060,133 @@ class TestTensorClass:
                     pass
 
         assert not [w for w in record if "tensorclasses ignore" in str(w.message)]
+
+    @pytest.mark.parametrize("style", ["subclass", "decorator"])
+    def test_positional_args_signature(self, style):
+        # Positional arguments go to the fields in order, keyword-only and
+        # init=False fields included. A call that this order makes raise
+        # follows the signature, and a call that the signature maps
+        # differently warns: 0.17 makes the signature the rule (#3100).
+        def make(name, annotations, namespace, base=None):
+            namespace = {"__annotations__": annotations, **namespace}
+            if style == "subclass":
+                return type(name, (base or TensorClass,), namespace)
+            return tensorclass(type(name, (base,) if base else (), namespace))
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", ".*tensorclasses ignore", UserWarning)
+            K = make(
+                "K",
+                {"a": torch.Tensor, "b": torch.Tensor},
+                {"a": dataclasses.field(kw_only=True)},
+            )
+            F = make(
+                "F",
+                {"a": torch.Tensor, "b": torch.Tensor},
+                {"a": dataclasses.field(default=None, init=False), "b": None},
+            )
+            L = make(
+                "L",
+                {"a": torch.Tensor, "b": torch.Tensor},
+                {"b": dataclasses.field(default=None, kw_only=True)},
+            )
+        KC = make("KC", {"c": torch.Tensor}, {"c": None}, base=K)
+        t0, t1 = torch.zeros(2), torch.ones(2)
+        assert list(inspect.signature(K).parameters)[:2] == ["b", "a"]
+
+        def check(data, **expected):
+            for name, value in expected.items():
+                if value is None:
+                    assert getattr(data, name) is None, name
+                else:
+                    assert (getattr(data, name) == value).all(), name
+
+        # calls that raised and that the signature allows follow it
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            check(K(t1, a=t0, batch_size=[2]), a=0, b=1)
+            check(F(t1, a=t0, batch_size=[2]), a=0, b=1)
+            check(KC(t1, a=t0, batch_size=[2]), a=0, b=1, c=None)
+            check(KC(t1, t0, a=t0, batch_size=[2]), a=0, b=1, c=0)
+            # calls that map the same either way do not warn
+            check(K(b=t1, a=t0, batch_size=[2]), a=0, b=1)
+            check(L(t1, batch_size=[2]), a=1, b=None)
+
+        # calls that the signature maps differently keep their result and warn
+        for cls, args, expected, moved in [
+            (K, (t0, t1), {"a": 0, "b": 1}, ["a", "b"]),
+            (F, (t1,), {"a": 1, "b": None}, ["a"]),
+            (F, (t1, t0), {"a": 1, "b": 0}, ["a", "b"]),
+            (L, (t1, t0), {"a": 1, "b": 0}, ["b"]),
+            (KC, (t0, t1, t1), {"a": 0, "b": 1, "c": 1}, ["a", "b", "c"]),
+        ]:
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                check(cls(*args, batch_size=[2]), **expected)
+            (warning,) = record
+            assert warning.category is FutureWarning
+            assert warning.filename == __file__
+            message = str(warning.message)
+            name = cls.__name__
+            assert message.startswith(
+                f"{name}() assigns positional arguments to the fields in the "
+                "order they are declared"
+            )
+            assert f"this call sets {', '.join(map(repr, moved))} by position" in (
+                message
+            )
+            assert "Starting with TensorDict 0.17, the default will change" in message
+            assert message.endswith(
+                f"pass these fields by keyword: "
+                f"{name}({', '.join(f'{key}=...' for key in moved)})."
+            )
+        # calls that raise either way raise as before, without a warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(TypeError, match="missing 1 required positional"):
+                K(t1, batch_size=[2])
+            with pytest.raises(TypeError, match="3 positional arguments but 4"):
+                K(t0, t1, t1, batch_size=[2])
+
+        # A class with a custom __setattr__, whose dataclass __init__ rejects
+        # the init=False field
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", ".*tensorclasses ignore", UserWarning)
+
+            def __setattr__(self, key, value):
+                super(type(self), self).__setattr__(key, value)
+
+            S = make(
+                "S",
+                {"a": torch.Tensor, "b": torch.Tensor},
+                {
+                    "a": dataclasses.field(default=None, init=False),
+                    "b": None,
+                    "__setattr__": __setattr__,
+                },
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            check(S(t1, batch_size=[2]), a=None, b=1)
+
+        # InitVars are positional arguments of the signature
+        scales = []
+
+        def __post_init__(self, scale=2.0):
+            scales.append(scale)
+
+        A = make(
+            "A",
+            {"x": torch.Tensor, "s": dataclasses.InitVar[float], "y": torch.Tensor},
+            {"s": 1.0, "y": None, "__post_init__": __post_init__},
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            data = A(t1, 3.0, t0, batch_size=[2])
+        check(data, x=1, y=0)
+        assert scales == [3.0]
+        with pytest.warns(FutureWarning, match="this call sets 'y' by position"):
+            check(A(t1, t0, batch_size=[2]), x=1, y=0)
 
     @pytest.mark.parametrize("style", ["subclass", "decorator"])
     def test_class_kw_only(self, style):
@@ -2252,7 +2379,9 @@ class TestTensorClass:
         torch.testing.assert_close(data.x, ones)
         assert data.y is None
         assert "scale" not in data.to_dict()
-        data = MyNoPostInit(ones, twos, batch_size=[3])
+        # the signature would pass twos to scale (#3100)
+        with pytest.warns(FutureWarning, match="this call sets 'y' by position"):
+            data = MyNoPostInit(ones, twos, batch_size=[3])
         torch.testing.assert_close(data.x, ones)
         torch.testing.assert_close(data.y, twos)
 
@@ -2272,7 +2401,9 @@ class TestTensorClass:
         data = MyData(x=ones, batch_size=[3])
         torch.testing.assert_close(data.x, ones * 5)
         torch.testing.assert_close(data.clone().x, ones * 25)
-        data = MyData(ones, twos, batch_size=[3])
+        # the signature would pass twos to scale (#3100)
+        with pytest.warns(FutureWarning, match="this call sets 'y' by position"):
+            data = MyData(ones, twos, batch_size=[3])
         torch.testing.assert_close(data.x, ones * 5)
         torch.testing.assert_close(data.y, twos)
         torch.testing.assert_close(
@@ -2295,7 +2426,9 @@ class TestTensorClass:
                 super().__setattr__(key, value)
 
         ones, twos = torch.ones(3), torch.full((3,), 2.0)
-        data = MyData(ones, twos, batch_size=[3])
+        # the signature would pass twos to scale (#3100)
+        with pytest.warns(FutureWarning, match="this call sets 'y' by position"):
+            data = MyData(ones, twos, batch_size=[3])
         torch.testing.assert_close(data.x, ones)
         torch.testing.assert_close(data.y, twos)
         torch.testing.assert_close(
@@ -2343,7 +2476,9 @@ class TestTensorClass:
         )
         cls = from_dataclass(MyDataClass)
         ones, twos = torch.ones(3), torch.full((3,), 2.0)
-        data = cls(ones, twos, batch_size=[3])
+        # the signature would pass twos to scale (#3100)
+        with pytest.warns(FutureWarning, match="this call sets 'y' by position"):
+            data = cls(ones, twos, batch_size=[3])
         torch.testing.assert_close(data.x, ones)
         torch.testing.assert_close(data.y, twos)
         torch.testing.assert_close(cls(x=ones, scale=3.0, batch_size=[3]).x, ones)

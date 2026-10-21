@@ -1258,7 +1258,11 @@ def _own_annotation_names(cls: type) -> list[str]:
 _IGNORED_FIELD_OPTIONS = {
     "init": (False, "__init__ still takes the field as an argument"),
     "compare": (False, "== and != still compare the field"),
-    "kw_only": (True, "__init__ still takes the field as a positional argument"),
+    "kw_only": (
+        True,
+        "__init__ still takes the field as a positional argument, and warns "
+        "when it does",
+    ),
 }
 
 
@@ -2166,6 +2170,52 @@ def _post_init_args(cls) -> tuple:
     return defaults if cls.__post_init__ is post_init else ()
 
 
+def _positional_names(
+    cls, args, kwargs, old_names, signature_names, required, not_init_names
+) -> tuple[str, ...]:
+    """The fields that the positional arguments of ``cls(*args, **kwargs)`` go to.
+
+    Positional arguments go to the fields in order, keyword-only and
+    ``init=False`` fields included, where the signature of ``__init__`` does
+    not take them positionally (#3100). A call that this order makes raise,
+    and that the signature allows, follows the signature. A call that works
+    in field order warns, as the signature would map it differently.
+    """
+
+    def maps(names):
+        mapped = names[: len(args)]
+        return (
+            len(args) <= len(names)
+            and not any(name in kwargs or name in not_init_names for name in mapped)
+            and all(name in kwargs or name in mapped for name in required)
+        )
+
+    if not maps(old_names) and maps(signature_names):
+        return signature_names
+    if maps(old_names) and not is_dynamo_compiling():
+        first = next(
+            i
+            for i, name in enumerate(old_names[: len(args)])
+            if i >= len(signature_names) or name != signature_names[i]
+        )
+        moved = old_names[first : len(args)]
+        warnings.warn(
+            f"{cls.__name__}() assigns positional arguments to the fields in "
+            "the order they are declared, not as the signature of __init__ "
+            f"takes them: this call sets {', '.join(map(repr, moved))} by "
+            "position. Starting with TensorDict 0.17, the default will change "
+            "to positional arguments that follow the signature, as in "
+            "dataclasses, which takes "
+            f"{', '.join(map(repr, signature_names)) or 'no argument'} by "
+            "position (keyword-only and init=False fields are not positional). "
+            "To keep this result, pass these fields by keyword: "
+            f"{cls.__name__}({', '.join(f'{name}=...' for name in moved)}).",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
+    return old_names
+
+
 def _init_wrapper(
     __init__: Callable,
     cls,
@@ -2209,6 +2259,32 @@ def _init_wrapper(
         signature_names
         if not _custom_init and _follows_signature(cls, False)
         else field_names
+    )
+    # Where the field order and the signature differ, from this position on,
+    # positional arguments may follow the signature (see _positional_names),
+    # without the InitVars that __init__ does not take.
+    target_names = tuple(
+        name
+        for name in signature_names
+        if name in init_var_names
+        or name not in cls.__dataclass_fields__
+        or cls.__dataclass_fields__[name]._field_type is not dataclasses._FIELD_INITVAR
+    )
+    remap_from = (
+        None
+        if _custom_init or old_positional_names == target_names
+        else next(
+            (
+                i
+                for i, (old, new) in enumerate(zip(old_positional_names, target_names))
+                if old != new
+            ),
+            min(len(old_positional_names), len(target_names)),
+        )
+    )
+    # the dataclass __init__ of a custom __setattr__ rejects init=False fields
+    not_init_names = frozenset(
+        field.name for field in fields if _has_custom_setattr and not field.init
     )
     # Specialize only complete schemas without defaults or user initialization
     # hooks. All other constructors retain the general field-setting path.
@@ -2385,18 +2461,31 @@ def _init_wrapper(
             type(self) is cls or type(self).__post_init__ is post_init
         )
         if args:
-            # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
-            expected_keys_list = (
-                (positional_names if uses_init_vars else old_positional_names)
+            if not (
+                type(self) is cls
                 # a subclass that is not a tensorclass itself maps as cls
-                if type(self) is cls
                 or type(self).__dataclass_fields__ is cls.__dataclass_fields__
-                else [
+            ):
+                # Use __dataclass_fields__ but filter out ClassVar fields to preserve order
+                expected_keys_list = [
                     key
                     for key in type(self).__dataclass_fields__
                     if key in self.__expected_keys__
                 ]
-            )
+            elif uses_init_vars:
+                expected_keys_list = positional_names
+            elif remap_from is None or len(args) <= remap_from:
+                expected_keys_list = old_positional_names
+            else:
+                expected_keys_list = _positional_names(
+                    type(self),
+                    args,
+                    kwargs,
+                    old_positional_names,
+                    target_names,
+                    required_params,
+                    not_init_names,
+                )
 
             # Check that we don't have too many positional arguments
             if len(args) > len(expected_keys_list):
@@ -6215,7 +6304,9 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     the repr. The options ``init=False``, ``compare=False`` and
     ``kw_only=True`` are ignored, and the class warns about each when it is
     defined, unless a method of the class (``__init__``, ``__eq__`` and
-    ``__ne__``) replaces the one that ignores the option. The class keyword
+    ``__ne__``) replaces the one that ignores the option. Positional arguments
+    go to the fields in the order they are declared, and warn where the
+    signature of ``__init__`` maps them differently. The class keyword
     ``kw_only=True`` makes the fields of the class keyword-only, as in a
     dataclass. A :class:`dataclasses.InitVar` goes to ``__post_init__``, as
     in a dataclass. See :ref:`tensorclass-field-options`.
