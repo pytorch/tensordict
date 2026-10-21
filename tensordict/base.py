@@ -58,6 +58,7 @@ from tensordict._indexing import (
     _is_new_dim_index,
     _mask_to_indices,
     _read_element,
+    _read_index,
     convert_ellipsis_to_idx,
 )
 from tensordict._nestedkey import NestedKey
@@ -2249,6 +2250,152 @@ def _warn_as_tensor_memmap() -> None:
     )
 
 
+def _warn_index_past_batch_dims(index, write: bool = False) -> None:
+    """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
+
+    ``write`` is ``True`` for ``td[index] = value``.
+    """
+    if is_compiling():
+        return
+    if write:
+        op = "written with td[index] = value "
+        replacement = (
+            "To write into the leaves, write "
+            "for leaf in td.values(True, True): leaf[:, idx] = value."
+        )
+    else:
+        op = ""
+        replacement = (
+            "To index the leaves, write td.apply(lambda x: x[:, idx]), "
+            "which keeps the batch size."
+        )
+    warnings.warn(
+        f"The index {index} {op}runs past the batch dims, and is used on the "
+        "dims of the leaves instead. Starting with TensorDict 0.17, the default "
+        "will change to raising an IndexError, as torch does for a tensor of "
+        f"the batch size. {replacement}",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+class _WritePastBatchDims(local):
+    """Per-thread flag: ``True`` while ``td[index] = value`` writes with an index that may run past the batch dims (#3202)."""
+
+    active = False
+
+
+_WRITE_PAST_BATCH_DIMS = _WritePastBatchDims()
+
+
+def _may_index_past_batch_dims(index, batch_dims: int) -> bool:
+    """``False`` if ``index`` uses no more than ``batch_dims`` dims, ``True`` if it may use more (#3202).
+
+    A cheap test for ``td[index] = value``, which counts the dims of the
+    common elements: an int, a slice, a range, a flat list of ints and an
+    integer tensor or array use one dim, a mask as many as it has, and
+    ``None`` none. Any other element returns ``True``. A tensordict without
+    batch dims returns ``False``: its writes do not warn, as on main.
+    """
+    if not batch_dims:
+        return False
+    cls = type(index)
+    if cls is not tuple:
+        # one element: only a mask can use more than one dim
+        if cls is int or cls is slice or cls is range or index is None:
+            return False
+        if cls is Tensor:
+            return index.ndim > batch_dims and index.dtype is torch.bool
+        if cls is np.ndarray:
+            return index.ndim > batch_dims and index.dtype == np.bool_
+        return not (cls is list and (not index or type(index[0]) is int))
+    used = 0
+    # a loop with type tests, not a helper per element: setitem is a hot path
+    for idx in index:
+        cls = type(idx)
+        if cls is int or cls is slice or cls is range:
+            used += 1
+        elif idx is None:
+            continue
+        elif cls is Tensor:
+            used += idx.ndim if idx.dtype is torch.bool else 1
+        elif cls is np.ndarray:
+            used += idx.ndim if idx.dtype == np.bool_ else 1
+        elif cls is list and (not idx or type(idx[0]) is int):
+            used += 1
+        else:
+            return True
+    return used > batch_dims
+
+
+def _index_runs_past_batch_dims(index, batch_dims: int) -> bool:
+    """``True`` if ``index`` uses more than ``batch_dims`` dims, as torch reads it (#3202)."""
+    try:
+        return _read_index(_entry_index(index), batch_dims)[3] > batch_dims
+    except (IndexError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def _index_past_batch_dims(td, index):
+    """Returns ``td[index]`` for an ``index`` that runs past the batch dims, as TensorDict 0.14 did, or ``None`` (#3202).
+
+    Each leaf is indexed with the whole index, and the batch size grows to
+    cover the leaf dims that the index uses. ``None`` is returned where 0.14
+    gave no result to keep: an index that slices a dim past the batch dims, a
+    tensordict without tensor leaves or with dim names, a sub-tensordict with
+    more batch dims than ``td`` or that is not a tensordict or a tensorclass,
+    and a leaf that the index does not fit.
+    """
+    ndim = td.batch_dims
+    try:
+        dims, _, _, used = _read_index(index, ndim)
+        if used <= ndim or any(dim is not None and dim >= ndim for dim, _ in dims):
+            return None
+        leaf = next((v for v in td.values(True, True) if isinstance(v, Tensor)), None)
+        if leaf is None:
+            return None
+        batch_size = _getitem_batch_size(td.batch_size + leaf.shape[ndim:used], index)
+        return _index_leaves(td, index, batch_size)
+    except (IndexError, RuntimeError):
+        return None
+
+
+def _index_leaves(td, index, batch_size):
+    """Indexes each leaf of ``td`` with ``index``, which runs past the batch dims, into a tensordict of ``batch_size`` (#3202)."""
+    if td._has_names():
+        # 0.14 named the dims of these results inconsistently
+        raise IndexError
+    source = {}
+    for key, item in td.items():
+        cls = type(item)
+        if _is_unbatched(item):
+            source[key] = _unbatched_with_batch_size(item, batch_size)
+        elif not _is_tensor_collection(cls):
+            source[key] = item[index]
+            if source[key].shape[: len(batch_size)] != batch_size:
+                raise IndexError
+        elif item.batch_dims != td.batch_dims:
+            raise IndexError
+        elif cls is _TENSORDICT_TYPE:
+            source[key] = _index_leaves(item, index, batch_size)
+        elif _is_tensorclass(cls):
+            # the non-tensor data and the non-tensor fields are kept
+            source[key] = cls._from_tensordict(
+                tensordict=_index_leaves(item._tensordict, index, batch_size),
+                non_tensordict=dict(item._non_tensordict),
+            )
+        else:
+            raise IndexError
+    result = td._new_unsafe(source=source, batch_size=batch_size, device=td.device)
+    if td._is_memmap and _index_preserve_data_ptr(index):
+        result._is_memmap = True
+        result.lock_()
+    elif td._is_shared and _index_preserve_data_ptr(index):
+        result._is_shared = True
+        result.lock_()
+    return result
+
+
 def _warn_split_keys_kept_in_last() -> None:
     """Warns that ``split_keys(strict=False)`` keeps a named entry that only some members of a lazy stack hold in the last part, until 0.17 (#2827)."""
     if is_compiling():
@@ -3481,7 +3628,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Any other index (an int, a slice, a tensor, a boolean mask, ``...``,
         ``None``, or a tuple of these) applies to the batch dimensions of every
         entry, as it would to a tensor of shape :attr:`~.batch_size`, and
-        returns a tensordict. See :ref:`batch-size`.
+        returns a tensordict. See :ref:`batch-size`. An index that runs past
+        the batch dimensions with ints, lists, tensors or masks indexes the
+        leaves of a tensordict, and grows the batch size to cover their indexed
+        dims, with a ``FutureWarning``. Starting with TensorDict 0.17, the
+        default will change to raising an ``IndexError``: to index the leaves,
+        write ``td.apply(lambda x: x[:, idx])``, which keeps the batch size.
 
         Raises:
             KeyError: if the key is missing.
@@ -3585,6 +3737,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         :ref:`non-tensor-data`). A
         :class:`~tensordict.LazyStackedTensorDict` adds the key only to the
         members that ``index`` selects.
+
+        An index that runs past the batch dimensions with ints, slices, lists,
+        tensors or masks, as in ``td[:, idx] = value`` on a tensordict with one
+        batch dimension, writes into the dims of the leaves, and emits a
+        :class:`FutureWarning` after the write. Starting with TensorDict 0.17,
+        the default will change to raising an ``IndexError``: to write into
+        the leaves, write ``for leaf in td.values(True, True): leaf[:, idx] =
+        value``. A write into a tensordict without batch dims does not warn.
         """
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
@@ -3603,7 +3763,22 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # we must use any and because using Ellipsis in index can break with some indices
         if index is Ellipsis or (istuple and any(idx is Ellipsis for idx in index)):
             index = _expand_batch_ellipsis(index, self.batch_size)
-        self._setitem_index(index, value)
+        if (
+            not _may_index_past_batch_dims(index, self.batch_dims)
+            or is_compiling()
+            or _WRITE_PAST_BATCH_DIMS.active
+        ):
+            self._setitem_index(index, value)
+            return
+        # the nested tensordicts that this write reaches do not warn (#3202)
+        _WRITE_PAST_BATCH_DIMS.active = True
+        try:
+            self._setitem_index(index, value)
+        finally:
+            _WRITE_PAST_BATCH_DIMS.active = False
+        if _index_runs_past_batch_dims(index, self.batch_dims):
+            # warn after the write, so that only the writes that work warn
+            _warn_index_past_batch_dims(index, write=True)
 
     def _setitem_index(self, index: IndexType, value: Any) -> None:
         """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.
@@ -11646,7 +11821,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 and not is_compiling()
             ):
                 index = _mask_to_indices(index, batch_size, self.device)
-            batch_size = _getitem_batch_size(batch_size, index)
+            try:
+                batch_size = _getitem_batch_size(batch_size, index)
+            except IndexError:
+                result = _index_past_batch_dims(self, index)
+                if result is None:
+                    raise
+                _warn_index_past_batch_dims(index)
+                return result
 
         if names is None:
             names = self._get_names_idx(index)

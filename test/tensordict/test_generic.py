@@ -5073,15 +5073,218 @@ class TestGeneric:
         # and raises the error that torch raises
         with pytest.raises(IndexError) as torch_error:
             torch.zeros(3, 4)[index]
-        for td in (
+        # (0, 0, 0) runs past the batch dims and indexes a leaf that has a dim
+        # past them, with a FutureWarning (#3202)
+        tds = [
             TensorDict(batch_size=[3, 4]),
-            TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4]),
-        ):
+            TensorDict({"a": torch.zeros(3, 4)}, [3, 4]),
+        ]
+        if not (type(index) is tuple and index == (0, 0, 0)):
+            tds.append(TensorDict({"a": torch.zeros(3, 4, 2)}, [3, 4]))
+        for td in tds:
             with pytest.raises(IndexError) as error:
                 td[index]
             assert str(error.value) == str(torch_error.value)
             with pytest.raises(IndexError):
                 td[index] = TensorDict()
+
+    def test_getitem_past_batch_dims_deprecated(self):
+        # TensorDict 0.14 indexed the leaves with an index that runs past the
+        # batch dims, 0.15 raised an IndexError without a warning first: the
+        # result of 0.14 comes back with a FutureWarning, until 0.17 (#3202)
+        @tensorclass
+        class _Leaves:
+            a: torch.Tensor
+            s: str
+
+        leaf = torch.arange(8.0).reshape(4, 2)
+        ids = torch.tensor([0, 1])
+        td = TensorDict(
+            a=leaf,
+            n=TensorDict(b=torch.arange(24.0).reshape(4, 2, 3), batch_size=[4]),
+            s=NonTensorData("x", batch_size=[4]),
+            batch_size=[4],
+        )
+        tc = _Leaves(a=leaf, s="x", batch_size=[4])
+        for index, batch_size in [
+            ((slice(None), [0, 1]), (4, 2)),
+            ((slice(None), ids), (4, 2)),
+            ((slice(None), 1), (4,)),
+            ((slice(None), -1), (4,)),
+            ((slice(None), torch.tensor([True, False])), (4, 1)),
+            ((0, [1, 0]), (2,)),
+            ((None, slice(None), 1), (1, 4)),
+        ]:
+            for data in (tc, td):
+                with warnings.catch_warnings(record=True) as record:
+                    warnings.simplefilter("always")
+                    result = data[index]
+                messages = [
+                    w for w in record if "runs past the batch dims" in str(w.message)
+                ]
+                assert len(messages) == 1
+                assert messages[0].category is FutureWarning
+                assert messages[0].filename == __file__
+                assert "td.apply(lambda x: x[:, idx])" in str(messages[0].message)
+                assert type(result) is type(data)
+                assert result.batch_size == batch_size
+                assert (result.get("a") == leaf[index]).all()
+                entries = result.to_tensordict(retain_none=True)
+                assert entries.get("s").batch_size == batch_size
+                assert entries["s"] == "x"
+            # the tensordict comes last
+            assert (result["n", "b"] == td["n", "b"][index]).all()
+            assert result["n"].batch_size == batch_size
+        # an int keeps the views of a shared tensordict, which stays locked
+        shared = td.exclude("s").clone().share_memory_()
+        with pytest.warns(FutureWarning, match="runs past the batch dims"):
+            result = shared[:, 1]
+        assert result._is_shared and result.is_locked
+        assert result["n"]._is_shared
+        # 0.14 gave nothing to keep for a tensordict without entries, a slice
+        # past the batch dims, a leaf too short for the index, and a lazy stack
+        lazy = LazyStackedTensorDict.lazy_stack(
+            [TensorDict(a=torch.zeros(2)) for _ in range(4)]
+        )
+        for data, index in [
+            (TensorDict(batch_size=[4]), (slice(None), 1)),
+            (td, (slice(None), slice(0, 1))),
+            (td, (slice(None), 1, 1)),
+            (td, (slice(None), 2)),
+            (lazy, (slice(None), 1)),
+        ]:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                with pytest.raises(IndexError):
+                    data[index]
+
+    @pytest.mark.parametrize("as_tensor", [False, True])
+    def test_getitem_past_batch_dims_joint_axis(self, as_tensor):
+        # #3202: indexing the joint axis of a proprioception TensorDict, as
+        # EmbodiChain does with get_proprioception()[:, active_joint_ids],
+        # worked on 0.14 and raised an IndexError on 0.15.0: it returns the
+        # 0.14 result, with a FutureWarning, until 0.17
+        num_envs, dof = 4, 3
+        qpos = torch.arange(num_envs * dof, dtype=torch.float).reshape(num_envs, dof)
+        proprio = TensorDict(
+            qpos=qpos, qvel=qpos + 100, qf=qpos + 200, batch_size=[num_envs]
+        )
+        ids = torch.tensor([0, 2]) if as_tensor else [0, 2]
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            robot = proprio[:, ids]
+        messages = [w for w in record if "runs past the batch dims" in str(w.message)]
+        assert len(messages) == 1
+        assert messages[0].category is FutureWarning
+        assert robot.batch_size == (num_envs, 2)
+        for key in ("qpos", "qvel", "qf"):
+            assert torch.equal(robot[key], proprio[key][:, ids])
+        obs = TensorDict({"robot": robot}, batch_size=[num_envs])
+        assert obs.batch_size == (num_envs,)
+        assert obs["robot"].batch_size == (num_envs, 2)
+        assert torch.equal(obs["robot", "qpos"], qpos[:, ids])
+
+    @pytest.mark.parametrize("as_tensor", [False, True])
+    def test_getitem_past_batch_dims_apply_spelling(self, as_tensor):
+        # #3202: the spelling that the FutureWarning names works on 0.14, 0.15
+        # and later, keeps the batch size, and does not warn
+        num_envs, dof = 4, 3
+        qpos = torch.arange(num_envs * dof, dtype=torch.float).reshape(num_envs, dof)
+        proprio = TensorDict(
+            qpos=qpos, qvel=qpos + 100, qf=qpos + 200, batch_size=[num_envs]
+        )
+        ids = torch.tensor([0, 2]) if as_tensor else [0, 2]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            robot = proprio.apply(lambda x: x[:, ids])
+        assert robot.batch_size == (num_envs,)
+        for key in ("qpos", "qvel", "qf"):
+            assert torch.equal(robot[key], proprio[key][:, ids])
+
+    @pytest.mark.parametrize("as_tensor", [False, True])
+    @pytest.mark.parametrize("scalar", [False, True])
+    def test_setitem_past_batch_dims_deprecated(self, as_tensor, scalar):
+        # #3202: writing the joint axis of a proprioception TensorDict, as in
+        # td[:, active_joint_ids] = value, writes into the leaves, and warns
+        # that it raises from 0.17, like the read
+        @tensorclass
+        class _Robot:
+            qpos: torch.Tensor
+            qvel: torch.Tensor
+
+        num_envs, dof = 4, 3
+        qpos = torch.arange(num_envs * dof, dtype=torch.float).reshape(num_envs, dof)
+        ids = torch.tensor([0, 2]) if as_tensor else [0, 2]
+        value = 7.0 if scalar else torch.tensor([-1.0, -2.0])
+        expected = qpos.clone()
+        expected[:, ids] = value
+        expected_qvel = qpos + 100
+        expected_qvel[:, ids] = value
+
+        def make():
+            return {
+                "td": TensorDict(qpos=qpos.clone(), qvel=qpos + 100, batch_size=[4]),
+                "nested": TensorDict(
+                    robot=TensorDict(
+                        qpos=qpos.clone(), qvel=qpos + 100, batch_size=[4]
+                    ),
+                    batch_size=[4],
+                ),
+                "tc": _Robot(qpos=qpos.clone(), qvel=qpos + 100, batch_size=[4]),
+            }
+
+        for name, data in make().items():
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                data[:, ids] = value
+            messages = [
+                w for w in record if "runs past the batch dims" in str(w.message)
+            ]
+            assert len(messages) == 1, name
+            assert messages[0].category is FutureWarning
+            assert messages[0].filename == __file__
+            assert "leaf[:, idx] = value" in str(messages[0].message)
+            robot = data["robot"] if name == "nested" else data
+            assert torch.equal(robot.get("qpos"), expected)
+            assert torch.equal(robot.get("qvel"), expected_qvel)
+        # the spelling that the warning names writes the same leaves, without
+        # a warning
+        for name, data in make().items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                for leaf in data.values(True, True):
+                    leaf[:, ids] = value
+            robot = data["robot"] if name == "nested" else data
+            assert torch.equal(robot.get("qpos"), expected)
+            assert torch.equal(robot.get("qvel"), expected_qvel)
+        # the writes within the batch dims do not warn, nor do the writes that
+        # raise
+        data = make()["td"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            data[0] = 1.0
+            data[ids] = value if scalar else 1.0
+            data[:2] = data[2:].clone()
+            data[torch.tensor([True, False, True, False])] = 0
+            data[..., 1] = 0
+            with pytest.raises(IndexError):
+                data[:, ids] = TensorDict(
+                    qpos=torch.zeros(4, 2), qvel=torch.zeros(4, 2), batch_size=[4, 2]
+                )
+            with pytest.raises(IndexError):
+                data[:, :, 0] = 1.0
+
+    def test_setitem_past_batch_dims_no_batch_dims(self):
+        # #3202: a write into a tensordict without batch dims runs past them,
+        # as the reads that raise a RuntimeError do, but does not warn
+        td = TensorDict(a=torch.zeros(3), b=TensorDict(c=torch.zeros(3, 2)))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td[0] = 1.0
+            td[:] = td.clone()
+            td[[0, 2]] = 2.0
+        assert (td["a"] == torch.tensor([2.0, 0.0, 2.0])).all()
+        assert (td["b", "c"] == torch.tensor([2.0, 0.0, 2.0])[:, None]).all()
 
     @pytest.mark.parametrize(
         "index",
