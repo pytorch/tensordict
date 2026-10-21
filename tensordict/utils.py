@@ -4654,6 +4654,8 @@ class LinkedList(list):
     items. If the write to the tensordict raises, the list is unchanged.
     :meth:`tolist` returns a plain :class:`list` copy that is not linked to
     the tensordict, as :meth:`~tensordict.NonTensorStack.tolist` does.
+    ``LinkedList(iterable)``, without ``td``, builds a list that is not
+    linked to any tensordict.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -4668,9 +4670,11 @@ class LinkedList(list):
 
     """
 
-    def __init__(self, *args, td: TensorDictBase, **kwargs):
+    def __init__(self, *args, td: TensorDictBase | None = None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._td = weakref.ref(td)
+        # Without td, as in type(values)(iterable), which code that rebuilds a
+        # sequence of the same type calls, the list is not linked.
+        self._td = weakref.ref(td) if td is not None else (lambda: None)
 
     def __setitem__(self, key, value):
         td = self._td()

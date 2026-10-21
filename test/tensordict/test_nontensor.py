@@ -944,6 +944,21 @@ class TestNonTensorData:
         result.extend(["baz", "qux"])
         assert result._td() is None
 
+    @set_list_to_stack(True)
+    def test_linked_list_from_iterable(self):
+        # gh-3162: code that rebuilds a sequence as type(seq)(items), such as
+        # Lightning's apply_to_collection, gets a list that is not linked.
+        td = TensorDict(a=["foo", "bar"], batch_size=(2,))
+        values = td["a"]
+        rebuilt = type(values)(item.upper() for item in values)
+        assert isinstance(rebuilt, LinkedList)
+        assert rebuilt == ["FOO", "BAR"]
+        assert rebuilt._td() is None
+        rebuilt[0] = "baz"
+        assert rebuilt == ["baz", "BAR"]
+        assert td["a"] == ["foo", "bar"]
+        assert LinkedList() == []
+
     @pytest.mark.parametrize("value", ["b", NonTensorData("b")])
     def test_linked_list_nontensordata_write_raises(self, value):
         # Regression test for #2978: a NonTensorData holds one value, so the
