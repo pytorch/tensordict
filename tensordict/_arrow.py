@@ -158,6 +158,16 @@ def _from_array(pa, arr, copy, nulls, key, masks):
         pa, typ.value_type
     ):
         return _to_jagged(pa, arr, copy, nulls, key)
+    if nulls == "raise":
+        # The nulls inside the rows of a list of non-tensor values.
+        values = arr
+        while (
+            pa.types.is_list(values.type)
+            or pa.types.is_large_list(values.type)
+            or pa.types.is_fixed_size_list(values.type)
+        ):
+            values = values.flatten()
+            _check_nulls(values, nulls, key)
     if not len(arr):
         # NonTensorStack(batch_size=[0]) has the batch size [0, 0].
         return NonTensorStack()

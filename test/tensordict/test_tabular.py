@@ -698,6 +698,36 @@ class TestArrow:
         assert torch.equal(td["_mask"], torch.tensor([1, 0]))
         assert torch.equal(td["masks", "_mask"], torch.tensor([True, False]))
 
+    # #3261
+    def test_from_arrow_nulls_raise_non_tensor_list(self):
+        import pyarrow as pa
+
+        strings = pa.list_(pa.string())
+        for arr in (
+            pa.array([["a"], None], strings),
+            pa.array([[1, None], [3]], pa.list_(pa.int64())),
+            pa.array([[None], ["b"]], strings),
+            pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+        ):
+            with pytest.raises(ValueError, match=r"\('x',\) has 1 null"):
+                from_arrow(pa.table({"x": arr}))
+        # A slice without the null row or value converts.
+        td = from_arrow(pa.table({"x": pa.array([[None], ["b"]], strings)[1:]}))
+        assert td.get("x").tolist() == [["b"]]
+        for nulls in ("fill", "mask"):
+            td = from_arrow(
+                pa.table(
+                    {
+                        "x": pa.array([[None], ["b"]], strings),
+                        "y": pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+                    }
+                ),
+                nulls=nulls,
+            )
+            assert td.get("x").tolist() == [[None], ["b"]]
+            assert td.get("y").tolist() == [[["a"]], [["b", None]]]
+            assert "masks" not in td.keys()
+
     # #3260
     @pytest.mark.parametrize("nulls", ["fill", "mask"])
     @pytest.mark.parametrize("dtype", ["uint8", "uint16", "uint32", "uint64"])
