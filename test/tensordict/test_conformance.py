@@ -1309,13 +1309,6 @@ _ROUND_TRIP_OUTCOMES = {
         for member in ("unbatched", "unbatched_batch_shaped")
         for path in ("consolidate_filename", "consolidate_pickle")
     },
-    ("non_tensor", "to_dict"): _Raises(
-        RuntimeError,
-        "batch dimension mismatch",
-        when="load",
-        reason="to_dict returns non-tensor data as its Python value, and "
-        "from_dict reads the int 7 as a tensor that has no batch dims",
-    ),
     ("non_tensor_stack", "append_memmap"): _Raises(
         ValueError, "a stack of non-tensor values cannot grow"
     ),
