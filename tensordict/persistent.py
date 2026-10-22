@@ -55,6 +55,7 @@ from tensordict.utils import (
     _is_unbatched,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
+    _UNBATCHED_SAVE,
     _warn_unbatched_saved_as_plain,
     expand_right,
     IndexType,
@@ -1380,10 +1381,18 @@ class PersistentTensorDict(
             **kwargs,
         )
         out._backend.metadata_on_create = _has_batch_size
-        if is_tensor_collection(input_dict):
-            out.update(input_dict)
-        else:
-            out.update(TensorDict(input_dict, batch_size=batch_size))
+        # one UnbatchedTensor warning per save, however many leaves (#3264)
+        outer = getattr(_UNBATCHED_SAVE, "warned", None)
+        if outer is None:
+            _UNBATCHED_SAVE.warned = False
+        try:
+            if is_tensor_collection(input_dict):
+                out.update(input_dict)
+            else:
+                out.update(TensorDict(input_dict, batch_size=batch_size))
+        finally:
+            if outer is None:
+                _UNBATCHED_SAVE.warned = None
         out._backend.metadata_on_create = False
         if not _has_batch_size:
             _set_max_batch_size(out)
