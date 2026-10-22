@@ -1206,6 +1206,16 @@ def _append_memmap(td, path):
     return path
 
 
+def _load_weights_only(path):
+    # PyTorch 2.16 no longer allowlists nested jagged tensors for weights_only
+    # loads (pytorch/pytorch#194380), and asks users to opt in, as here. The
+    # path then tests what tensordict allowlists, on every torch version.
+    from torch.nested._internal.nested_tensor import _rebuild_njt, NestedTensor
+
+    with torch.serialization.safe_globals([_rebuild_njt, NestedTensor]):
+        return torch.load(path, weights_only=True)
+
+
 def _from_dict(data):
     td, as_dict = data
     if _is_tensorclass(type(td)):
@@ -1261,7 +1271,7 @@ _SAVE_LOAD = {
     ),
     "torch_save_weights_only": (
         _save_to_file(lambda td, path: torch.save(td, path)),
-        lambda path: torch.load(path, weights_only=True),
+        _load_weights_only,
     ),
     "to_dict": (lambda td, path: (td, td.to_dict()), _from_dict),
 }
