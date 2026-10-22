@@ -1878,13 +1878,6 @@ _PRINT_XFAILS = {
         for mode in (*_DETAILED_MODES, "plain")
     },
     **{
-        ("lazy_str_and_tensor", mode): (
-            "#3258: detailed repr raises TypeError on a lazy stack of a str "
-            "then a tensor"
-        )
-        for mode in (*_DETAILED_MODES, "plain")
-    },
-    **{
         (case, "plain"): "#3259: plain=True raises on a jagged leaf"
         for case in ("jagged", "jagged_unbatched")
     },
