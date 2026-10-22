@@ -992,6 +992,70 @@ class TestCompactRepr:
                 f"LazyStackedTensorDict(\n    fields={{\n        a: [{types}]}},\n"
             )
 
+    @pytest.mark.parametrize(
+        "options",
+        [{}, {"compact": False}, {"compact": False, "plain": True}],
+        ids=["compact", "detailed", "plain"],
+    )
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "td_then_tensor",
+            "tensor_then_td",
+            "non_tensor_stack",
+            "nested_key",
+            "lazy_in_td",
+            "lazy_of_lazy",
+        ],
+    )
+    def test_mixed_lazy_stack_kinds(self, options, case):
+        # #3258: an entry whose members' values cannot be stacked prints as
+        # their types, wherever the lazy stack sits
+        from tensordict import NonTensorStack
+
+        lazy = LazyStackedTensorDict
+
+        def mixed():
+            return lazy(TensorDict(a="text"), TensorDict(a=torch.zeros(3)))
+
+        obj, types = {
+            "td_then_tensor": (
+                lambda: lazy(
+                    TensorDict(a=TensorDict(b=1)), TensorDict(a=torch.zeros(3))
+                ),
+                "TensorDict, Tensor",
+            ),
+            "tensor_then_td": (
+                lambda: lazy(
+                    TensorDict(a=torch.zeros(3)), TensorDict(a=TensorDict(b=1))
+                ),
+                "Tensor, TensorDict",
+            ),
+            "non_tensor_stack": (
+                lambda: lazy(
+                    TensorDict(a=torch.zeros(2, 3), batch_size=[2]),
+                    TensorDict(a=NonTensorStack("x", "y"), batch_size=[2]),
+                ),
+                "Tensor, NonTensorStack",
+            ),
+            "nested_key": (
+                lambda: lazy(
+                    TensorDict(n=TensorDict(a="text")),
+                    TensorDict(n=TensorDict(a=torch.zeros(3))),
+                ),
+                "NonTensorData, Tensor",
+            ),
+            "lazy_in_td": (
+                lambda: TensorDict(n=mixed(), batch_size=[2]),
+                "NonTensorData, Tensor",
+            ),
+            "lazy_of_lazy": (lambda: lazy(mixed(), mixed()), "NonTensorData, Tensor"),
+        }[case]
+        with set_printoptions(**options):
+            out = repr(obj())
+        if options:
+            assert f"a: [{types}]}}," in out
+
     def test_compact_error_falls_back(self, monkeypatch):
         # #3233: an error in the compact form falls back to the detailed one
         import tensordict.base
