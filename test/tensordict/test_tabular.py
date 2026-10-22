@@ -439,12 +439,14 @@ class TestParquet:
             pq.write_table(pa.table({"t": column}), str(path), row_group_size=2)
             return path
 
-        # A null row.
-        values = np.arange(24, dtype=np.float32)
-        mask = pa.array([False, False, False, True])
-        td = TensorDict.from_parquet(write(pa.array(values), mask))
-        rows = values.reshape(4, 6).tolist()
-        assert list(td["t"]) == [*rows[:3], None]
+        # A null row. pyarrow 25 fails to read it back from Parquet, with
+        # "Expected all lists to be of size=6", so this part needs pyarrow 26.
+        if int(pa.__version__.split(".")[0]) >= 26:
+            values = np.arange(24, dtype=np.float32)
+            mask = pa.array([False, False, False, True])
+            td = TensorDict.from_parquet(write(pa.array(values), mask))
+            rows = values.reshape(4, 6).tolist()
+            assert list(td["t"]) == [*rows[:3], None]
 
         # A null value inside a row, in the second row group, still raises
         # rather than reading whatever the buffer holds.
