@@ -2627,8 +2627,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             warnings.warn(
                 deprecation_message(
                     f"Calling {type(self).__name__}.masked_fill_ with a mask of "
-                    f"shape {tuple(mask.shape)}, which is not the batch size "
-                    f"{tuple(self.batch_size)}, broadcasts the mask from the right "
+                    "shape other than the batch size broadcasts the mask from the right "
                     "against each entry. This",
                     removal="0.17",
                 )

@@ -1015,8 +1015,8 @@ def _maybe_broadcast_other(
                         # pointwise pairs it with the trailing dims of each leaf
                         result = pointwise(self, others, args, kwargs)
                         warnings.warn(
-                            f"{op}() got {tensor_kwargs} by keyword, which do "
-                            f"not broadcast with the batch size {self.shape}: "
+                            f"{op}() got tensors by keyword that do not "
+                            "broadcast with the batch size: "
                             "each leaf broadcasts them from the right, where a "
                             "tensordict without lazy stacks raises. Starting "
                             "with TensorDict 0.17, the default will change to "

@@ -823,6 +823,17 @@ class TestNonTensorData:
             stack[1] = NonTensorData(1, batch_size=(3,))
         assert stack.tolist() == [[0] * 5, [1] * 5, [0] * 5]
 
+    def test_expand_rejected_shape_warns_once(self):
+        # #3256: the message held the shapes, so Python's default filter
+        # showed the warning again for each new shape from one call site
+        d = NonTensorData("a", batch_size=[2])
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("default")
+            for size in range(1, 51):
+                d.expand(size, 3)
+        assert len(record) == 1
+        assert record[0].category is FutureWarning
+
     @pytest.mark.parametrize(
         "in_out", [(None, None), (0, -1), (None, 0), (0, None), (0, 0)]
     )

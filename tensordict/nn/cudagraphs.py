@@ -290,9 +290,11 @@ class CudaGraphModule:
 
         for name, keys in (("in_keys", in_keys), ("out_keys", out_keys)):
             if hasattr(module, name) and _keys_differ(keys, getattr(module, name)):
+                # keys, bounded by the module: cheap to print
+                module_keys = getattr(module, name)
                 warnings.warn(
                     f"CudaGraphModule ignores {name}={keys} because the module has "
-                    f"its own {name}={getattr(module, name)}, which it uses instead. "
+                    f"its own {name}={module_keys}, which it uses instead. "
                     f"Leave {name} unset, or pass an empty list, to silence this warning.",
                     UserWarning,
                     stacklevel=_user_stacklevel(),

@@ -4561,10 +4561,13 @@ def _warn_batch_dims_ignored(op: str, result, batch_dims, batch_size) -> None:
     )
 
 
-def _warn_lazy_shape_args(op: str, args: str) -> None:
-    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17."""
+def _warn_lazy_shape_args(op: str, what: str) -> None:
+    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17.
+
+    ``what`` describes the arguments in a fixed text, without their values.
+    """
     warnings.warn(
-        f"LazyStackedTensorDict.{op} got {args}, which TensorDict.{op} "
+        f"LazyStackedTensorDict.{op} got {what}, which TensorDict.{op} "
         "rejects, and returns the result of its members. Starting with "
         "TensorDict 0.17, the default will change to raising a ValueError, "
         f"as TensorDict.{op} does.",
