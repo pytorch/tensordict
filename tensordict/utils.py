@@ -2981,9 +2981,13 @@ def _proc_init(base_seed, queue, num_threads):
 def _prune_selected_keys(keys_to_update, prefix):
     if keys_to_update is None:
         return None
-    return tuple(
+    sub_keys = tuple(
         key[1:] for key in keys_to_update if isinstance(key, tuple) and key[0] == prefix
     )
+    if not sub_keys and prefix in keys_to_update:
+        # the key names the sub-tensordict: all its entries, as select gives
+        return None
+    return sub_keys
 
 
 class TensorDictFuture:
