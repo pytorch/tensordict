@@ -1514,16 +1514,17 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
 
 
-def test_import_loads_dynamo_before_runtime_wrappers():
-    # #3231: torch has a circular import between
-    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. If
-    # runtime_wrappers is imported first, torch._dynamo stays half-initialized
-    # and every later torch.compile call raises. import tensordict loads
-    # torch._dynamo, so that import order works after it.
+@pytest.mark.parametrize("scenario", ["import", "dynamo_first"])
+def test_import_registers_dynamo_functions(scenario):
+    # tensordict registers some of its functions with Dynamo when it is
+    # imported. They must be in place whether Dynamo is imported before
+    # tensordict or not.
     code = (
-        "import torch, tensordict\n"
-        "from torch._functorch._aot_autograd.runtime_wrappers import AOTDispatchAutograd\n"
-        "assert torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1)) == 2\n"
+        "import torch\n"
+        f"scenario = {scenario!r}\n"
+        "if scenario == 'dynamo_first':\n"
+        "    import torch._dynamo\n"
+        "import tensordict, tensordict.nn\n"
         "from tensordict import base\n"
         "from torch._dynamo import trace_rules\n"
         "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n"
@@ -1535,6 +1536,26 @@ def test_import_loads_dynamo_before_runtime_wrappers():
         "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
         "for fn in (lock, vmap):\n"
         "    torch.compile(fn, fullgraph=True, backend='eager')(td.clone())\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
+
+
+def test_import_loads_dynamo_before_runtime_wrappers():
+    # #3231: torch has a circular import between
+    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. If
+    # runtime_wrappers is imported first, torch._dynamo stays half-initialized
+    # and every later torch.compile call raises. import tensordict loads
+    # torch._dynamo, so that this import order works after it.
+    code = (
+        "import torch, tensordict\n"
+        "import torch._functorch._aot_autograd.runtime_wrappers\n"
+        "out = torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1))\n"
+        "assert out.item() == 2, out\n"
         "print('ok')\n"
     )
     result = subprocess.run(
