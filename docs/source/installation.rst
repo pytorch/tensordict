@@ -52,7 +52,7 @@ Some features need other packages. Install them with an extra, for example
        :meth:`~tensordict.TensorDict.from_h5`, and
        :class:`~tensordict.PersistentTensorDict`.
    * - ``zarr``
-     - ``zarr>=3.0.8``
+     - ``zarr>=3.1.1``
      - Zarr stores: :meth:`~tensordict.TensorDict.to_zarr` and
        :meth:`~tensordict.TensorDict.from_zarr`. zarr 3 needs Python 3.11+.
        On Python 3.10, this extra installs nothing.
