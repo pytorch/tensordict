@@ -180,6 +180,17 @@ across epochs, so it may not see writes that the main process makes to the
 file between epochs: HDF5 does not support writes across processes without
 SWMR mode.
 
+With `spawn` or `forkserver`, each worker opens the HDF5 file again.
+While the main process has the file open for writing (`mode="r+"`,
+`"a"` or `"w"`), HDF5's file lock stops the workers from opening it, so
+they fail with `BlockingIOError`, and the `DataLoader` raises
+`RuntimeError` saying that a worker exited unexpectedly. Give the
+`DataLoader` a tensordict opened with `mode="r"`, and don't keep the file
+open for writing while the workers run; or use `fork`. With
+`persistent_workers=True`, the workers keep the file open for reading
+across epochs, so the main process cannot open it for writing between epochs
+either.
+
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with `python`:
 
