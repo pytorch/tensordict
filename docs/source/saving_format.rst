@@ -90,8 +90,8 @@ tensordict, such as ``"shape"``, is lost: the entry of the tensordict
 replaces the entry of the key. The exceptions are ``"_format_version"``,
 ``"_class"`` and ``"_names"``: a key of one of these names keeps its entry,
 and the ``meta.json`` then lacks that entry of the tensordict, so it reads as
-version 0, its class is looked up by ``"_type"``, or it loads without dim
-names.
+version 0, its class is looked up by ``"_type"``, or its dim names are not
+read from it (a named nested tensordict can still give it names).
 
 Leaves
 ------

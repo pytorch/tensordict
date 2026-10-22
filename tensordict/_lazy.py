@@ -4666,12 +4666,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
             i += 1
-        return cls(
-            *tensordicts,
-            stack_dim=stack_dim,
-            stack_dim_name=metadata.get("stack_dim_name"),
-            **kwargs,
-        )
+        result = cls(*tensordicts, stack_dim=stack_dim, **kwargs)
+        # Set after construction: a subclass's __init__ may not take
+        # stack_dim_name.
+        stack_dim_name = metadata.get("stack_dim_name")
+        if stack_dim_name is not None:
+            result._td_dim_name = stack_dim_name
+        return result
 
     # Override: expand each member, which keeps the stack lazy when the
     # expanded members differ. The names come from the members and the stack

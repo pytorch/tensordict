@@ -2293,14 +2293,16 @@ class TensorDict(TensorDictBase):
         metadata["shape"] = torch.Size(metadata.get("shape", ()))
 
         if out is None:
-            names = metadata.get("_names")
             result = cls(
                 {},
                 batch_size=metadata.pop("shape"),
                 device=metadata.pop("device") if device is None else device,
-                # A key named "_names" has a dict entry.
-                names=names if isinstance(names, list) else None,
             )
+            # Set after construction: a subclass's __init__ may not take
+            # names. A key named "_names" has a dict entry.
+            names = metadata.get("_names")
+            if isinstance(names, list):
+                result._set_names(names)
         else:
             if is_tensorclass(out):
                 # A tensordict save, such as the ``_tensordict`` directory
