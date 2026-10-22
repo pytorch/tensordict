@@ -15,14 +15,14 @@ conda activate ./env
 # The minimum of each extra in pyproject.toml, in its oldest minor series
 # (zarr at its exact floor, as 3.0.0 to 3.0.7 are yanked): update them
 # together. numpy is the oldest series that all of these accept: zarr 3.0.8
-# needs numpy>=1.25. safetensors 0.4.5 is the oldest release that handles
-# float8 tensors and empty tensordicts.
+# needs numpy>=1.25. safetensors 0.7.0 is the oldest release that handles
+# complex tensors.
 min_deps=(
     "pyarrow==10.0.*"
     "pandas==1.5.*"
     "h5py==3.9.*"
     "zarr==3.0.8"
-    "safetensors==0.4.5"
+    "safetensors==0.7.0"
     "numpy==1.25.*"
 )
 python -m pip install "${min_deps[@]}"
@@ -60,8 +60,12 @@ python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist worksteal \
     -k "not (TestArrow or from_arrow or to_arrow) or old_pyarrow or MinimumVersion" \
     --instafail -v --durations 20 --timeout 120 \
     --junitxml="$JUNIT_DIR/junit-tests-min-deps.xml" || test_status=$?
+# zarr 3.0.8 warns that its vlen-utf8 codec for strings is not part of the
+# Zarr 3 specification, and newer zarr releases don't. The printing suite turns
+# every warning into an error, so its zarr cases with strings are deselected.
 python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist worksteal \
-    test/tensordict test/tensorclass -k "h5 or zarr or safetensors" \
+    test/tensordict test/tensorclass \
+    -k "(h5 or zarr or safetensors) and not zarr_non_tensor" \
     --instafail -v --durations 20 --timeout 120 \
     --junitxml="$JUNIT_DIR/junit-tests-min-deps-named.xml" || test_status=$?
 
