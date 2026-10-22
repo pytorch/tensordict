@@ -1317,6 +1317,35 @@ class TestTabularTypeMatrix:
         result = _tabular_cases.run_pandas(pa, _make_column(case_id))
         _check_v0_15_2(case_id, "to_pandas", result["to_pandas"], _make_column(case_id))
 
+    def test_check_accepts_a_fix_of_an_old_bug(self):
+        # v0.15.2 read a bool column with a null row as one NonTensorData that
+        # holds the whole column: a fix that keeps the rows passes, other
+        # values do not.
+        column = _make_column("bool-null_rows")
+        fixed = {"c": {"kind": "NonTensorStack", "values": ["True", "None", "True"]}}
+        _check_v0_15_2("bool-null_rows", "from_parquet", fixed, column, any_pandas=True)
+        copied = {
+            "c": {"kind": "NonTensorStack", "values": [["True", "None", "True"]] * 3}
+        }
+        with pytest.raises(AssertionError, match="nor holds the rows"):
+            _check_v0_15_2(
+                "bool-null_rows", "from_parquet", copied, column, any_pandas=True
+            )
+        # v0.15.2 was right for an int64 column with a null row: any change fails.
+        column = _make_column("int64-null_rows")
+        changed = {
+            "c": {
+                "kind": "tensor",
+                "dtype": "torch.float32",
+                "shape": [3],
+                "values": [1.0, "nan", 3.0],
+            }
+        }
+        with pytest.raises(pytest.fail.Exception, match="where v0.15.2 gave"):
+            _check_v0_15_2(
+                "int64-null_rows", "from_parquet", changed, column, any_pandas=True
+            )
+
     @pytest.mark.parametrize("nulls", ["raise", "fill", "mask"])
     @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
     def test_from_arrow(self, case_id, nulls):
