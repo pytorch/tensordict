@@ -1397,12 +1397,6 @@ _ROUND_TRIP_BUGS = {
     ("non_tensor", "to_dict"): (
         "#3266: from_dict(to_dict()) fails on a nested non-tensor entry"
     ),
-    **{
-        (member, "safetensors"): (
-            "#3267: a lazy stack loads back from safetensors as a dense TensorDict"
-        )
-        for member in ("lazy_stack_dim0", "lazy_stack_dim1")
-    },
 }
 
 
