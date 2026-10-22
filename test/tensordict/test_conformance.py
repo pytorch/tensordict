@@ -1363,10 +1363,6 @@ _ROUND_TRIP_OUTCOMES = {
 # The pairs that filed bugs still break, as {(member, path): xfail reason}.
 _ROUND_TRIP_BUGS = {
     **{
-        ("dim_names", path): "#3262: memmap, save and append_memmap lose the dim names"
-        for path in _MEMMAP_PATHS
-    },
-    **{
         (member, "h5"): "#3263: from_h5 infers the batch sizes and loses the dim names"
         for member in (
             "dense_nested",
