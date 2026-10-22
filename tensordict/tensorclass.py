@@ -6962,7 +6962,7 @@ class NonTensorDataBase(TensorClass):
 
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -8613,7 +8613,7 @@ class NonTensorStack(LazyStackedTensorDict):
     # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,

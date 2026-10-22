@@ -968,7 +968,7 @@ class TensorClass(_TensorClassInitArgs):
     def get_item_shape(self, key: NestedKey) -> torch.Size: ...
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T,
+        input_dict_or_td: Mapping[Any, Any] | T,
         clone: bool = False,
         inplace: bool = False,
         *,

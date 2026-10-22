@@ -37,6 +37,7 @@ from typing import (
     Tuple,
     Type,
     TYPE_CHECKING,
+    TypeAlias,
     TypeVar,
 )
 
@@ -200,7 +201,7 @@ class _BEST_ATTEMPT_INPLACE:
 
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
-CompatibleType = Tensor | TensorCollection
+CompatibleType: TypeAlias = Tensor | TensorCollection
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -6359,7 +6360,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
