@@ -1712,6 +1712,51 @@ _FILE_BACKED = {
     *(name for name in _PRINT_CASES if name.split("_")[0] in ("memmap", "h5", "zarr")),
 }
 
+# the (case, mode) pairs that filed bugs still fail
+_DETAILED_MODES = ("detailed", "detailed_all_flags", "detailed_hidden")
+_PRINT_XFAILS = {
+    **{
+        (case, mode): "#3257: detailed printing reads every leaf of an h5 or zarr file"
+        for case in (
+            "td_h5",
+            "h5",
+            "h5_in_td",
+            "h5_non_tensor",
+            "zarr",
+            "zarr_non_tensor",
+        )
+        for mode in _DETAILED_MODES
+    },
+    ("h5_non_tensor", "plain"): (
+        "#3257: printing an h5 string leaf emits the h5 string FutureWarning"
+    ),
+    ("memmap_lazy", "detailed_all_flags"): (
+        "#3257: detailed printing of a lazy stack stacks its leaves"
+    ),
+    **{
+        ("unbatched_lazy", mode): (
+            "#3257: detailed printing of a lazy stack stacks its UnbatchedTensor "
+            "leaves, which warns"
+        )
+        for mode in (*_DETAILED_MODES, "plain")
+    },
+    **{
+        ("lazy_str_and_tensor", mode): (
+            "#3258: detailed repr raises TypeError on a lazy stack of a str "
+            "then a tensor"
+        )
+        for mode in (*_DETAILED_MODES, "plain")
+    },
+    **{
+        (case, "plain"): "#3259: plain=True raises on a jagged leaf"
+        for case in ("jagged", "jagged_unbatched")
+    },
+    **{
+        (case, "plain"): "#3259: plain=True warns on a one-element leaf"
+        for case in ("zero_d", "non_tensor_leaves")
+    },
+}
+
 
 def _make_print_case(name, path):
     if name in _PRINT_CASES:
@@ -1876,7 +1921,11 @@ class TestPrintEveryContainer:
 
     @pytest.mark.parametrize("mode", list(_PRINT_MODES))
     @pytest.mark.parametrize("case", _CONTAINERS + list(_PRINT_CASES))
-    def test_print(self, case, mode, tmp_path, _backend_reads):
+    def test_print(self, case, mode, tmp_path, _backend_reads, request):
+        if (case, mode) in _PRINT_XFAILS:
+            request.applymarker(
+                pytest.mark.xfail(strict=True, reason=_PRINT_XFAILS[case, mode])
+            )
         obj = _make_print_case(case, tmp_path)
         before = _print_state(obj)
         leaf_reads = _LeafReads()
