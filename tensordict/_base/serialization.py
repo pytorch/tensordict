@@ -1390,7 +1390,7 @@ class _Serialization:
 
     def memmap_(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -1558,7 +1558,7 @@ class _Serialization:
 
     def save(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -1645,7 +1645,7 @@ class _Serialization:
 
     def memmap(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -1874,7 +1874,7 @@ class _Serialization:
 
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         existsok: bool = True,

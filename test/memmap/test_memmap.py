@@ -1439,6 +1439,32 @@ class TestAtomicSave:
         assert sorted(os.listdir(tmp_path)) == ["ckpt", "other"]
 
 
+class TestAtomicSaveClaims:
+    # Behaviour that the description of #3141 promises and TestAtomicSave
+    # does not cover.
+    @staticmethod
+    def _td(value):
+        return TensorDict(
+            a=torch.full((3,), value),
+            nested=TensorDict(b=torch.full((3, 2), value), batch_size=[3]),
+            batch_size=[3],
+        )
+
+    @pytest.mark.parametrize("method", ["memmap", "save"])
+    @pytest.mark.parametrize("windows", [False, True])
+    def test_atomic_archive_has_no_effect(self, tmp_path, monkeypatch, method, windows):
+        # "For an archive, atomic is accepted and has no effect, since the
+        # archive is already written this way." The Windows error is for
+        # directories only.
+        monkeypatch.setattr(td_serialization, "_IS_WINDOWS", windows)
+        path = tmp_path / "data.tdz"
+        self._td(0.0).save(path)
+        getattr(self._td(1.0), method)(path, atomic=True)
+        assert os.listdir(tmp_path) == ["data.tdz"]
+        loaded = TensorDict.load_memmap(path)
+        assert (loaded == self._td(1.0)).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
