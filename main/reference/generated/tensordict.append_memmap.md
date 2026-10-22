@@ -9,7 +9,11 @@ files are rewritten last, each one through a temporary file, so that a
 failed append leaves the saved data as it was. Readers that mapped the
 files before the append keep seeing the old number of rows, and
 [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) after the append sees the new one. Use one
-writer at a time. Each append maps the whole saved tree, as
+writer at a time. The `meta.json` files of nested levels are replaced
+one at a time, so an append that is killed midway, or a
+[`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) that runs during an append, can see
+nested levels with different numbers of rows: don't read a directory
+while you append to it. Each append maps the whole saved tree, as
 [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) does, to read its structure, so many small
 appends to a save with many leaves are slow. See [Save and load tensordicts](../../saving.html#saving).
 

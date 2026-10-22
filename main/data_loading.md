@@ -174,7 +174,11 @@ of a module.
 In a worker, `__getitems__` of an HDF5 or zarr
 [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) reads the rows into a
 [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) in memory, so the batch is not a view that
-writes to the file, as it is without workers.
+writes to the file, as it is without workers. With
+`persistent_workers=True`, each worker keeps its own HDF5 file handle
+across epochs, so it may not see writes that the main process makes to the
+file between epochs: HDF5 does not support writes across processes without
+SWMR mode.
 
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with `python`:
