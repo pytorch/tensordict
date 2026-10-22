@@ -4515,6 +4515,17 @@ def _user_stacklevel() -> int:
     return stacklevel
 
 
+def _warn_unbatched_saved_as_plain() -> None:
+    """Warns that an h5, zarr or ``.tdz`` save writes an UnbatchedTensor leaf as a plain tensor (#3264)."""
+    warnings.warn(
+        "UnbatchedTensor leaves are saved as plain tensors: they are read back "
+        "as plain tensors, or fail to load when their shape does not fit the "
+        "batch size. Exclude them before saving.",
+        UserWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_dim_past_batch_dims(op: str) -> None:
     """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
     warnings.warn(

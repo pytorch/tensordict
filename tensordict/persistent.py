@@ -52,8 +52,10 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
+    _is_unbatched,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
+    _warn_unbatched_saved_as_plain,
     expand_right,
     IndexType,
     is_non_tensor,
@@ -2320,6 +2322,9 @@ class PersistentTensorDict(
         if hasattr(value, "requires_grad") and value.requires_grad:
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
+            if _is_unbatched(value):
+                # the file has no place for the class (#3264)
+                _warn_unbatched_saved_as_plain()
             out = value.cpu().detach().numpy()
         elif isinstance(value, dict):
             out = TensorDict(value, [])
