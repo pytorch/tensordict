@@ -2167,8 +2167,12 @@ class TestMemmap:
         # #3264: h5, zarr and .tdz files have no place for the UnbatchedTensor
         # class, so the leaves are saved as plain tensors. Saving warns once
         # per call site and writes the same file as before.
-        if fmt in ("h5", "zarr"):
-            pytest.importorskip({"h5": "h5py", "zarr": "zarr"}[fmt])
+        if fmt == "h5":
+            pytest.importorskip("h5py")
+        elif fmt == "zarr":
+            zarr = pytest.importorskip("zarr")
+            if int(zarr.__version__.split(".")[0]) < 3:
+                pytest.skip("tensordict's zarr support needs zarr>=3")
         save, load = {
             "h5": (TensorDict.to_h5, PersistentTensorDict.from_h5),
             "zarr": (TensorDict.to_zarr, PersistentTensorDict.from_zarr),
