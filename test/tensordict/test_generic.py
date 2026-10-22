@@ -15903,6 +15903,349 @@ class TestGeneric:
         assert out.get("instr").tolist() == expected
 
 
+class TestPRClaims:
+    """Behaviour that the descriptions of merged PRs promise and no other test covers.
+
+    Each test names the PR whose description makes the claim.
+    """
+
+    @staticmethod
+    def _collate_samples(kind):
+        class Base(TensorClass):
+            x: torch.Tensor
+
+        class Child(Base):
+            pass
+
+        @tensorclass
+        class DecoratedBase:
+            x: torch.Tensor
+
+        @tensorclass
+        class DecoratedChild(DecoratedBase):
+            pass
+
+        if kind == "TensorDictBase":
+            return TensorDictBase, [TensorDict(x=torch.zeros(3)) for _ in range(4)]
+        if kind == "TensorClass":
+            return TensorClass, [Child(x=torch.zeros(3)) for _ in range(4)]
+        if kind == "tensorclass_base":
+            return Base, [Child(x=torch.zeros(3)) for _ in range(4)]
+        return DecoratedBase, [DecoratedChild(x=torch.zeros(3)) for _ in range(4)]
+
+    @pytest.mark.parametrize(
+        "kind",
+        ["TensorDictBase", "TensorClass", "tensorclass_base", "decorated_base"],
+    )
+    def test_collate_registration_for_base_class_wins(self, kind, monkeypatch):
+        # #3180 says that tensordict's entries in default_collate_fn_map leave
+        # a collate function that another library or the user registered in
+        # charge. On 0.15.2 a function registered for a base class of the
+        # samples ran (#3236).
+        default_collate_fn_map = torch.utils.data._utils.collate.default_collate_fn_map
+        key, samples = self._collate_samples(kind)
+
+        def mine(batch, *, collate_fn_map=None):
+            return "mine"
+
+        monkeypatch.setitem(default_collate_fn_map, key, mine)
+        result = torch.utils.data.default_collate(samples)
+        assert isinstance(result, str) and result == "mine", (
+            f"default_collate skipped the function registered for {key.__name__} "
+            f"and returned a {type(result).__name__}"
+        )
+        loader = torch.utils.data.DataLoader(samples, batch_size=2)  # noqa: TOR401
+        result = next(iter(loader))
+        assert isinstance(result, str) and result == "mine", (
+            f"the default collate_fn of a DataLoader skipped the function "
+            f"registered for {key.__name__} and returned a {type(result).__name__}"
+        )
+
+    @pytest.mark.parametrize("order", ["tensordict_first", "tensorclass_first"])
+    def test_collate_mixed_batch_raises_type_error(self, order):
+        # #3180: only batches that raise a TypeError in the default collate
+        # change behaviour. A batch that mixes a TensorDict and a tensorclass
+        # raised TypeError on 0.15.2 and must still raise one.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        samples = [TensorDict(x=torch.zeros(3)), Sample(x=torch.zeros(3))]
+        if order == "tensorclass_first":
+            samples.reverse()
+        try:
+            torch.utils.data.default_collate(samples)
+        except TypeError:
+            pass
+        except Exception as err:
+            pytest.fail(
+                "default_collate of a batch that mixes a TensorDict and a "
+                f"tensorclass raised {type(err).__name__}: {err}, not the "
+                "TypeError of 0.15.2"
+            )
+        else:
+            pytest.fail(
+                "default_collate of a batch that mixes a TensorDict and a "
+                "tensorclass returned without an error"
+            )
+
+    @pytest.mark.parametrize(
+        "samples",
+        [
+            [torch.ones(2), torch.zeros(2)],
+            [{"a": torch.ones(2), "b": 1}, {"a": torch.zeros(2), "b": 2}],
+            [(torch.ones(2), 1.0), (torch.zeros(2), 2.0)],
+            [[1, 2], [3, 4]],
+            ["a", "b"],
+            [np.ones(2), np.zeros(2)],
+        ],
+        ids=["tensor", "dict", "tuple", "list", "str", "numpy"],
+    )
+    def test_collate_other_types_unchanged(self, samples):
+        # #3180: "Only types that raise TypeError in the default collate today
+        # change behaviour." Samples without tensordicts collate as torch's
+        # map without tensordict's entries collates them.
+        from tensordict.tensorclass import _collate_tensor_collection
+        from torch.utils.data._utils.collate import collate, default_collate_fn_map
+
+        torch_map = {
+            key: fn
+            for key, fn in default_collate_fn_map.items()
+            if fn is not _collate_tensor_collection
+        }
+        expected = collate(samples, collate_fn_map=torch_map)
+        result = torch.utils.data.default_collate(samples)
+        assert type(result) is type(expected)
+        assert str(result) == str(expected)
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_newer_metadata_version_raises(self, tmp_path):
+        # #3139: "The metadata includes a format version (1), so a later
+        # version [...] this loader then raises a clear error instead of
+        # loading such a file wrongly."
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        path = tmp_path / "td.safetensors"
+        tensordict.to_safetensors(TensorDict(a=torch.zeros(2)), path)
+        with safe_open(path, framework="pt") as file:
+            metadata = json.loads(file.metadata()["tensordict"])
+        assert metadata["version"] == 1
+        metadata["version"] = 2
+        save_file(
+            {"a": torch.zeros(2)}, path, metadata={"tensordict": json.dumps(metadata)}
+        )
+        with pytest.raises(ValueError, match="version 2"):
+            tensordict.from_safetensors(path)
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_unlisted_tensor_raises(self, tmp_path):
+        # #3139: "A file with tensordict metadata that also holds tensors the
+        # metadata does not list raises a ValueError."
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        path = tmp_path / "td.safetensors"
+        tensordict.to_safetensors(TensorDict(a=torch.zeros(2)), path)
+        with safe_open(path, framework="pt") as file:
+            metadata = file.metadata()
+        save_file({"a": torch.zeros(2), "extra": torch.ones(2)}, path, metadata)
+        with pytest.raises(ValueError, match="extra"):
+            tensordict.from_safetensors(path)
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_default_device_is_none(self, tmp_path):
+        # #3139: "The device is not stored. [...] The default loads on CPU and
+        # gives a result with no device."
+        path = tmp_path / "td.safetensors"
+        td = TensorDict(a=torch.zeros(2), b={"c": torch.ones(2)}, device="cpu")
+        tensordict.to_safetensors(td, path)
+        out = tensordict.from_safetensors(path)
+        assert out.device is None
+        assert out["b"].device is None
+        assert out["a"].device == torch.device("cpu")
+
+    def test_safetensors_missing_package_raises_import_error(
+        self, tmp_path, monkeypatch
+    ):
+        # #3139: "the two functions raise an ImportError if it is missing."
+        import tensordict._safetensors as safetensors_module
+
+        monkeypatch.setattr(safetensors_module, "_has_safetensors", False)
+        path = tmp_path / "td.safetensors"
+        with pytest.raises(ImportError, match="safetensors"):
+            tensordict.to_safetensors(TensorDict(a=torch.zeros(2)), path)
+        with pytest.raises(ImportError, match="safetensors"):
+            tensordict.from_safetensors(path)
+        assert not path.exists()
+
+    def test_import_loads_no_optional_dependency(self):
+        # #3139: "`import tensordict` works without safetensors"; #3145:
+        # "`import tensordict` does not import pyarrow."
+        code = (
+            "import sys\n"
+            "import tensordict\n"
+            "print(sorted(m for m in ('safetensors', 'pyarrow') if m in sys.modules))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "[]", (
+            f"import tensordict imported {result.stdout.strip()}"
+        )
+
+    def test_memmap_tensorclass_root_has_no_format_entries(self, tmp_path):
+        # #3114: "A tensorclass meta.json gets no new entries [...] the root
+        # meta.json of a saved tensorclass has no version, and its
+        # _tensordict/meta.json has one."
+        sample = _ClaimsSample(x=torch.zeros(3), label="a", batch_size=[3])
+        sample.memmap(tmp_path)
+        root = json.loads((tmp_path / "meta.json").read_text())
+        assert "_format_version" not in root
+        assert "_class" not in root
+        inner = json.loads((tmp_path / "_tensordict" / "meta.json").read_text())
+        assert inner["_format_version"] == 1
+        assert inner["_class"] == "tensordict:TensorDict"
+        loaded = _ClaimsSample.load_memmap(tmp_path)
+        assert type(loaded) is _ClaimsSample
+        assert loaded.label == "a"
+        assert (loaded.x == 0).all()
+
+    @staticmethod
+    def _read_tree(path):
+        return {p: p.read_bytes() for p in sorted(Path(path).rglob("*")) if p.is_file()}
+
+    def test_append_memmap_rows_not_a_collection_raise_type_error(self, tmpdir):
+        # #3142: "Rows that are not a tensor collection raise TypeError", and
+        # no file changes.
+        TensorDict(a=torch.zeros(3, 2), batch_size=[3]).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        for rows in (torch.ones(2, 2), {"a": torch.ones(2, 2)}):
+            with pytest.raises(TypeError):
+                tensordict.append_memmap(tmpdir, rows)
+        assert self._read_tree(tmpdir) == files
+        assert tensordict.load_memmap(tmpdir).batch_size == (3,)
+
+    def test_append_memmap_other_class_raises(self, tmpdir):
+        # #3142: the rows must have the class of the save (tensordict or the
+        # same tensorclass); a mismatch raises ValueError and no file changes.
+        TensorDict(x=torch.zeros(3), label="a", batch_size=[3]).memmap(tmpdir)
+        files = self._read_tree(tmpdir)
+        with pytest.raises(ValueError):
+            tensordict.append_memmap(
+                tmpdir, _ClaimsSample(x=torch.ones(2), label="a", batch_size=[2])
+            )
+        assert self._read_tree(tmpdir) == files
+
+    def test_jagged_index_out_of_range_raises_index_error(self):
+        # #3113: "An out-of-range index tensor on a jagged leaf now raises
+        # IndexError."
+        nt = torch.nested.nested_tensor(
+            [torch.zeros(2), torch.zeros(3), torch.zeros(1)], layout=torch.jagged
+        )
+        td = TensorDict(ids=nt, x=torch.arange(3), batch_size=[3])
+        for index in (torch.tensor([0, 5]), torch.tensor([-4]), [3]):
+            with pytest.raises(IndexError):
+                td[index]
+
+    def test_jagged_chunk_shares_values(self):
+        # #3113: "A slice of step 1, split and chunk return views of the
+        # values, as for dense tensors."
+        nt = torch.nested.nested_tensor(
+            [torch.arange(3), torch.arange(5), torch.arange(2), torch.arange(4)],
+            layout=torch.jagged,
+        )
+        td = TensorDict(ids=nt, batch_size=[4])
+        storage = nt.values().untyped_storage().data_ptr()
+        for piece in td.chunk(2):
+            assert piece["ids"].values().untyped_storage().data_ptr() == storage
+
+    def test_group_by_reserves_no_tensorclass_field(self):
+        # #3098: group_by "is not a method, so it reserves no tensorclass
+        # field name."
+        class Sample(TensorClass):
+            group_by: torch.Tensor
+
+        sample = Sample(group_by=torch.tensor([1, 0, 1]), batch_size=[3])
+        assert (sample.group_by == torch.tensor([1, 0, 1])).all()
+        values, groups = group_by(sample, "group_by")
+        assert values.tolist() == [0, 1]
+        assert all(type(group) is Sample for group in groups)
+        assert [group.group_by.tolist() for group in groups] == [[0], [1, 1]]
+
+    def test_to_non_blocking_pin_same_result_for_any_num_threads(self, monkeypatch):
+        # #3228: the default num_threads now pins on the calling thread, and
+        # "the results do not change": nested batch sizes, names, lazy stacks
+        # and non-tensor data come out as with threads.
+        if not torch.cuda.is_available():
+            monkeypatch.setattr(torch.Tensor, "pin_memory", lambda tensor: tensor)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        td = TensorDict(
+            a=torch.arange(6.0).reshape(3, 2),
+            nested=TensorDict(b=torch.ones(3, 4, 2), batch_size=[3, 4]),
+            lazy=lazy_stack([TensorDict(c=torch.zeros(2)) for _ in range(3)]),
+            label="x",
+            batch_size=[3],
+            names=["time"],
+        )
+        for num_threads in (None, 0, 2):
+            out = td.to(device, non_blocking_pin=True, num_threads=num_threads)
+            assert out.batch_size == td.batch_size, num_threads
+            assert out.names == td.names, num_threads
+            assert out["nested"].batch_size == (3, 4), num_threads
+            assert isinstance(out["lazy"], LazyStackedTensorDict), num_threads
+            assert out["label"] == "x", num_threads
+            assert set(out.keys(True, True)) == set(td.keys(True, True)), num_threads
+            assert (out.cpu() == td).all(), num_threads
+
+    @pytest.mark.parametrize(
+        "index", [True, False, None, (), Ellipsis], ids=lambda index: repr(index)
+    )
+    def test_setitem_no_batch_dims_silent_indices(self, index):
+        # #3225: on a tensordict without batch dims, td[...] = v, td[()] = v,
+        # td[None] = v and 0-dim bool indices such as td[True] = v don't warn.
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.zeros(2, 2)})
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td[index] = 1.0
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "names",
+            pytest.param(
+                "h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not installed"),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "index",
+        [(slice(None), [0, 1]), (slice(None), torch.tensor([0, 1])), (slice(None), 0)],
+        ids=["list", "tensor", "int"],
+    )
+    def test_getitem_past_batch_dims_still_raises(self, kind, index, tmp_path):
+        # #3206 lists the containers where an index past the batch dims still
+        # raises main's IndexError, without a warning: among them a
+        # tensordict with dim names and a PersistentTensorDict (h5).
+        td = TensorDict(a=torch.zeros(4, 3), batch_size=[4], names=["time"])
+        if kind == "h5":
+            td = PersistentTensorDict.from_dict(
+                TensorDict(a=torch.zeros(4, 3), batch_size=[4]), tmp_path / "td.h5"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with pytest.raises(IndexError, match="too many indices"):
+                td[index]
+        if kind == "h5":
+            td.close()
+
+
+class _ClaimsSample(TensorClass):
+    x: torch.Tensor
+    label: str
+
+
 _SYNC_COUNTER = 0
 
 
