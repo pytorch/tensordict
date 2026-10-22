@@ -13,17 +13,18 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 # The minimum of each extra in pyproject.toml, in its oldest minor series
-# (zarr at its exact floor, as 3.0.0 to 3.0.7 are yanked): update them
-# together. numpy is the oldest series that all of these accept: zarr 3.0.8
-# needs numpy>=1.25. safetensors 0.4.5 is the oldest release that handles
-# float8 tensors and empty tensordicts.
+# (zarr at its exact floor): update them together. numpy is the oldest series
+# that all of these accept: zarr 3.1.1 needs numpy>=1.26. safetensors 0.7.0 is
+# the oldest release that handles complex tensors, and zarr 3.1.1 the oldest
+# that saves strings without warning that its vlen-utf8 codec is not part of
+# the Zarr 3 specification.
 min_deps=(
     "pyarrow==10.0.*"
     "pandas==1.5.*"
     "h5py==3.9.*"
-    "zarr==3.0.8"
-    "safetensors==0.4.5"
-    "numpy==1.25.*"
+    "zarr==3.1.1"
+    "safetensors==0.7.0"
+    "numpy==1.26.*"
 )
 python -m pip install "${min_deps[@]}"
 python -c "
