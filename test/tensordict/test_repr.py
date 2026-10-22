@@ -62,7 +62,6 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
-_has_zarr = importlib.util.find_spec("zarr", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -1915,8 +1914,9 @@ def _make_print_case(name, path):
         backend = name.split("_")[0]
         if backend == "h5" and not _has_h5py:
             pytest.skip("h5py is not installed")
-        if backend == "zarr" and not _has_zarr:
-            pytest.skip("zarr is not installed")
+        if backend == "zarr":
+            # tensordict's zarr support needs zarr 3
+            pytest.importorskip("zarr", minversion="3")
         return _PRINT_CASES[name](path)
     return getattr(_Pool, name)("cpu")
 
