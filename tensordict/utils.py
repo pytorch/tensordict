@@ -2682,7 +2682,9 @@ def _html_repr(obj) -> str | None:
     from tensordict import TensorDictBase
     from tensordict.tensorclass import _repr
 
-    if not _REPR_OPTIONS["html"]:
+    # with compact=False (or a detailed-only option), the notebook shows the
+    # detailed text repr
+    if not _REPR_OPTIONS["html"] or not _REPR_OPTIONS["compact"]:
         return None
     try:
         # a class with its own repr (a non-tensor class among them) keeps it
