@@ -32,6 +32,7 @@ import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
+import numpy as np
 import torch
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import _SKIP_TENSORCLASS_POST_INIT, _zip_strict
@@ -612,8 +613,10 @@ class _ArchiveReader:
         if request is not None:
             self.prefetch_compressed(*request)
 
-    def _inflate(self, name: str, archive: memoryview) -> bytes:
+    def _inflate(self, name: str, archive: np.ndarray) -> bytes:
         entry = self.entries[name]
+        # Slice the array, not a memoryview: memoryview slices share an export
+        # count that is not thread-safe on free-threaded Python (#3226).
         raw = archive[entry.offset : entry.offset + entry.compress_size]
         inflater = zlib.decompressobj(wbits=-15)
         error = f"Invalid deflated payload for entry {name!r} in {self.path}."
@@ -647,7 +650,7 @@ class _ArchiveReader:
         ]
         if len(names) < 2 or num_threads < 2:
             return
-        archive = memoryview(self.storage.numpy())
+        archive = self.storage.numpy()
 
         def inflate(name):
             return name, self._inflate(name, archive)
@@ -677,7 +680,7 @@ class _ArchiveReader:
             data = self._decompressed.pop(name, None)
             if data is None:
                 if entry.compress_type == zipfile.ZIP_DEFLATED:
-                    data = self._inflate(name, memoryview(self.storage.numpy()))
+                    data = self._inflate(name, self.storage.numpy())
                 else:
                     data = self.read_bytes(name)
             if not data:
