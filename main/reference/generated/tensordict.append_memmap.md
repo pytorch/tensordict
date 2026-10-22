@@ -13,9 +13,15 @@ writer at a time. The `meta.json` files of nested levels are replaced
 one at a time, so an append that is killed midway, or a
 [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) that runs during an append, can see
 nested levels with different numbers of rows: don't read a directory
-while you append to it. Each append maps the whole saved tree, as
-[`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) does, to read its structure, so many small
-appends to a save with many leaves are slow. See [Save and load tensordicts](../../saving.html#saving).
+while you append to it. A killed append can leave its new `meta.json`
+files behind as `.meta.json.append.tmp` files. If it was killed after
+the first `meta.json` was replaced, [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap)
+and the next append raise an error: rename each temporary file over the
+`meta.json` next to it, which completes the append. If the directory
+still loads, delete the temporary files, which may be incomplete. Each
+append maps the whole saved tree, as [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap)
+does, to read its structure, so many small appends to a save with many
+leaves are slow. See [Save and load tensordicts](../../saving.html#saving).
 
 `rows` must have the keys, the classes, the dtypes and the trailing
 shapes of the saved tensordict, and its batch size may differ from the
