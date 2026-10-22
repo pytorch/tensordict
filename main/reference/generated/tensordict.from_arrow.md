@@ -48,10 +48,9 @@ floating-point tensors, `0` (`False`) in the other tensors, an
 empty list in jagged tensors, and `None` in a
 [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack). A null struct makes each of
 its fields null. `"mask"` fills them as `"fill"` does, and adds
-the boolean entry `("masks", *key)` for each entry `key` that
-has nulls, `True` where the row is not null, as
-[`pad_sequence()`](tensordict.pad_sequence.html#tensordict.pad_sequence) does with `return_mask=True`.
-Filling copies the column. Defaults to `"raise"`.
+the boolean entry `("_mask", *key)` for each entry `key` that
+has nulls, `True` where the row is not null. Filling copies the
+column. Defaults to `"raise"`.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
 result. Defaults to `None`, which keeps the tensors on the CPU
 and gives a tensordict without a device.
@@ -84,6 +83,6 @@ tensor([1., 2., 3.], dtype=torch.float64)
 >>> td.get("text").tolist()
 ['a', 'b', 'c']
 >>> td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
->>> td["y"], td["masks", "y"]
+>>> td["y"], td["_mask", "y"]
 (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
 ```
