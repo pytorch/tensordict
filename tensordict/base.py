@@ -2545,15 +2545,14 @@ def _warn_update_keys_narrowed(
     except Exception:
         # a source that the update rejects: it raises its own error
         return
-    under = [k for k in deeper if k[: len(key)] == key]
+    # Fixed text: the keys would make Python warn again for each new value (#3232).
     warnings.warn(
-        f"{method}() got keys_to_update with the key {key!r} and the deeper "
-        f"keys {under!r}, and writes every entry of the sub-tensordict under "
-        f"{key!r}, while select() and update() keep only the deeper keys. "
-        "Starting with TensorDict 0.17, the default will change to writing "
-        "only the deeper keys, as select does. List only the sub-tensordict "
-        "key to keep the current result, or only the deeper keys to get the "
-        "new one now.",
+        f"{method}() got a sub-tensordict key and deeper keys under it in "
+        "keys_to_update, and writes every entry of that sub-tensordict, while "
+        "select() and update() keep only the deeper keys. Starting with "
+        "TensorDict 0.17, the default will change to writing only the deeper "
+        "keys, as select does. List only the sub-tensordict key to keep the "
+        "current result, or only the deeper keys to get the new one now.",
         FutureWarning,
         stacklevel=_user_stacklevel(),
     )
