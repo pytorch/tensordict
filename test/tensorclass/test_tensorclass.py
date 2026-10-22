@@ -1272,7 +1272,7 @@ def test_sequential_overloads_source_static_types(
         (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
     )
     package.joinpath("nn", "__init__.pyi").write_text(
-        f"""from typing import Any, Callable, List, overload
+        f"""from typing import Any, Callable, List, OrderedDict, overload
 
 from tensordict._nestedkey import NestedKey
 
