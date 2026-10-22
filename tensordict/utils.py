@@ -2425,7 +2425,9 @@ def _compact_dtype(dtype: torch.dtype) -> str:
 def _compact_leaf(td, key):
     # Returns the shape after the batch dims, the dtype and the set of devices
     # of a tensor entry. In a lazy stack, a dim that differs between members
-    # is -1 and the dtype is the promoted one, as the stacked tensor has.
+    # is -1 and the dtype is the promoted one, as the stacked tensor has. If a
+    # member holds a non-tensor value, returns the entry of that member, as
+    # when it comes first.
     from tensordict import LazyStackedTensorDict, TensorDict
     from tensordict.persistent import PersistentTensorDict
     from tensordict.typedtensordict import TypedTensorDict
@@ -2442,13 +2444,18 @@ def _compact_leaf(td, key):
             sub = members.pop()
             if type(sub) is TensorDict:
                 tensor = sub._get_str(key, None)
+                if is_non_tensor(tensor):
+                    return _compact_entry(sub, key)
                 shapes.add(_compact_shape(sub, tensor))
                 dtypes.add(tensor.dtype)
                 devices.add(tensor.device)
             elif isinstance(sub, LazyStackedTensorDict):
                 members.extend(sub.tensordicts)
             else:
-                shape, dtype, sub_devices = _compact_leaf(sub, key)
+                leaf = _compact_leaf(sub, key)
+                if isinstance(leaf, str):
+                    return leaf
+                shape, dtype, sub_devices = leaf
                 shapes.add(tuple(shape))
                 dtypes.add(dtype)
                 devices |= sub_devices
@@ -2465,6 +2472,8 @@ def _compact_leaf(td, key):
         device = td.device if td.device is not None else torch.device("cpu")
         return list(meta["shape"][td.batch_dims :]), meta["dtype"], {device}
     tensor = td._get_str(key, None)
+    if is_non_tensor(tensor):
+        return _compact_entry(td, key)
     return _compact_shape(td, tensor), tensor.dtype, {tensor.device}
 
 
@@ -2511,7 +2520,8 @@ def _compact_entry(td, key):
     else:
         item = first._get_str(key, None)
     if item is None or not _is_tensor_collection(type(item)):
-        return _compact_token(td, *_compact_leaf(td, key))
+        leaf = _compact_leaf(td, key)
+        return leaf if isinstance(leaf, str) else _compact_token(td, *leaf)
     if isinstance(item, NonTensorData):
         return type(item.data).__name__
     if is_non_tensor(item) or (not is_tensorclass(item) and _keeps_own_repr(item)):

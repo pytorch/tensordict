@@ -967,6 +967,35 @@ class TestCompactRepr:
             expected = repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))
         assert (repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))) == expected
 
+    @pytest.mark.parametrize("value,name", [("text", "str"), (None, "NoneType")])
+    @pytest.mark.parametrize("tensor_first", [True, False])
+    def test_compact_mixed_lazy_stack(self, value, name, tensor_first):
+        # #3233: a key that holds a tensor in one member and a non-tensor in
+        # another shows as the non-tensor entry, whatever the order
+        members = [TensorDict(a=torch.zeros(3)), TensorDict(a=value)]
+        if not tensor_first:
+            members = members[::-1]
+        lazy = LazyStackedTensorDict(*members)
+        assert repr(lazy) == (
+            f"LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={{a: {name}}})"
+        )
+        out = lazy._repr_html_()
+        assert out.startswith("<div")
+        assert "a: <span style=" in out and f">{name}</span>" in out
+
+    def test_compact_error_falls_back(self, monkeypatch):
+        # #3233: an error in the compact form falls back to the detailed one
+        import tensordict.base
+
+        def fail(obj):
+            raise TypeError("compact")
+
+        monkeypatch.setattr(tensordict.base, "_compact_repr", fail)
+        td = TensorDict(a=torch.zeros(3))
+        with set_printoptions(compact=False):
+            expected = repr(td)
+        assert repr(td) == expected
+
     def test_compact_default_reads_no_nested_store_leaf(self):
         # A nested TensorDictStore has its own _repr_parts and reads its
         # leaves from a server: the default repr must not fetch them.
