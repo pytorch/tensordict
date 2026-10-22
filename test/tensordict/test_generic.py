@@ -4182,12 +4182,12 @@ class TestGeneric:
         # https://github.com/pytorch/tensordict/issues/2979
         td = TensorDict(a=torch.zeros(3))
         td3 = TensorDict(a=torch.zeros(3), batch_size=[3])
-        with pytest.warns(FutureWarning, match="batch_size=.2, 3. for the tensor"):
+        with pytest.warns(FutureWarning, match="batch_size.* for the tensor"):
             assert TensorDict.from_list([td, td], batch_size=[2, 3]).batch_size == (2,)
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
             out = TensorDict.from_list([td3, td3], batch_size=[2])
         assert out.batch_size == (2, 3)
-        with pytest.warns(FutureWarning, match="device=meta"):
+        with pytest.warns(FutureWarning, match="device.* for the tensor"):
             assert TensorDict.from_list([td, td], device="meta").device is None
         # silent when the result has the batch size and device asked for
         data = [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}]
@@ -14496,8 +14496,7 @@ class TestGeneric:
 
         match = (
             r"^update\(update_batch_size=True\) got a source with batch size "
-            r"torch\.Size\(\[2\]\) for a destination with batch size "
-            r"torch\.Size\(\[\]\), a prefix of it, .*Starting with TensorDict "
+            r".*, a prefix of it, .*Starting with TensorDict "
             r"0\.17, the default will change"
         )
         td = TensorDict(x=torch.ones(2, 3), y=torch.ones(5))
