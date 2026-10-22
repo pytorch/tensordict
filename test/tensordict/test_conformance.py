@@ -33,23 +33,36 @@ torch of that job.
 ``TensorDictBase`` override its public methods only where
 :data:`_ALLOWED_OVERRIDES` gives a reason, and that the private methods they
 override have a docstring.
+
+:class:`TestSaveLoadRoundTrip` saves each tensordict of :data:`_ZOO` through
+each save/load path of :data:`_SAVE_LOAD`, and checks that it loads back
+unchanged, or that saving it raises as :data:`_ROUND_TRIP_OUTCOMES` says.
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.util
 import json
 import os
 import pathlib
 import pickle
 
 import pytest
+import tensordict
 import torch
 from _utils_internal import TestTensorDictsBase
-from tensordict import is_tensor_collection, TensorDict, UnbatchedTensor
+from tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    NonTensorStack,
+    tensorclass,
+    TensorDict,
+    UnbatchedTensor,
+)
 from tensordict.base import _is_leaf_nontensor, TensorDictBase
-from tensordict.utils import is_non_tensor
+from tensordict.utils import _is_tensorclass, is_non_tensor
 
 _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name(
     "conformance_known_failures.json"
@@ -1044,6 +1057,487 @@ class TestOneImplementation:
                 + "\n".join(f"  {name}" for name in stale)
             )
         assert not message, "\n".join(message)
+
+
+# Round trips through every save/load path (#3235). A save/load pair must give
+# back the tensordict it saved (classes, values, batch sizes, dim names,
+# UnbatchedTensor leaves and non-tensor data), or raise a clear error when it
+# saves. _ROUND_TRIP_OUTCOMES lists the pairs that do something else.
+
+
+@tensorclass
+class _SavedLeaf:
+    x: torch.Tensor
+    label: str
+
+
+@tensorclass
+class _SavedOuter:
+    y: torch.Tensor
+    inner: _SavedLeaf
+
+
+def _saved_leaf(label="leaf"):
+    return _SavedLeaf(x=torch.arange(6.0).view(3, 2), label=label, batch_size=[3])
+
+
+def _stack_member(value, width=4):
+    return TensorDict(
+        a=torch.full((3, width), float(value)),
+        nested={"b": torch.full((3,), value)},
+        batch_size=[3],
+    )
+
+
+def _zoo_unbatched():
+    td = TensorDict(
+        x=torch.zeros(3), u=UnbatchedTensor(torch.arange(5.0)), batch_size=[3]
+    )
+    td["nested"] = TensorDict(
+        v=UnbatchedTensor(torch.arange(12.0).view(3, 4)), batch_size=[3]
+    )
+    return td
+
+
+def _zoo_non_tensor():
+    td = TensorDict(x=torch.zeros(3), batch_size=[3])
+    td.set_non_tensor("s", "hello")
+    td.set_non_tensor(("nested", "n"), 7)
+    return td
+
+
+def _zoo_shared_storage():
+    base = torch.arange(12.0)
+    return TensorDict(
+        whole=base.view(3, 4),
+        same=base.view(3, 4),
+        half=base[:6].view(3, 2),
+        batch_size=[3],
+    )
+
+
+def _zoo_non_contiguous():
+    base = torch.arange(24.0).view(4, 6)
+    return TensorDict(t=base.t()[:3], strided=base[:3, ::2], batch_size=[3])
+
+
+# Each entry builds a new tensordict: the tests compare what a path loads with a
+# second, untouched copy.
+_ZOO = {
+    "dense_nested": lambda: TensorDict(
+        a=torch.arange(12.0).view(3, 4),
+        nested={"b": torch.arange(6).view(3, 2), "deep": {"c": torch.ones(3, 1, 2)}},
+        batch_size=[3],
+    ),
+    "unbatched": _zoo_unbatched,
+    # Its leading dim equals the batch size, so it also fits as a batched leaf.
+    "unbatched_batch_shaped": lambda: TensorDict(
+        x=torch.zeros(3),
+        u=UnbatchedTensor(torch.arange(12.0).view(3, 4)),
+        batch_size=[3],
+    ),
+    "non_tensor": _zoo_non_tensor,
+    "non_tensor_stack": lambda: TensorDict(
+        x=torch.zeros(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+    ),
+    "lazy_stack_dim0": lambda: LazyStackedTensorDict.lazy_stack(
+        [_stack_member(0), _stack_member(1)], 0
+    ),
+    "lazy_stack_dim1": lambda: LazyStackedTensorDict.lazy_stack(
+        [_stack_member(0), _stack_member(1)], 1
+    ),
+    "lazy_stack_ragged": lambda: LazyStackedTensorDict.lazy_stack(
+        [_stack_member(0, width=4), _stack_member(1, width=5)], 0
+    ),
+    "tensorclass": lambda: _saved_leaf("flat"),
+    "tensorclass_nested": lambda: _SavedOuter(
+        y=torch.arange(3.0), inner=_saved_leaf(), batch_size=[3]
+    ),
+    "tensorclass_in_td": lambda: TensorDict(
+        x=torch.zeros(3), tc=_saved_leaf(), batch_size=[3]
+    ),
+    "dim_names": lambda: TensorDict(
+        a=torch.zeros(3, 4, 2),
+        nested={"b": torch.ones(3, 4)},
+        batch_size=[3, 4],
+        names=["time", "env"],
+    ),
+    "empty": lambda: TensorDict(),
+    "empty_batched": lambda: TensorDict(batch_size=[3]),
+    "zero_dim_batch": lambda: TensorDict(
+        a=torch.tensor(1.0), nested={"b": torch.tensor([1, 2])}, batch_size=[]
+    ),
+    "zero_length_batch": lambda: TensorDict(a=torch.zeros(0, 2), batch_size=[0]),
+    "jagged": lambda: TensorDict(
+        j=torch.nested.nested_tensor(
+            [torch.arange(2.0), torch.arange(3.0)], layout=torch.jagged
+        ),
+        batch_size=[2],
+    ),
+    "dtypes": lambda: TensorDict(
+        bf16=torch.arange(3, dtype=torch.bfloat16),
+        bool=torch.tensor([True, False, True]),
+        complex=torch.tensor([1 + 2j, 3 - 1j, 0j]),
+        batch_size=[3],
+    ),
+    "shared_storage": _zoo_shared_storage,
+    "non_contiguous": _zoo_non_contiguous,
+}
+
+
+def _save_to_file(write, suffix=""):
+    def save(td, path):
+        path = path.with_suffix(suffix)
+        write(td, path)
+        return path
+
+    return save
+
+
+def _append_memmap(td, path):
+    # Saves the first row, then appends the others. Without batch dims,
+    # appends the whole tensordict, which append_memmap refuses.
+    if not td.batch_dims:
+        td.memmap(path)
+        tensordict.append_memmap(path, td)
+        return path
+    td[:1].memmap(path)
+    tensordict.append_memmap(path, td[1:])
+    return path
+
+
+def _from_dict(data):
+    td, as_dict = data
+    if _is_tensorclass(type(td)):
+        return type(td).from_dict(as_dict, batch_size=td.batch_size)
+    return TensorDict.from_dict(
+        as_dict,
+        batch_size=td.batch_size,
+        names=td.names if td._has_names() else None,
+    )
+
+
+# Each path is (save, load): ``save(td, path)`` writes ``td`` under ``path`` and
+# returns what ``load`` reads it from.
+_SAVE_LOAD = {
+    "memmap": (
+        _save_to_file(lambda td, path: td.memmap(path)),
+        tensordict.load_memmap,
+    ),
+    "memmap_atomic": (
+        _save_to_file(lambda td, path: td.memmap(path, atomic=True)),
+        tensordict.load_memmap,
+    ),
+    "memmap_archive": (
+        _save_to_file(lambda td, path: td.memmap(path), ".tdz"),
+        tensordict.load_memmap,
+    ),
+    "save": (_save_to_file(lambda td, path: td.save(path)), tensordict.load),
+    "append_memmap": (_append_memmap, tensordict.load_memmap),
+    "consolidate_filename": (
+        _save_to_file(lambda td, path: td.consolidate(filename=path)),
+        tensordict.from_consolidated,
+    ),
+    "consolidate_pickle": (
+        lambda td, path: pickle.dumps(td.consolidate()),
+        pickle.loads,
+    ),
+    "safetensors": (
+        _save_to_file(tensordict.to_safetensors),
+        tensordict.from_safetensors,
+    ),
+    "h5": (
+        _save_to_file(lambda td, path: td.to_h5(path), ".h5"),
+        tensordict.from_h5,
+    ),
+    "zarr": (
+        _save_to_file(lambda td, path: td.to_zarr(path), ".zarr"),
+        tensordict.from_zarr,
+    ),
+    "pickle": (lambda td, path: pickle.dumps(td), pickle.loads),
+    "torch_save": (
+        _save_to_file(lambda td, path: torch.save(td, path)),
+        lambda path: torch.load(path, weights_only=False),
+    ),
+    "to_dict": (lambda td, path: (td, td.to_dict()), _from_dict),
+}
+
+_PATH_REQUIRES = {"safetensors": "safetensors", "h5": "h5py", "zarr": "zarr"}
+
+
+class _Raises:
+    """The pair raises ``error`` with a message that matches ``match``, ``when`` it saves or loads."""
+
+    def __init__(self, error, match, when="save", reason=""):
+        self.error = error
+        self.match = match
+        self.when = when
+        self.reason = reason
+
+
+# The changes that the docs of a path describe, as {kind of difference: where
+# the docs say so}. The kinds are those of _round_trip_differences: "class"
+# (of a tensordict or tensorclass), "leaf" (the type of a leaf), "batch size",
+# "names", "keys" and "value".
+_PATH_CHANGES = {
+    "consolidate_filename": {"class": "from_consolidated returns a TensorDict"},
+    "h5": {"class": "from_h5 returns a PersistentTensorDict"},
+    "zarr": {"class": "from_zarr returns a PersistentTensorDict"},
+    "to_dict": {"class": "to_dict turns tensordicts and tensorclasses into dicts"},
+}
+
+_MEMMAP_PATHS = ("memmap", "memmap_atomic", "memmap_archive", "save", "append_memmap")
+
+# The pairs that raise, all documented or with a clear message. Every other
+# pair must round trip exactly, apart from the changes of _PATH_CHANGES.
+_ROUND_TRIP_OUTCOMES = {
+    **{
+        (member, path): _Raises(
+            NotImplementedError, "UnbatchedTensor entries cannot be memory-mapped"
+        )
+        for member in ("unbatched", "unbatched_batch_shaped")
+        for path in ("memmap", "memmap_atomic", "save", "append_memmap")
+    },
+    **{
+        (member, path): _Raises(
+            NotImplementedError, "UnbatchedTensor entries cannot be consolidated"
+        )
+        for member in ("unbatched", "unbatched_batch_shaped")
+        for path in ("consolidate_filename", "consolidate_pickle")
+    },
+    ("non_tensor", "to_dict"): _Raises(
+        RuntimeError,
+        "batch dimension mismatch",
+        when="load",
+        reason="to_dict returns non-tensor data as its Python value, and "
+        "from_dict reads the int 7 as a tensor that has no batch dims",
+    ),
+    ("non_tensor_stack", "append_memmap"): _Raises(
+        ValueError, "a stack of non-tensor values cannot grow"
+    ),
+    ("non_tensor_stack", "safetensors"): _Raises(TypeError, "non-tensor stack"),
+    **{
+        (member, "append_memmap"): _Raises(
+            ValueError, "Cannot append a LazyStackedTensorDict"
+        )
+        for member in ("lazy_stack_dim0", "lazy_stack_dim1", "lazy_stack_ragged")
+    },
+    **{
+        ("lazy_stack_ragged", path): _Raises(RuntimeError, "Failed to stack tensors")
+        for path in ("safetensors", "h5", "zarr", "to_dict")
+    },
+    **{
+        (member, "append_memmap"): _Raises(
+            ValueError, "appends along the first batch dimension"
+        )
+        for member in ("empty", "zero_dim_batch")
+    },
+    **{
+        ("jagged", path): _Raises(
+            NotImplementedError, "does not support nested tensors with the torch.jagged"
+        )
+        for path in _MEMMAP_PATHS
+    },
+    ("jagged", "safetensors"): _Raises(TypeError, "only dense tensors"),
+    ("dtypes", "h5"): _Raises(TypeError, "unsupported ScalarType BFloat16"),
+    ("dtypes", "zarr"): _Raises(TypeError, "unsupported ScalarType BFloat16"),
+}
+
+
+def _kind(value):
+    if isinstance(value, NonTensorStack):
+        return "NonTensorStack"
+    if is_non_tensor(value):
+        return "NonTensorData"
+    if _is_tensorclass(type(value)):
+        return type(value).__name__
+    if isinstance(value, LazyStackedTensorDict):
+        return f"lazy stack along dim {value.stack_dim}"
+    if is_tensor_collection(value):
+        return "tensordict"
+    if isinstance(value, UnbatchedTensor):
+        return "UnbatchedTensor"
+    if isinstance(value, torch.Tensor):
+        return "nested tensor" if value.is_nested else "tensor"
+    return type(value).__name__
+
+
+def _non_tensor_value(value):
+    if is_non_tensor(value) and not isinstance(value, NonTensorStack):
+        return value.data
+    return value
+
+
+def _round_trip_differences(saved, loaded, key=()):
+    """Returns ``[(kind, description)]`` for each way ``loaded`` differs from ``saved``."""
+    where = "the root" if not key else repr(key)
+    # A tensorclass reads a non-tensor field as its value, and a tensordict as a
+    # NonTensorData: compare the values.
+    saved, loaded = _non_tensor_value(saved), _non_tensor_value(loaded)
+    saved_kind, loaded_kind = _kind(saved), _kind(loaded)
+    differences = []
+    if saved_kind != loaded_kind:
+        # "class" is the class of a tensordict or tensorclass, "leaf" the type
+        # of a leaf.
+        containers = all(
+            is_tensor_collection(value) and not is_non_tensor(value)
+            for value in (saved, loaded)
+        )
+        differences.append(
+            (
+                "class" if containers else "leaf",
+                f"{where}: saved a {saved_kind}, loaded a {loaded_kind}",
+            )
+        )
+    if is_tensor_collection(saved) != is_tensor_collection(loaded):
+        return differences
+    if is_tensor_collection(saved):
+        if saved.batch_size != loaded.batch_size:
+            differences.append(
+                (
+                    "batch size",
+                    f"{where}: saved batch size {list(saved.batch_size)}, loaded "
+                    f"{list(loaded.batch_size)}",
+                )
+            )
+            return differences
+        if list(saved.names) != list(loaded.names):
+            differences.append(
+                (
+                    "names",
+                    f"{where}: saved dim names {saved.names}, loaded {loaded.names}",
+                )
+            )
+        if is_non_tensor(saved) or is_non_tensor(loaded):
+            saved_data, loaded_data = saved.tolist(), loaded.tolist()
+            if saved_data != loaded_data or type(saved_data) is not type(loaded_data):
+                differences.append(
+                    (
+                        "value",
+                        f"{where}: saved the non-tensor data {saved_data!r}, "
+                        f"loaded {loaded_data!r}",
+                    )
+                )
+            return differences
+        if isinstance(saved, LazyStackedTensorDict):
+            # Compare the stacked tensordicts one by one, which also works for
+            # entries whose shapes differ and for a loaded dense tensordict.
+            loaded_parts = (
+                loaded.tensordicts
+                if isinstance(loaded, LazyStackedTensorDict)
+                and loaded.stack_dim == saved.stack_dim
+                else loaded.unbind(saved.stack_dim)
+            )
+            for i, (part, loaded_part) in enumerate(
+                zip(saved.tensordicts, loaded_parts)
+            ):
+                differences += _round_trip_differences(
+                    part, loaded_part, key + (f"<stacked {i}>",)
+                )
+            return differences
+        saved_keys, loaded_keys = set(saved.keys()), set(loaded.keys())
+        if saved_keys != loaded_keys:
+            differences.append(
+                (
+                    "keys",
+                    f"{where}: saved the keys {sorted(saved_keys)}, loaded "
+                    f"{sorted(loaded_keys)}",
+                )
+            )
+        for name in sorted(saved_keys & loaded_keys):
+            differences += _round_trip_differences(
+                saved.get(name), loaded.get(name), key + (name,)
+            )
+        return differences
+    if not isinstance(saved, torch.Tensor) or not isinstance(loaded, torch.Tensor):
+        # A non-tensor field of a tensorclass reads as its Python value.
+        if type(saved) is not type(loaded) or saved != loaded:
+            differences.append(
+                ("value", f"{where}: saved {saved!r}, loaded {loaded!r}")
+            )
+        return differences
+    if saved.is_nested or loaded.is_nested:
+        # The shape of a jagged tensor has a symbolic dim: compare the parts.
+        saved, loaded = (
+            list(value.unbind()) if value.is_nested else [value]
+            for value in (saved, loaded)
+        )
+        if len(saved) != len(loaded):
+            differences.append(("value", f"{where}: the number of parts differs"))
+            return differences
+        for i, (part, loaded_part) in enumerate(zip(saved, loaded)):
+            differences += _round_trip_differences(
+                part, loaded_part, key + (f"<part {i}>",)
+            )
+    elif saved.dtype != loaded.dtype or saved.shape != loaded.shape:
+        differences.append(
+            (
+                "value",
+                f"{where}: saved a {saved.dtype} tensor of shape "
+                f"{list(saved.shape)}, loaded a {loaded.dtype} tensor of shape "
+                f"{list(loaded.shape)}",
+            )
+        )
+    elif saved.tolist() != loaded.tolist():
+        differences.append(("value", f"{where}: the values differ"))
+    return differences
+
+
+class TestSaveLoadRoundTrip:
+    """Each tensordict of :data:`_ZOO` through each save/load path of :data:`_SAVE_LOAD`."""
+
+    @pytest.mark.filterwarnings("ignore::FutureWarning")
+    @pytest.mark.parametrize("path", list(_SAVE_LOAD))
+    @pytest.mark.parametrize("member", list(_ZOO))
+    def test_round_trip(self, member, path, tmp_path):
+        if path in _PATH_REQUIRES:
+            pytest.importorskip(_PATH_REQUIRES[path])
+        save, load = _SAVE_LOAD[path]
+        expected = _ROUND_TRIP_OUTCOMES.get((member, path))
+        td = _ZOO[member]()
+        if isinstance(expected, _Raises) and expected.when == "save":
+            with pytest.raises(expected.error, match=expected.match):
+                save(td, tmp_path / "saved")
+            return
+        try:
+            saved = save(td, tmp_path / "saved")
+        except Exception as err:
+            pytest.fail(
+                f"saving {member} through {path} raised {type(err).__name__}: {err}"
+            )
+        if isinstance(expected, _Raises):
+            with pytest.raises(expected.error, match=expected.match):
+                load(saved)
+            return
+        try:
+            loaded = load(saved)
+        except Exception as err:
+            pytest.fail(
+                f"{member} saved through {path}, but loading it raised "
+                f"{type(err).__name__}: {err}"
+            )
+        allowed = _PATH_CHANGES.get(path, {})
+        differences = [
+            description
+            for kind, description in _round_trip_differences(_ZOO[member](), loaded)
+            if kind not in allowed
+        ]
+        assert not differences, (
+            f"{member} through {path} came back changed:\n  " + "\n  ".join(differences)
+        )
+        differences = _round_trip_differences(_ZOO[member](), td)
+        assert not differences, (
+            f"saving {member} through {path} changed it:\n  "
+            + "\n  ".join(description for _, description in differences)
+        )
+
+    def test_outcomes_are_used(self):
+        stale = sorted(
+            pair
+            for pair in _ROUND_TRIP_OUTCOMES
+            if pair[0] not in _ZOO or pair[1] not in _SAVE_LOAD
+        )
+        assert not stale, f"_ROUND_TRIP_OUTCOMES names unknown pairs: {stale}"
 
 
 if __name__ == "__main__":
