@@ -8,6 +8,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import re
+import sys
 import warnings
 from collections.abc import MutableSequence
 from textwrap import indent
@@ -48,9 +49,11 @@ from torch import distributions as D, Tensor
 from torch.compiler import is_compiling
 from torch.utils._contextlib import _DecoratorContextManager
 
-try:
+# A version check, not try/except ImportError, so that type checkers see an
+# enum base and type InteractionType.RANDOM as an InteractionType (#3305).
+if sys.version_info >= (3, 11):
     from enum import StrEnum
-except ImportError:
+else:
     from .utils import _StrEnum as StrEnum
 
 if TYPE_CHECKING:

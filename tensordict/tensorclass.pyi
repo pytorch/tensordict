@@ -1826,6 +1826,28 @@ class TensorAttrs(TensorClass):
     ) -> Self: ...
 
 class NonTensorStack(LazyStackedTensorDict):
+    def __init__(
+        self,
+        *args: Any,
+        stack_dim: int = 0,
+        hook_out: Callable | None = None,
+        hook_in: Callable | None = None,
+        batch_size: Sequence[int] | None = None,
+        device: DeviceType | None = None,
+        names: Sequence[str] | None = None,
+        stack_dim_name: str | None = None,
+        strict_shape: bool = False,
+    ) -> None: ...
+    # Comparing two stacks gives a boolean tensor. Other operands can give a
+    # lazy stack of tensordicts, a TensorDict or a bool (#3305).
+    @overload  # type: ignore[override]
+    def __eq__(self, other: NonTensorStack) -> Tensor: ...
+    @overload
+    def __eq__(self, other: object) -> Any: ...
+    @overload  # type: ignore[override]
+    def __ne__(self, other: NonTensorStack) -> Tensor: ...
+    @overload
+    def __ne__(self, other: object) -> Any: ...
     def maybe_to_stack(self) -> Self: ...
 
 _ClassT = TypeVar("_ClassT")

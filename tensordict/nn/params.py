@@ -448,6 +448,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     """
 
+    if TYPE_CHECKING:
+        # The comparisons return a TensorDict, not the Self of the
+        # TensorDictBase declarations (#3305).
+        def __eq__(self, other: object) -> TensorDict: ...  # type: ignore[override]
+
+        def __ne__(self, other: object) -> TensorDict: ...  # type: ignore[override]
+
     def __init__(
         self,
         parameters: TensorDictBase | dict | None = None,
