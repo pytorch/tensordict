@@ -1330,6 +1330,7 @@ class TestArrowMinimumVersion:
     def test_from_arrow_pyarrow_15_runs(self, monkeypatch):
         import pyarrow as pa
 
+        _skip_old_pyarrow_from_arrow()
         table = pa.table({"x": [1, 2]})
         monkeypatch.setattr(pa, "__version__", "15.0.0")
         assert torch.equal(from_arrow(table)["x"], torch.tensor([1, 2]))
