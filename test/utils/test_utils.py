@@ -1550,7 +1550,8 @@ def test_import_loads_dynamo_before_runtime_wrappers():
     # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. If
     # runtime_wrappers is imported first, torch._dynamo stays half-initialized
     # and every later torch.compile call raises. import tensordict loads
-    # torch._dynamo, so that this import order works after it.
+    # torch._dynamo, so that this import order works after it. The PyTorch
+    # issue is pytorch/pytorch#201689.
     code = (
         "import torch, tensordict\n"
         "import torch._functorch._aot_autograd.runtime_wrappers\n"
