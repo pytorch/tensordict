@@ -18,6 +18,7 @@ from tensordict import (
     from_json,
     from_pandas,
     from_parquet,
+    pad_sequence,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -654,9 +655,9 @@ class TestArrow:
         )
         assert td.get("s").tolist() == ["a", None, "c"]
         if nulls == "fill":
-            assert "_mask" not in td.keys()
+            assert "masks" not in td.keys()
         else:
-            assert set(td["_mask"].keys(include_nested=True, leaves_only=True)) == {
+            assert set(td["masks"].keys(include_nested=True, leaves_only=True)) == {
                 "f",
                 "i",
                 "b",
@@ -666,16 +667,36 @@ class TestArrow:
                 ("st", "y"),
                 "s",
             }
-            assert torch.equal(td["_mask", "f"], torch.tensor([True, False, True]))
-            assert torch.equal(td["_mask", "i"], torch.tensor([False, True, True]))
+            assert torch.equal(td["masks", "f"], torch.tensor([True, False, True]))
+            assert torch.equal(td["masks", "i"], torch.tensor([False, True, True]))
             assert torch.equal(
-                td["_mask", "st", "y"], torch.tensor([True, False, False])
+                td["masks", "st", "y"], torch.tensor([True, False, False])
             )
-            with pytest.raises(ValueError, match="under the key '_mask'"):
-                from_arrow(pa.table({"_mask": [1]}), nulls="mask")
+            with pytest.raises(ValueError, match="under the key 'masks'"):
+                from_arrow(pa.table({"masks": [1]}), nulls="mask")
         # Nulls inside a list are filled.
         td = from_arrow(pa.table({"l": pa.array([[1, None], [2]])}), nulls=nulls)
         assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2]]
+
+    def test_from_arrow_nulls_mask_key(self):
+        # #3241: nulls='mask' stores its masks under the key that
+        # pad_sequence(return_mask=True) uses, "masks".
+        import pyarrow as pa
+
+        padded = pad_sequence(
+            [TensorDict(y=torch.ones(1)), TensorDict(y=torch.ones(2))],
+            return_mask=True,
+        )
+        assert "masks" in padded.keys()
+        td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
+        assert set(td.keys()) == {"y", "masks"}
+        assert torch.equal(td["masks", "y"], torch.tensor([True, False]))
+        with pytest.raises(ValueError, match="under the key 'masks'"):
+            from_arrow(pa.table({"masks": [1]}), nulls="mask")
+        # "_mask" is now an ordinary column name.
+        td = from_arrow(pa.table({"_mask": [1, None]}), nulls="mask")
+        assert torch.equal(td["_mask"], torch.tensor([1, 0]))
+        assert torch.equal(td["masks", "_mask"], torch.tensor([True, False]))
 
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the

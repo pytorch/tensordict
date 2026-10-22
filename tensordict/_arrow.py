@@ -202,9 +202,10 @@ def from_arrow(
             empty list in jagged tensors, and ``None`` in a
             :class:`~tensordict.NonTensorStack`. A null struct makes each of
             its fields null. ``"mask"`` fills them as ``"fill"`` does, and adds
-            the boolean entry ``("_mask", *key)`` for each entry ``key`` that
-            has nulls, ``True`` where the row is not null. Filling copies the
-            column. Defaults to ``"raise"``.
+            the boolean entry ``("masks", *key)`` for each entry ``key`` that
+            has nulls, ``True`` where the row is not null, as
+            :func:`~tensordict.pad_sequence` does with ``return_mask=True``.
+            Filling copies the column. Defaults to ``"raise"``.
         device (torch.device, str or int, optional): the device of the
             result. Defaults to ``None``, which keeps the tensors on the CPU
             and gives a tensordict without a device.
@@ -232,7 +233,7 @@ def from_arrow(
         >>> td.get("text").tolist()
         ['a', 'b', 'c']
         >>> td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
-        >>> td["y"], td["_mask", "y"]
+        >>> td["y"], td["masks", "y"]
         (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
     """
     pa = _import_pyarrow()
@@ -240,9 +241,9 @@ def from_arrow(
         raise ValueError(f"nulls must be one of {_NULLS}, got {nulls!r}.")
     if not isinstance(table, (pa.Table, pa.RecordBatch)):
         table = pa.table(table)
-    if nulls == "mask" and "_mask" in table.column_names:
+    if nulls == "mask" and "masks" in table.column_names:
         raise ValueError(
-            "nulls='mask' writes the masks under the key '_mask', which is a column "
+            "nulls='mask' writes the masks under the key 'masks', which is a column "
             "of the table."
         )
     masks = {}
@@ -255,7 +256,7 @@ def from_arrow(
         data[name] = _from_array(pa, column, copy, nulls, (name,), masks)
     result = TensorDict(data, batch_size=[table.num_rows])
     for key, mask in masks.items():
-        result.set(("_mask", *key), mask)
+        result.set(("masks", *key), mask)
     if device is not None:
         result = result.to(device)
     return result
