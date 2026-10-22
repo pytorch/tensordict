@@ -74,6 +74,8 @@ def _encode_level(td, prefix: tuple, tensors: dict) -> dict:
         "batch_size": list(td.batch_size),
         "names": list(inner.names) if inner._has_names() else None,
     }
+    if isinstance(inner, LazyStackedTensorDict):
+        level["stack_dim"] = inner.stack_dim
     if _is_tensorclass(type(td)):
         level["class"] = str(type(td))
     entries = level["keys"] = {}
@@ -142,9 +144,9 @@ def to_safetensors(data: TensorDictBase, path: str | Path) -> None:
     Each tensor is saved under its nested key joined with ``"."``, the names
     that a model's ``state_dict`` uses. The structure of the tensordict (the
     batch size and dim names of each level, the class of each tensorclass,
-    the non-tensor values, and which tensors are
-    :class:`~tensordict.UnbatchedTensor`) is saved as one JSON string in the metadata of
-    the file, so that :func:`~tensordict.from_safetensors` rebuilds it.
+    the stack dim of each lazy stack, the non-tensor values, and which tensors
+    are :class:`~tensordict.UnbatchedTensor`) is saved as one JSON string in
+    the metadata of the file, so that :func:`~tensordict.from_safetensors` rebuilds it.
 
     Tensors that share memory are saved as separate copies, and a tensordict
     on another device is saved through the CPU. Requires the ``safetensors``
@@ -220,6 +222,18 @@ def _decode_level(level: dict, file, device, path, names_used: set):
             td.set_non_tensor(key, entry["non_tensor"])
         else:
             td.set(key, _decode_level(entry["td"], file, device, path, names_used))
+    stack_dim = level.get("stack_dim")
+    if stack_dim is not None:
+        # A lazy stack: its entries are the slices of the level along the stack dim.
+        entries = td.unbind(stack_dim)
+        batch_size = None
+        if not entries:
+            batch_size = td.batch_size[:stack_dim] + td.batch_size[stack_dim + 1 :]
+        td = LazyStackedTensorDict(
+            *entries, stack_dim=stack_dim, batch_size=batch_size, device=device
+        )
+        if level["names"] is not None:
+            td.names = level["names"]
     class_name = level.get("class")
     if class_name is not None:
         return _find_tensorclass(class_name, path)._from_tensordict(td)
@@ -232,10 +246,11 @@ def from_safetensors(
     """Loads a tensordict from a safetensors file.
 
     A file written by :func:`~tensordict.to_safetensors` loads with its
-    structure: the batch sizes, dim names, tensorclasses and non-tensor
-    values that it was saved with. A tensorclass loads only if the module
-    that defines it is imported: tensordict never imports a module by the
-    name in a file.
+    structure: the batch sizes, dim names, tensorclasses, lazy stacks and
+    non-tensor values that it was saved with. A lazy stack loads with the
+    same stack dim, and its entries load as dense tensordicts. A tensorclass
+    loads only if the module that defines it is imported: tensordict never
+    imports a module by the name in a file.
 
     Any other safetensors file, such as a model checkpoint from the Hugging
     Face Hub, loads as a nested :class:`~tensordict.TensorDict` with an empty
@@ -254,7 +269,9 @@ def from_safetensors(
             device.
 
     Returns:
-        a :class:`~tensordict.TensorDict`, or the tensorclass that was saved.
+        a :class:`~tensordict.TensorDict`, a
+        :class:`~tensordict.LazyStackedTensorDict`, or the tensorclass that
+        was saved.
 
     Examples:
         >>> import tempfile
