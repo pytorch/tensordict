@@ -2157,14 +2157,14 @@ def _warn_empty_names(
     frame, stacklevel = sys._getframe(1), 2
     while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
         frame, stacklevel = frame.f_back, stacklevel + 1
-    result = f"the names {list(result_names)}"
+    result = "the names that the names setter would not give"
     future_size = ""
     if resized:
-        result = f"the batch size {list(result_batch_size)} and {result}"
-        future_size = f"returning the batch size {list(batch_size)} and "
+        result = "the batch size of its members and the names that fit it"
+        future_size = "returning the batch size asked for and "
     warnings.warn(
-        f"empty(batch_size={list(batch_size)}, names={value}) returns a "
-        f"tensordict with {result}. Starting with TensorDict 0.17, the default "
+        "empty(batch_size=..., names=...) returns a tensordict with "
+        f"{result}. Starting with TensorDict 0.17, the default "
         f"will change to {future_size}applying the names as the names setter "
         f"does, which {future}. Pass one name per batch dim, "
         "with no name used twice.",
@@ -2462,18 +2462,17 @@ def _warn_separates_default(key: NestedKey) -> None:
     )
 
 
-def _warn_update_batch_size_prefix(dest_batch_size, source_batch_size) -> None:
+def _warn_update_batch_size_prefix() -> None:
     """Warns that ``update(update_batch_size=True)`` keeps a batch size that is a prefix of the source's, until 0.17 (#2957)."""
     if is_compiling():
         return
     warnings.warn(
         "update(update_batch_size=True) got a source with batch size "
-        f"{source_batch_size} for a destination with batch size "
-        f"{dest_batch_size}, a prefix of it, and keeps the destination's batch "
-        "size. Starting with TensorDict 0.17, the default will change to "
-        "giving the destination the source's batch size, as for any other "
-        "mismatch, which raises if the destination has keys that the source "
-        "lacks, or with inplace=True or keys_to_update.",
+        "longer than the destination's batch size, a prefix of it, and keeps "
+        "the destination's batch size. Starting with TensorDict 0.17, the "
+        "default will change to giving the destination the source's batch "
+        "size, as for any other mismatch, which raises if the destination has "
+        "keys that the source lacks, or with inplace=True or keys_to_update.",
         FutureWarning,
         stacklevel=_user_stacklevel(),
     )
@@ -6626,7 +6625,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             and self.batch_dims < input_dict_or_td.batch_dims
         ):
             # self's batch size is a prefix of the source's (#2957)
-            _warn_update_batch_size_prefix(self.batch_size, input_dict_or_td.batch_size)
+            _warn_update_batch_size_prefix()
 
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
