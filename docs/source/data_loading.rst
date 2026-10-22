@@ -161,7 +161,11 @@ worker processes. Each worker gets the dataset when it starts:
 In a worker, ``__getitems__`` of an HDF5 or zarr
 :class:`~tensordict.PersistentTensorDict` reads the rows into a
 :class:`~tensordict.TensorDict` in memory, so the batch is not a view that
-writes to the file, as it is without workers.
+writes to the file, as it is without workers. With
+``persistent_workers=True``, each worker keeps its own HDF5 file handle
+across epochs, so it may not see writes that the main process makes to the
+file between epochs: HDF5 does not support writes across processes without
+SWMR mode.
 
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with ``python``:
@@ -204,9 +208,9 @@ when this page is tested:
   >>> loader = DataLoader(data, batch_size=4, collate_fn=lambda x: x, pin_memory=True)  # doctest: +SKIP
   >>> batch = next(iter(loader)).to("cuda", non_blocking=True)  # doctest: +SKIP
 
-Without a ``DataLoader``, ``td.to("cuda", non_blocking_pin=True)`` pins the
-leaves with several threads (``num_threads``), and copies them to the GPU
-(see :ref:`devices`).
+Without a ``DataLoader``, ``td.to("cuda", non_blocking_pin=True)`` pins each
+leaf on the calling thread and copies it to the GPU (see :ref:`devices`).
+For leaves of a few KiB, a plain ``td.to("cuda")`` is usually faster.
 
 Share a tensordict between processes
 ------------------------------------
