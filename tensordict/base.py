@@ -97,7 +97,6 @@ from tensordict.utils import (
     _pass_through_cls,
     _proc_init,
     _prune_selected_keys,
-    _register_with_dynamo,
     _REPR_OPTIONS,
     _set_max_batch_size,
     _shape,
@@ -149,7 +148,7 @@ __all__ = [
     "set_get_defaults_to_none",
 ]
 
-_foreach_copy_compiled = _register_with_dynamo(allow_in_graph, _foreach_copy_)
+_foreach_copy_compiled = allow_in_graph(_foreach_copy_)
 
 _has_h5 = importlib.util.find_spec("h5py") is not None
 
@@ -3499,6 +3498,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # replaces the entry. BEST_ATTEMPT_INPLACE (_SubTensorDict, the files and
     # stores) writes into an existing entry and adds a new one.
     _setitem_key_inplace = False
+
+    if TYPE_CHECKING:
+        # Type checkers cannot expand the starred mixin bases, so they would
+        # take __eq__ from Mapping (bool) and unbind, chunk and split from the
+        # TensorCollection stub (TensorCollection pieces). These declarations
+        # give them what the mixins return (#3269, #3270).
+        def __eq__(self, other: object) -> Self: ...  # type: ignore[override]
+
+        def unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
+
+        def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]: ...
+
+        def split(
+            self, split_size: int | list[int], dim: int = 0
+        ) -> tuple[TensorDictBase, ...]: ...
 
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
