@@ -2146,9 +2146,9 @@ def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
     # The tensor_only path of __init__ stores the arguments that are not
     # fields. The other paths raise AttributeError for them, and this path
     # will too once the deprecation ends.
-    unknown = sorted(key for key in kwargs if key not in cls.__expected_keys__)
+    unknown_keys = sorted(key for key in kwargs if key not in cls.__expected_keys__)
     warn_deprecated(
-        f"Passing arguments that are not fields ({unknown}) to the tensor_only "
+        f"Passing arguments that are not fields ({unknown_keys}) to the tensor_only "
         f"tensorclass {cls.__name__}, which other tensorclasses reject with "
         "AttributeError,",
         removal="0.17",
@@ -5075,11 +5075,11 @@ def _from_dict_public(
         torch.Size([3])
     """
     keys = {key[0] if isinstance(key, tuple) else key for key in input_dict}
-    missing = [name for name in cls._from_dict_defaults if name not in keys]
+    missing_keys = [name for name in cls._from_dict_defaults if name not in keys]
     # Dynamo cannot trace warnings.warn: a compiled call stays silent.
-    if missing and not is_compiling():
+    if missing_keys and not is_compiling():
         warnings.warn(
-            f"{cls.__name__}.from_dict() sets the fields {missing} that the input "
+            f"{cls.__name__}.from_dict() sets the fields {missing_keys} that the input "
             "misses to None, not to their declared defaults. Starting with "
             "TensorDict 0.17, the default will change to filling these fields "
             "with their defaults and default factories, as the constructor does. "
@@ -7717,9 +7717,8 @@ class NonTensorData(NonTensorDataBase):
             shape = _resolve_expand_shape(shape, self.batch_size)
         if not _expands_to(self.batch_size, shape):
             warnings.warn(
-                f"Expanding a NonTensorData of batch size {list(self.batch_size)} "
-                f"to {list(shape)} does not raise today, although "
-                "torch.Tensor.expand rejects this shape. Starting with "
+                "Expanding a NonTensorData to a shape that torch.Tensor.expand "
+                "rejects does not raise today. Starting with "
                 "TensorDict 0.17, the default will change to raising a "
                 "RuntimeError, as TensorDict.expand does.",
                 FutureWarning,

@@ -2976,9 +2976,7 @@ class _ShapeOps:
                     "The end dimension must be greater or equal to the start dim."
                 )
             # LazyStackedTensorDict.flatten inserted a dim of size 1
-            _warn_lazy_shape_args(
-                "flatten", f"start_dim={start_dim} > end_dim={end_dim}"
-            )
+            _warn_lazy_shape_args("flatten", "an end_dim before its start_dim")
             batch_size = list(self.batch_size)
             batch_size.insert(start_dim, 1)
             return self._reshape(torch.Size(batch_size), None)

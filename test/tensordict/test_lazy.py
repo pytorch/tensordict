@@ -5422,6 +5422,17 @@ class TestLazyStackedTensorDict:
         with pytest.raises(TypeError, match="must be int or list of ints"):
             td.split(2.0, stack_dim)
 
+    def test_split_stack_dim_bad_sizes_warn_once(self):
+        # #3256: the message held the sizes, so Python's default filter
+        # showed the warning again for each new size from one call site
+        td = lazy_stack([TensorDict(a=torch.zeros(3)) for _ in range(60)])
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("default")
+            for size in range(1, 51):
+                td.split([size, 1], 0)
+        assert len(record) == 1
+        assert record[0].category is FutureWarning
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_expand_dense_or_lazy_result(self, stack_dim):
         td = self._shape_stack(stack_dim, stack_dim_name="s")
