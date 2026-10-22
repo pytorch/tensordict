@@ -1310,16 +1310,10 @@ _WARNING_ONCE_CASES = [
     pytest.param(
         _lazy_split_sizes,
         id="LazyStackedTensorDict.split-sizes",
-        marks=pytest.mark.xfail(
-            strict=True, reason="#3256: split warns once per split size"
-        ),
     ),
     pytest.param(
         _non_tensor_expand,
         id="NonTensorData.expand-shape",
-        marks=pytest.mark.xfail(
-            strict=True, reason="#3256: NonTensorData.expand warns once per shape"
-        ),
     ),
 ]
 
@@ -1910,26 +1904,18 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
 
 
-@pytest.mark.parametrize("scenario", ["import", "find_spec_first", "dynamo_first"])
-def test_import_does_not_load_dynamo(scenario):
-    # Importing torch._dynamo takes about a second (#3090), so tensordict defers
-    # its Dynamo registrations until torch._dynamo is imported. They must be in
-    # place whether Dynamo is imported before tensordict, after it, or after a
-    # lookup that does not import it.
+@pytest.mark.parametrize("scenario", ["import", "dynamo_first"])
+def test_import_registers_dynamo_functions(scenario):
+    # tensordict registers some of its functions with Dynamo when it is
+    # imported. They must be in place whether Dynamo is imported before
+    # tensordict or not.
     code = (
-        "import importlib.util, sys, torch\n"
-        "if 'torch._dynamo' in sys.modules:\n"
-        "    print('torch loads dynamo')\n"
-        "    sys.exit()\n"
+        "import torch\n"
         f"scenario = {scenario!r}\n"
         "if scenario == 'dynamo_first':\n"
         "    import torch._dynamo\n"
         "import tensordict, tensordict.nn\n"
         "from tensordict import base\n"
-        "assert ('torch._dynamo' in sys.modules) == (scenario == 'dynamo_first')\n"
-        "if scenario == 'find_spec_first':\n"
-        "    assert importlib.util.find_spec('torch._dynamo') is not None\n"
-        "    assert 'torch._dynamo' not in sys.modules\n"
         "from torch._dynamo import trace_rules\n"
         "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n"
         "def lock(td):\n"
@@ -1946,9 +1932,284 @@ def test_import_does_not_load_dynamo(scenario):
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
     )
     assert result.returncode == 0, result.stderr
-    if result.stdout.strip() == "torch loads dynamo":
-        pytest.skip("import torch loads torch._dynamo")
     assert result.stdout.strip() == "ok"
+
+
+def test_import_loads_dynamo_before_runtime_wrappers():
+    # #3231: torch has a circular import between
+    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. If
+    # runtime_wrappers is imported first, torch._dynamo stays half-initialized
+    # and every later torch.compile call raises. import tensordict loads
+    # torch._dynamo, so that this import order works after it. The PyTorch
+    # issue is pytorch/pytorch#201689.
+    code = (
+        "import torch, tensordict\n"
+        "import torch._functorch._aot_autograd.runtime_wrappers\n"
+        "out = torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1))\n"
+        "assert out.item() == 2, out\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
+
+
+def _run_in_fresh_interpreter(steps):
+    """Runs ``(label, source)`` steps in one fresh interpreter, in order.
+
+    A step that raises does not stop the next ones, as downstream code often
+    wraps its early imports in ``except Exception``. Returns the list of
+    ``"<label> raised <error>"`` messages and the value the last step printed.
+    """
+    code = (
+        "import sys\n"
+        f"steps = {list(steps)!r}\n"
+        "ns = {}\n"
+        "failed = []\n"
+        "for label, source in steps:\n"
+        "    try:\n"
+        "        exec(source, ns)\n"
+        "    except BaseException as e:\n"
+        "        failed.append(f'{label} raised {type(e).__name__}: {e}')\n"
+        "print(repr((failed, ns.get('result'))))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert result.returncode == 0, result.stderr
+    return ast.literal_eval(result.stdout.strip().splitlines()[-1])
+
+
+# The import that PhysicsNeMo's domain_parallel makes when it is imported (#3231).
+_RUNTIME_WRAPPERS_IMPORT = (
+    "from torch._functorch._aot_autograd.runtime_wrappers import AOTDispatchAutograd"
+)
+_DEFINE_TENSORCLASS = (
+    "from tensordict import tensorclass\n"
+    "@tensorclass\n"
+    "class Point:\n"
+    "    x: torch.Tensor\n"
+    "point = Point(x=torch.zeros(4, 3), batch_size=[4])\n"
+)
+
+# Import orders that downstream code uses. Each is followed by the checks of
+# _COMPILE_CHECKS, in the same interpreter.
+_IMPORT_ORDERS = {
+    "tensordict.nn-then-runtime_wrappers": (
+        "import torch",
+        "import tensordict.nn",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "tensorclass-then-runtime_wrappers": (
+        "import torch",
+        _DEFINE_TENSORCLASS,
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "tensordict-then-export-fx-data": (
+        "import torch",
+        "import tensordict",
+        "import torch.export",
+        "import torch.fx",
+        "import torch.utils.data",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "dynamo-first": (
+        "import torch._dynamo",
+        "import tensordict",
+        "import tensordict.nn",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "export-fx-data-then-tensordict": (
+        "import torch",
+        "import torch.export",
+        "import torch.fx",
+        "import torch.utils.data",
+        "import tensordict",
+        "import tensordict.nn",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "dynamo-and-aot_autograd-then-tensordict": (
+        "import torch._dynamo",
+        "import torch._functorch.aot_autograd",
+        _RUNTIME_WRAPPERS_IMPORT,
+        "import tensordict",
+        "import tensordict.nn",
+    ),
+    "tensordict-only": (
+        "import torch",
+        "import tensordict",
+    ),
+}
+
+_COMPILE_CHECKS = (
+    (
+        "torch._dynamo and runtime_wrappers fully importable",
+        "import torch._dynamo\n"
+        "from torch._dynamo.convert_frame import convert_frame\n"
+        "from torch._dynamo.eval_frame import optimize\n"
+        "from torch._dynamo.compiled_autograd import AutogradCompilerInstance\n"
+        "from torch._functorch._aot_autograd.runtime_wrappers import (\n"
+        "    AOTDispatchAutograd, AutogradLazyBackwardCompileInfo)\n",
+    ),
+    (
+        "torch.compile(lambda x: x + 1, backend='eager')",
+        "import torch\n"
+        "assert torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1)) == 2\n",
+    ),
+    (
+        "tensordict's Dynamo registrations",
+        "from tensordict import base\n"
+        "from torch._dynamo import trace_rules\n"
+        "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n",
+    ),
+    (
+        "torch.compile of a locked TensorDict",
+        "import tensordict\n"
+        "def lock(td):\n"
+        "    td.lock_()\n"
+        "    return td['a'] + 1\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "out = torch.compile(lock, fullgraph=True, backend='eager')(td)\n"
+        "assert (out == 1).all()\n",
+    ),
+    (
+        "torch.compile of torch.vmap over a TensorDict",
+        "import tensordict\n"
+        "def vmap(td):\n"
+        "    return torch.vmap(lambda t: t['a'] + 1)(td)\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "out = torch.compile(vmap, fullgraph=True, backend='eager')(td)\n"
+        "assert (out == 1).all()\n",
+    ),
+    (
+        "torch.compile of a TensorDictModule",
+        "import tensordict\n"
+        "from tensordict.nn import TensorDictModule\n"
+        "module = TensorDictModule(lambda a: a + 1, in_keys=['a'], out_keys=['b'])\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "out = torch.compile(module, fullgraph=True, backend='eager')(td)\n"
+        "assert (out['b'] == 1).all()\n",
+    ),
+    (
+        "torch.compile of a tensorclass",
+        _DEFINE_TENSORCLASS + "out = torch.compile(lambda p: p.x + 1, fullgraph=True, "
+        "backend='eager')(point)\n"
+        "assert (out == 1).all()\n",
+    ),
+)
+
+
+@pytest.mark.parametrize("order", list(_IMPORT_ORDERS))
+def test_import_order_keeps_compile_working(order):
+    # #3231: torch has a circular import between
+    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. When
+    # runtime_wrappers comes first, torch._dynamo is left half-initialized and
+    # every later torch.compile raises. PhysicsNeMo's domain_parallel makes that
+    # import, and up to 0.15.2 import tensordict loaded torch._dynamo first.
+    # Whatever order downstream code imports torch, its submodules and
+    # tensordict in, each import must work, and so must torch.compile.
+    steps = [(source, source) for source in _IMPORT_ORDERS[order]]
+    failed, _ = _run_in_fresh_interpreter(steps + list(_COMPILE_CHECKS))
+    assert not failed, f"import order {order!r}:\n" + "\n".join(failed)
+
+
+_TORCH_STATE = (
+    "import warnings\n"
+    "import torch\n"
+    "import torch.utils._pytree as pytree\n"
+    "def name(obj):\n"
+    "    if obj is None:\n"
+    "        return None\n"
+    "    return f'{obj.__module__}.{obj.__qualname__}'\n"
+    "result = {\n"
+    "    'default dtype': str(torch.get_default_dtype()),\n"
+    "    'default device': str(torch.get_default_device()),\n"
+    "    'grad mode': torch.is_grad_enabled(),\n"
+    "    'inference mode': torch.is_inference_mode_enabled(),\n"
+    "    'deterministic algorithms': torch.are_deterministic_algorithms_enabled(),\n"
+    # A filter for the warnings of another package, such as the one sympy adds
+    # for its own when torch._dynamo imports it, affects only that package.
+    "    'warnings filters': [\n"
+    "        repr(f) for f in warnings.filters\n"
+    "        if f[2].__module__.split('.')[0] in ('builtins', 'torch', 'tensordict')\n"
+    "    ],\n"
+    "    'pytree nodes': {\n"
+    "        name(cls): (name(node.flatten_fn), name(node.unflatten_fn),\n"
+    "                    name(node.flatten_with_keys_fn))\n"
+    "        for cls, node in pytree.SUPPORTED_NODES.items()\n"
+    "    },\n"
+    "    'pytree serialized type names': {\n"
+    "        serialized: name(cls)\n"
+    "        for serialized, cls in pytree.SERIALIZED_TYPE_TO_PYTHON_TYPE.items()\n"
+    "        if serialized != pytree.NO_SERIALIZED_TYPE_NAME_FOUND\n"
+    "    },\n"
+    "}\n"
+)
+
+
+def test_import_keeps_torch_global_state():
+    # import tensordict must leave the global torch state that other code relies
+    # on as a fresh import torch has it. It may register its own types with
+    # pytree, but not change the entries of the types that torch registered.
+    steps = [("import torch", "import torch"), ("state", _TORCH_STATE)]
+    failed, torch_state = _run_in_fresh_interpreter(steps)
+    assert not failed, failed
+    steps.insert(1, ("import tensordict", "import tensordict"))
+    failed, td_state = _run_in_fresh_interpreter(steps)
+    assert not failed, failed
+    changed = [
+        f"{key}: {torch_state[key]!r} -> {td_state[key]!r}"
+        for key in torch_state
+        if not isinstance(torch_state[key], dict) and torch_state[key] != td_state[key]
+    ]
+    for key in ("pytree nodes", "pytree serialized type names"):
+        changed += [
+            f"{key}[{name!r}]: {value!r} -> {td_state[key].get(name)!r}"
+            for name, value in torch_state[key].items()
+            if td_state[key].get(name) != value
+        ]
+    assert not changed, "import tensordict changed the global torch state:\n" + (
+        "\n".join(changed)
+    )
+
+
+def test_import_keeps_pytree_specs_serializable():
+    # torch.export.save and torch.export.load store the tree specs of the inputs
+    # and outputs with treespec_dumps and treespec_loads. After import tensordict,
+    # a spec of a built-in container must still load as the spec it was saved
+    # from, or torch.export.load gives programs that reject their own inputs.
+    check = (
+        "import collections\n"
+        "import torch.utils._pytree as pytree\n"
+        "trees = {\n"
+        "    'list': [1, 2],\n"
+        "    'tuple': (1, 2),\n"
+        "    'dict': {'a': 1, 'b': 2},\n"
+        "    'OrderedDict': collections.OrderedDict(a=1, b=2),\n"
+        "    'defaultdict': collections.defaultdict(int, a=1),\n"
+        "    'nested': {'a': [1, (2, 3)], 'b': [[4]]},\n"
+        "}\n"
+        "result = []\n"
+        "for kind, tree in trees.items():\n"
+        "    spec = pytree.tree_structure(tree)\n"
+        "    loaded = pytree.treespec_loads(pytree.treespec_dumps(spec))\n"
+        "    if loaded != spec:\n"
+        "        saved, loaded = (' '.join(str(s).split()) for s in (spec, loaded))\n"
+        "        result.append(f'{kind}: saved {saved}, loaded {loaded}')\n"
+    )
+    steps = [
+        ("import torch", "import torch"),
+        ("import tensordict", "import tensordict"),
+        ("round trip", check),
+    ]
+    failed, changed = _run_in_fresh_interpreter(steps)
+    assert not failed, failed
+    assert not changed, (
+        "after import tensordict, treespec_loads(treespec_dumps(spec)) != spec:\n"
+        + "\n".join(changed)
+    )
 
 
 def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):

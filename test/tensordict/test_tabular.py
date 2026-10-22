@@ -18,6 +18,7 @@ from tensordict import (
     from_json,
     from_pandas,
     from_parquet,
+    pad_sequence,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -482,6 +483,35 @@ class TestParquet:
         assert td["f"].dtype == torch.int64
         assert (td["f"] == torch.tensor([[1, 2, 3], [4, 5, 6]])).all()
 
+    def test_from_parquet_primitive_columns(self, tmp_path):
+        # #3272: on pyarrow 10 to 12, ChunkedArray.to_numpy() takes no keyword,
+        # and from_parquet raised a TypeError on every file
+        import datetime
+
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        path = tmp_path / "primitive.parquet"
+        days = [datetime.datetime(2020, 1, day) for day in (1, 2, 3)]
+        table = pa.table(
+            {
+                "i": [1, 2, 3],
+                "f": [1.0, 2.0, 3.0],
+                "b": [True, False, True],
+                "ts": pa.array(days, pa.timestamp("s")),
+            }
+        )
+        pq.write_table(table, str(path), row_group_size=2)
+
+        td = TensorDict.from_parquet(path)
+        assert td["i"].tolist() == [1, 2, 3]
+        assert td["f"].tolist() == [1.0, 2.0, 3.0]
+        assert td["b"].tolist() == [True, False, True]
+        seconds = [
+            int(day.replace(tzinfo=datetime.timezone.utc).timestamp()) for day in days
+        ]
+        assert td["ts"].tolist() == [second * 10**9 for second in seconds]
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -685,9 +715,9 @@ class TestArrow:
         )
         assert td.get("s").tolist() == ["a", None, "c"]
         if nulls == "fill":
-            assert "_mask" not in td.keys()
+            assert "masks" not in td.keys()
         else:
-            assert set(td["_mask"].keys(include_nested=True, leaves_only=True)) == {
+            assert set(td["masks"].keys(include_nested=True, leaves_only=True)) == {
                 "f",
                 "i",
                 "b",
@@ -697,16 +727,95 @@ class TestArrow:
                 ("st", "y"),
                 "s",
             }
-            assert torch.equal(td["_mask", "f"], torch.tensor([True, False, True]))
-            assert torch.equal(td["_mask", "i"], torch.tensor([False, True, True]))
+            assert torch.equal(td["masks", "f"], torch.tensor([True, False, True]))
+            assert torch.equal(td["masks", "i"], torch.tensor([False, True, True]))
             assert torch.equal(
-                td["_mask", "st", "y"], torch.tensor([True, False, False])
+                td["masks", "st", "y"], torch.tensor([True, False, False])
             )
-            with pytest.raises(ValueError, match="under the key '_mask'"):
-                from_arrow(pa.table({"_mask": [1]}), nulls="mask")
+            with pytest.raises(ValueError, match="under the key 'masks'"):
+                from_arrow(pa.table({"masks": [1]}), nulls="mask")
         # Nulls inside a list are filled.
         td = from_arrow(pa.table({"l": pa.array([[1, None], [2]])}), nulls=nulls)
         assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2]]
+
+    def test_from_arrow_nulls_mask_key(self):
+        # #3241: nulls='mask' stores its masks under the key that
+        # pad_sequence(return_mask=True) uses, "masks".
+        import pyarrow as pa
+
+        padded = pad_sequence(
+            [TensorDict(y=torch.ones(1)), TensorDict(y=torch.ones(2))],
+            return_mask=True,
+        )
+        assert "masks" in padded.keys()
+        td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
+        assert set(td.keys()) == {"y", "masks"}
+        assert torch.equal(td["masks", "y"], torch.tensor([True, False]))
+        with pytest.raises(ValueError, match="under the key 'masks'"):
+            from_arrow(pa.table({"masks": [1]}), nulls="mask")
+        # "_mask" is now an ordinary column name.
+        td = from_arrow(pa.table({"_mask": [1, None]}), nulls="mask")
+        assert torch.equal(td["_mask"], torch.tensor([1, 0]))
+        assert torch.equal(td["masks", "_mask"], torch.tensor([True, False]))
+
+    # #3261
+    def test_from_arrow_nulls_raise_non_tensor_list(self):
+        import pyarrow as pa
+
+        strings = pa.list_(pa.string())
+        records = pa.struct([("s", pa.string())])
+        for arr in (
+            pa.array([["a"], None], strings),
+            pa.array([[1, None], [3]], pa.list_(pa.int64())),
+            pa.array([[None], ["b"]], strings),
+            pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+            pa.array([[{"s": "a"}], [{"s": None}]], pa.list_(records)),
+        ):
+            with pytest.raises(ValueError, match=r"\('x',\) has 1 null"):
+                from_arrow(pa.table({"x": arr}))
+        # A slice without the null row or value converts.
+        td = from_arrow(pa.table({"x": pa.array([[None], ["b"]], strings)[1:]}))
+        assert td.get("x").tolist() == [["b"]]
+        for nulls in ("fill", "mask"):
+            td = from_arrow(
+                pa.table(
+                    {
+                        "x": pa.array([[None], ["b"]], strings),
+                        "y": pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+                        "z": pa.array([[{"s": "a"}], [{"s": None}]], pa.list_(records)),
+                    }
+                ),
+                nulls=nulls,
+            )
+            assert td.get("x").tolist() == [[None], ["b"]]
+            assert td.get("y").tolist() == [[["a"]], [["b", None]]]
+            assert td.get("z").tolist() == [[{"s": "a"}], [{"s": None}]]
+            assert "masks" not in td.keys()
+
+    # #3260
+    @pytest.mark.parametrize("nulls", ["fill", "mask"])
+    @pytest.mark.parametrize("dtype", ["uint8", "uint16", "uint32", "uint64"])
+    def test_from_arrow_nulls_unsigned(self, dtype, nulls):
+        import pyarrow as pa
+
+        typ = getattr(pa, dtype)()
+        td = from_arrow(
+            pa.table(
+                {
+                    "x": pa.array([1, None, 3], typ),
+                    "l": pa.array([[1, None], [2], []], pa.list_(typ)),
+                }
+            ),
+            nulls=nulls,
+        )
+        assert td["x"].dtype == getattr(torch, dtype)
+        assert td["x"].tolist() == [1, 0, 3]
+        assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2], []]
+        if nulls == "fill":
+            assert "masks" not in td.keys()
+        else:
+            assert set(td["masks"].keys()) == {"x"}
+            assert torch.equal(td["masks", "x"], torch.tensor([True, False, True]))
 
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the
@@ -793,6 +902,33 @@ class TestArrow:
         with pytest.raises(ValueError, match="one batch dimension"):
             to_arrow(td)
         assert to_arrow(td.reshape(-1)).num_rows == 6
+
+    def test_from_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: pyarrow 10 to 14 failed with "from_dlpack received an invalid capsule"
+        import pyarrow as pa
+
+        version = pa.__version__
+        table = pa.table({"x": pa.array([1, 2])})
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"from_arrow needs pyarrow 15.*14\.0\.2"):
+            from_arrow(table)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert from_arrow(table)["x"].tolist() == [1, 2]
+
+    def test_to_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: on pyarrow 10 to 14, to_arrow raised an AttributeError for a
+        # leaf with more than one dim
+        import pyarrow as pa
+
+        version = pa.__version__
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"to_arrow needs pyarrow 15.*14\.0\.2"):
+            to_arrow(td)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert to_arrow(td).num_rows == 2
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
