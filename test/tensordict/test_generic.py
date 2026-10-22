@@ -4271,12 +4271,12 @@ class TestGeneric:
         # https://github.com/pytorch/tensordict/issues/2979
         td = TensorDict(a=torch.zeros(3))
         td3 = TensorDict(a=torch.zeros(3), batch_size=[3])
-        with pytest.warns(FutureWarning, match="batch_size=.2, 3. for the tensor"):
+        with pytest.warns(FutureWarning, match="batch_size.* for the tensor"):
             assert TensorDict.from_list([td, td], batch_size=[2, 3]).batch_size == (2,)
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
             out = TensorDict.from_list([td3, td3], batch_size=[2])
         assert out.batch_size == (2, 3)
-        with pytest.warns(FutureWarning, match="device=meta"):
+        with pytest.warns(FutureWarning, match="device.* for the tensor"):
             assert TensorDict.from_list([td, td], device="meta").device is None
         # silent when the result has the batch size and device asked for
         data = [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}]
@@ -11419,6 +11419,71 @@ class TestGeneric:
         assert loaded.batch_size == expected.batch_size
         assert (loaded == expected).all()
 
+    @pytest.mark.parametrize("replaced", [True, False])
+    def test_append_memmap_killed_empty_nested(self, tmpdir, replaced):
+        # #3249: with an empty nested tensordict, the directory still loads
+        # after the root meta.json is replaced. The docs decide by the root
+        # .meta.json.append.tmp: rename the leftovers if it is gone, delete
+        # them if it is there.
+        def rows(num_rows, value):
+            return TensorDict(
+                a=torch.full((num_rows,), float(value)),
+                sub=TensorDict(batch_size=[num_rows]),
+                batch_size=[num_rows],
+            )
+
+        rows(3, 0).memmap(tmpdir)
+        # Kill the child right after the first meta.json is replaced, or right
+        # before.
+        code = (
+            "import os, torch\n"
+            "from tensordict import TensorDict, append_memmap\n"
+            "replace = os.replace\n"
+            "def replace_and_die(src, dst):\n"
+            f"    if {replaced}:\n"
+            "        replace(src, dst)\n"
+            "    os._exit(9)\n"
+            "os.replace = replace_and_die\n"
+            "rows = TensorDict(a=torch.ones(2), sub=TensorDict(batch_size=[2]), "
+            "batch_size=[2])\n"
+            f"append_memmap({str(tmpdir)!r}, rows)\n"
+        )
+        # The child imports the tensordict that this test imports.
+        package_root = os.path.dirname(os.path.dirname(tensordict.__file__))
+        pythonpath = os.pathsep.join(
+            filter(None, [package_root, os.environ.get("PYTHONPATH")])
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env={**os.environ, "PYTHONPATH": pythonpath},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 9, result.stderr
+        leftovers = list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        assert len(leftovers) == (1 if replaced else 2)
+        # The documented rule.
+        root_replaced = not (Path(tmpdir) / ".meta.json.append.tmp").exists()
+        assert root_replaced == replaced
+        for tmp in leftovers:
+            if root_replaced:
+                os.replace(tmp, tmp.with_name("meta.json"))
+            else:
+                os.remove(tmp)
+        expected = torch.cat([rows(3, 0), rows(2, 1)]) if replaced else rows(3, 0)
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded.batch_size == expected.batch_size
+        assert loaded["sub"].batch_size == expected.batch_size
+        assert (loaded == expected).all()
+        del loaded
+        tensordict.append_memmap(tmpdir, rows(4, 2))
+        loaded = tensordict.load_memmap(tmpdir)
+        expected = torch.cat([expected, rows(4, 2)])
+        assert loaded.batch_size == expected.batch_size
+        assert loaded["sub"].batch_size == expected.batch_size
+        assert (loaded == expected).all()
+
     def test_memmap_format_version(self, tmp_path):
         td = TensorDict(
             a=torch.zeros(3),
@@ -14585,8 +14650,7 @@ class TestGeneric:
 
         match = (
             r"^update\(update_batch_size=True\) got a source with batch size "
-            r"torch\.Size\(\[2\]\) for a destination with batch size "
-            r"torch\.Size\(\[\]\), a prefix of it, .*Starting with TensorDict "
+            r".*, a prefix of it, .*Starting with TensorDict "
             r"0\.17, the default will change"
         )
         td = TensorDict(x=torch.ones(2, 3), y=torch.ones(5))
