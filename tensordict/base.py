@@ -37,6 +37,7 @@ from typing import (
     Tuple,
     Type,
     TYPE_CHECKING,
+    TypeAlias,
     TypeVar,
 )
 
@@ -200,7 +201,7 @@ class _BEST_ATTEMPT_INPLACE:
 
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
-CompatibleType = Tensor | TensorCollection
+CompatibleType: TypeAlias = Tensor | TensorCollection
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
@@ -2251,12 +2252,14 @@ def _warn_as_tensor_memmap() -> None:
 
 
 def _warn_index_past_batch_dims(
-    index, write: bool = False, no_batch_dims: bool = False
+    write: bool = False, no_batch_dims: bool = False
 ) -> None:
-    """Warns that ``index`` runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
+    """Warns that an index runs past the batch dims and indexes the leaves, which raises from 0.17 (#3202).
 
     ``write`` is ``True`` for ``td[index] = value``, and ``no_batch_dims`` for
-    such a write into a tensordict without batch dims.
+    such a write into a tensordict without batch dims. The text leaves out the
+    index, so that a filtered warning costs nothing and each call site warns
+    once (#3232).
     """
     if is_compiling():
         return
@@ -2280,7 +2283,7 @@ def _warn_index_past_batch_dims(
             "which keeps the batch size."
         )
     warnings.warn(
-        f"The index {index} {op}runs past the batch dims, and is used on the "
+        f"An index {op}runs past the batch dims, and is used on the "
         "dims of the leaves instead. Starting with TensorDict 0.17, the default "
         "will change to raising an IndexError, as torch does for a tensor of "
         f"the batch size. {replacement}",
@@ -2374,7 +2377,9 @@ def _index_past_batch_dims(td, index):
             return None
         batch_size = _getitem_batch_size(td.batch_size + leaf.shape[ndim:used], index)
         return _index_leaves(td, index, batch_size)
-    except (IndexError, RuntimeError):
+    except (IndexError, RuntimeError, AttributeError):
+        # AttributeError: an int index on the ragged dim of a jagged leaf,
+        # whose nested int has no negation for the bounds check (#3232)
         return None
 
 
@@ -3495,6 +3500,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # stores) writes into an existing entry and adds a new one.
     _setitem_key_inplace = False
 
+    if TYPE_CHECKING:
+        # Type checkers cannot expand the starred mixin bases, so they would
+        # take __eq__ from Mapping (bool) and unbind, chunk and split from the
+        # TensorCollection stub (TensorCollection pieces). These declarations
+        # give them what the mixins return (#3269, #3270).
+        def __eq__(self, other: object) -> Self: ...  # type: ignore[override]
+
+        def unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
+
+        def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]: ...
+
+        def split(
+            self, split_size: int | list[int], dim: int = 0
+        ) -> tuple[TensorDictBase, ...]: ...
+
     @classmethod
     def _new_unsafe(cls, *args, **kwargs) -> "TensorDictBase":
         """Builds a tensordict from ``source`` without validating it.
@@ -3523,11 +3543,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def __repr__(self) -> str:
-        try:
-            if _REPR_OPTIONS["compact"]:
+        if _REPR_OPTIONS["compact"]:
+            try:
                 compact = _compact_repr(self)
-                if compact is not None:
-                    return compact
+            except Exception:
+                # repr must not raise: fall back to the detailed form
+                compact = None
+            if compact is not None:
+                return compact
+        try:
             string = ",\n".join(self._repr_parts())
         except AttributeError:
             # When using torch.compile, an exception may be raised with a tensordict object
@@ -3798,9 +3822,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _WRITE_PAST_BATCH_DIMS.active = False
         if _index_runs_past_batch_dims(index, self.batch_dims):
             # warn after the write, so that only the writes that work warn
-            _warn_index_past_batch_dims(
-                index, write=True, no_batch_dims=not self.batch_dims
-            )
+            _warn_index_past_batch_dims(write=True, no_batch_dims=not self.batch_dims)
 
     def _setitem_index(self, index: IndexType, value: Any) -> None:
         """Writes ``value`` at the batch index ``index`` of every entry, for :meth:`__setitem__`.
@@ -6353,7 +6375,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -11849,7 +11871,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 result = _index_past_batch_dims(self, index)
                 if result is None:
                     raise
-                _warn_index_past_batch_dims(index)
+                _warn_index_past_batch_dims()
                 return result
 
         if names is None:
