@@ -1350,6 +1350,69 @@ _ROUND_TRIP_OUTCOMES = {
     ("dtypes", "zarr"): _Raises(TypeError, "unsupported ScalarType BFloat16"),
 }
 
+# The pairs that filed bugs still break, as {(member, path): xfail reason}.
+_ROUND_TRIP_BUGS = {
+    **{
+        ("dim_names", path): "#3262: memmap, save and append_memmap lose the dim names"
+        for path in _MEMMAP_PATHS
+    },
+    **{
+        (member, "h5"): "#3263: from_h5 infers the batch sizes and loses the dim names"
+        for member in (
+            "dense_nested",
+            "unbatched",
+            "non_tensor",
+            "tensorclass",
+            "tensorclass_nested",
+            "tensorclass_in_td",
+            "dim_names",
+            "empty_batched",
+            "zero_dim_batch",
+            "zero_length_batch",
+        )
+    },
+    **{
+        pair: "#3264: h5, zarr and .tdz files lose the UnbatchedTensor class"
+        for pair in (
+            ("unbatched", "zarr"),
+            ("unbatched", "memmap_archive"),
+            ("unbatched_batch_shaped", "h5"),
+            ("unbatched_batch_shaped", "zarr"),
+            ("unbatched_batch_shaped", "memmap_archive"),
+        )
+    },
+    **{
+        (member, "torch_save_weights_only"): (
+            "#3264: torch.load(weights_only=True) rejects UnbatchedTensor"
+        )
+        for member in ("unbatched", "unbatched_batch_shaped")
+    },
+    **{
+        (
+            "jagged",
+            path,
+        ): "#3265: saving a jagged leaf fails with an error that names no key"
+        for path in ("h5", "zarr")
+    },
+    ("non_tensor", "to_dict"): (
+        "#3266: from_dict(to_dict()) fails on a nested non-tensor entry"
+    ),
+    **{
+        (member, "safetensors"): (
+            "#3267: a lazy stack loads back from safetensors as a dense TensorDict"
+        )
+        for member in ("lazy_stack_dim0", "lazy_stack_dim1")
+    },
+}
+
+
+def _round_trip_params():
+    for member in _ZOO:
+        for path in _SAVE_LOAD:
+            reason = _ROUND_TRIP_BUGS.get((member, path))
+            marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
+            yield pytest.param(member, path, marks=marks, id=f"{member}-{path}")
+
 
 def _kind(value):
     if isinstance(value, NonTensorStack):
@@ -1494,8 +1557,7 @@ class TestSaveLoadRoundTrip:
     """Each tensordict of :data:`_ZOO` through each save/load path of :data:`_SAVE_LOAD`."""
 
     @pytest.mark.filterwarnings("ignore::FutureWarning")
-    @pytest.mark.parametrize("path", list(_SAVE_LOAD))
-    @pytest.mark.parametrize("member", list(_ZOO))
+    @pytest.mark.parametrize(("member", "path"), list(_round_trip_params()))
     def test_round_trip(self, member, path, tmp_path):
         if path in _PATH_REQUIRES:
             pytest.importorskip(_PATH_REQUIRES[path])
