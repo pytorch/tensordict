@@ -1310,16 +1310,10 @@ _WARNING_ONCE_CASES = [
     pytest.param(
         _lazy_split_sizes,
         id="LazyStackedTensorDict.split-sizes",
-        marks=pytest.mark.xfail(
-            strict=True, reason="#3256: split warns once per split size"
-        ),
     ),
     pytest.param(
         _non_tensor_expand,
         id="NonTensorData.expand-shape",
-        marks=pytest.mark.xfail(
-            strict=True, reason="#3256: NonTensorData.expand warns once per shape"
-        ),
     ),
 ]
 

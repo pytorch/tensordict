@@ -3287,10 +3287,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         _empty_misfit(source, batch_size) if members_before else None
                     )
                     if misfit is not None:
-                        key, value = misfit
+                        key, _ = misfit
                         problem = (
                             f"cannot give that batch size to the entry {key!r}, whose "
-                            f"batch size {list(value.batch_size)} does not start with it",
+                            "batch size does not start with it",
                             "a RuntimeError, as TensorDict.empty does",
                         )
                 if problem is None:
@@ -3302,11 +3302,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         names=names if names is not None else NO_DEFAULT,
                     )
                 if problem != "names":
-                    args = f"recurse=True, batch_size={list(batch_size)}"
-                    if names is not None:
-                        args = f"{args}, names={list(names)}"
                     warning = (
-                        f"LazyStackedTensorDict.empty({args}) {problem[0]}, and "
+                        "LazyStackedTensorDict.empty with recurse=True and a new "
+                        f"batch size {problem[0]}, and "
                         "returns the empty stack of its members, which keeps the "
                         "size of the stack dim. Starting with TensorDict 0.17, the "
                         f"default will change to raising {problem[1]}."
@@ -5180,10 +5178,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 and _where_split_differs(self, other_tensor.ndim)
             ):
                 warnings.warn(
-                    "LazyStackedTensorDict.where splits a tensor `other` of shape "
-                    f"{tuple(other_tensor.shape)} along the stack dim and gives "
-                    "each member its piece, which differs from TensorDict.where "
-                    f"for the leaves that do not have {other_tensor.ndim} dims. "
+                    "LazyStackedTensorDict.where splits a tensor `other` along "
+                    "the stack dim and gives each member its piece, which "
+                    "differs from TensorDict.where for the leaves that do not "
+                    "have as many dims as `other`. "
                     "Starting with TensorDict 0.17, the default will change to "
                     "broadcasting like TensorDict.where, which aligns `other` with "
                     "each leaf from the right. To keep the current result, add "
@@ -5729,7 +5727,6 @@ class LazyStackedTensorDict(TensorDictBase):
         invalid = any(dim < 0 or dim >= ndim for dim in dims_list) or sorted(
             dims_list
         ) != list(range(len(dims_list)))
-        dims = dims_list
         # find the new stack dim, as np.argsort(dims_list)[self.stack_dim]: a
         # Python int, which torch.compile traces
         stack_dim = sorted(range(len(dims_list)), key=dims_list.__getitem__)[
@@ -5746,7 +5743,7 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         if invalid:
             _warn_lazy_shape_args(
-                "permute", f"dims={dims}, which are not a permutation of its batch dims"
+                "permute", "dims that are not a permutation of its batch dims"
             )
         return result
 
@@ -5814,9 +5811,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 if negative or start != len(self.tensordicts):
                     # stacklevel 4: skip this generator, _split and split
                     warnings.warn(
-                        f"LazyStackedTensorDict.split got the sizes {split_sizes} "
-                        "along the stack dim, which are negative or do not add up "
-                        f"to the stack size {len(self.tensordicts)}. Today the "
+                        "LazyStackedTensorDict.split got sizes along the stack "
+                        "dim that are negative or do not add up to the stack "
+                        "size. Today the "
                         "pieces miss members or have a wrong batch size. Starting "
                         "with TensorDict 0.17, the default will change to raising "
                         "a RuntimeError, as TensorDict.split and torch.split do.",
