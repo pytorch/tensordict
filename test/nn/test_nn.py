@@ -8447,6 +8447,17 @@ class TestTensorClassModuleForward:
             assert td_module(td)["result", "added"] == 15
             assert td_module(a=10, b=5)[0] == 10
 
+    def test_td_forward_extra_args_warn_once(self) -> None:
+        """Test that one call site warns once for any number of ignored arguments (#3256)."""
+        td_module = TestTensorClassModule().as_td_module()
+        td = TensorDict(a=10, b=5)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("default")
+            for count in range(1, 21):
+                td_module(td, *range(count))
+        messages = [str(w.message) for w in record]
+        assert len(messages) == 1, "\n".join(messages[:2])
+
     def test_td_forward_nested_input_extra_keys(self) -> None:
         """Test that the wrapper ignores the entries next to nested input fields."""
         value = TestTensorClassModule()(InputTensorClass(a=10, b=5, batch_size=[]))
