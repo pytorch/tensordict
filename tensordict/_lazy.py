@@ -4151,7 +4151,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return getattr(other, reflected_op)(self)
         if isinstance(other, (dict,)):
             # we may want to broadcast it instead
-            other = TensorDict.from_dict(other, batch_size=self.batch_size)
+            other = TensorDict._from_dict_impl(other, batch_size=self.batch_size)
         if _is_tensor_collection(type(other)):
             self_expand = self
             if other.batch_size != self.batch_size:
@@ -4729,7 +4729,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     if value is self:
                         raise ValueError(_SELF_NESTING_ERROR.format(key))
             self._check_tuple_keys(input_dict_or_td)
-            input_dict_or_td = TensorDict.from_dict(
+            input_dict_or_td = TensorDict._from_dict_impl(
                 input_dict_or_td, batch_size=self.batch_size
             )
         kwargs = {
@@ -5050,7 +5050,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         indexed_bs = _getitem_batch_size(self.batch_size, idx)
         if not _is_tensor_collection(type(input_dict_or_td)):
-            input_dict_or_td = TensorDict.from_dict(
+            input_dict_or_td = TensorDict._from_dict_impl(
                 input_dict_or_td, batch_size=indexed_bs
             )
         elif input_dict_or_td.batch_size != indexed_bs:

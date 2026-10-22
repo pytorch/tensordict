@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import weakref
-from collections import defaultdict
+from collections import defaultdict, UserDict
 from collections.abc import Mapping
 from numbers import Number
 from pathlib import Path
@@ -1219,6 +1219,31 @@ class TensorDict(TensorDictBase):
         batch_dims: int | None = None,
         names: Sequence[str] | None = None,
     ) -> Self:
+        return cls._from_dict_impl(
+            input_dict,
+            auto_batch_size=auto_batch_size,
+            batch_size=batch_size,
+            device=device,
+            batch_dims=batch_dims,
+            names=names,
+            non_tensor_scalars=True,
+        )
+
+    @classmethod
+    def _from_dict_impl(
+        cls,
+        input_dict: dict[Any, Any] | TensorDictBase,
+        *,
+        auto_batch_size: bool | None = None,
+        batch_size: Sequence[int] | torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: Sequence[str] | None = None,
+        non_tensor_scalars: bool = False,
+    ) -> Self:
+        # from_dict reads a Python scalar as non-tensor data (#3266). Without
+        # non_tensor_scalars, it stays a 0-dim tensor: the dicts that update,
+        # comparisons and indexed writes convert keep main's behavior.
         if _is_tensor_collection(type(input_dict)):
             return input_dict
 
@@ -1230,6 +1255,25 @@ class TensorDict(TensorDictBase):
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
         input_dict = dict(input_dict)
         for key, value in list(input_dict.items()):
+            if not non_tensor_scalars and isinstance(value, (dict, UserDict)):
+                input_dict[key] = TensorDict._from_dict_impl(
+                    value, auto_batch_size=False, device=device, batch_size=batch_size
+                )
+                continue
+            if (
+                non_tensor_scalars
+                and batch_size
+                and isinstance(value, (float, int, bool))
+            ):
+                # A 0-dim tensor cannot have the batch size: read the scalar
+                # as non-tensor data, which is what to_dict writes it from
+                # (#3266).
+                from tensordict.tensorclass import NonTensorData
+
+                input_dict[key] = NonTensorData(
+                    value, batch_size=batch_size, device=device
+                )
+                continue
             # we don't know if another tensor of smaller size is coming
             # so we can't be sure that the batch-size will still be valid later
             input_dict[key] = TensorDict.from_any(

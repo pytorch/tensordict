@@ -4152,6 +4152,95 @@ class TestGeneric:
             assert data["d"].batch_size == torch.Size(batch_size)
             assert data["d", "g"].batch_size == torch.Size(batch_size)
 
+    @pytest.mark.parametrize("value", [7, 1.5, True])
+    def test_from_dict_to_dict_non_tensor_scalar(self, value):
+        # https://github.com/pytorch/tensordict/issues/3266: to_dict writes
+        # non-tensor data as its Python value, and from_dict read a scalar as a
+        # 0-dim tensor that does not fit the batch size.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("n", value)
+        td.set_non_tensor(("nested", "n"), value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out.get(key).batch_size == (3,)
+            assert type(out[key]) is type(value)
+            assert out[key] == value
+        assert out["nested"].batch_size == (3,)
+        # Without a batch size, a scalar is still read as a 0-dim tensor.
+        assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            "lazy_eq",
+            "lazy_eq_nested",
+            "lazy_update",
+            "lazy_update_new_key",
+            "lazy_update_at_",
+            "dense_setitem_slice",
+            "dense_setitem_mask",
+        ],
+    )
+    def test_dict_scalar_operand_still_raises(self, op):
+        # https://github.com/pytorch/tensordict/issues/3266: from_dict reads a
+        # Python scalar as non-tensor data, but the dicts that comparisons,
+        # updates and indexed writes convert still read it as a 0-dim tensor,
+        # which does not fit the batch size. Reading it as non-tensor data
+        # would compare zeros with 1 as True, or replace a tensor with
+        # non-tensor data.
+        lazy = LazyStackedTensorDict(
+            *[
+                TensorDict(a=torch.zeros(()), n=TensorDict(a=torch.zeros(())))
+                for _ in range(3)
+            ]
+        )
+        dense = TensorDict(a=torch.zeros(3), batch_size=[3])
+        ops = {
+            "lazy_eq": lambda: lazy == {"a": 1},
+            "lazy_eq_nested": lambda: lazy == {"n": {"a": 1}},
+            "lazy_update": lambda: lazy.update({"a": 7}),
+            "lazy_update_new_key": lambda: lazy.update({"x": 7}),
+            "lazy_update_at_": lambda: lazy.update_at_({"a": 1}, slice(0, 2)),
+            "dense_setitem_slice": lambda: dense.__setitem__(slice(0, 2), {"a": 1}),
+            "dense_setitem_mask": lambda: dense.__setitem__(
+                torch.tensor([True, False, True]), {"a": 1}
+            ),
+        }
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            ops[op]()
+        assert isinstance(lazy.get("a"), torch.Tensor)
+        assert "x" not in lazy.keys()
+        assert (dense["a"] == 0).all()
+
+    def test_from_dict_scalar_through_from_list_from_any_tensorclass(self):
+        # https://github.com/pytorch/tensordict/issues/3266: from_list,
+        # from_any and a tensorclass's from_dict convert dicts with from_dict,
+        # so they read a scalar as non-tensor data too; the update methods of
+        # a tensorclass still raise for it.
+        class TC(TensorClass):
+            a: torch.Tensor
+            n: Any = None
+
+        out = TensorDict.from_list(
+            [{"a": torch.zeros(3), "n": 7}] * 2, batch_size=[2, 3]
+        )
+        assert isinstance(out.get("n"), NonTensorStack)
+        assert out.get("n").batch_size == (2, 3)
+        out = TensorDict.from_any({"a": torch.zeros(3), "n": 7}, batch_size=[3])
+        assert isinstance(out.get("n"), NonTensorData)
+        tc = TC.from_dict({"a": torch.zeros(3), "n": 7}, batch_size=[3])
+        assert isinstance(tc._tensordict.get("n"), NonTensorData)
+        assert tc.n == 7
+        for update in (
+            lambda: tc.update_({"a": 1.0}),
+            lambda: tc.update_at_({"a": 1.0}, slice(0, 2)),
+            lambda: tc.update({"a": 1.0}, inplace=True),
+        ):
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                update()
+        assert (tc.a == 0).all()
+
     @pytest.mark.parametrize(
         "kwargs",
         [
