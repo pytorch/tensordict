@@ -2238,8 +2238,14 @@ def _plain_summary(tensor: Tensor) -> str:
     """Short value summary for ``plain`` print mode."""
     if isinstance(tensor, UninitializedTensorMixin) or tensor.numel() == 0:
         return "[]"
+    if tensor.is_nested:
+        # The jagged layout has no std over all elements (#3259).
+        tensor = torch.cat([t.reshape(-1) for t in tensor.unbind()])
     if tensor.is_floating_point() or tensor.is_complex():
-        return f"mean={tensor.to(torch.float64).mean().item():.4g}, std={tensor.to(torch.float64).std().item():.4g}"
+        tensor = tensor.to(torch.float64)
+        # std of one element is nan, and torch warns when computing it (#3259).
+        std = tensor.std().item() if tensor.numel() > 1 else float("nan")
+        return f"mean={tensor.mean().item():.4g}, std={std:.4g}"
     return f"min={tensor.min().item()}, max={tensor.max().item()}"
 
 

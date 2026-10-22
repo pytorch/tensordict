@@ -12,6 +12,7 @@ import os
 import platform
 import re
 import sys
+import warnings
 
 import pytest
 import torch
@@ -706,6 +707,22 @@ class TestSetPrintoptions:
         with set_printoptions(plain=True):
             r = repr(td)
         assert "mean=" in r
+
+    def test_plain_mode_jagged_and_one_element(self):
+        # #3259: plain=True raised on a jagged leaf and warned on a
+        # one-element leaf
+        nt = torch.nested.nested_tensor(
+            [torch.arange(6.0).reshape(2, 3), torch.arange(12.0).reshape(4, 3)],
+            layout=torch.jagged,
+        )
+        td = TensorDict(j=nt, a=torch.tensor(1.0), b=torch.tensor([2.0]))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with set_printoptions(compact=False, plain=True):
+                r = repr(td)
+        assert "mean=4.5, std=3.4" in r
+        assert "mean=1, std=nan" in r
+        assert "mean=2, std=nan" in r
 
     def test_lazy_stacked_respects_options(self):
         td1 = TensorDict({"a": torch.randn(3)})
