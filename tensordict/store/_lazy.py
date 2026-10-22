@@ -35,6 +35,7 @@ from tensordict.base import (
     _is_tensor_collection,
     _KeyThroughLeafError,
     _register_tensor_class,
+    _warn_update_keys_narrowed,
     BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
     TensorDictBase,
@@ -2576,6 +2577,9 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
                 )
             except _HeterogeneousKeyError:
                 pass
+        elif keys_to_update is not None and len(keys_to_update) > 1:
+            # the base warns on the route above
+            _warn_update_keys_narrowed("update_", input_dict_or_td, keys_to_update)
         all_keys = self._get_all_keys()
         missing = None
         written = False
