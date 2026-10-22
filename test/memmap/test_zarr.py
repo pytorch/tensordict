@@ -1027,6 +1027,41 @@ class TestZarrWriteOps:
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrStores:
+    @pytest.mark.parametrize("call", ["to_zarr", "from_zarr", "persistent"])
+    def test_zarr_2_raises_import_error(self, tmp_path, monkeypatch, call):
+        # #3298: every zarr path names the zarr version it needs; to_zarr
+        # failed inside zarr 2 with a TypeError about use_consolidated
+        import zarr
+
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.to_zarr(tmp_path / "a.zarr")
+        open_group = zarr.open_group
+
+        def zarr_2_open_group(*args, **kwargs):
+            # zarr 2's open_group has no use_consolidated
+            if "use_consolidated" in kwargs:
+                raise TypeError(
+                    "open_group() got an unexpected keyword argument 'use_consolidated'"
+                )
+            return open_group(*args, **kwargs)
+
+        monkeypatch.setattr(zarr, "__version__", "2.18.3")
+        monkeypatch.setattr(zarr, "open_group", zarr_2_open_group)
+        calls = {
+            "to_zarr": lambda: td.to_zarr(tmp_path / "b.zarr"),
+            "from_zarr": lambda: TensorDict.from_zarr(tmp_path / "a.zarr"),
+            "persistent": lambda: PersistentTensorDict(
+                filename=str(tmp_path / "c.zarr"),
+                backend="zarr",
+                mode="w",
+                batch_size=[3],
+            ),
+        }
+        with pytest.raises(
+            ImportError, match=r"requires zarr>=3\.0, got zarr==2\.18\.3"
+        ):
+            calls[call]()
+
     def test_explicit_store(self, tmp_path):
         from zarr.storage import LocalStore
 
