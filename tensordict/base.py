@@ -127,7 +127,7 @@ from tensordict.utils import (
 )
 from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
 from torch.autograd import forward_ad
-from torch.compiler import allow_in_graph, is_compiling
+from torch.compiler import allow_in_graph, is_compiling, is_dynamo_compiling
 from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -2492,6 +2492,9 @@ def _warn_update_keys_narrowed(
     ``dest`` is given where the route of ``update_`` that follows ``select``
     already (``_reads_copies_under``) is possible: it does not warn there.
     """
+    if is_dynamo_compiling():
+        # Dynamo can't trace bisect; the warning is for eager code
+        return
     lengths = sorted(set(map(len, keys_to_update)))
     if len(lengths) < 2:
         # keys of one length: none is under another
