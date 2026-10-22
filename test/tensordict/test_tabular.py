@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import datetime
+import decimal
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import warnings
@@ -1054,15 +1057,103 @@ def _v0_15_2_result(case_id, reader, *, any_pandas):
     return None
 
 
-def _check_v0_15_2(case_id, reader, actual, *, any_pandas=False):
+def _plain_value(value):
+    """A Python value of a leaf in a description, with nulls as ``None`` and bools apart from 1 and 0."""
+    if isinstance(value, dict):
+        if "tensor" in value or "ndarray" in value:
+            return _plain_value(value["values"])
+        return {k: _plain_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_value(v) for v in value]
+    if isinstance(value, str):
+        if value in ("nan", "None", "NaT"):
+            return None
+        match = re.fullmatch(r"np\.\w+\((.*)\)|Decimal\((.*)\)", value)
+        if match and match[2] is not None:
+            return decimal.Decimal(ast.literal_eval(match[2]))
+        try:
+            value = ast.literal_eval(match[1] if match else value)
+        except (ValueError, SyntaxError):
+            return value
+        return value if isinstance(value, str) else _plain_value(value)
+    if isinstance(value, float) and value != value:
+        return None
+    if isinstance(value, bool):
+        return ("bool", value)
+    return value
+
+
+def _flat(row):
+    if isinstance(row, list):
+        return [leaf for value in row for leaf in _flat(value)]
+    return [row]
+
+
+def _same_row(actual, expected):
+    if expected is None and isinstance(actual, list):
+        # A null row read as a row of nulls (NaN) is fine.
+        return all(leaf is None for leaf in _flat(actual))
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        return actual.keys() == expected.keys() and all(
+            _same_row(actual[k], expected[k]) for k in expected
+        )
+    if isinstance(expected, list) and isinstance(actual, list):
+        actual, expected = _flat(actual), _flat(expected)
+        return len(actual) == len(expected) and all(
+            _same_row(a, e) for a, e in zip(actual, expected)
+        )
+    return actual == expected
+
+
+def _entry_rows(entry):
+    """The rows of a described entry, or ``None`` if it does not hold one value per row."""
+    kind = entry["kind"]
+    if kind in ("tensor", "NonTensorStack"):
+        return _plain_value(entry["values"])
+    if kind == "jagged":
+        return _plain_value(entry["rows"])
+    if "entries" in entry:
+        fields = {k: _entry_rows(v) for k, v in entry["entries"].items()}
+        if any(rows is None for rows in fields.values()):
+            return None
+        return [dict(zip(fields, row)) for row in zip(*fields.values())]
+    # NonTensorData: one value for all the rows.
+    return None
+
+
+def _holds_column(result, column):
+    """Whether a result holds the rows of the Arrow column, with nulls as None or NaN."""
+    if "c" not in result:
+        return False
+    rows = _entry_rows(result["c"])
+    expected = _plain_value(column.to_pylist())
+    return (
+        rows is not None
+        and len(rows) == len(expected)
+        and all(_same_row(a, e) for a, e in zip(rows, expected))
+    )
+
+
+def _check_v0_15_2(case_id, reader, actual, column, *, any_pandas=False):
+    # Where v0.15.2 was right, the result must not change. Where v0.15.2 raised
+    # or lost the rows of the column, a result that holds them passes too, so
+    # that fixing an old bug does not need a change of this test.
     if actual == _tabular_cases.PYARROW_CANNOT:
         pytest.skip("this pyarrow cannot write this column to Parquet and read it back")
     expected = _v0_15_2_result(case_id, reader, any_pandas=any_pandas)
     if expected is None:
         pytest.skip("no v0.15.2 result recorded with this version of pandas")
-    assert actual == expected, (
+    if actual == expected:
+        return
+    if (case_id, reader) in _CHANGED_SINCE_V0_15_2 or _holds_column(expected, column):
+        pytest.fail(
+            f"{reader} of an Arrow column {case_id} gives\n  {actual}\n"
+            f"where v0.15.2 gave\n  {expected}"
+        )
+    assert _holds_column(actual, column), (
         f"{reader} of an Arrow column {case_id} gives\n  {actual}\n"
-        f"where v0.15.2 gave\n  {expected}"
+        f"which neither is what v0.15.2 gave\n  {expected}\nnor holds the rows "
+        f"of the column, {column.to_pylist()}"
     )
 
 
@@ -1187,7 +1278,13 @@ class TestTabularTypeMatrix:
         import pyarrow.parquet as pq
 
         result = _tabular_cases.run_parquet(pa, pq, _make_column(case_id), tmp_path)
-        _check_v0_15_2(case_id, "from_parquet", result["from_parquet"], any_pandas=True)
+        _check_v0_15_2(
+            case_id,
+            "from_parquet",
+            result["from_parquet"],
+            _make_column(case_id),
+            any_pandas=True,
+        )
 
     @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
     def test_to_parquet(self, case_id, tmp_path):
@@ -1196,7 +1293,9 @@ class TestTabularTypeMatrix:
         import pyarrow.parquet as pq
 
         result = _tabular_cases.run_parquet(pa, pq, _make_column(case_id), tmp_path)
-        _check_v0_15_2(case_id, "to_parquet", result["to_parquet"])
+        _check_v0_15_2(
+            case_id, "to_parquet", result["to_parquet"], _make_column(case_id)
+        )
 
     @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
     @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
@@ -1205,7 +1304,9 @@ class TestTabularTypeMatrix:
         import pyarrow as pa
 
         result = _tabular_cases.run_pandas(pa, _make_column(case_id))
-        _check_v0_15_2(case_id, "from_pandas", result["from_pandas"])
+        _check_v0_15_2(
+            case_id, "from_pandas", result["from_pandas"], _make_column(case_id)
+        )
 
     @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
     @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
@@ -1214,7 +1315,7 @@ class TestTabularTypeMatrix:
         import pyarrow as pa
 
         result = _tabular_cases.run_pandas(pa, _make_column(case_id))
-        _check_v0_15_2(case_id, "to_pandas", result["to_pandas"])
+        _check_v0_15_2(case_id, "to_pandas", result["to_pandas"], _make_column(case_id))
 
     @pytest.mark.parametrize("nulls", ["raise", "fill", "mask"])
     @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
