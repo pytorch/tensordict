@@ -2162,6 +2162,43 @@ class TestMemmap:
             legacy = _encode_key_for_filesystem(key, robust=False)
             assert legacy == key
 
+    @pytest.mark.parametrize("fmt", ["h5", "zarr", "tdz"])
+    def test_save_unbatched_warns(self, tmp_path, fmt):
+        # #3264: h5, zarr and .tdz files have no place for the UnbatchedTensor
+        # class, so the leaves are saved as plain tensors. Saving warns once
+        # per call site and writes the same file as before.
+        if fmt == "h5":
+            pytest.importorskip("h5py")
+        elif fmt == "zarr":
+            zarr = pytest.importorskip("zarr")
+            if int(zarr.__version__.split(".")[0]) < 3:
+                pytest.skip("tensordict's zarr support needs zarr>=3")
+        save, load = {
+            "h5": (TensorDict.to_h5, PersistentTensorDict.from_h5),
+            "zarr": (TensorDict.to_zarr, PersistentTensorDict.from_zarr),
+            "tdz": (TensorDict.memmap, TensorDict.load_memmap),
+        }[fmt]
+        data = torch.arange(12.0).view(3, 4)
+        td = TensorDict(x=torch.zeros(3), u=UnbatchedTensor(data), batch_size=[3])
+        td["nested"] = TensorDict(v=UnbatchedTensor(data), batch_size=[3])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("default")
+            save(td, tmp_path / f"unbatched.{fmt}")
+        caught = [w for w in caught if "UnbatchedTensor leaves" in str(w.message)]
+        assert len(caught) == 1
+        assert caught[0].category is UserWarning
+        assert caught[0].filename == __file__
+        loaded = load(tmp_path / f"unbatched.{fmt}")
+        for key in ("u", ("nested", "v")):
+            assert not isinstance(loaded.get(key), UnbatchedTensor)
+            torch.testing.assert_close(loaded.get(key), data)
+
+        plain = TensorDict(x=torch.zeros(3), u=data, batch_size=[3])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            save(plain, tmp_path / f"plain.{fmt}")
+        assert not [w for w in caught if "UnbatchedTensor leaves" in str(w.message)]
+
 
 class TestFreeThreading:
     """Tests for free-threading (GIL-less Python) compatibility."""
