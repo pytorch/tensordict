@@ -596,7 +596,7 @@ Functions
 | [`from_csv`](generated/tensordict.from_csv.html#tensordict.from_csv)(path, *[, auto_batch_size, ...]) | Reads a CSV file into a tensordict, with one entry per column. |
 | [`from_json`](generated/tensordict.from_json.html#tensordict.from_json)(path, *[, auto_batch_size, ...]) | Reads a JSON file of records into a tensordict, with one entry per field. |
 | [`from_parquet`](generated/tensordict.from_parquet.html#tensordict.from_parquet)(path, *[, auto_batch_size, ...]) | Reads a Parquet file into a tensordict, with one entry per column. |
-| [`from_arrow`](generated/tensordict.from_arrow.html#tensordict.from_arrow)(table, *[, copy, nulls, device]) | Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can. |
+| [`from_arrow`](generated/tensordict.from_arrow.html#tensordict.from_arrow)(table, *[, copy, nulls, ...]) | Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can. |
 | [`to_arrow`](generated/tensordict.to_arrow.html#tensordict.to_arrow)(td) | Converts a tensordict with one batch dimension to an Arrow table, with one column per entry. |
 
 ### Locking

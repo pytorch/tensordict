@@ -1,6 +1,6 @@
 # from_arrow
 
-tensordict.from_arrow(*table: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, ***, *copy: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *nulls: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['raise', 'fill', 'mask'] = 'raise'*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
+tensordict.from_arrow(*table: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*, ***, *copy: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *nulls: [Literal](https://docs.python.org/3/library/typing.html#typing.Literal)['raise', 'fill', 'mask'] = 'raise'*, *mask_key: [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)
 
 Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can.
 
@@ -48,10 +48,15 @@ floating-point tensors, `0` (`False`) in the other tensors, an
 empty list in jagged tensors, and `None` in a
 [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack). A null struct makes each of
 its fields null. `"mask"` fills them as `"fill"` does, and adds
-the boolean entry `("masks", *key)` for each entry `key` that
-has nulls, `True` where the row is not null, as
-[`pad_sequence()`](tensordict.pad_sequence.html#tensordict.pad_sequence) does with `return_mask=True`.
-Filling copies the column. Defaults to `"raise"`.
+the boolean entry `(*mask_key, *key)` for each entry `key`
+that has nulls, `True` where the row is not null. Filling copies
+the column. Defaults to `"raise"`.
+- **mask_key** ([*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - the key of the masks that
+`nulls="mask"` adds. It differs from the `"masks"` key of
+[`pad_sequence()`](tensordict.pad_sequence.html#tensordict.pad_sequence) with `return_mask=True`, so
+that the result can be padded with masks too. Passing it with
+another `nulls` raises a `ValueError`. Defaults to
+`"_mask"`.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the
 result. Defaults to `None`, which keeps the tensors on the CPU
 and gives a tensordict without a device.
@@ -84,6 +89,6 @@ tensor([1., 2., 3.], dtype=torch.float64)
 >>> td.get("text").tolist()
 ['a', 'b', 'c']
 >>> td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
->>> td["y"], td["masks", "y"]
+>>> td["y"], td["_mask", "y"]
 (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
 ```
