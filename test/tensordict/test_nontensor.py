@@ -978,6 +978,31 @@ class TestNonTensorData:
         assert copied == ["baz", "bar"]
         assert td["a"] == ["foo", "bar"]
 
+    # #3255
+    @pytest.mark.parametrize("cls", [list, LinkedList])
+    def test_linked_list_treespec_serialization(self, cls):
+        # LinkedList had the serialized name of list, so a saved list spec
+        # loaded back as a LinkedList spec.
+        pytree = torch.utils._pytree
+        spec = pytree.tree_structure(cls([1, 2]))
+        loaded = pytree.treespec_loads(pytree.treespec_dumps(spec))
+        assert loaded.type is cls
+        assert loaded == spec
+
+    # #3255
+    def test_export_load_list_input(self):
+        class Module(torch.nn.Module):
+            def forward(self, xs):
+                return xs[0] + xs[1]
+
+        inputs = [torch.ones(2), torch.full((2,), 2.0)]
+        program = torch.export.export(Module(), (inputs,))
+        buffer = io.BytesIO()
+        torch.export.save(program, buffer)
+        buffer.seek(0)
+        loaded = torch.export.load(buffer).module()
+        torch.testing.assert_close(loaded(inputs), Module()(inputs))
+
     @pytest.mark.parametrize("value", ["b", NonTensorData("b")])
     def test_linked_list_nontensordata_write_raises(self, value):
         # Regression test for #2978: a NonTensorData holds one value, so the

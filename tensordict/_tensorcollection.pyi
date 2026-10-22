@@ -677,7 +677,7 @@ class TensorCollection:
     ): ...
     def split(
         self, split_size: int | list[int], dim: int = 0
-    ) -> list[TensorCollection]: ...
+    ) -> tuple[TensorCollection, ...]: ...
     def gather(self, dim: int, index: Tensor, out: T | None = None) -> Self: ...
     @overload
     def view(self, *shape: int): ...
@@ -786,7 +786,7 @@ class TensorCollection:
     def is_consolidated(self): ...
     def memmap_(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -823,7 +823,7 @@ class TensorCollection:
     ) -> MemoryMappedTensor: ...
     def save(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -834,7 +834,7 @@ class TensorCollection:
     ) -> Self: ...
     def dumps(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -845,7 +845,7 @@ class TensorCollection:
     ) -> Self: ...
     def memmap(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -857,7 +857,7 @@ class TensorCollection:
     ) -> Self: ...
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         existsok: bool = True,

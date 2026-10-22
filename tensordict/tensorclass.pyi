@@ -688,7 +688,7 @@ class TensorClass(_TensorClassInitArgs):
     def maybe_dense_stack(
         cls, input, dim: int = 0, *, out: Incomplete | None = None, **kwargs
     ) -> Self: ...
-    def split(self, split_size: int | list[int], dim: int = 0) -> list[Self]: ...
+    def split(self, split_size: int | list[int], dim: int = 0) -> tuple[Self, ...]: ...
     def gather(
         self,
         dim: int,
@@ -810,7 +810,7 @@ class TensorClass(_TensorClassInitArgs):
     def is_consolidated(self) -> bool: ...
     def memmap_(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -847,7 +847,7 @@ class TensorClass(_TensorClassInitArgs):
     ) -> MemoryMappedTensor: ...
     def save(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -858,7 +858,7 @@ class TensorClass(_TensorClassInitArgs):
     ) -> Self: ...
     def dumps(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -869,7 +869,7 @@ class TensorClass(_TensorClassInitArgs):
     ) -> Self: ...
     def memmap(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -881,7 +881,7 @@ class TensorClass(_TensorClassInitArgs):
     ) -> Self: ...
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         existsok: bool = True,
