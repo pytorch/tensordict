@@ -60,7 +60,7 @@ What you will learn:
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7ff3d716ca90>
+    <torch._C.Generator object at 0x7fdb47560a90>
 
 
 
