@@ -435,11 +435,17 @@ For a tensorclass, both attribute access and `get()` also return the
 
 ### Limitations
 
-- Memory-mapped serialization and consolidation do not support
-[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) yet.
-[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) and
+- Memory-mapped serialization to a directory and consolidation do not
+support [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) yet.
+[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) with a directory prefix and
 [`consolidate()`](../reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) raise `NotImplementedError`
 when the tensordict contains one. [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) keeps them.
+- [`to_h5()`](../reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5),
+[`to_zarr()`](../reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) and `.tdz` archives (written by
+[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) or
+[`save()`](../reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) with a `.tdz` path) save
+[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) entries as plain tensors, and they
+are read back as plain tensors. Such a save emits a `UserWarning`.
 - If you stack tensordicts whose [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)
 entries have different data, the result keeps only the data of the first
 one, and it warns.

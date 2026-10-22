@@ -16,7 +16,12 @@ Parameters:
 
 **input_dict** ([*dict*](https://docs.python.org/3/builtins/stdtypes.html#dict)) - the entries. A key can be a string or a tuple
 of strings, and a value a tensor, a dictionary, or any object
-that [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) accepts.
+that [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) accepts. With a non-empty
+`batch_size`, [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) stores a
+Python `int`, `float` or `bool` as
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData), so that the output of
+[`to_dict()`](tensordict.TensorDictBase.to_dict.html#tensordict.TensorDictBase.to_dict) converts back. Otherwise, it stores it as a
+0-dim tensor.
 
 Keyword Arguments:
 
