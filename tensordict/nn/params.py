@@ -8,10 +8,12 @@ import collections
 import functools
 import inspect
 import weakref
+from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from copy import copy
 from functools import wraps
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -646,7 +648,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_lock_blocked
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase | None = None,
+        input_dict_or_td: Mapping[Any, Any] | TensorDictBase | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -1028,7 +1030,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     def memmap_(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
     ) -> TensorDictBase:
@@ -1216,7 +1218,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
     ) -> Self: ...
