@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import ast
 import datetime
+import decimal
 import importlib.util
 import json
+import pathlib
+import re
 import subprocess
 import sys
 import warnings
 
+import _tabular_cases
 import numpy as np
 import pytest
 import torch
@@ -18,6 +23,7 @@ from tensordict import (
     from_json,
     from_pandas,
     from_parquet,
+    pad_sequence,
     tensorclass,
     TensorDict,
     TensorDictBase,
@@ -482,6 +488,35 @@ class TestParquet:
         assert td["f"].dtype == torch.int64
         assert (td["f"] == torch.tensor([[1, 2, 3], [4, 5, 6]])).all()
 
+    def test_from_parquet_primitive_columns(self, tmp_path):
+        # #3272: on pyarrow 10 to 12, ChunkedArray.to_numpy() takes no keyword,
+        # and from_parquet raised a TypeError on every file
+        import datetime
+
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        path = tmp_path / "primitive.parquet"
+        days = [datetime.datetime(2020, 1, day) for day in (1, 2, 3)]
+        table = pa.table(
+            {
+                "i": [1, 2, 3],
+                "f": [1.0, 2.0, 3.0],
+                "b": [True, False, True],
+                "ts": pa.array(days, pa.timestamp("s")),
+            }
+        )
+        pq.write_table(table, str(path), row_group_size=2)
+
+        td = TensorDict.from_parquet(path)
+        assert td["i"].tolist() == [1, 2, 3]
+        assert td["f"].tolist() == [1.0, 2.0, 3.0]
+        assert td["b"].tolist() == [True, False, True]
+        seconds = [
+            int(day.replace(tzinfo=datetime.timezone.utc).timestamp()) for day in days
+        ]
+        assert td["ts"].tolist() == [second * 10**9 for second in seconds]
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -685,9 +720,9 @@ class TestArrow:
         )
         assert td.get("s").tolist() == ["a", None, "c"]
         if nulls == "fill":
-            assert "_mask" not in td.keys()
+            assert "masks" not in td.keys()
         else:
-            assert set(td["_mask"].keys(include_nested=True, leaves_only=True)) == {
+            assert set(td["masks"].keys(include_nested=True, leaves_only=True)) == {
                 "f",
                 "i",
                 "b",
@@ -697,16 +732,95 @@ class TestArrow:
                 ("st", "y"),
                 "s",
             }
-            assert torch.equal(td["_mask", "f"], torch.tensor([True, False, True]))
-            assert torch.equal(td["_mask", "i"], torch.tensor([False, True, True]))
+            assert torch.equal(td["masks", "f"], torch.tensor([True, False, True]))
+            assert torch.equal(td["masks", "i"], torch.tensor([False, True, True]))
             assert torch.equal(
-                td["_mask", "st", "y"], torch.tensor([True, False, False])
+                td["masks", "st", "y"], torch.tensor([True, False, False])
             )
-            with pytest.raises(ValueError, match="under the key '_mask'"):
-                from_arrow(pa.table({"_mask": [1]}), nulls="mask")
+            with pytest.raises(ValueError, match="under the key 'masks'"):
+                from_arrow(pa.table({"masks": [1]}), nulls="mask")
         # Nulls inside a list are filled.
         td = from_arrow(pa.table({"l": pa.array([[1, None], [2]])}), nulls=nulls)
         assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2]]
+
+    def test_from_arrow_nulls_mask_key(self):
+        # #3241: nulls='mask' stores its masks under the key that
+        # pad_sequence(return_mask=True) uses, "masks".
+        import pyarrow as pa
+
+        padded = pad_sequence(
+            [TensorDict(y=torch.ones(1)), TensorDict(y=torch.ones(2))],
+            return_mask=True,
+        )
+        assert "masks" in padded.keys()
+        td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
+        assert set(td.keys()) == {"y", "masks"}
+        assert torch.equal(td["masks", "y"], torch.tensor([True, False]))
+        with pytest.raises(ValueError, match="under the key 'masks'"):
+            from_arrow(pa.table({"masks": [1]}), nulls="mask")
+        # "_mask" is now an ordinary column name.
+        td = from_arrow(pa.table({"_mask": [1, None]}), nulls="mask")
+        assert torch.equal(td["_mask"], torch.tensor([1, 0]))
+        assert torch.equal(td["masks", "_mask"], torch.tensor([True, False]))
+
+    # #3261
+    def test_from_arrow_nulls_raise_non_tensor_list(self):
+        import pyarrow as pa
+
+        strings = pa.list_(pa.string())
+        records = pa.struct([("s", pa.string())])
+        for arr in (
+            pa.array([["a"], None], strings),
+            pa.array([[1, None], [3]], pa.list_(pa.int64())),
+            pa.array([[None], ["b"]], strings),
+            pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+            pa.array([[{"s": "a"}], [{"s": None}]], pa.list_(records)),
+        ):
+            with pytest.raises(ValueError, match=r"\('x',\) has 1 null"):
+                from_arrow(pa.table({"x": arr}))
+        # A slice without the null row or value converts.
+        td = from_arrow(pa.table({"x": pa.array([[None], ["b"]], strings)[1:]}))
+        assert td.get("x").tolist() == [["b"]]
+        for nulls in ("fill", "mask"):
+            td = from_arrow(
+                pa.table(
+                    {
+                        "x": pa.array([[None], ["b"]], strings),
+                        "y": pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+                        "z": pa.array([[{"s": "a"}], [{"s": None}]], pa.list_(records)),
+                    }
+                ),
+                nulls=nulls,
+            )
+            assert td.get("x").tolist() == [[None], ["b"]]
+            assert td.get("y").tolist() == [[["a"]], [["b", None]]]
+            assert td.get("z").tolist() == [[{"s": "a"}], [{"s": None}]]
+            assert "masks" not in td.keys()
+
+    # #3260
+    @pytest.mark.parametrize("nulls", ["fill", "mask"])
+    @pytest.mark.parametrize("dtype", ["uint8", "uint16", "uint32", "uint64"])
+    def test_from_arrow_nulls_unsigned(self, dtype, nulls):
+        import pyarrow as pa
+
+        typ = getattr(pa, dtype)()
+        td = from_arrow(
+            pa.table(
+                {
+                    "x": pa.array([1, None, 3], typ),
+                    "l": pa.array([[1, None], [2], []], pa.list_(typ)),
+                }
+            ),
+            nulls=nulls,
+        )
+        assert td["x"].dtype == getattr(torch, dtype)
+        assert td["x"].tolist() == [1, 0, 3]
+        assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2], []]
+        if nulls == "fill":
+            assert "masks" not in td.keys()
+        else:
+            assert set(td["masks"].keys()) == {"x"}
+            assert torch.equal(td["masks", "x"], torch.tensor([True, False, True]))
 
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the
@@ -793,6 +907,33 @@ class TestArrow:
         with pytest.raises(ValueError, match="one batch dimension"):
             to_arrow(td)
         assert to_arrow(td.reshape(-1)).num_rows == 6
+
+    def test_from_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: pyarrow 10 to 14 failed with "from_dlpack received an invalid capsule"
+        import pyarrow as pa
+
+        version = pa.__version__
+        table = pa.table({"x": pa.array([1, 2])})
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"from_arrow needs pyarrow 15.*14\.0\.2"):
+            from_arrow(table)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert from_arrow(table)["x"].tolist() == [1, 2]
+
+    def test_to_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: on pyarrow 10 to 14, to_arrow raised an AttributeError for a
+        # leaf with more than one dim
+        import pyarrow as pa
+
+        version = pa.__version__
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"to_arrow needs pyarrow 15.*14\.0\.2"):
+            to_arrow(td)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert to_arrow(td).num_rows == 2
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
@@ -1028,3 +1169,477 @@ class TestTensorClassTabular:
         assert isinstance(tc2, TabularTensorClass)
         assert (tc2.x == tc.x).all()
         assert torch.allclose(tc2.y.to(tc.y.dtype), tc.y)
+
+
+# The type-by-null matrix (#3234, #3238): a column of each Arrow type, with no
+# nulls, with null rows, and with null values inside rows, through each reader
+# and writer. The cases are in _tabular_cases.py; tabular_v0_15_2.json records
+# what v0.15.2 returned for the readers and writers it had.
+_V0_15_2 = json.loads(
+    (pathlib.Path(__file__).parent / "tabular_v0_15_2.json").read_text()
+)["runs"]
+
+
+def _fst_as_tensor(dtype, shape):
+    # #3109 reads a fixed_shape_tensor column without nulls as a tensor of its
+    # shape and dtype, where v0.15.2 gave a flat int64 or float32 tensor.
+    values = torch.arange(6 * 3, dtype=dtype).view(3, *shape)
+    return {
+        "c": {
+            "kind": "tensor",
+            "dtype": str(dtype),
+            "shape": list(values.shape),
+            "values": values.tolist(),
+        }
+    }
+
+
+# The results that change on purpose since v0.15.2, with the change that made them.
+_CHANGED_SINCE_V0_15_2 = {
+    ("fixed_shape_tensor_float32-no_nulls", "from_parquet"): _fst_as_tensor(
+        torch.float32, (2, 3)
+    ),
+    ("fixed_shape_tensor_int32-no_nulls", "from_parquet"): _fst_as_tensor(
+        torch.int32, (3, 2)
+    ),
+}
+
+
+def _v0_15_2_result(case_id, reader, *, any_pandas):
+    """What v0.15.2 returned, or ``None`` if it was not recorded with this pandas major version."""
+    if (case_id, reader) in _CHANGED_SINCE_V0_15_2:
+        return _CHANGED_SINCE_V0_15_2[case_id, reader]
+    major = (
+        importlib.import_module("pandas").__version__.split(".")[0]
+        if _has_pandas
+        else None
+    )
+    runs = [_V0_15_2[major]] if major in _V0_15_2 else []
+    if any_pandas:
+        runs += [run for key, run in sorted(_V0_15_2.items()) if key != major]
+    for run in runs:
+        result = run["cases"].get(case_id, {}).get(reader)
+        if result is not None and result != _tabular_cases.PYARROW_CANNOT:
+            return result
+    return None
+
+
+def _plain_value(value):
+    """A Python value of a leaf in a description, with nulls as ``None`` and bools apart from 1 and 0."""
+    if isinstance(value, dict):
+        if "tensor" in value or "ndarray" in value:
+            return _plain_value(value["values"])
+        return {k: _plain_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_value(v) for v in value]
+    if isinstance(value, str):
+        if value in ("nan", "None", "NaT"):
+            return None
+        match = re.fullmatch(r"np\.\w+\((.*)\)|Decimal\((.*)\)", value)
+        if match and match[2] is not None:
+            return decimal.Decimal(ast.literal_eval(match[2]))
+        try:
+            value = ast.literal_eval(match[1] if match else value)
+        except (ValueError, SyntaxError):
+            return value
+        return value if isinstance(value, str) else _plain_value(value)
+    if isinstance(value, float) and value != value:
+        return None
+    if isinstance(value, bool):
+        return ("bool", value)
+    return value
+
+
+def _flat(row):
+    if isinstance(row, list):
+        return [leaf for value in row for leaf in _flat(value)]
+    return [row]
+
+
+def _same_row(actual, expected):
+    if expected is None and isinstance(actual, list):
+        # A null row read as a row of nulls (NaN) is fine.
+        return all(leaf is None for leaf in _flat(actual))
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        return actual.keys() == expected.keys() and all(
+            _same_row(actual[k], expected[k]) for k in expected
+        )
+    if isinstance(expected, list) and isinstance(actual, list):
+        actual, expected = _flat(actual), _flat(expected)
+        return len(actual) == len(expected) and all(
+            _same_row(a, e) for a, e in zip(actual, expected)
+        )
+    return actual == expected
+
+
+def _entry_rows(entry):
+    """The rows of a described entry, or ``None`` if it does not hold one value per row."""
+    kind = entry["kind"]
+    if kind in ("tensor", "NonTensorStack"):
+        return _plain_value(entry["values"])
+    if kind == "jagged":
+        return _plain_value(entry["rows"])
+    if "entries" in entry:
+        fields = {k: _entry_rows(v) for k, v in entry["entries"].items()}
+        if any(rows is None for rows in fields.values()):
+            return None
+        return [dict(zip(fields, row)) for row in zip(*fields.values())]
+    # NonTensorData: one value for all the rows.
+    return None
+
+
+def _holds_column(result, column):
+    """Whether a result holds the rows of the Arrow column, with nulls as None or NaN."""
+    if "c" not in result:
+        return False
+    rows = _entry_rows(result["c"])
+    expected = _plain_value(column.to_pylist())
+    return (
+        rows is not None
+        and len(rows) == len(expected)
+        and all(_same_row(a, e) for a, e in zip(rows, expected))
+    )
+
+
+def _check_v0_15_2(case_id, reader, actual, column, *, any_pandas=False):
+    # Where v0.15.2 was right, the result must not change. Where v0.15.2 raised
+    # or lost the rows of the column, a result that holds them passes too, so
+    # that fixing an old bug does not need a change of this test.
+    if actual == _tabular_cases.PYARROW_CANNOT:
+        pytest.skip("this pyarrow cannot write this column to Parquet and read it back")
+    expected = _v0_15_2_result(case_id, reader, any_pandas=any_pandas)
+    if expected is None:
+        pytest.skip("no v0.15.2 result recorded with this version of pandas")
+    if actual == expected:
+        return
+    if (case_id, reader) in _CHANGED_SINCE_V0_15_2 or _holds_column(expected, column):
+        pytest.fail(
+            f"{reader} of an Arrow column {case_id} gives\n  {actual}\n"
+            f"where v0.15.2 gave\n  {expected}"
+        )
+    assert _holds_column(actual, column), (
+        f"{reader} of an Arrow column {case_id} gives\n  {actual}\n"
+        f"which neither is what v0.15.2 gave\n  {expected}\nnor holds the rows "
+        f"of the column, {column.to_pylist()}"
+    )
+
+
+def _make_column(case_id):
+    import pyarrow as pa
+
+    column = _tabular_cases.make_column(pa, case_id)
+    if column is None:
+        pytest.skip("this pyarrow cannot build this column")
+    return column
+
+
+def _from_arrow_reference(pa, typ, values):
+    """The description of the entry that from_arrow documents for a column of ``typ`` holding ``values``."""
+    if pa.types.is_struct(typ):
+        return {
+            "kind": "TensorDict",
+            "entries": {
+                field.name: _from_arrow_reference(
+                    pa,
+                    field.type,
+                    [None if row is None else row[field.name] for row in values],
+                )
+                for field in typ
+            },
+        }
+    shape = ()
+    leaf = typ
+    if isinstance(typ, getattr(pa, "FixedShapeTensorType", ())):
+        shape, leaf = tuple(typ.shape), typ.value_type
+    elif pa.types.is_fixed_size_list(typ):
+        shape, leaf = (typ.list_size,), typ.value_type
+    jagged = pa.types.is_list(typ) or pa.types.is_large_list(typ)
+    if jagged:
+        leaf = typ.value_type
+    if not (
+        pa.types.is_integer(leaf)
+        or pa.types.is_floating(leaf)
+        or pa.types.is_boolean(leaf)
+    ):
+        return {"kind": "NonTensorStack", "values": _tabular_cases._plain(values)}
+    dtype = torch.from_numpy(np.zeros(0, leaf.to_pandas_dtype())).dtype
+    if dtype.is_floating_point:
+        fill = float("nan")
+    else:
+        fill = False if dtype == torch.bool else 0
+
+    def filled(row, row_shape):
+        if row is None:
+            return torch.full(row_shape, fill, dtype=dtype).tolist()
+        return [fill if v is None else v for v in row]
+
+    if jagged:
+        rows = [[] if row is None else filled(row, ()) for row in values]
+        return {
+            "kind": "jagged",
+            "dtype": str(dtype),
+            "rows": _tabular_cases._tensor_values(rows),
+        }
+    if shape:
+        rows = [filled(row, (int(np.prod(shape)),)) for row in values]
+        tensor = torch.tensor(rows, dtype=dtype).view(len(values), *shape)
+    else:
+        tensor = torch.tensor([fill if v is None else v for v in values], dtype=dtype)
+    return {
+        "kind": "tensor",
+        "dtype": str(dtype),
+        "shape": list(tensor.shape),
+        "values": _tabular_cases._tensor_values(tensor.tolist()),
+    }
+
+
+def _has_nulls(pa, arr):
+    """Whether an Arrow array has a null row, or a null value inside a row."""
+    if arr.null_count:
+        return True
+    if isinstance(arr, pa.ExtensionArray):
+        return _has_nulls(pa, arr.storage)
+    if pa.types.is_struct(arr.type):
+        return any(_has_nulls(pa, child) for child in arr.flatten())
+    if (
+        pa.types.is_list(arr.type)
+        or pa.types.is_large_list(arr.type)
+        or pa.types.is_fixed_size_list(arr.type)
+    ):
+        return _has_nulls(pa, arr.flatten())
+    return False
+
+
+def _expected_masks(pa, arr, key):
+    """The masks that from_arrow(nulls="mask") documents: one per entry with null rows, True where the row is not null."""
+    if pa.types.is_struct(arr.type):
+        # flatten() gives the fields the nulls of the struct.
+        masks = {}
+        for field, child in zip(arr.type, arr.flatten()):
+            masks.update(_expected_masks(pa, child, (*key, field.name)))
+        return masks
+    if not arr.null_count:
+        return {}
+    return {key: arr.is_valid().to_pylist()}
+
+
+def _skip_old_pyarrow_from_arrow():
+    import pyarrow as pa
+
+    if int(pa.__version__.split(".")[0]) < 15:
+        pytest.skip("from_arrow needs pyarrow 15 or later (#3238)")
+
+
+_COLUMN = "the_column"
+
+
+@pytest.mark.skipif(not _has_pyarrow, reason="pyarrow not found")
+class TestTabularTypeMatrix:
+    """Each Arrow type, with and without nulls, through each reader and writer (#3234, #3238)."""
+
+    @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
+    def test_from_parquet(self, case_id, tmp_path):
+        # Readers that v0.15.2 had give the same result as v0.15.2, apart from
+        # the changes listed in _CHANGED_SINCE_V0_15_2.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        result = _tabular_cases.run_parquet(pa, pq, _make_column(case_id), tmp_path)
+        _check_v0_15_2(
+            case_id,
+            "from_parquet",
+            result["from_parquet"],
+            _make_column(case_id),
+            any_pandas=True,
+        )
+
+    @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
+    def test_to_parquet(self, case_id, tmp_path):
+        # to_parquet of what from_parquet read, read back with from_parquet.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        result = _tabular_cases.run_parquet(pa, pq, _make_column(case_id), tmp_path)
+        _check_v0_15_2(
+            case_id, "to_parquet", result["to_parquet"], _make_column(case_id)
+        )
+
+    @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
+    @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
+    def test_from_pandas(self, case_id):
+        # from_pandas of pyarrow.Table.to_pandas().
+        import pyarrow as pa
+
+        result = _tabular_cases.run_pandas(pa, _make_column(case_id))
+        _check_v0_15_2(
+            case_id, "from_pandas", result["from_pandas"], _make_column(case_id)
+        )
+
+    @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
+    @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
+    def test_to_pandas(self, case_id):
+        # to_pandas of what from_pandas read, read back with from_pandas.
+        import pyarrow as pa
+
+        result = _tabular_cases.run_pandas(pa, _make_column(case_id))
+        _check_v0_15_2(case_id, "to_pandas", result["to_pandas"], _make_column(case_id))
+
+    def test_check_accepts_a_fix_of_an_old_bug(self):
+        # v0.15.2 read a bool column with a null row as one NonTensorData that
+        # holds the whole column: a fix that keeps the rows passes, other
+        # values do not.
+        column = _make_column("bool-null_rows")
+        fixed = {"c": {"kind": "NonTensorStack", "values": ["True", "None", "True"]}}
+        _check_v0_15_2("bool-null_rows", "from_parquet", fixed, column, any_pandas=True)
+        copied = {
+            "c": {"kind": "NonTensorStack", "values": [["True", "None", "True"]] * 3}
+        }
+        with pytest.raises(AssertionError, match="nor holds the rows"):
+            _check_v0_15_2(
+                "bool-null_rows", "from_parquet", copied, column, any_pandas=True
+            )
+        # v0.15.2 was right for an int64 column with a null row: any change fails.
+        column = _make_column("int64-null_rows")
+        changed = {
+            "c": {
+                "kind": "tensor",
+                "dtype": "torch.float32",
+                "shape": [3],
+                "values": [1.0, "nan", 3.0],
+            }
+        }
+        with pytest.raises(pytest.fail.Exception, match="where v0.15.2 gave"):
+            _check_v0_15_2(
+                "int64-null_rows", "from_parquet", changed, column, any_pandas=True
+            )
+
+    @pytest.mark.parametrize("nulls", ["raise", "fill", "mask"])
+    @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
+    def test_from_arrow(self, case_id, nulls):
+        # from_arrow is new in 0.15.3: it gives what its docstring documents,
+        # or a clear error that names the column, never wrong values.
+        import pyarrow as pa
+
+        _skip_old_pyarrow_from_arrow()
+        column = _make_column(case_id)
+        table = pa.table({_COLUMN: column})
+        has_nulls = _has_nulls(pa, column)
+        try:
+            td = from_arrow(table, nulls=nulls)
+        except Exception as err:
+            assert _COLUMN in str(err), (
+                f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} raises an "
+                f"error that does not name the column: {type(err).__name__}: {err}"
+            )
+            if nulls == "raise" and has_nulls:
+                assert isinstance(err, ValueError), (
+                    f"from_arrow(nulls='raise') of an Arrow column {case_id} with "
+                    f"nulls raises {type(err).__name__}, not ValueError: {err}"
+                )
+            return
+        assert not (nulls == "raise" and has_nulls), (
+            f"from_arrow(nulls='raise') of an Arrow column {case_id} with nulls "
+            f"does not raise, and gives {_tabular_cases.describe(td)}"
+        )
+        expected = _from_arrow_reference(pa, column.type, column.to_pylist())
+        actual = _tabular_cases.describe_entry(td.get(_COLUMN))
+        assert actual == expected, (
+            f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} gives\n"
+            f"  {actual}\nwhere its docstring gives\n  {expected}"
+        )
+        masks = td.get("masks", None)
+        if nulls != "mask":
+            assert masks is None, (
+                f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} adds "
+                f"the masks {masks}"
+            )
+            return
+        expected = _expected_masks(pa, column, (_COLUMN,))
+        actual = {
+            (key,) if isinstance(key, str) else key: value.tolist()
+            for key, value in ({} if masks is None else masks.items(True, True))
+        }
+        assert actual == expected, (
+            f"from_arrow(nulls='mask') of an Arrow column {case_id} gives the masks "
+            f"{actual}, where its docstring gives {expected}"
+        )
+
+    @pytest.mark.parametrize("case_id", _tabular_cases.CASE_IDS)
+    def test_to_arrow(self, case_id):
+        # to_arrow of what from_arrow read, read back with from_arrow, gives
+        # the same entries, or to_arrow raises a clear error.
+        import pyarrow as pa
+
+        _skip_old_pyarrow_from_arrow()
+        table = pa.table({_COLUMN: _make_column(case_id)})
+        try:
+            td = from_arrow(table, nulls="fill")
+        except Exception:
+            pytest.skip("from_arrow cannot read this column: see test_from_arrow")
+        try:
+            table2 = to_arrow(td)
+        except Exception as err:
+            assert _COLUMN in str(err), (
+                f"to_arrow of the entry from_arrow read from an Arrow column "
+                f"{case_id} raises an error that does not name it: "
+                f"{type(err).__name__}: {err}"
+            )
+            return
+        expected = _tabular_cases.describe(td)
+        try:
+            actual = _tabular_cases.describe(from_arrow(table2, nulls="fill"))
+        except Exception as err:
+            raise AssertionError(
+                f"from_arrow cannot read back what to_arrow wrote for an Arrow column "
+                f"{case_id}, of type {table2.schema.field(_COLUMN).type}: "
+                f"{type(err).__name__}: {err}"
+            ) from err
+        assert actual == expected, (
+            f"to_arrow then from_arrow of an Arrow column {case_id} gives\n"
+            f"  {actual}\nwhere from_arrow first gave\n  {expected}"
+        )
+
+
+@pytest.mark.skipif(not _has_pyarrow, reason="pyarrow not found")
+class TestArrowMinimumVersion:
+    """from_arrow needs pyarrow 15, while the parquet extra allows pyarrow 10 (#3238)."""
+
+    @pytest.mark.parametrize("version", ["10.0.1", "14.0.2"])
+    def test_from_arrow_old_pyarrow_raises_import_error(self, monkeypatch, version):
+        import pyarrow as pa
+
+        table = pa.table({"x": [1, 2]})
+        monkeypatch.setattr(pa, "__version__", version)
+        try:
+            from_arrow(table)
+        except ImportError as err:
+            assert "15" in str(err) and "pyarrow" in str(err), (
+                f"from_arrow on pyarrow {version} raises an ImportError that does "
+                f"not name the minimum, pyarrow 15: {err}"
+            )
+        else:
+            pytest.fail(
+                f"from_arrow runs on pyarrow {version}, where it fails or gives "
+                "wrong results; it must raise an ImportError that names the "
+                "minimum, pyarrow 15 (#3238)"
+            )
+
+    def test_from_arrow_pyarrow_15_runs(self, monkeypatch):
+        import pyarrow as pa
+
+        _skip_old_pyarrow_from_arrow()
+        table = pa.table({"x": [1, 2]})
+        monkeypatch.setattr(pa, "__version__", "15.0.0")
+        assert torch.equal(from_arrow(table)["x"], torch.tensor([1, 2]))
+
+    def test_parquet_runs_on_pyarrow_10(self, monkeypatch, tmp_path):
+        # The check of from_arrow must not reach from_parquet and to_parquet,
+        # which the parquet extra allows from pyarrow 10.
+        import pyarrow as pa
+
+        monkeypatch.setattr(pa, "__version__", "10.0.1")
+        td = TensorDict(x=torch.tensor([1.0, 2.0]), batch_size=[2])
+        td.to_parquet(tmp_path / "x.parquet")
+        assert torch.equal(
+            TensorDict.from_parquet(tmp_path / "x.parquet")["x"], td["x"]
+        )

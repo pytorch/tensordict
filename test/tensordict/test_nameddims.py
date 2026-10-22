@@ -12,6 +12,7 @@ import sys
 import warnings
 
 import pytest
+import tensordict
 import torch
 from tensordict import lazy_stack, LazyStackedTensorDict, TensorAttrs, TensorDict
 
@@ -430,6 +431,89 @@ class TestNamedDims(TestTensorDictsBase):
         tdm = td.memmap_like(prefix=tmpdir)
         assert tdm.names == ["a", "b", "c", "d"]
         assert tdm.is_memmap()
+
+    @pytest.mark.parametrize(
+        "save", ["memmap", "memmap_", "save", "archive", "append_memmap"]
+    )
+    def test_memmap_load_keeps_names(self, save, tmp_path):
+        # #3262: the directory loaded back had no dim names.
+        def save_and_load(td, name):
+            path = tmp_path / name
+            if save == "memmap":
+                td.memmap(path)
+            elif save == "memmap_":
+                td.clone().memmap_(path)
+            elif save == "save":
+                td.save(path)
+            elif save == "archive":
+                path = tmp_path / f"{name}.tdz"
+                td.memmap(path)
+            else:
+                td[:1].memmap(path)
+                tensordict.append_memmap(path, td[1:])
+            return tensordict.load_memmap(path)
+
+        # no nested tensordict, whose names would spread to the top level
+        td = TensorDict(a=torch.zeros(3, 4), batch_size=[3, 4], names=["time", "env"])
+        assert save_and_load(td, "flat").names == ["time", "env"]
+        td["nested"] = TensorDict(b=torch.ones(3, 4, 2), batch_size=[3, 4, 2])
+        td["nested"].names = ["time", "env", "agent"]
+        loaded = save_and_load(td, "nested")
+        assert loaded.names == ["time", "env"]
+        assert loaded["nested"].names == ["time", "env", "agent"]
+        # a key named like the entry of the names keeps its entry
+        td = TensorDict(a=torch.zeros(3), _names=torch.ones(3), batch_size=[3])
+        loaded = save_and_load(td, "key")
+        assert (loaded["_names"] == 1).all()
+        assert set(loaded.keys()) == {"a", "_names"}
+        # without names, the loaded tensordict has none
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        assert not save_and_load(td, "unnamed")._has_names()
+
+    def test_memmap_load_keeps_lazy_stack_dim_name(self, tmp_path):
+        # #3262
+        td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["time"])
+        lazy_stack([td, td.clone()], 0, stack_dim_name="env").memmap(tmp_path)
+        assert tensordict.load_memmap(tmp_path).names == ["env", "time"]
+
+    def test_memmap_load_keeps_tensorclass_names(self, tmp_path):
+        # #3262: a tensorclass saves its tensors through the same code
+        from tensordict import tensorclass
+
+        @tensorclass
+        class Frames:
+            a: torch.Tensor
+
+        tc = Frames(a=torch.zeros(3, 4), batch_size=[3, 4], names=["time", "env"])
+        tc.memmap(tmp_path)
+        loaded = tensordict.load_memmap(tmp_path)
+        assert type(loaded) is Frames
+        assert loaded.names == ["time", "env"]
+
+    def test_memmap_load_names_subclass_without_names_arg(self, tmp_path):
+        # #3262: loading must not pass names or stack_dim_name to the
+        # __init__ of a subclass that does not take them.
+        class MyTD(TensorDict):
+            def __init__(self, source=None, batch_size=None, device=None):
+                super().__init__(source, batch_size=batch_size, device=device)
+
+        class MyStack(LazyStackedTensorDict):
+            def __init__(self, *tensordicts, stack_dim=0):
+                super().__init__(*tensordicts, stack_dim=stack_dim)
+
+        td = MyTD({"a": torch.zeros(3)}, batch_size=[3])
+        td.names = ["time"]
+        td.memmap(tmp_path / "td")
+        loaded = MyTD.load_memmap(tmp_path / "td")
+        assert type(loaded) is MyTD
+        assert loaded.names == ["time"]
+        member = TensorDict(a=torch.zeros(3), batch_size=[3])
+        stack = MyStack(member, member.clone())
+        stack.names = ["env", None]
+        stack.memmap(tmp_path / "stack")
+        loaded = MyStack.load_memmap(tmp_path / "stack")
+        assert type(loaded) is MyStack
+        assert loaded.names == ["env", None]
 
     def test_memmap_td(self):
         td = self.memmap_td("cpu")

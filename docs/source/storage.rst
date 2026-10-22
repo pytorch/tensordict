@@ -451,7 +451,7 @@ With ``backend="zarr"``, :class:`~tensordict.PersistentTensorDict` stores each
 tensor as a zarr array and each nested tensordict as a zarr group. The store
 can be a local directory, a ``zarr.storage.ZipStore``, or any other
 ``zarr.abc.store.Store``. You can read and write separate chunks in parallel.
-The zarr backend needs ``zarr>=3.0`` (``pip install "tensordict[zarr]"``).
+The zarr backend needs ``zarr>=3.0.8`` (``pip install "tensordict[zarr]"``).
 
 :meth:`~tensordict.TensorDictBase.to_zarr` writes a tensordict, and
 :meth:`~tensordict.TensorDictBase.from_zarr` reads it back. ``to_zarr`` stores
@@ -549,7 +549,9 @@ A dataset loaded from disk is memory-mapped, and its memory is read-only.
 ``from_arrow`` copies such columns, because an in-place write into a view of
 read-only memory crashes the process. ``copy=False`` views them anyway: then
 do not write into the tensors. A column with null values raises an error,
-unless you pass ``nulls="fill"`` or ``nulls="mask"``. A tensordict with
+unless you pass ``nulls="fill"`` or ``nulls="mask"``; the latter adds a
+``"masks"`` entry, as :func:`~tensordict.pad_sequence` does with
+``return_mask=True``. A tensordict with
 jagged tensors can be indexed with an integer, a slice, an index tensor or a
 boolean mask, and split, chunked, unbound and concatenated along its batch
 dimension, but not stacked. ``memmap`` does not take jagged tensors: pad them

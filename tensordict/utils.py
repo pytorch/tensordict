@@ -2176,8 +2176,14 @@ def _plain_summary(tensor: Tensor) -> str:
     """Short value summary for ``plain`` print mode."""
     if isinstance(tensor, UninitializedTensorMixin) or tensor.numel() == 0:
         return "[]"
+    if tensor.is_nested:
+        # The jagged layout has no std over all elements (#3259).
+        tensor = torch.cat([t.reshape(-1) for t in tensor.unbind()])
     if tensor.is_floating_point() or tensor.is_complex():
-        return f"mean={tensor.to(torch.float64).mean().item():.4g}, std={tensor.to(torch.float64).std().item():.4g}"
+        tensor = tensor.to(torch.float64)
+        # std of one element is nan, and torch warns when computing it (#3259).
+        std = tensor.std().item() if tensor.numel() > 1 else float("nan")
+        return f"mean={tensor.mean().item():.4g}, std={std:.4g}"
     return f"min={tensor.min().item()}, max={tensor.max().item()}"
 
 
@@ -2975,9 +2981,13 @@ def _proc_init(base_seed, queue, num_threads):
 def _prune_selected_keys(keys_to_update, prefix):
     if keys_to_update is None:
         return None
-    return tuple(
+    sub_keys = tuple(
         key[1:] for key in keys_to_update if isinstance(key, tuple) and key[0] == prefix
     )
+    if not sub_keys and prefix in keys_to_update:
+        # the key names the sub-tensordict: all its entries, as select gives
+        return None
+    return sub_keys
 
 
 class TensorDictFuture:
@@ -4554,10 +4564,13 @@ def _warn_batch_dims_ignored(op: str, result, batch_dims, batch_size) -> None:
     )
 
 
-def _warn_lazy_shape_args(op: str, args: str) -> None:
-    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17."""
+def _warn_lazy_shape_args(op: str, what: str) -> None:
+    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17.
+
+    ``what`` describes the arguments in a fixed text, without their values.
+    """
     warnings.warn(
-        f"LazyStackedTensorDict.{op} got {args}, which TensorDict.{op} "
+        f"LazyStackedTensorDict.{op} got {what}, which TensorDict.{op} "
         "rejects, and returns the result of its members. Starting with "
         "TensorDict 0.17, the default will change to raising a ValueError, "
         f"as TensorDict.{op} does.",
