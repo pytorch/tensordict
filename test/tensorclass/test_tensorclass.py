@@ -1083,6 +1083,226 @@ assert_type(tensordict.stack([td, td]), TD)
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_memmap_save_path_source_static_types(tmp_path, monkeypatch):
+    # #3268: with py.typed, mypy must accept a pathlib.Path in memmap,
+    # memmap_, save, dumps and memmap_like, as the run time does. The
+    # signatures are copied from _tensorcollection.pyi, tensorclass.pyi and
+    # the _Serialization mixin of TensorDictBase into a package of their own.
+    # Mypy also searches the working directory, which must not hold the
+    # tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    names = ("memmap", "memmap_", "save", "dumps", "memmap_like")
+
+    def members(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef) and node.name in names
+        ]
+        assert nodes, (path, class_name)
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+            node.decorator_list = []
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    imports = """from pathlib import Path
+from typing import Self
+"""
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""{imports}
+class TensorCollection:
+{members("_tensorcollection.pyi", "TensorCollection")}
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        f"""{imports}
+class TensorClass:
+{members("tensorclass.pyi", "TensorClass")}
+"""
+    )
+    package.joinpath("base.py").write_text(
+        f"""# mypy: disable-error-code="empty-body"
+from __future__ import annotations
+
+{imports}
+from tensordict._tensorcollection import TensorCollection
+
+class TensorDictBase(TensorCollection):
+{members("_base/serialization.py", "_Serialization")}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def user_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        return [line for line in stdout.splitlines() if line.startswith("user.py:")]
+
+    valid = """from pathlib import Path
+from tensordict._tensorcollection import TensorCollection
+from tensordict.base import TensorDictBase
+from tensordict.tensorclass import TensorClass
+
+def check(
+    tc: TensorCollection, td: TensorDictBase, obs: TensorClass, path: Path
+) -> None:
+    tc.memmap(path)
+    tc.memmap_(path)
+    tc.save(path)
+    tc.dumps(path)
+    tc.memmap_like(path)
+    td.memmap(path)
+    td.memmap_(path)
+    td.save(path)
+    td.memmap_like(path)
+    obs.memmap(path)
+    obs.memmap_(path)
+    obs.save(path)
+    obs.dumps(path)
+    obs.memmap_like(path)
+    tc.memmap("out")
+    tc.memmap()
+"""
+    assert user_errors(valid) == []
+
+    invalid = """from tensordict._tensorcollection import TensorCollection
+
+def check(tc: TensorCollection) -> None:
+    tc.memmap(3)
+"""
+    errors = user_errors(invalid)
+    assert len(errors) == 1, errors
+    assert 'Argument 1 to "memmap" of "TensorCollection"' in errors[0]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensordict_compare_and_split_source_static_types(tmp_path, monkeypatch):
+    # #3269 and #3270: with py.typed, mypy must type td == td as a tensordict,
+    # not as the bool of Mapping.__eq__, and the pieces of unbind, chunk and
+    # split as TensorDictBase, not TensorCollection. Type checkers cannot
+    # expand the starred mixin bases of TensorDictBase, so they see
+    # MutableMapping, then the TensorCollection stub, and the TYPE_CHECKING
+    # declarations of the class body. These are copied into a package of
+    # their own. Mypy also searches the working directory, which must not hold
+    # the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    names = ("__eq__", "__ne__", "unbind", "chunk", "split")
+
+    def class_body(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        return class_node.body
+
+    stub_members = [
+        node
+        for node in class_body("_tensorcollection.pyi", "TensorCollection")
+        if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    assert len(stub_members) == len(names)
+    type_checking = [
+        node
+        for node in class_body("base.py", "TensorDictBase")
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+    ]
+
+    def indent(nodes):
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)) or "...", "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""from typing import Self
+
+class TensorCollection:
+{indent(stub_members)}
+"""
+    )
+    # A module, not a stub, as in the sources.
+    package.joinpath("base.py").write_text(
+        f"""from __future__ import annotations
+
+from collections.abc import MutableMapping
+from typing import Self, TYPE_CHECKING
+
+from tensordict._tensorcollection import TensorCollection
+
+class TensorDictBase(MutableMapping, TensorCollection):
+{indent(type_checking)}
+
+class TensorDict(TensorDictBase): ...
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    user = tmp_path / "user.py"
+    user.write_text(
+        """from typing import assert_type
+from tensordict.base import TensorDict, TensorDictBase
+
+def check(td: TensorDict, base: TensorDictBase) -> None:
+    assert_type(td == td, TensorDict)
+    assert_type(td != td, TensorDict)
+    assert_type(base == td, TensorDictBase)
+    assert_type(td.unbind(0), tuple[TensorDictBase, ...])
+    assert_type(td.chunk(2), tuple[TensorDictBase, ...])
+    assert_type(td.split(2), tuple[TensorDictBase, ...])
+    assert_type(base.split([1, 3], 0), tuple[TensorDictBase, ...])
+    first: TensorDictBase = td.unbind(0)[0]
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+    assert not stderr, stderr
+    errors = [line for line in stdout.splitlines() if line.startswith("user.py:")]
+    assert errors == [], stdout
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.parametrize(
     "path,class_name",
     [

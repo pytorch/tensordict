@@ -13,6 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from copy import copy
 from functools import wraps
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -1029,7 +1030,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     def memmap_(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
     ) -> TensorDictBase:
@@ -1217,7 +1218,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_fallback
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
     ) -> Self: ...
