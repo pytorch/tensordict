@@ -313,9 +313,10 @@ def from_arrow(
             or in the dictionary values that a dictionary-encoded column
             selects, comes back as ``None`` with a ``FutureWarning``:
             starting with TensorDict 0.18, the default will change to raising
-            a ``ValueError`` for these nulls too. Nulls inside a union are
-            not checked, and come back as ``None``. ``"fill"`` fills them with ``NaN`` in
-            floating-point tensors, ``0`` (``False``) in the other tensors, an
+            a ``ValueError`` for these nulls too. Nulls inside a union or a
+            run-end encoded column are not checked, and come back as
+            ``None``. ``"fill"`` fills them with ``NaN`` in floating-point
+            tensors, ``0`` (``False``) in the other tensors, an
             empty list in jagged tensors, and ``None`` in a
             :class:`~tensordict.NonTensorStack`. A null struct makes each of
             its fields null. ``"mask"`` fills them as ``"fill"`` does, and adds
@@ -374,7 +375,10 @@ def from_arrow(
             )
         data[name] = _from_array(pa, column, copy, nulls, (name,), masks)
         unchecked_nulls = unchecked_nulls or (
-            nulls == "raise" and _has_unchecked_nulls(pa, column)
+            nulls == "raise"
+            # Cheap gate, so numeric columns skip the walk over their type.
+            and (pa.types.is_nested(column.type) or pa.types.is_dictionary(column.type))
+            and _has_unchecked_nulls(pa, column)
         )
     if unchecked_nulls:
         # #3312: warn once all the columns converted, so a call that raises does not warn.
