@@ -2293,10 +2293,13 @@ class TensorDict(TensorDictBase):
         metadata["shape"] = torch.Size(metadata.get("shape", ()))
 
         if out is None:
+            names = metadata.get("_names")
             result = cls(
                 {},
                 batch_size=metadata.pop("shape"),
                 device=metadata.pop("device") if device is None else device,
+                # A key named "_names" has a dict entry.
+                names=names if isinstance(names, list) else None,
             )
         else:
             if is_tensorclass(out):

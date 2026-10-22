@@ -4586,6 +4586,7 @@ class LazyStackedTensorDict(TensorDictBase):
                             "_type": str(type(self)),
                             **_format_metadata(type(self)),
                             "stack_dim": self.stack_dim,
+                            "stack_dim_name": self._td_dim_name,
                         }
                     )
                     # Ensure we write bytes to the binary file
@@ -4665,7 +4666,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
             i += 1
-        return cls(*tensordicts, stack_dim=stack_dim, **kwargs)
+        return cls(
+            *tensordicts,
+            stack_dim=stack_dim,
+            stack_dim_name=metadata.get("stack_dim_name"),
+            **kwargs,
+        )
 
     # Override: expand each member, which keeps the stack lazy when the
     # expanded members differ. The names come from the members and the stack

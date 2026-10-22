@@ -12,6 +12,7 @@ import sys
 import warnings
 
 import pytest
+import tensordict
 import torch
 from tensordict import lazy_stack, LazyStackedTensorDict, TensorAttrs, TensorDict
 
@@ -430,6 +431,48 @@ class TestNamedDims(TestTensorDictsBase):
         tdm = td.memmap_like(prefix=tmpdir)
         assert tdm.names == ["a", "b", "c", "d"]
         assert tdm.is_memmap()
+
+    @pytest.mark.parametrize(
+        "save", ["memmap", "memmap_", "save", "archive", "append_memmap"]
+    )
+    def test_memmap_load_keeps_names(self, save, tmp_path):
+        # #3262: the directory loaded back had no dim names.
+        td = TensorDict(
+            a=torch.zeros(3, 4),
+            nested=TensorDict(b=torch.ones(3, 4, 2), batch_size=[3, 4, 2]),
+            # a key named like the entry of the names keeps its entry
+            _names=torch.zeros(3, 4),
+            batch_size=[3, 4],
+            names=["time", "env"],
+        )
+        td["nested"].names = ["time", "env", "agent"]
+        path = tmp_path / "saved"
+        if save == "memmap":
+            td.memmap(path)
+        elif save == "memmap_":
+            td.clone().memmap_(path)
+        elif save == "save":
+            td.save(path)
+        elif save == "archive":
+            path = tmp_path / "saved.tdz"
+            td.memmap(path)
+        else:
+            td[:1].memmap(path)
+            tensordict.append_memmap(path, td[1:])
+        loaded = tensordict.load_memmap(path)
+        assert loaded.names == ["time", "env"]
+        assert loaded["nested"].names == ["time", "env", "agent"]
+        assert set(loaded.keys()) == {"a", "nested", "_names"}
+        # without names, the loaded tensordict has none
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.memmap(tmp_path / "unnamed")
+        assert not tensordict.load_memmap(tmp_path / "unnamed")._has_names()
+
+    def test_memmap_load_keeps_lazy_stack_dim_name(self, tmp_path):
+        # #3262
+        td = TensorDict(a=torch.zeros(3), batch_size=[3], names=["time"])
+        lazy_stack([td, td.clone()], 0, stack_dim_name="env").memmap(tmp_path)
+        assert tensordict.load_memmap(tmp_path).names == ["env", "time"]
 
     def test_memmap_td(self):
         td = self.memmap_td("cpu")
