@@ -66,6 +66,13 @@ def _save_metadata(data: TensorCollection, prefix: Path, metadata=None) -> None:
     # as version 0, or by _type.
     for name, value in _format_metadata(type(data)).items():
         metadata.setdefault(name, value)
+    # The dim names, if any (#3262). A key named "_names" keeps its entry (a
+    # dict), and the loader only reads a list.
+    if not isinstance(metadata.get("_names"), dict):
+        if data._has_names():
+            metadata["_names"] = list(data.names)
+        else:
+            metadata.pop("_names", None)
     with open(filepath, "wb") as json_metadata:
         from tensordict._utils_key_json import json_dumps
 

@@ -16,6 +16,7 @@ import random
 import re
 import subprocess
 import sys
+import time
 import types
 import warnings
 from pathlib import Path
@@ -33,6 +34,7 @@ from tensordict import (
     assert_close,
     KEY_SEPARATOR,
     lazy_stack,
+    NonTensorData,
     set_printoptions,
     tensorclass,
     TensorDict,
@@ -1022,6 +1024,394 @@ def test_deprecation_deadlines():
     )
 
 
+# Warning hygiene (#3232). Python builds a warning's message before it
+# looks at the filters, and shows a warning once per call site and message
+# text. A message that holds a runtime value, such as an index, a tensor or a
+# shape, pays for its repr on every call, even when the warning is filtered
+# out, and warns again for each new value.
+
+# The arguments that hold the message text, by position and keyword, of
+# warnings.warn and of the helpers in tensordict/_deprecation.py.
+_WARNING_MESSAGE_ARGS = {
+    "warn": ((0,), ("message",)),
+    "warn_deprecated": ((0,), ("what", "replacement")),
+    "deprecation_message": ((0,), ("what", "replacement")),
+    "warn_deprecated_env_var": ((0, 1), ("name", "value", "replacement")),
+    "deprecated": ((0,), ("what", "replacement")),
+}
+# The allow-list: what a warning message may interpolate. Names of types,
+# classes and functions (x.__name__, type(x)); variables and attributes that
+# hold keys, names, methods, ops, functions, attributes or options, by their
+# name; and constants: literals, UPPER_CASE names, and local variables that
+# hold only allowed values. str(), repr(), sorted(), list(), tuple(), map(),
+# "sep".join() and str.format() pass their arguments through.
+_WARNING_SAFE_ATTRS = frozenset({"__name__", "__qualname__", "__module__"})
+_WARNING_SAFE_NAMES = re.compile(
+    r"_*(\w+_)?(key|name|method|op|func|attr|option|what)s?_*|_*[A-Z][A-Z0-9_]*"
+)
+_WARNING_PASS_THROUGH = frozenset(
+    {"str", "repr", "sorted", "list", "tuple", "join", "format"}
+)
+# The exemptions: parts that the rules above flag but whose value is bounded
+# and cheap to print, by "path:function" of the call site and the part's text.
+_WARNING_EXEMPT = {
+    # constants, key and field names, and string templates
+    "tensordict/_contextlib.py:_warn_kept_in_place": {"result"},
+    "tensordict/tensorclass.py:_set": {"type(self)._set_dict_warn_msg"},
+    "tensordict/typedtensordict.py:_warn_missing_required": {
+        "call",
+        "cls.__required_keys__.difference(keys)",
+        "opt_out",
+    },
+    "tensordict/base.py:_warn_update_skipped": {"skipped"},
+    "tensordict/_base/convert.py:_warn_structseq_keys": {
+        "range(len(obj))",
+        "obj_type.__match_args__",
+    },
+    "tensordict/tensorclass.py:_warn_get_through_tensor": {
+        "_key_through_leaf_error(key, 1, entry)"
+    },
+    "tensordict/nn/cudagraphs.py:_warn_if_interaction_type_changed": {
+        "self._graph_interaction_types",
+        "self._interaction_types()",
+    },
+    # an environment variable's value, warned once at import
+    "tensordict/base.py:<module>": {"os.environ"},
+    "tensordict/nn/functional_modules.py:<module>": {"os.environ"},
+    # small ints, dims, dtypes, bools and file names
+    "tensordict/_base/reductions.py:_warn_negative_dim_with_reduce": {"dim"},
+    "tensordict/_base/reductions.py:_warn_tuple_dim": {"dim"},
+    "tensordict/_base/serialization.py:consolidate": {"filename"},
+    "tensordict/_td_memmap.py:_warn_if_existing_file_smaller": {
+        "filename",
+        "os.path.getsize(filename)",
+        "value.dtype.itemsize * numel",
+        "value.dtype",
+    },
+    "tensordict/base.py:_warn_names_length": {"batch_dims"},
+    "tensordict/utils.py:_warn_batch_dims_ignored": {"batch_dims"},
+    "tensordict/base.py:_warn_tuple_dtype": {
+        "torch.as_tensor(array).dtype",
+        "torch.get_default_dtype()",
+        "{torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)",
+    },
+    "tensordict/base.py:_warn_unsupported_operand": {"result"},
+    "tensordict/tensorclass.py:_warn_if_int_wraps": {"ctypes.c_longlong(val).value"},
+    "tensordict/tensorclass.py:_warn_exclusive_flags": {
+        "autocast",
+        "nocast",
+        "tensor_only",
+    },
+    "tensordict/tensorclass.py:_update_shared_nontensor": {
+        "len(nontensor)",
+        "len(val)",
+    },
+}
+
+
+def _call_name(node):
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _message_parts(call, assignments):
+    # Yields the parts of the message of the warning call that are not allowed.
+    positions, keywords = _WARNING_MESSAGE_ARGS[_call_name(call.func)]
+    args = [call.args[i] for i in positions if i < len(call.args)]
+    args += [k.value for k in call.keywords if k.arg in keywords]
+    for arg in args:
+        yield from _unsafe_parts(arg, assignments, frozenset())
+
+
+def _unsafe_parts(node, assignments, safe):
+    # Yields the parts of node that are not allowed. assignments maps each
+    # name in scope to the values assigned to it; safe holds the names bound
+    # by an enclosing comprehension over allowed values.
+    children = []
+    name = _call_name(node.func) if isinstance(node, ast.Call) else None
+    if isinstance(node, ast.Constant):
+        pass
+    elif isinstance(node, ast.JoinedStr):
+        children = node.values
+    elif isinstance(node, ast.FormattedValue):
+        children = [node.value]
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)):
+        children = [node.left, node.right]
+    elif isinstance(node, (ast.Tuple, ast.List)):
+        children = node.elts
+    elif isinstance(node, ast.IfExp):
+        children = [node.body, node.orelse]
+    elif isinstance(node, ast.BoolOp):
+        children = node.values
+    elif isinstance(node, ast.Subscript):
+        children = [node.value]
+    elif isinstance(node, (ast.GeneratorExp, ast.ListComp)):
+        children = [gen.iter for gen in node.generators]
+        targets = {
+            target.id
+            for gen in node.generators
+            for target in ast.walk(gen.target)
+            if isinstance(target, ast.Name)
+        }
+        yield from _unsafe_parts(node.elt, assignments, safe | targets)
+    elif isinstance(node, ast.Attribute) and node.attr in _WARNING_SAFE_ATTRS:
+        pass
+    elif name == "type":
+        pass
+    elif name in _WARNING_MESSAGE_ARGS:
+        yield from _message_parts(node, assignments)
+    elif name == "map":
+        children = node.args[1:]
+    elif name in _WARNING_PASS_THROUGH:
+        children = list(node.args)
+        if name in ("join", "format") and isinstance(node.func, ast.Attribute):
+            children.append(node.func.value)
+    elif isinstance(node, (ast.Name, ast.Attribute)) and (
+        _call_name(node) in safe or _WARNING_SAFE_NAMES.fullmatch(_call_name(node))
+    ):
+        pass
+    elif isinstance(node, ast.Name) and node.id in assignments:
+        # message = f"..." or op = "..." before the call: check what it holds
+        children = assignments[node.id]
+        assignments = {k: v for k, v in assignments.items() if k != node.id}
+    else:
+        yield node
+    for child in children:
+        yield from _unsafe_parts(child, assignments, safe)
+
+
+def _warning_message_violations(path, root):
+    # Lists the parts of the warning messages in path that are not allowed.
+    tree = ast.parse(path.read_text())
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+
+    def scopes(node):
+        # the enclosing functions, innermost first, then the module
+        while node is not tree:
+            node = parents[node]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+                yield node
+
+    assigned = collections.defaultdict(lambda: collections.defaultdict(list))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value:
+            targets = [node.target]
+        else:
+            continue
+        scope = next(scopes(node))
+        for target in targets:
+            for name in ast.walk(target):
+                if isinstance(name, ast.Name):
+                    assigned[scope][name.id].append(node.value)
+    violations, reported = [], set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and _call_name(node.func) in _WARNING_MESSAGE_ARGS
+        ):
+            assignments = {}
+            for scope in reversed(list(scopes(node))):
+                assignments.update(assigned[scope])
+            # warn(deprecation_message(...)): report each part once
+            parts = [
+                part
+                for part in _message_parts(node, assignments)
+                if part not in reported
+            ]
+            reported.update(parts)
+            site = getattr(next(scopes(node)), "name", "<module>")
+            exempt = _WARNING_EXEMPT.get(
+                f"{path.relative_to(root).as_posix()}:{site}", ()
+            )
+            parts = [ast.unparse(part) for part in parts]
+            parts = [part for part in parts if part not in exempt]
+            if parts:
+                location = f"{path.relative_to(root)}:{node.lineno}"
+                violations.append(f"{location}: {', '.join(parts)}")
+    return violations
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="#3256: warning messages still interpolate runtime values",
+)
+def test_warning_messages_hold_no_runtime_values():
+    # #3232: a warning's message interpolates only what the allow-list and
+    # the exemptions above name. tensordict/_deprecation.py itself is skipped: its helpers pass on
+    # the text that their callers give, which this test checks at each call.
+    package = Path(tensordict.__file__).parent
+    violations = []
+    for path in sorted(package.rglob("*.py")):
+        if path.name != "_deprecation.py":
+            violations.extend(_warning_message_violations(path, package.parent))
+    assert not violations, (
+        "These warning messages interpolate a runtime value, whose repr is "
+        "built on every call, even when the warning is filtered out, and which "
+        "makes Python warn again for each new value (#3232). Name the kind of "
+        "value in a fixed text instead:\n" + "\n".join(violations)
+    )
+
+
+def _distinct_masks(width, count=50):
+    # count random boolean masks of the given width, distinct for width >= 16
+    generator = torch.Generator().manual_seed(0)
+    return list(torch.rand(count, width, generator=generator) > 0.5)
+
+
+def _past_batch_dims_get():
+    td = TensorDict(a=torch.zeros(8, 16), b=torch.zeros(8, 16), batch_size=[8])
+    return (lambda mask: td[:, mask]), _distinct_masks(16)
+
+
+def _past_batch_dims_set():
+    td = TensorDict(a=torch.zeros(8, 16), b=torch.zeros(8, 16), batch_size=[8])
+
+    def write(mask):
+        td[:, mask] = 0.0
+
+    return write, _distinct_masks(16)
+
+
+def _no_batch_dims_set():
+    td = TensorDict(a=torch.zeros(16), b=torch.zeros(16))
+
+    def write(mask):
+        td[mask] = 0.0
+
+    return write, _distinct_masks(16)
+
+
+def _lazy_split_sizes():
+    td = lazy_stack([TensorDict(a=torch.zeros(3)) for _ in range(60)])
+    return (lambda size: td.split([size, 1], 0)), range(1, 51)
+
+
+def _non_tensor_expand():
+    data = NonTensorData("a", batch_size=[2])
+    return (lambda size: data.expand(size, 3)), range(1, 51)
+
+
+# Each case returns a call and 50 values that make it warn with the same
+# warning: an index past the batch dims (#3206), a write into a tensordict
+# without batch dims (#3225), split sizes that do not add up (#2437) and a
+# shape that torch.Tensor.expand rejects (#2421).
+_WARNING_ONCE_CASES = [
+    pytest.param(_past_batch_dims_get, id="td[:, mask]-past-batch-dims"),
+    pytest.param(_past_batch_dims_set, id="td[:, mask]=v-past-batch-dims"),
+    pytest.param(_no_batch_dims_set, id="td[mask]=v-no-batch-dims"),
+    pytest.param(
+        _lazy_split_sizes,
+        id="LazyStackedTensorDict.split-sizes",
+    ),
+    pytest.param(
+        _non_tensor_expand,
+        id="NonTensorData.expand-shape",
+    ),
+]
+
+
+@pytest.mark.parametrize("case", _WARNING_ONCE_CASES)
+def test_warning_once_per_call_site(case):
+    # #3232: the same warning, from one call site, with 50 values, warns once
+    # under the default filters, not once per value.
+    call, values = case()
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("default")
+        for value in values:
+            call(value)
+    messages = [str(w.message) for w in record]
+    assert len(messages) == 1, (
+        f"{len(messages)} warnings from one call site for {len(values)} "
+        "values, instead of one: the message holds the value (#3232). The "
+        "first two:\n" + "\n".join(messages[:2])
+    )
+
+
+def _min_time_interleaved(calls, values, rounds=7):
+    # The least time of each call over values, timed in turn in each round,
+    # so that a change in the machine's load affects them alike.
+    best = [float("inf")] * len(calls)
+    for _ in range(rounds):
+        for i, call in enumerate(calls):
+            start = time.perf_counter()
+            for value in values:
+                call(value)
+            best[i] = min(best[i], time.perf_counter() - start)
+    return best
+
+
+def _past_batch_dims_get_cost():
+    td = TensorDict(a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8])
+    plain = TensorDict(
+        a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8, 256]
+    )
+    return (lambda mask: td[:, mask]), (lambda mask: plain[:, mask])
+
+
+def _past_batch_dims_set_cost():
+    td = TensorDict(a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8])
+    plain = TensorDict(
+        a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8, 256]
+    )
+
+    def write(mask):
+        td[:, mask] = 0.0
+
+    def write_plain(mask):
+        plain[:, mask] = 0.0
+
+    return write, write_plain
+
+
+def _no_batch_dims_set_cost():
+    td = TensorDict(a=torch.zeros(256), b=torch.zeros(256))
+    plain = TensorDict(a=torch.zeros(256), b=torch.zeros(256), batch_size=[256])
+
+    def write(mask):
+        td[mask] = 0.0
+
+    def write_plain(mask):
+        plain[mask] = 0.0
+
+    return write, write_plain
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(_past_batch_dims_get_cost, id="td[:, mask]-past-batch-dims"),
+        pytest.param(_past_batch_dims_set_cost, id="td[:, mask]=v-past-batch-dims"),
+        pytest.param(_no_batch_dims_set_cost, id="td[mask]=v-no-batch-dims"),
+    ],
+)
+def test_ignored_warning_costs_little(case):
+    # #3232: with the warning filtered out, a call that warns costs about as
+    # much as the same index within the batch dims, which does not warn. The
+    # message held the index, whose repr made each call 25 to 75 times slower.
+    # A screen, with a generous bound: the call that warns also takes a
+    # longer path to the leaves, 2 to 3 times as long as the plain call, and
+    # more under load, so the bound is 10 times.
+    warn_call, plain_call = case()
+    masks = _distinct_masks(256)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        warn_time, plain_time = _min_time_interleaved([warn_call, plain_call], masks)
+    assert warn_time < 10 * plain_time, (
+        f"With the warning ignored, the call that warns takes "
+        f"{warn_time / len(masks) * 1e6:.0f} us, {warn_time / plain_time:.1f} "
+        f"times the {plain_time / len(masks) * 1e6:.0f} us of the plain call: "
+        "building the message costs too much (#3232)"
+    )
+
+
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
 def test_isin_1dim(key, dim):
@@ -1514,26 +1904,18 @@ def test_logging_level_env_var(level, expected_level, shows_debug):
     assert ("[tensordict][DEBUG] debug message" in result.stderr) is shows_debug
 
 
-@pytest.mark.parametrize("scenario", ["import", "find_spec_first", "dynamo_first"])
-def test_import_does_not_load_dynamo(scenario):
-    # Importing torch._dynamo takes about a second (#3090), so tensordict defers
-    # its Dynamo registrations until torch._dynamo is imported. They must be in
-    # place whether Dynamo is imported before tensordict, after it, or after a
-    # lookup that does not import it.
+@pytest.mark.parametrize("scenario", ["import", "dynamo_first"])
+def test_import_registers_dynamo_functions(scenario):
+    # tensordict registers some of its functions with Dynamo when it is
+    # imported. They must be in place whether Dynamo is imported before
+    # tensordict or not.
     code = (
-        "import importlib.util, sys, torch\n"
-        "if 'torch._dynamo' in sys.modules:\n"
-        "    print('torch loads dynamo')\n"
-        "    sys.exit()\n"
+        "import torch\n"
         f"scenario = {scenario!r}\n"
         "if scenario == 'dynamo_first':\n"
         "    import torch._dynamo\n"
         "import tensordict, tensordict.nn\n"
         "from tensordict import base\n"
-        "assert ('torch._dynamo' in sys.modules) == (scenario == 'dynamo_first')\n"
-        "if scenario == 'find_spec_first':\n"
-        "    assert importlib.util.find_spec('torch._dynamo') is not None\n"
-        "    assert 'torch._dynamo' not in sys.modules\n"
         "from torch._dynamo import trace_rules\n"
         "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n"
         "def lock(td):\n"
@@ -1550,9 +1932,284 @@ def test_import_does_not_load_dynamo(scenario):
         [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
     )
     assert result.returncode == 0, result.stderr
-    if result.stdout.strip() == "torch loads dynamo":
-        pytest.skip("import torch loads torch._dynamo")
     assert result.stdout.strip() == "ok"
+
+
+def test_import_loads_dynamo_before_runtime_wrappers():
+    # #3231: torch has a circular import between
+    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. If
+    # runtime_wrappers is imported first, torch._dynamo stays half-initialized
+    # and every later torch.compile call raises. import tensordict loads
+    # torch._dynamo, so that this import order works after it. The PyTorch
+    # issue is pytorch/pytorch#201689.
+    code = (
+        "import torch, tensordict\n"
+        "import torch._functorch._aot_autograd.runtime_wrappers\n"
+        "out = torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1))\n"
+        "assert out.item() == 2, out\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
+
+
+def _run_in_fresh_interpreter(steps):
+    """Runs ``(label, source)`` steps in one fresh interpreter, in order.
+
+    A step that raises does not stop the next ones, as downstream code often
+    wraps its early imports in ``except Exception``. Returns the list of
+    ``"<label> raised <error>"`` messages and the value the last step printed.
+    """
+    code = (
+        "import sys\n"
+        f"steps = {list(steps)!r}\n"
+        "ns = {}\n"
+        "failed = []\n"
+        "for label, source in steps:\n"
+        "    try:\n"
+        "        exec(source, ns)\n"
+        "    except BaseException as e:\n"
+        "        failed.append(f'{label} raised {type(e).__name__}: {e}')\n"
+        "print(repr((failed, ns.get('result'))))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300
+    )
+    assert result.returncode == 0, result.stderr
+    return ast.literal_eval(result.stdout.strip().splitlines()[-1])
+
+
+# The import that PhysicsNeMo's domain_parallel makes when it is imported (#3231).
+_RUNTIME_WRAPPERS_IMPORT = (
+    "from torch._functorch._aot_autograd.runtime_wrappers import AOTDispatchAutograd"
+)
+_DEFINE_TENSORCLASS = (
+    "from tensordict import tensorclass\n"
+    "@tensorclass\n"
+    "class Point:\n"
+    "    x: torch.Tensor\n"
+    "point = Point(x=torch.zeros(4, 3), batch_size=[4])\n"
+)
+
+# Import orders that downstream code uses. Each is followed by the checks of
+# _COMPILE_CHECKS, in the same interpreter.
+_IMPORT_ORDERS = {
+    "tensordict.nn-then-runtime_wrappers": (
+        "import torch",
+        "import tensordict.nn",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "tensorclass-then-runtime_wrappers": (
+        "import torch",
+        _DEFINE_TENSORCLASS,
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "tensordict-then-export-fx-data": (
+        "import torch",
+        "import tensordict",
+        "import torch.export",
+        "import torch.fx",
+        "import torch.utils.data",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "dynamo-first": (
+        "import torch._dynamo",
+        "import tensordict",
+        "import tensordict.nn",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "export-fx-data-then-tensordict": (
+        "import torch",
+        "import torch.export",
+        "import torch.fx",
+        "import torch.utils.data",
+        "import tensordict",
+        "import tensordict.nn",
+        _RUNTIME_WRAPPERS_IMPORT,
+    ),
+    "dynamo-and-aot_autograd-then-tensordict": (
+        "import torch._dynamo",
+        "import torch._functorch.aot_autograd",
+        _RUNTIME_WRAPPERS_IMPORT,
+        "import tensordict",
+        "import tensordict.nn",
+    ),
+    "tensordict-only": (
+        "import torch",
+        "import tensordict",
+    ),
+}
+
+_COMPILE_CHECKS = (
+    (
+        "torch._dynamo and runtime_wrappers fully importable",
+        "import torch._dynamo\n"
+        "from torch._dynamo.convert_frame import convert_frame\n"
+        "from torch._dynamo.eval_frame import optimize\n"
+        "from torch._dynamo.compiled_autograd import AutogradCompilerInstance\n"
+        "from torch._functorch._aot_autograd.runtime_wrappers import (\n"
+        "    AOTDispatchAutograd, AutogradLazyBackwardCompileInfo)\n",
+    ),
+    (
+        "torch.compile(lambda x: x + 1, backend='eager')",
+        "import torch\n"
+        "assert torch.compile(lambda x: x + 1, backend='eager')(torch.ones(1)) == 2\n",
+    ),
+    (
+        "tensordict's Dynamo registrations",
+        "from tensordict import base\n"
+        "from torch._dynamo import trace_rules\n"
+        "assert trace_rules.lookup_callable(base._foreach_copy_compiled) is not None\n",
+    ),
+    (
+        "torch.compile of a locked TensorDict",
+        "import tensordict\n"
+        "def lock(td):\n"
+        "    td.lock_()\n"
+        "    return td['a'] + 1\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "out = torch.compile(lock, fullgraph=True, backend='eager')(td)\n"
+        "assert (out == 1).all()\n",
+    ),
+    (
+        "torch.compile of torch.vmap over a TensorDict",
+        "import tensordict\n"
+        "def vmap(td):\n"
+        "    return torch.vmap(lambda t: t['a'] + 1)(td)\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "out = torch.compile(vmap, fullgraph=True, backend='eager')(td)\n"
+        "assert (out == 1).all()\n",
+    ),
+    (
+        "torch.compile of a TensorDictModule",
+        "import tensordict\n"
+        "from tensordict.nn import TensorDictModule\n"
+        "module = TensorDictModule(lambda a: a + 1, in_keys=['a'], out_keys=['b'])\n"
+        "td = tensordict.TensorDict(a=torch.zeros(4, 3), batch_size=[4])\n"
+        "out = torch.compile(module, fullgraph=True, backend='eager')(td)\n"
+        "assert (out['b'] == 1).all()\n",
+    ),
+    (
+        "torch.compile of a tensorclass",
+        _DEFINE_TENSORCLASS + "out = torch.compile(lambda p: p.x + 1, fullgraph=True, "
+        "backend='eager')(point)\n"
+        "assert (out == 1).all()\n",
+    ),
+)
+
+
+@pytest.mark.parametrize("order", list(_IMPORT_ORDERS))
+def test_import_order_keeps_compile_working(order):
+    # #3231: torch has a circular import between
+    # torch._functorch._aot_autograd.runtime_wrappers and torch._dynamo. When
+    # runtime_wrappers comes first, torch._dynamo is left half-initialized and
+    # every later torch.compile raises. PhysicsNeMo's domain_parallel makes that
+    # import, and up to 0.15.2 import tensordict loaded torch._dynamo first.
+    # Whatever order downstream code imports torch, its submodules and
+    # tensordict in, each import must work, and so must torch.compile.
+    steps = [(source, source) for source in _IMPORT_ORDERS[order]]
+    failed, _ = _run_in_fresh_interpreter(steps + list(_COMPILE_CHECKS))
+    assert not failed, f"import order {order!r}:\n" + "\n".join(failed)
+
+
+_TORCH_STATE = (
+    "import warnings\n"
+    "import torch\n"
+    "import torch.utils._pytree as pytree\n"
+    "def name(obj):\n"
+    "    if obj is None:\n"
+    "        return None\n"
+    "    return f'{obj.__module__}.{obj.__qualname__}'\n"
+    "result = {\n"
+    "    'default dtype': str(torch.get_default_dtype()),\n"
+    "    'default device': str(torch.get_default_device()),\n"
+    "    'grad mode': torch.is_grad_enabled(),\n"
+    "    'inference mode': torch.is_inference_mode_enabled(),\n"
+    "    'deterministic algorithms': torch.are_deterministic_algorithms_enabled(),\n"
+    # A filter for the warnings of another package, such as the one sympy adds
+    # for its own when torch._dynamo imports it, affects only that package.
+    "    'warnings filters': [\n"
+    "        repr(f) for f in warnings.filters\n"
+    "        if f[2].__module__.split('.')[0] in ('builtins', 'torch', 'tensordict')\n"
+    "    ],\n"
+    "    'pytree nodes': {\n"
+    "        name(cls): (name(node.flatten_fn), name(node.unflatten_fn),\n"
+    "                    name(node.flatten_with_keys_fn))\n"
+    "        for cls, node in pytree.SUPPORTED_NODES.items()\n"
+    "    },\n"
+    "    'pytree serialized type names': {\n"
+    "        serialized: name(cls)\n"
+    "        for serialized, cls in pytree.SERIALIZED_TYPE_TO_PYTHON_TYPE.items()\n"
+    "        if serialized != pytree.NO_SERIALIZED_TYPE_NAME_FOUND\n"
+    "    },\n"
+    "}\n"
+)
+
+
+def test_import_keeps_torch_global_state():
+    # import tensordict must leave the global torch state that other code relies
+    # on as a fresh import torch has it. It may register its own types with
+    # pytree, but not change the entries of the types that torch registered.
+    steps = [("import torch", "import torch"), ("state", _TORCH_STATE)]
+    failed, torch_state = _run_in_fresh_interpreter(steps)
+    assert not failed, failed
+    steps.insert(1, ("import tensordict", "import tensordict"))
+    failed, td_state = _run_in_fresh_interpreter(steps)
+    assert not failed, failed
+    changed = [
+        f"{key}: {torch_state[key]!r} -> {td_state[key]!r}"
+        for key in torch_state
+        if not isinstance(torch_state[key], dict) and torch_state[key] != td_state[key]
+    ]
+    for key in ("pytree nodes", "pytree serialized type names"):
+        changed += [
+            f"{key}[{name!r}]: {value!r} -> {td_state[key].get(name)!r}"
+            for name, value in torch_state[key].items()
+            if td_state[key].get(name) != value
+        ]
+    assert not changed, "import tensordict changed the global torch state:\n" + (
+        "\n".join(changed)
+    )
+
+
+def test_import_keeps_pytree_specs_serializable():
+    # torch.export.save and torch.export.load store the tree specs of the inputs
+    # and outputs with treespec_dumps and treespec_loads. After import tensordict,
+    # a spec of a built-in container must still load as the spec it was saved
+    # from, or torch.export.load gives programs that reject their own inputs.
+    check = (
+        "import collections\n"
+        "import torch.utils._pytree as pytree\n"
+        "trees = {\n"
+        "    'list': [1, 2],\n"
+        "    'tuple': (1, 2),\n"
+        "    'dict': {'a': 1, 'b': 2},\n"
+        "    'OrderedDict': collections.OrderedDict(a=1, b=2),\n"
+        "    'defaultdict': collections.defaultdict(int, a=1),\n"
+        "    'nested': {'a': [1, (2, 3)], 'b': [[4]]},\n"
+        "}\n"
+        "result = []\n"
+        "for kind, tree in trees.items():\n"
+        "    spec = pytree.tree_structure(tree)\n"
+        "    loaded = pytree.treespec_loads(pytree.treespec_dumps(spec))\n"
+        "    if loaded != spec:\n"
+        "        saved, loaded = (' '.join(str(s).split()) for s in (spec, loaded))\n"
+        "        result.append(f'{kind}: saved {saved}, loaded {loaded}')\n"
+    )
+    steps = [
+        ("import torch", "import torch"),
+        ("import tensordict", "import tensordict"),
+        ("round trip", check),
+    ]
+    failed, changed = _run_in_fresh_interpreter(steps)
+    assert not failed, failed
+    assert not changed, (
+        "after import tensordict, treespec_loads(treespec_dumps(spec)) != spec:\n"
+        + "\n".join(changed)
+    )
 
 
 def test_pin_mem_stops_when_another_thread_took_the_last_input(monkeypatch):

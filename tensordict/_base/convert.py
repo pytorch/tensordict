@@ -485,8 +485,8 @@ class _Conversion:
                 out.names = names
             else:
                 warnings.warn(
-                    f"from_list ignores names={names} for a result of batch "
-                    f"size {out.batch_size} today. Starting with TensorDict "
+                    f"from_list ignores names={names}, whose length is not the "
+                    "number of batch dims of the result, today. Starting with TensorDict "
                     "0.17, the default will change to raising a ValueError, "
                     "as for a batch_size of another length.",
                     FutureWarning,
