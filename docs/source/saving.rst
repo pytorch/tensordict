@@ -253,6 +253,11 @@ leaves the data as it was. A tensordict loaded before the append keeps its
 number of rows, and ``load_memmap`` after the append sees the new rows.
 Append from one process at a time.
 
+The ``meta.json`` files of nested levels are replaced one at a time, so an
+append that is killed midway, or a ``load_memmap`` that runs during an
+append, can see nested levels with different numbers of rows. Don't read a
+directory while you append to it.
+
 Save to one file
 ----------------
 
