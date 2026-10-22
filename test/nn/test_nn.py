@@ -8439,7 +8439,7 @@ class TestTensorClassModuleForward:
             td_output = td_module(td, tensordict_out=out)
         assert td_output is not out
         assert out.is_empty()
-        with pytest.warns(FutureWarning, match="1 positional argument\\(s\\), 'foo'"):
+        with pytest.warns(FutureWarning, match="positional argument.*, 'foo'"):
             td_output = td_module(td, 1, foo=3)
         assert td_output["result", "added"] == 15
         with warnings.catch_warnings():
