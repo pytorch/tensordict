@@ -7,9 +7,9 @@ Saves a tensordict or a tensorclass to a safetensors file.
 Each tensor is saved under its nested key joined with `"."`, the names
 that a model's `state_dict` uses. The structure of the tensordict (the
 batch size and dim names of each level, the class of each tensorclass,
-the non-tensor values, and which tensors are
-[`UnbatchedTensor`](tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)) is saved as one JSON string in the metadata of
-the file, so that [`from_safetensors()`](tensordict.from_safetensors.html#tensordict.from_safetensors) rebuilds it.
+the stack dim of each lazy stack, the non-tensor values, and which tensors
+are [`UnbatchedTensor`](tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)) is saved as one JSON string in
+the metadata of the file, so that [`from_safetensors()`](tensordict.from_safetensors.html#tensordict.from_safetensors) rebuilds it.
 
 Tensors that share memory are saved as separate copies, and a tensordict
 on another device is saved through the CPU. Requires the `safetensors`

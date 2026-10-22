@@ -5,10 +5,11 @@ tensordict.from_safetensors(*path: [str](https://docs.python.org/3/builtins/stdt
 Loads a tensordict from a safetensors file.
 
 A file written by [`to_safetensors()`](tensordict.to_safetensors.html#tensordict.to_safetensors) loads with its
-structure: the batch sizes, dim names, tensorclasses and non-tensor
-values that it was saved with. A tensorclass loads only if the module
-that defines it is imported: tensordict never imports a module by the
-name in a file.
+structure: the batch sizes, dim names, tensorclasses, lazy stacks and
+non-tensor values that it was saved with. A lazy stack loads with the
+same stack dim, and its entries load as dense tensordicts. A tensorclass
+loads only if the module that defines it is imported: tensordict never
+imports a module by the name in a file.
 
 Any other safetensors file, such as a model checkpoint from the Hugging
 Face Hub, loads as a nested [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) with an empty
@@ -30,7 +31,9 @@ device.
 
 Returns:
 
-a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), or the tensorclass that was saved.
+a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict), a
+[`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), or the tensorclass that
+was saved.
 
 Examples
 

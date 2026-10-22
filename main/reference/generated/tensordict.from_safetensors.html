@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6428+g313a6a6e9.d20261022)">
+<meta name="llm:version" content="main (0.15.0.dev6431+gf2ac602c4.d20261022)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6428+g313a6a6e9.d20261022)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6431+gf2ac602c4.d20261022)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1764,10 +1764,11 @@ document.write(`
 <span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">from_safetensors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DeviceType</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></span><a class="headerlink" href="#tensordict.from_safetensors" title="Link to this definition">#</a></dt>
 <dd><p>Loads a tensordict from a safetensors file.</p>
 <p>A file written by <a class="reference internal" href="tensordict.to_safetensors.html#tensordict.to_safetensors" title="tensordict.to_safetensors"><code class="xref py py-func docutils literal notranslate"><span class="pre">to_safetensors()</span></code></a> loads with its
-structure: the batch sizes, dim names, tensorclasses and non-tensor
-values that it was saved with. A tensorclass loads only if the module
-that defines it is imported: tensordict never imports a module by the
-name in a file.</p>
+structure: the batch sizes, dim names, tensorclasses, lazy stacks and
+non-tensor values that it was saved with. A lazy stack loads with the
+same stack dim, and its entries load as dense tensordicts. A tensorclass
+loads only if the module that defines it is imported: tensordict never
+imports a module by the name in a file.</p>
 <p>Any other safetensors file, such as a model checkpoint from the Hugging
 Face Hub, loads as a nested <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with an empty
 batch size: each name is split on <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code>. The result has the layout of
@@ -1785,7 +1786,9 @@ tensors on, which is also the device of the result. Defaults to
 device.</p>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, or the tensorclass that was saved.</p>
+<dd class="field-odd"><p>a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, a
+<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>, or the tensorclass that
+was saved.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2163,7 +2166,7 @@ device.</p>
        "headline": "from_safetensors",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - from_safetensors",
        "url": "/reference/generated/tensordict.from_safetensors.html",
-       "articleBody": "from_safetensors# tensordict.from_safetensors(path: str | Path, *, device: DeviceType | None = None) \u2192 TensorDictBase# Loads a tensordict from a safetensors file. A file written by to_safetensors() loads with its structure: the batch sizes, dim names, tensorclasses and non-tensor values that it was saved with. A tensorclass loads only if the module that defines it is imported: tensordict never imports a module by the name in a file. Any other safetensors file, such as a model checkpoint from the Hugging Face Hub, loads as a nested TensorDict with an empty batch size: each name is split on \".\". The result has the layout of from_module(), so that to_module() writes it into the model. Requires the safetensors package. Parameters: path (str or Path) \u2013 the path of the file. Keyword Arguments: device (device or compatible, optional) \u2013 the device to load the tensors on, which is also the device of the result. Defaults to None: the tensors load on the CPU, and the result has no device. Returns: a TensorDict, or the tensorclass that was saved. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from safetensors.torch import save_file \u003e\u003e\u003e from tensordict import from_safetensors \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmp: ... save_file( ... {\"0.weight\": torch.ones(4, 3), \"0.bias\": torch.zeros(4)}, ... Path(tmp) / \"model.safetensors\", ... ) ... params = from_safetensors(Path(tmp) / \"model.safetensors\") \u003e\u003e\u003e params[\"0\", \"weight\"].shape torch.Size([4, 3]) \u003e\u003e\u003e _ = params.to_module(torch.nn.Sequential(torch.nn.Linear(3, 4)))",
+       "articleBody": "from_safetensors# tensordict.from_safetensors(path: str | Path, *, device: DeviceType | None = None) \u2192 TensorDictBase# Loads a tensordict from a safetensors file. A file written by to_safetensors() loads with its structure: the batch sizes, dim names, tensorclasses, lazy stacks and non-tensor values that it was saved with. A lazy stack loads with the same stack dim, and its entries load as dense tensordicts. A tensorclass loads only if the module that defines it is imported: tensordict never imports a module by the name in a file. Any other safetensors file, such as a model checkpoint from the Hugging Face Hub, loads as a nested TensorDict with an empty batch size: each name is split on \".\". The result has the layout of from_module(), so that to_module() writes it into the model. Requires the safetensors package. Parameters: path (str or Path) \u2013 the path of the file. Keyword Arguments: device (device or compatible, optional) \u2013 the device to load the tensors on, which is also the device of the result. Defaults to None: the tensors load on the CPU, and the result has no device. Returns: a TensorDict, a LazyStackedTensorDict, or the tensorclass that was saved. Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from safetensors.torch import save_file \u003e\u003e\u003e from tensordict import from_safetensors \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmp: ... save_file( ... {\"0.weight\": torch.ones(4, 3), \"0.bias\": torch.zeros(4)}, ... Path(tmp) / \"model.safetensors\", ... ) ... params = from_safetensors(Path(tmp) / \"model.safetensors\") \u003e\u003e\u003e params[\"0\", \"weight\"].shape torch.Size([4, 3]) \u003e\u003e\u003e _ = params.to_module(torch.nn.Sequential(torch.nn.Linear(3, 4)))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
