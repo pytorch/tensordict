@@ -2331,6 +2331,32 @@ def _stacked_repr(shape, tensors) -> str | None:
     return _get_repr_custom(Tensor, shape, device, dtype, device.type == "cuda")
 
 
+def _mixed_repr(td, key) -> str | None:
+    """The types of the members' values of entry ``key`` of lazy stack ``td``, as ``[NonTensorData, Tensor]``.
+
+    Returns ``None`` unless some members hold a tensor and others non-tensor
+    data there: such an entry cannot be stacked (#3258).
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+
+    def values(lazy):
+        for member in lazy.tensordicts:
+            if isinstance(member, LazyStackedTensorDict):
+                yield from values(member)
+            else:
+                yield member._get_str(key, None)
+
+    if not isinstance(key, str):
+        return None
+    items = list(values(td))
+    if not any(isinstance(item, Tensor) for item in items) or not any(
+        is_non_tensor(item) for item in items
+    ):
+        return None
+    names = dict.fromkeys(type(item).__name__ for item in items)
+    return f"[{', '.join(names)}]"
+
+
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
 
@@ -2352,6 +2378,10 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 strs.append(sep.join([key, substr]))
                 continue
         else:
+            substr = _mixed_repr(source, key) if is_lazy else None
+            if substr is not None:
+                strs.append(sep.join([key, substr]))
+                continue
             shape = td.get_item_shape(key)
         if -1 not in shape:
             item = td.get(key)

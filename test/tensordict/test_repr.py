@@ -966,6 +966,32 @@ class TestCompactRepr:
         assert out.startswith("<div")
         assert "a: <span style=" in out and f">{name}</span>" in out
 
+    @pytest.mark.parametrize(
+        "options",
+        [{}, {"compact": False}, {"compact": False, "plain": True}],
+        ids=["compact", "detailed", "plain"],
+    )
+    @pytest.mark.parametrize("tensor_first", [True, False])
+    def test_mixed_lazy_stack_every_display(self, options, tensor_first):
+        # #3258: the detailed display raised on a lazy stack whose first
+        # member holds a string where a later one holds a tensor; it lists
+        # the members' types, in order
+        members = [TensorDict(a=torch.zeros(3)), TensorDict(a="text")]
+        if not tensor_first:
+            members = members[::-1]
+        lazy = LazyStackedTensorDict(*members)
+        with set_printoptions(**options):
+            out = repr(lazy)
+        if not options:
+            assert out == (
+                "LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={a: str})"
+            )
+        else:
+            types = "Tensor, NonTensorData" if tensor_first else "NonTensorData, Tensor"
+            assert out.startswith(
+                f"LazyStackedTensorDict(\n    fields={{\n        a: [{types}]}},\n"
+            )
+
     def test_compact_error_falls_back(self, monkeypatch):
         # #3233: an error in the compact form falls back to the detailed one
         import tensordict.base
