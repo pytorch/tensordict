@@ -39,16 +39,16 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.tensordict.test._utils_internal import (
         get_available_devices,
         is_npu_available,
-        TestTensorDictsBase as _Pool,
     )
-    from pytorch.tensordict.test.tensordict.test_conformance import _CONTAINERS
 else:
     IS_FB = False
-    from _utils_internal import (
-        get_available_devices,
-        is_npu_available,
-        TestTensorDictsBase as _Pool,
-    )
+    from _utils_internal import get_available_devices, is_npu_available
+
+if IS_FB:
+    from pytorch.tensordict.test._utils_internal import TestTensorDictsBase as _Pool
+    from pytorch.tensordict.test.tensordict.test_conformance import _CONTAINERS
+else:
+    from _utils_internal import TestTensorDictsBase as _Pool
     from test_conformance import _CONTAINERS
 
 
