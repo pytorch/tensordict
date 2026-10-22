@@ -570,6 +570,60 @@ Step(obs=t)
     assert [line for line in stdout.splitlines() if line.startswith("user.py:")] == []
 
 
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensordict_self_python310_static(tmp_path, monkeypatch):
+    # #3304: on Python 3.10, typing has no Self, so the .py modules must take
+    # it from typing_extensions for methods typed -> Self to keep their type.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "source"
+    shutil.copytree(
+        _TENSORDICT_DIR,
+        source / "tensordict",
+        ignore=shutil.ignore_patterns("__pycache__", "*.so"),
+    )
+    stubs = tmp_path / "stubs"
+    torch_package = stubs / "torch"
+    torch_package.mkdir(parents=True)
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.10
+show_error_codes = True
+mypy_path = {stubs},{source}
+no_site_packages = True
+ignore_missing_imports = True
+follow_imports = silent
+"""
+    )
+    user = tmp_path / "user.py"
+    user.write_text(
+        """import torch
+from tensordict import TensorDict
+
+td = TensorDict(a=torch.zeros(4), batch_size=[4])
+reveal_type(td.clone())
+reveal_type(td == td)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+    assert not stderr, stderr
+    assert [line for line in stdout.splitlines() if line.startswith("user.py:")] == [
+        'user.py:5: note: Revealed type is "tensordict._td.TensorDict"',
+        'user.py:6: note: Revealed type is "tensordict._td.TensorDict"',
+    ]
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_init_subclass():
     # The class keywords (class X(TensorClass, autocast=True)) go to the

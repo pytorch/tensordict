@@ -29,7 +29,7 @@ from tensordict.utils import (
 from torch.compiler import is_compiling
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

@@ -75,7 +75,7 @@ except ImportError:
     _has_funcdim = False
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
