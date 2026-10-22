@@ -1280,6 +1280,53 @@ class TestCompactRepr:
             r = repr(td)
         assert r == "TensorDict(batch_size=[10], fields={a: f32[2]})"
 
+    @pytest.mark.parametrize(
+        "option",
+        [
+            "show_is_shared",
+            "show_shape",
+            "show_field_device",
+            "show_field_is_shared",
+            "show_grad",
+            "show_is_contiguous",
+            "show_is_view",
+            "show_storage_size",
+            "plain",
+        ],
+    )
+    def test_compact_detailed_only_option_turns_compact_off(self, option):
+        # #3240: an option that only the detailed form uses turns the compact
+        # form off when compact is not passed; an explicit compact=True keeps it.
+        assert get_printoptions()["compact"] is True
+        value = not get_printoptions()[option]
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        with set_printoptions(**{option: value}):
+            assert get_printoptions()["compact"] is False
+            r = repr(td)
+        assert r.startswith("TensorDict(\n    fields={")
+        with set_printoptions(compact=False, **{option: value}):
+            assert r == repr(td)
+        with set_printoptions(compact=True, **{option: value}):
+            assert repr(td) == "TensorDict(batch_size=[3], fields={a: f32[]})"
+        assert get_printoptions()["compact"] is True
+
+    def test_compact_show_grad_shows_requires_grad(self):
+        # #3240: set_printoptions(show_grad=True) alone used to print the
+        # compact form, without requires_grad
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        with set_printoptions(show_grad=True):
+            assert "requires_grad=True" in repr(td)
+        # verbose=False hides options of the detailed form but keeps compact
+        with set_printoptions(verbose=False):
+            assert repr(td) == "TensorDict(batch_size=[3], fields={a: []})"
+
+        # as a decorator too, which clones the options on each call
+        @set_printoptions(verbose=False)
+        def decorated():
+            return repr(td)
+
+        assert decorated() == "TensorDict(batch_size=[3], fields={a: []})"
+
     def test_compact_sort_keys(self):
         td = TensorDict(c=torch.zeros(2), a=torch.zeros(2), b=torch.zeros(2))
         with set_printoptions(compact=True, sort_keys="insertion"):

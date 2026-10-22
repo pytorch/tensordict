@@ -4792,7 +4792,7 @@ torch.utils._pytree.register_pytree_node(
     LinkedList,
     torch.utils._pytree._list_flatten,
     torch.utils._pytree._list_unflatten,
-    serialized_type_name="builtins.list",
+    serialized_type_name="tensordict.utils.LinkedList",
     flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
 )
 
