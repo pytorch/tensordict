@@ -1233,6 +1233,123 @@ TensorDictSequential(3)
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_sequential_overloads_source_static_types(
+    tmp_path, monkeypatch, python_version
+):
+    # #3303: mypy must accept ProbabilisticTensorDictSequential(m1, m2) and a
+    # plain dict of modules, as documented. The __init__ overloads of both
+    # sequences are copied from the sources into a stub. Mypy also searches
+    # the working directory, which must not hold the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+
+    def overloads(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "__init__"
+            and "overload" in map(ast.unparse, node.decorator_list)
+        ]
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    (package / "nn").mkdir(parents=True)
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_nestedkey.pyi").write_text(
+        (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
+    )
+    package.joinpath("nn", "__init__.pyi").write_text(
+        f"""from typing import Any, Callable, List, overload
+
+from tensordict._nestedkey import NestedKey
+
+class TensorDictBase: ...
+
+class TensorDictModuleBase:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+
+class TensorDictModule(TensorDictModuleBase):
+    def __init__(self, module: Any, in_keys: Any, out_keys: Any) -> None: ...
+
+class ProbabilisticTensorDictModule(TensorDictModuleBase):
+    def __init__(self, **kwargs: Any) -> None: ...
+
+class TensorDictSequential(TensorDictModuleBase):
+{overloads("nn/sequence.py", "TensorDictSequential")}
+
+class ProbabilisticTensorDictSequential(TensorDictSequential):
+{overloads("nn/probabilistic.py", "ProbabilisticTensorDictSequential")}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = {python_version}
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def mypy_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        # Errors in the copied annotations count too.
+        return [line for line in stdout.splitlines() if ": error: " in line]
+
+    valid = """import collections
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictSequential,
+)
+
+net = TensorDictModule(None, in_keys=["x"], out_keys=["loc", "scale"])
+prob = ProbabilisticTensorDictModule(in_keys=["loc", "scale"], out_keys=["action"])
+ProbabilisticTensorDictSequential(net, prob)
+ProbabilisticTensorDictSequential(net, prob, return_composite=True)
+ProbabilisticTensorDictSequential({"net": net, "prob": prob})
+ProbabilisticTensorDictSequential(collections.OrderedDict(net=net, prob=prob))
+TensorDictSequential({"net": net, "prob": prob})
+TensorDictSequential(collections.OrderedDict(net=net, prob=prob))
+"""
+    assert mypy_errors(valid) == []
+
+    invalid = """from tensordict.nn import (
+    ProbabilisticTensorDictSequential,
+    TensorDictSequential,
+)
+
+ProbabilisticTensorDictSequential(3)
+TensorDictSequential({"net": 3})
+"""
+    errors = mypy_errors(invalid)
+    assert len(errors) == 2, errors
+    assert errors[0].startswith("user.py:6:"), errors
+    assert "ProbabilisticTensorDictSequential" in errors[0]
+    assert errors[1].startswith("user.py:7:"), errors
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_stack_cat_source_static_types(tmp_path, monkeypatch):
     from mypy import api
 

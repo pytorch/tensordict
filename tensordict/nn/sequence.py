@@ -8,7 +8,7 @@ from __future__ import annotations
 import collections
 import sys
 from copy import deepcopy
-from typing import Any, Callable, Iterable, List, OrderedDict, overload, TYPE_CHECKING
+from typing import Any, Callable, Iterable, List, overload, TYPE_CHECKING
 
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
@@ -212,7 +212,7 @@ class TensorDictSequential(TensorDictModule):
     @overload
     def __init__(
         self,
-        modules: OrderedDict[str, Callable[[TensorDictBase], TensorDictBase]],
+        modules: dict[str, Callable[[TensorDictBase], TensorDictBase]],
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
