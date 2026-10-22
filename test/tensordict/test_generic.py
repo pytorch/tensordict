@@ -4213,6 +4213,34 @@ class TestGeneric:
         assert "x" not in lazy.keys()
         assert (dense["a"] == 0).all()
 
+    def test_from_dict_scalar_through_from_list_from_any_tensorclass(self):
+        # https://github.com/pytorch/tensordict/issues/3266: from_list,
+        # from_any and a tensorclass's from_dict convert dicts with from_dict,
+        # so they read a scalar as non-tensor data too; the update methods of
+        # a tensorclass still raise for it.
+        class TC(TensorClass):
+            a: torch.Tensor
+            n: Any = None
+
+        out = TensorDict.from_list(
+            [{"a": torch.zeros(3), "n": 7}] * 2, batch_size=[2, 3]
+        )
+        assert isinstance(out.get("n"), NonTensorStack)
+        assert out.get("n").batch_size == (2, 3)
+        out = TensorDict.from_any({"a": torch.zeros(3), "n": 7}, batch_size=[3])
+        assert isinstance(out.get("n"), NonTensorData)
+        tc = TC.from_dict({"a": torch.zeros(3), "n": 7}, batch_size=[3])
+        assert isinstance(tc._tensordict.get("n"), NonTensorData)
+        assert tc.n == 7
+        for update in (
+            lambda: tc.update_({"a": 1.0}),
+            lambda: tc.update_at_({"a": 1.0}, slice(0, 2)),
+            lambda: tc.update({"a": 1.0}, inplace=True),
+        ):
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                update()
+        assert (tc.a == 0).all()
+
     @pytest.mark.parametrize(
         "kwargs",
         [
