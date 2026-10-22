@@ -4087,6 +4087,49 @@ class TestGeneric:
         assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
 
     @pytest.mark.parametrize(
+        "op",
+        [
+            "lazy_eq",
+            "lazy_eq_nested",
+            "lazy_update",
+            "lazy_update_new_key",
+            "lazy_update_at_",
+            "dense_setitem_slice",
+            "dense_setitem_mask",
+        ],
+    )
+    def test_dict_scalar_operand_still_raises(self, op):
+        # https://github.com/pytorch/tensordict/issues/3266: from_dict reads a
+        # Python scalar as non-tensor data, but the dicts that comparisons,
+        # updates and indexed writes convert still read it as a 0-dim tensor,
+        # which does not fit the batch size. Reading it as non-tensor data
+        # would compare zeros with 1 as True, or replace a tensor with
+        # non-tensor data.
+        lazy = LazyStackedTensorDict(
+            *[
+                TensorDict(a=torch.zeros(()), n=TensorDict(a=torch.zeros(())))
+                for _ in range(3)
+            ]
+        )
+        dense = TensorDict(a=torch.zeros(3), batch_size=[3])
+        ops = {
+            "lazy_eq": lambda: lazy == {"a": 1},
+            "lazy_eq_nested": lambda: lazy == {"n": {"a": 1}},
+            "lazy_update": lambda: lazy.update({"a": 7}),
+            "lazy_update_new_key": lambda: lazy.update({"x": 7}),
+            "lazy_update_at_": lambda: lazy.update_at_({"a": 1}, slice(0, 2)),
+            "dense_setitem_slice": lambda: dense.__setitem__(slice(0, 2), {"a": 1}),
+            "dense_setitem_mask": lambda: dense.__setitem__(
+                torch.tensor([True, False, True]), {"a": 1}
+            ),
+        }
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            ops[op]()
+        assert isinstance(lazy.get("a"), torch.Tensor)
+        assert "x" not in lazy.keys()
+        assert (dense["a"] == 0).all()
+
+    @pytest.mark.parametrize(
         "kwargs",
         [
             {"batch_size": [2, 3]},

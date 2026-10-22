@@ -592,7 +592,7 @@ class _Conversion:
                     auto_batch_size=False,
                 )
 
-        out = TensorDict.from_dict(
+        out = TensorDict._from_dict_impl(
             input_dict,
             batch_size=batch_size_set,
             device=device,
