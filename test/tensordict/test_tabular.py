@@ -767,13 +767,28 @@ class TestArrow:
         # #3238: pyarrow 10 to 14 failed with "from_dlpack received an invalid capsule"
         import pyarrow as pa
 
+        version = pa.__version__
         table = pa.table({"x": pa.array([1, 2])})
         monkeypatch.setattr(pa, "__version__", "14.0.2")
-        with pytest.raises(ImportError, match=r"pyarrow 15 or later.*14\.0\.2"):
+        with pytest.raises(ImportError, match=r"from_arrow needs pyarrow 15.*14\.0\.2"):
             from_arrow(table)
-        assert to_arrow(TensorDict(x=torch.arange(2), batch_size=[2])).num_rows == 2
-        monkeypatch.setattr(pa, "__version__", "15.0.0")
-        assert from_arrow(table)["x"].tolist() == [1, 2]
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert from_arrow(table)["x"].tolist() == [1, 2]
+
+    def test_to_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: on pyarrow 10 to 14, to_arrow raised an AttributeError for a
+        # leaf with more than one dim
+        import pyarrow as pa
+
+        version = pa.__version__
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"to_arrow needs pyarrow 15.*14\.0\.2"):
+            to_arrow(td)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert to_arrow(td).num_rows == 2
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")
