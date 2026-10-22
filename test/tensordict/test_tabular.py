@@ -451,6 +451,35 @@ class TestParquet:
         assert td["f"].dtype == torch.int64
         assert (td["f"] == torch.tensor([[1, 2, 3], [4, 5, 6]])).all()
 
+    def test_from_parquet_primitive_columns(self, tmp_path):
+        # #3272: on pyarrow 10 to 12, ChunkedArray.to_numpy() takes no keyword,
+        # and from_parquet raised a TypeError on every file
+        import datetime
+
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        path = tmp_path / "primitive.parquet"
+        days = [datetime.datetime(2020, 1, day) for day in (1, 2, 3)]
+        table = pa.table(
+            {
+                "i": [1, 2, 3],
+                "f": [1.0, 2.0, 3.0],
+                "b": [True, False, True],
+                "ts": pa.array(days, pa.timestamp("s")),
+            }
+        )
+        pq.write_table(table, str(path), row_group_size=2)
+
+        td = TensorDict.from_parquet(path)
+        assert td["i"].tolist() == [1, 2, 3]
+        assert td["f"].tolist() == [1.0, 2.0, 3.0]
+        assert td["b"].tolist() == [True, False, True]
+        seconds = [
+            int(day.replace(tzinfo=datetime.timezone.utc).timestamp()) for day in days
+        ]
+        assert td["ts"].tolist() == [second * 10**9 for second in seconds]
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq
