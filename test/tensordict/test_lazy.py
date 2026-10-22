@@ -2702,9 +2702,9 @@ class TestLazyStackedTensorDict:
             assert len(record) == 1
             assert record[0].category is FutureWarning
             assert re.search(
-                r"returns a tensordict with the batch size \[.*\] and the names "
+                r"returns a tensordict with the batch size .* and the names "
                 r".*Starting with TensorDict 0\.17, the default will change to "
-                r"returning the batch size \[.*\] and applying the names as the "
+                r"returning the batch size .* and applying the names as the "
                 r"names setter does",
                 str(record[0].message),
             )
