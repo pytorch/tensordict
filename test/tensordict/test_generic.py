@@ -764,6 +764,28 @@ class TestGeneric:
         assert stacked[:, 1:3].batch_size == (2, 2)
         assert stacked[1, torch.tensor([0, 2])]["ids"].offsets().tolist() == [0, 3, 5]
 
+    def test_index_past_batch_dims_jagged_raises(self):
+        # #3232: an index past the batch dims that reaches the ragged dim of a
+        # jagged leaf raised an AttributeError from the nested int, and raises
+        # an IndexError again, as before #3206
+        for kind in ("ragged_dim_1", "ragged_dim_2"):
+            td = TensorDict(ids=self._jagged(kind), batch_size=[6])
+            for index in [(0, 0), (slice(1, 3), 0), (0, 0, 0)]:
+                if kind == "ragged_dim_2" and len(index) == 2:
+                    # the dim after the batch dim is not ragged here
+                    continue
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error")
+                    with pytest.raises(IndexError):
+                        td[index]
+        # a tensor or list index on the ragged dim still indexes the leaves
+        leaf = self._jagged("ragged_dim_1")
+        td = TensorDict(ids=leaf, batch_size=[6])
+        for idx in (torch.tensor([2, 0]), [0, 2]):
+            with pytest.warns(FutureWarning, match="past the batch dims"):
+                result = td[1, idx]
+            torch.testing.assert_close(result["ids"], leaf[1][idx])
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone_empty(self, recurse):
         td = TensorDict()
@@ -3713,6 +3735,31 @@ class TestGeneric:
             ).all()
 
     @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_unbatched(self, tmp_path):
+        # #3235
+        from tensordict import UnbatchedTensor
+
+        u = UnbatchedTensor(torch.arange(12.0).view(3, 4))
+        td = TensorDict(
+            x=torch.zeros(3),
+            u=u,
+            sub=TensorDict(v=UnbatchedTensor(torch.ones(5)), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        stack = LazyStackedTensorDict(
+            *[TensorDict(x=torch.zeros(2), u=u, batch_size=[2]) for _ in range(3)]
+        )
+        for data in (td, stack):
+            tensordict.to_safetensors(data, tmp_path / "td.safetensors")
+            out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+            assert out.batch_size == data.batch_size
+            for key in data.keys(True, True):
+                assert (type(out.get(key)) is UnbatchedTensor) == (key != "x")
+                assert (out.get(key) == data.get(key)).all()
+            assert out.get("u").batch_size == data.batch_size
+            assert out[0].get("u").shape == (3, 4)
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
     @pytest.mark.parametrize(
         "case",
         [
@@ -5333,6 +5380,43 @@ class TestGeneric:
             warnings.simplefilter("error")
             with pytest.raises(IndexError):
                 td[0] = 1.0
+
+    def test_past_batch_dims_warning_once_per_call_site(self, monkeypatch):
+        # #3232: the FutureWarning of an index past the batch dims held the
+        # index, so that it formatted every mask, even when filtered out, and
+        # warned once per distinct mask. Its text is fixed: it warns once per
+        # call site, and never formats the index.
+        formatted = []
+        tensor_repr = torch.Tensor.__repr__
+
+        def counting_repr(self, *args, **kwargs):
+            formatted.append(1)
+            return tensor_repr(self, *args, **kwargs)
+
+        monkeypatch.setattr(torch.Tensor, "__repr__", counting_repr)
+        # 50 distinct masks: the bits of 1 to 50
+        masks = [(i >> torch.arange(16)) % 2 == 1 for i in range(1, 51)]
+        td = TensorDict(a=torch.zeros(8, 16), b=torch.zeros(8, 16), batch_size=[8])
+        no_batch_dims = TensorDict(a=torch.zeros(16), b=torch.zeros(16))
+        for action in ("default", "ignore"):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter(action)
+                for mask in masks:
+                    td[:, mask]
+                for mask in masks:
+                    td[:, mask] = 0.0
+                for mask in masks:
+                    no_batch_dims[mask] = 0.0
+            messages = [str(w.message) for w in record]
+            if action == "default":
+                assert len(messages) == 3, messages
+                assert all("runs past the batch dims" in m for m in messages)
+                assert "td.apply(lambda x: x[:, idx])" in messages[0]
+                assert "leaf[:, idx] = value" in messages[1]
+                assert "td[...] = value" in messages[2]
+            else:
+                assert not messages
+        assert not formatted
 
     def test_getitem_slice_no_batch_dims_raises(self):
         # #3202: td[:] on a tensordict without batch dims returned td on 0.14,
@@ -9291,6 +9375,47 @@ class TestGeneric:
                 default_collate_fn_map, cls, lambda batch, collate_fn_map: "mine"
             )
             assert load([cls(x=torch.zeros(3)) for _ in range(4)]) == "mine"
+
+    def test_collate_default_base_registration(self, monkeypatch):
+        # #3236: a collate function registered after tensordict's entries, for
+        # TensorDictBase, TensorClass or a tensorclass base, wins.
+        class Base(TensorClass):
+            x: torch.Tensor
+
+        class Sub(Base):
+            pass
+
+        def mine(batch, *, collate_fn_map=None):
+            return "mine"
+
+        default_collate = torch.utils.data.default_collate
+        default_collate_fn_map = torch.utils.data._utils.collate.default_collate_fn_map
+        td = TensorDict(a=torch.zeros(3))
+        sub = Sub(x=torch.zeros(3))
+        lazy = lazy_stack([td, td])
+        batched = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        for key, samples, other in (
+            (TensorDictBase, [td, td], [sub, sub]),
+            (TensorDictBase, [lazy, lazy], [sub, sub]),
+            (TensorDictBase, batched, [sub, sub]),
+            (TensorClass, [sub, sub], [td, td]),
+            (TensorClass, NonTensorStack("a", "b"), [td, td]),
+            (Base, [sub, sub], [td, td]),
+        ):
+            with monkeypatch.context() as m:
+                m.setitem(default_collate_fn_map, key, mine)
+                assert default_collate(samples) == "mine"
+                assert default_collate(other) != "mine"
+        assert type(default_collate([sub, sub])) is Sub
+        # a batch that mixes tensordicts and tensorclasses raises a TypeError
+        for samples in ([td, sub], [sub, td]):
+            with pytest.raises(TypeError, match="mixes tensorclass"):
+                default_collate(samples)
+        # but a non-tensor stack and non-tensor data stack together
+        stack = NonTensorStack("a", "b")
+        data = NonTensorData("c", batch_size=[2])
+        assert default_collate([stack, data]).tolist() == [["a", "b"], ["c", "c"]]
+        assert default_collate([data, stack]).tolist() == [["c", "c"], ["a", "b"]]
 
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
