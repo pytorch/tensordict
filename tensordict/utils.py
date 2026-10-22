@@ -118,68 +118,6 @@ __all__ = [
 ]
 
 
-# Decorations deferred until torch._dynamo is imported, see _register_with_dynamo.
-_PENDING_DYNAMO_REGISTRATIONS = []
-
-
-class _DynamoImportHook:
-    """Finder that applies the pending registrations once torch._dynamo is imported.
-
-    It stays on ``sys.meta_path`` until ``torch._dynamo`` is executed, so a
-    lookup that does not import it, such as ``importlib.util.find_spec``, does
-    not lose the registrations.
-    """
-
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname != "torch._dynamo":
-            return None
-        for finder in sys.meta_path:
-            find_spec = getattr(finder, "find_spec", None)
-            if finder is self or find_spec is None:
-                continue
-            spec = find_spec(fullname, path, target)
-            if spec is not None:
-                break
-        else:
-            return None
-        loader = spec.loader
-        exec_module = getattr(loader, "exec_module", None)
-        if exec_module is None or not hasattr(loader, "__dict__"):
-            return None
-
-        def exec_and_register(module):
-            vars(loader).pop("exec_module", None)
-            exec_module(module)
-            if self in sys.meta_path:
-                sys.meta_path.remove(self)
-            while _PENDING_DYNAMO_REGISTRATIONS:
-                decorator, fn = _PENDING_DYNAMO_REGISTRATIONS.pop(0)
-                decorator(fn)
-
-        loader.exec_module = exec_and_register
-        return spec
-
-
-_DYNAMO_IMPORT_HOOK = _DynamoImportHook()
-
-
-def _register_with_dynamo(decorator, fn):
-    """Apply ``decorator`` (``allow_in_graph`` or ``assume_constant_result``) to ``fn``.
-
-    Both register ``fn`` with Dynamo and return it unchanged, but importing
-    ``torch._dynamo`` takes about a second, so this defers the call until
-    ``torch._dynamo`` is imported, which happens before anything is compiled.
-    ``import tensordict`` thus does not load Dynamo.
-    """
-    if "torch._dynamo" in sys.modules:
-        decorator(fn)
-    else:
-        if _DYNAMO_IMPORT_HOOK not in sys.meta_path:
-            sys.meta_path.insert(0, _DYNAMO_IMPORT_HOOK)
-        _PENDING_DYNAMO_REGISTRATIONS.append((decorator, fn))
-    return fn
-
-
 # Utility function to wrap C++ functorch functions for torch.compile support
 def _wrap_functorch_function(func):
     """Wrap a functorch C++ function to make it compatible with torch.compile.
@@ -194,7 +132,7 @@ def _wrap_functorch_function(func):
     Returns:
         The wrapped function
     """
-    return _register_with_dynamo(allow_in_graph, func)
+    return allow_in_graph(func)
 
 
 def _import_and_wrap_functorch(*names, wrap_names=None):
@@ -2331,6 +2269,41 @@ def _stacked_repr(shape, tensors) -> str | None:
     return _get_repr_custom(Tensor, shape, device, dtype, device.type == "cuda")
 
 
+def _mixed_repr(td, key) -> str | None:
+    """The types of the members' values of entry ``key`` of lazy stack ``td``, as ``[NonTensorData, Tensor]``.
+
+    Returns ``None`` unless the members hold different kinds of values there
+    (tensors, non-tensor data, tensordicts), which cannot be stacked (#3258).
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.base import _is_tensor_collection
+
+    def values(lazy):
+        for member in lazy.tensordicts:
+            if isinstance(member, LazyStackedTensorDict):
+                yield from values(member)
+            else:
+                yield member._get_str(key, None)
+
+    if not isinstance(key, str):
+        return None
+    items = list(values(td))
+    if any(item is None for item in items):
+        return None
+    kinds = {
+        "non-tensor"
+        if is_non_tensor(item)
+        else "collection"
+        if _is_tensor_collection(type(item))
+        else "tensor"
+        for item in items
+    }
+    if len(kinds) < 2:
+        return None
+    names = dict.fromkeys(type(item).__name__ for item in items)
+    return f"[{', '.join(names)}]"
+
+
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
 
@@ -2352,7 +2325,16 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 strs.append(sep.join([key, substr]))
                 continue
         else:
-            shape = td.get_item_shape(key)
+            try:
+                shape = td.get_item_shape(key)
+            except Exception:
+                # The members of a lazy stack hold values that cannot be
+                # stacked, such as a string and a tensor (#3258).
+                substr = _mixed_repr(source, key) if is_lazy else None
+                if substr is None:
+                    raise
+                strs.append(sep.join([key, substr]))
+                continue
         if -1 not in shape:
             item = td.get(key)
             strs.append(_make_repr(key, item, td, sep=sep))
@@ -4048,7 +4030,7 @@ def _lock_warn():
     )
 
 
-_lock_warn = _register_with_dynamo(assume_constant_result, _lock_warn)
+_lock_warn = assume_constant_result(_lock_warn)
 
 
 _zip_strict = functools.partial(zip, strict=True)
