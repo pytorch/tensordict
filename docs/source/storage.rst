@@ -551,7 +551,11 @@ read-only memory crashes the process. ``copy=False`` views them anyway: then
 do not write into the tensors. A column with null values raises an error,
 unless you pass ``nulls="fill"`` or ``nulls="mask"``; the latter adds a
 ``"masks"`` entry, as :func:`~tensordict.pad_sequence` does with
-``return_mask=True``. A tensordict with
+``return_mask=True``. A null inside a map, a list view or the dictionary
+values of a dictionary-encoded column comes back as ``None`` with a
+``FutureWarning``: starting with TensorDict 0.18, the default will change to
+raising an error for these nulls too. Nulls inside a union are not checked.
+A tensordict with
 jagged tensors can be indexed with an integer, a slice, an index tensor or a
 boolean mask, and split, chunked, unbound and concatenated along its batch
 dimension, but not stacked. ``memmap`` does not take jagged tensors: pad them

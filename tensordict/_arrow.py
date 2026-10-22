@@ -8,13 +8,14 @@
 from __future__ import annotations
 
 import importlib.util
+import warnings
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.tensorclass import NonTensorStack
-from tensordict.utils import is_non_tensor
+from tensordict.utils import _user_stacklevel, is_non_tensor
 
 if TYPE_CHECKING:
     import pyarrow
@@ -92,6 +93,70 @@ def _check_inner_nulls(pa, arr, key: tuple) -> None:
     for child in children:
         _check_nulls(child, "raise", key)
         _check_inner_nulls(pa, child, key)
+
+
+def _is_unchecked(pa, typ) -> bool:
+    """Whether ``_check_inner_nulls`` does not look inside an Arrow type: a map, a list view or a dictionary."""
+    return (
+        pa.types.is_map(typ)
+        or pa.types.is_dictionary(typ)
+        # pyarrow 15 has no list views.
+        or (
+            hasattr(pa.types, "is_list_view")
+            and (pa.types.is_list_view(typ) or pa.types.is_large_list_view(typ))
+        )
+    )
+
+
+def _has_unchecked_type(pa, typ) -> bool:
+    """Whether an Arrow type has a map, a list view or a dictionary, at any depth outside unions."""
+    if _is_unchecked(pa, typ):
+        return True
+    if pa.types.is_struct(typ):
+        return any(_has_unchecked_type(pa, field.type) for field in typ)
+    if (
+        pa.types.is_list(typ)
+        or pa.types.is_large_list(typ)
+        or pa.types.is_fixed_size_list(typ)
+    ):
+        return _has_unchecked_type(pa, typ.value_type)
+    return False
+
+
+def _has_unchecked_nulls(pa, arr, inside: bool = False) -> bool:
+    """Whether an Arrow array has a null that ``_check_inner_nulls`` lets through.
+
+    Such a null is inside a map or a list view, or in the dictionary values
+    that the indices select. Unions are not looked into.
+    """
+    if inside and arr.null_count:
+        return True
+    typ = arr.type
+    if not inside and not _has_unchecked_type(pa, typ):
+        return False
+    if pa.types.is_dictionary(typ):
+        if not _has_unchecked_nulls(pa, arr.dictionary, True):
+            return False
+        # Only the values that the indices select count.
+        children = [arr.dictionary_decode()]
+    elif pa.types.is_struct(typ):
+        children = arr.flatten()
+    elif pa.types.is_map(typ):
+        # MapArray.flatten() raises, and keys and items ignore the offset of
+        # arr: these are the key-value structs of its rows.
+        children = [pa.ListArray.from_arrays(arr.offsets, arr.values).flatten()]
+    elif (
+        pa.types.is_list(typ)
+        or pa.types.is_large_list(typ)
+        or pa.types.is_fixed_size_list(typ)
+        or _is_unchecked(pa, typ)
+    ):
+        # Lists and list views: flatten() honours the offset of arr.
+        children = [arr.flatten()]
+    else:
+        return False
+    inside = inside or _is_unchecked(pa, typ)
+    return any(_has_unchecked_nulls(pa, child, inside) for child in children)
 
 
 def _primitive(pa, arr, copy: bool | None) -> torch.Tensor:
@@ -243,7 +308,13 @@ def from_arrow(
             view of an immutable buffer then crashes the process, since torch
             has no read-only tensors. Defaults to ``None``.
         nulls (str, optional): what to do with null values. ``"raise"``
-            raises a ``ValueError``. ``"fill"`` fills them with ``NaN`` in
+            raises a ``ValueError`` for a null row, and for a null inside the
+            rows of a list or a struct. A null inside a map or a list view,
+            or in the dictionary values that a dictionary-encoded column
+            selects, comes back as ``None`` with a ``FutureWarning``:
+            starting with TensorDict 0.18, the default will change to raising
+            a ``ValueError`` for these nulls too. Nulls inside a union are
+            not checked, and come back as ``None``. ``"fill"`` fills them with ``NaN`` in
             floating-point tensors, ``0`` (``False``) in the other tensors, an
             empty list in jagged tensors, and ``None`` in a
             :class:`~tensordict.NonTensorStack`. A null struct makes each of
@@ -295,12 +366,28 @@ def from_arrow(
         )
     masks = {}
     data = {}
+    unchecked_nulls = False
     for name, column in zip(table.column_names, table.columns):
         if isinstance(column, pa.ChunkedArray):
             column = (
                 column.chunk(0) if column.num_chunks == 1 else column.combine_chunks()
             )
         data[name] = _from_array(pa, column, copy, nulls, (name,), masks)
+        unchecked_nulls = unchecked_nulls or (
+            nulls == "raise" and _has_unchecked_nulls(pa, column)
+        )
+    if unchecked_nulls:
+        # #3312: warn once all the columns converted, so a call that raises does not warn.
+        warnings.warn(
+            "from_arrow got a null inside a map, a list view or the values of a "
+            "dictionary-encoded column, and returns it as None. Starting with "
+            "TensorDict 0.18, the default will change to raising a ValueError for "
+            "these nulls, as for nulls inside lists. Pass nulls='fill' to keep "
+            "this result without the warning. nulls='mask' gives the same result: "
+            "its masks only mark null rows.",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
     result = TensorDict(data, batch_size=[table.num_rows])
     for key, mask in masks.items():
         result.set(("masks", *key), mask)
