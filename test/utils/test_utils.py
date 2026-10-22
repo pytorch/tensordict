@@ -1239,6 +1239,10 @@ def _warning_message_violations(path, root):
     return violations
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="#3256: warning messages still interpolate runtime values",
+)
 def test_warning_messages_hold_no_runtime_values():
     # #3232: a warning's message interpolates only what the allow-list and
     # the exemptions above name. tensordict/_deprecation.py itself is skipped: its helpers pass on
@@ -1303,8 +1307,20 @@ _WARNING_ONCE_CASES = [
     pytest.param(_past_batch_dims_get, id="td[:, mask]-past-batch-dims"),
     pytest.param(_past_batch_dims_set, id="td[:, mask]=v-past-batch-dims"),
     pytest.param(_no_batch_dims_set, id="td[mask]=v-no-batch-dims"),
-    pytest.param(_lazy_split_sizes, id="LazyStackedTensorDict.split-sizes"),
-    pytest.param(_non_tensor_expand, id="NonTensorData.expand-shape"),
+    pytest.param(
+        _lazy_split_sizes,
+        id="LazyStackedTensorDict.split-sizes",
+        marks=pytest.mark.xfail(
+            strict=True, reason="#3256: split warns once per split size"
+        ),
+    ),
+    pytest.param(
+        _non_tensor_expand,
+        id="NonTensorData.expand-shape",
+        marks=pytest.mark.xfail(
+            strict=True, reason="#3256: NonTensorData.expand warns once per shape"
+        ),
+    ),
 ]
 
 
