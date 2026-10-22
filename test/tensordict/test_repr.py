@@ -8,32 +8,48 @@ import argparse
 import dataclasses
 import html
 import importlib.util
+import io
 import os
 import platform
 import re
 import sys
+import warnings
 
 import pytest
 import torch
 from tensordict import (
     get_printoptions,
+    is_tensor_collection,
     LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
     set_printoptions,
+    TensorClass,
     tensorclass,
     TensorDict,
     TypedTensorDict,
+    UnbatchedTensor,
 )
 from tensordict._torch_func import _stack as stack_td
+from tensordict.persistent import _H5Backend, _ZarrBackend
+from tensordict.utils import is_non_tensor
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     IS_FB = True
     from pytorch.tensordict.test._utils_internal import (
         get_available_devices,
         is_npu_available,
+        TestTensorDictsBase as _Pool,
     )
+    from pytorch.tensordict.test.tensordict.test_conformance import _CONTAINERS
 else:
     IS_FB = False
-    from _utils_internal import get_available_devices, is_npu_available
+    from _utils_internal import (
+        get_available_devices,
+        is_npu_available,
+        TestTensorDictsBase as _Pool,
+    )
+    from test_conformance import _CONTAINERS
 
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
@@ -46,6 +62,7 @@ except ImportError:
     _has_h5py = False
 
 _has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
+_has_zarr = importlib.util.find_spec("zarr", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
@@ -1469,6 +1486,433 @@ class TestHtmlRepr:
         with set_printoptions(show_batch_size=False, show_device=False):
             out = _mesh_sample()._repr_html_()
         assert "batch_size" not in out and "device" not in out
+
+
+# Printing on every container type (#3233): repr, str, print and _repr_html_
+# never raise, return a non-empty string, read no leaf data of a file-backed
+# container and leave the object as it was, under each print mode.
+
+_PRINT_MODES = {
+    "compact": {"compact": True},
+    "detailed": {"compact": False},
+    "detailed_all_flags": {
+        "compact": False,
+        "show_grad": True,
+        "show_is_contiguous": True,
+        "show_is_view": True,
+        "show_storage_size": True,
+    },
+    "detailed_hidden": {
+        "compact": False,
+        "verbose": False,
+        "show_batch_size": False,
+        "show_shape": False,
+    },
+    "compact_hidden": {
+        "compact": True,
+        "verbose": False,
+        "show_batch_size": False,
+        "show_shape": False,
+    },
+    "plain": {"compact": False, "plain": True},
+    "insertion_order": {"compact": True, "sort_keys": "insertion"},
+    "html_off": {"compact": True, "html": False},
+}
+
+
+class _PrintData(TensorClass):
+    x: torch.Tensor
+    label: str
+    hidden: torch.Tensor = dataclasses.field(default=None, repr=False)
+    secret: str = dataclasses.field(default="secret", repr=False)
+
+
+@tensorclass
+class _PrintNested:
+    inner: _PrintData
+    y: torch.Tensor
+
+
+def _print_data(n=3):
+    return _PrintData(
+        x=torch.zeros(n, 2), label="a", hidden=torch.ones(n), batch_size=[n]
+    )
+
+
+def _deep(depth=12):
+    td = TensorDict(leaf=torch.zeros(2, 3), batch_size=[2])
+    for i in range(depth):
+        td = TensorDict({f"level{i}": td, f"x{i}": torch.zeros(2)}, batch_size=[2])
+    return td
+
+
+def _jagged():
+    return torch.nested.nested_tensor(
+        [torch.zeros(2, 3), torch.zeros(4, 3)], layout=torch.jagged
+    )
+
+
+def _file_td():
+    # the content of the h5, zarr and memory-mapped cases
+    return TensorDict(
+        a=torch.zeros(3, 2),
+        b=torch.arange(3),
+        nested=TensorDict(c=torch.ones(3, 4, dtype=torch.bool), batch_size=[3]),
+        batch_size=[3],
+    )
+
+
+def _file_td_non_tensor():
+    td = _file_td()
+    td["s"] = "text"
+    td["nested", "t"] = NonTensorStack("x", "y", "z")
+    return td
+
+
+def _mixed_lazy(other):
+    # #3233: one member holds a tensor and the other a non-tensor under "a"
+    return LazyStackedTensorDict(TensorDict(a=torch.zeros(3)), TensorDict(a=other))
+
+
+def _locked(td):
+    td.lock_()
+    return td
+
+
+# Each case takes a temporary directory and returns the object to print.
+_PRINT_CASES = {
+    # lazy stacks whose members hold a tensor and a non-tensor under one key
+    "lazy_tensor_and_str": lambda path: _mixed_lazy("text"),
+    "lazy_tensor_and_none": lambda path: _mixed_lazy(None),
+    "lazy_str_and_tensor": lambda path: LazyStackedTensorDict(
+        TensorDict(a="text"), TensorDict(a=torch.zeros(3))
+    ),
+    "lazy_tensor_and_str_nested": lambda path: LazyStackedTensorDict(
+        TensorDict(sub=TensorDict(a=torch.zeros(3))),
+        TensorDict(sub=TensorDict(a="text")),
+    ),
+    "lazy_tensor_and_str_in_td": lambda path: TensorDict(
+        x=_mixed_lazy("text"), batch_size=[2]
+    ),
+    "lazy_of_lazy_tensor_and_str": lambda path: LazyStackedTensorDict(
+        _mixed_lazy("text"), _mixed_lazy("text"), stack_dim=1
+    ),
+    "lazy_tensor_and_str_locked": lambda path: _locked(_mixed_lazy("text")),
+    "lazy_tensor_and_tensorclass": lambda path: LazyStackedTensorDict(
+        TensorDict(a=torch.zeros(3)), TensorDict(a=_print_data())
+    ),
+    # empty tensordicts and 0-d batches
+    "empty": lambda path: TensorDict(),
+    "empty_batched": lambda path: TensorDict(batch_size=[3, 0]),
+    "empty_nested": lambda path: TensorDict(sub=TensorDict()),
+    "empty_lazy": lambda path: LazyStackedTensorDict(TensorDict(), TensorDict()),
+    "zero_d": lambda path: TensorDict(a=torch.tensor(1.0), b=torch.zeros(3)),
+    "zero_size_leaf": lambda path: TensorDict(a=torch.zeros(0, 3), batch_size=[0]),
+    # nested and deep trees
+    "deep": lambda path: _deep(),
+    "wide": lambda path: TensorDict(
+        {f"k{i}": torch.zeros(2) for i in range(300)}, batch_size=[2]
+    ),
+    "locked": lambda path: _locked(_deep(3)),
+    "named_dims": lambda path: TensorDict(
+        a=torch.zeros(2, 3), batch_size=[2, 3], names=["x", None]
+    ),
+    # non-tensor data and stacks
+    "non_tensor_leaves": lambda path: TensorDict(
+        s="text", n=None, i=3, f=1.5, b=b"bytes", d={"k": 1}
+    ),
+    "non_tensor_data": lambda path: NonTensorData("text"),
+    "non_tensor_data_batched": lambda path: NonTensorData("text", batch_size=[3]),
+    "non_tensor_stack": lambda path: NonTensorStack("a", "b"),
+    "non_tensor_stack_mixed": lambda path: NonTensorStack("a", None, 1),
+    "non_tensor_stack_in_td": lambda path: TensorDict(
+        s=NonTensorStack("a", "b"), batch_size=[2]
+    ),
+    "lazy_of_non_tensor": lambda path: LazyStackedTensorDict(
+        TensorDict(s="a"), TensorDict(s="b")
+    ),
+    "long_string": lambda path: TensorDict(s="x" * 10_000),
+    # UnbatchedTensor and jagged leaves
+    "unbatched": lambda path: TensorDict(
+        u=UnbatchedTensor(torch.zeros(5)), a=torch.zeros(2), batch_size=[2]
+    ),
+    "unbatched_lazy": lambda path: LazyStackedTensorDict(
+        TensorDict(u=UnbatchedTensor(torch.zeros(5))),
+        TensorDict(u=UnbatchedTensor(torch.zeros(5))),
+    ),
+    "jagged": lambda path: TensorDict(j=_jagged(), batch_size=[2]),
+    "jagged_unbatched": lambda path: TensorDict(j=_jagged()),
+    "nested_strided": lambda path: TensorDict(
+        j=torch.nested.nested_tensor([torch.zeros(2, 3), torch.zeros(4, 3)]),
+        batch_size=[2],
+    ),
+    # tensorclasses, with field(repr=False)
+    "tensorclass": lambda path: _print_data(),
+    "tensorclass_nested": lambda path: _PrintNested(
+        inner=_print_data(), y=torch.zeros(3), batch_size=[3]
+    ),
+    "tensorclass_in_td": lambda path: TensorDict(d=_print_data(), batch_size=[3]),
+    "tensorclass_lazy": lambda path: LazyStackedTensorDict(
+        _print_data(), _print_data()
+    ),
+    "tensorclass_unset_fields": lambda path: _PrintData(
+        x=torch.zeros(3), label=None, batch_size=[3]
+    ),
+    "typed": lambda path: _TypedMesh(
+        points=torch.zeros(2, 3), cells=torch.zeros(2, 4), batch_size=[2]
+    ),
+    # memory-mapped, h5 and zarr files
+    "memmap": lambda path: _file_td().memmap_(path),
+    "memmap_non_tensor": lambda path: _file_td_non_tensor().memmap_(path),
+    "memmap_lazy": lambda path: LazyStackedTensorDict(_file_td(), _file_td()).memmap_(
+        path
+    ),
+    "h5": lambda path: _file_td().to_h5(path / "td.h5"),
+    "h5_non_tensor": lambda path: _file_td_non_tensor().to_h5(path / "td.h5"),
+    "h5_in_td": lambda path: TensorDict(
+        h5=_file_td().to_h5(path / "td.h5"), batch_size=[3]
+    ),
+    "zarr": lambda path: _file_td().to_zarr(path / "td.zarr"),
+    "zarr_non_tensor": lambda path: _file_td_non_tensor().to_zarr(path / "td.zarr"),
+}
+
+# the cases backed by a file, and whose leaves printing must not read
+_FILE_BACKED = {
+    "memmap_td",
+    "td_h5",
+    *(name for name in _PRINT_CASES if name.split("_")[0] in ("memmap", "h5", "zarr")),
+}
+
+
+def _make_print_case(name, path):
+    if name in _PRINT_CASES:
+        backend = name.split("_")[0]
+        if backend == "h5" and not _has_h5py:
+            pytest.skip("h5py is not installed")
+        if backend == "zarr" and not _has_zarr:
+            pytest.skip("zarr is not installed")
+        return _PRINT_CASES[name](path)
+    return getattr(_Pool, name)("cpu")
+
+
+def _print_state(obj):
+    """A snapshot of the keys, values, batch size and lock state of ``obj``."""
+    with warnings.catch_warnings():
+        # reading a string of an h5 file warns about its future type
+        warnings.filterwarnings(
+            "ignore", "The h5 backend of PersistentTensorDict reads the string"
+        )
+        return _print_state_impl(obj)
+
+
+def _print_state_impl(obj):
+    if is_non_tensor(obj):
+        return (type(obj).__name__, tuple(obj.batch_size), obj.tolist())
+    if isinstance(obj, LazyStackedTensorDict):
+        return (
+            type(obj).__name__,
+            obj.is_locked,
+            tuple(obj.batch_size),
+            obj.stack_dim,
+            [_print_state(td) for td in obj.tensordicts],
+        )
+    if is_tensor_collection(obj):
+        return (
+            type(obj).__name__,
+            obj.is_locked,
+            tuple(obj.batch_size),
+            obj.names if obj.batch_dims else None,
+            {key: _print_state(obj.get(key)) for key in sorted(obj.keys())},
+        )
+    if isinstance(obj, torch.Tensor):
+        if obj.is_nested:
+            return ("nested", obj.dtype, [t.clone() for t in obj.unbind()])
+        # the class name tells an UnbatchedTensor from a tensor
+        return (type(obj).__name__, obj.dtype, tuple(obj.shape), obj.detach().clone())
+    return ("value", obj)
+
+
+def _print_state_equal(a, b):
+    if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
+        return (
+            isinstance(a, torch.Tensor)
+            and isinstance(b, torch.Tensor)
+            and torch.equal(a, b)
+        )
+    if isinstance(a, (tuple, list)) or isinstance(b, (tuple, list)):
+        return (
+            type(a) is type(b)
+            and len(a) == len(b)
+            and all(_print_state_equal(x, y) for x, y in zip(a, b))
+        )
+    if isinstance(a, dict) or isinstance(b, dict):
+        return (
+            type(a) is type(b)
+            and list(a) == list(b)
+            and all(_print_state_equal(a[k], b[k]) for k in a)
+        )
+    return a == b
+
+
+class _LeafReads(torch.overrides.TorchFunctionMode):
+    """Records the torch functions called on tensors that are not metadata reads."""
+
+    # the tensor methods that read no data; the attributes (shape, dtype,
+    # device, ...) read none either
+    _METADATA = {
+        "device",
+        "promote_types",
+        "is_shared",
+        "is_contiguous",
+        "untyped_storage",
+        "size",
+        "dim",
+        "stride",
+        "numel",
+        "element_size",
+        "data_ptr",
+        "storage_offset",
+        "is_floating_point",
+        "is_complex",
+    }
+
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def __torch_function__(self, func, types, args=(), kwargs=None):
+        name = getattr(func, "__name__", repr(func))
+        if name != "__get__" and name not in self._METADATA:
+            self.calls.append(name)
+        return func(*args, **(kwargs or {}))
+
+
+@pytest.fixture
+def _backend_reads(monkeypatch):
+    """Records the reads of leaf data from h5 and zarr files."""
+    reads = []
+    for backend in (_H5Backend, _ZarrBackend):
+        for method in (
+            "read_full",
+            "read_non_tensor",
+            "read_at",
+            "read_non_tensor_stack",
+        ):
+            original = getattr(backend, method)
+
+            def counting(
+                self, node, *args, _original=original, _method=method, **kwargs
+            ):
+                reads.append(
+                    f"{type(self).__name__}.{_method}({getattr(node, 'name', node)})"
+                )
+                return _original(self, node, *args, **kwargs)
+
+            monkeypatch.setattr(backend, method, counting)
+    return reads
+
+
+def _print_all(obj, mode):
+    """Calls repr, str, print and _repr_html_ on ``obj``; returns a description of each failure."""
+    failures = {}
+    outputs = {}
+
+    def _print(o):
+        buffer = io.StringIO()
+        print(o, file=buffer)
+        return buffer.getvalue()
+
+    for name, fn in (
+        ("repr", repr),
+        ("str", str),
+        ("print", _print),
+        ("_repr_html_", lambda o: o._repr_html_()),
+    ):
+        try:
+            out = fn(obj)
+        except Exception as err:
+            failures[name] = f"raises {type(err).__name__}: {err}"[:300]
+            continue
+        outputs[name] = out
+        if name == "_repr_html_" and mode == "html_off":
+            if out is not None:
+                failures[name] = "returns a value with set_printoptions(html=False)"
+        elif not isinstance(out, str) or not out.strip():
+            failures[name] = f"returns {out!r}, not a non-empty string"
+    return failures, outputs
+
+
+class TestPrintEveryContainer:
+    """repr, str, print and _repr_html_ on every container type and under every print mode (#3233)."""
+
+    @pytest.mark.parametrize("mode", list(_PRINT_MODES))
+    @pytest.mark.parametrize("case", _CONTAINERS + list(_PRINT_CASES))
+    def test_print(self, case, mode, tmp_path, _backend_reads):
+        obj = _make_print_case(case, tmp_path)
+        before = _print_state(obj)
+        leaf_reads = _LeafReads()
+        _backend_reads.clear()
+        with set_printoptions(**_PRINT_MODES[mode]), leaf_reads:
+            failures, _ = _print_all(obj, mode)
+        # plain=True prints a summary of the values (mean/std, min/max)
+        if case in _FILE_BACKED and mode != "plain":
+            if _backend_reads:
+                failures["reads"] = f"reads leaf data from the file: {_backend_reads}"
+            if leaf_reads.calls:
+                failures["tensor ops"] = (
+                    f"calls torch functions that read leaf data: {sorted(set(leaf_reads.calls))}"
+                )
+        after = _print_state(obj)
+        if not _print_state_equal(before, after):
+            failures["state"] = (
+                f"printing changed the object: before {before!r:.300}, after {after!r:.300}"
+            )
+        assert not failures, f"printing {case} with {_PRINT_MODES[mode]}: {failures}"
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "key",
+            "nested_key",
+            "string",
+            "lazy_key",
+            "lazy_tensor_and_string",
+            "tensorclass_string",
+            "non_tensor_data",
+            "non_tensor_stack",
+            "h5_key",
+        ],
+    )
+    @pytest.mark.parametrize("compact", [True, False], ids=["compact", "detailed"])
+    def test_html_escapes(self, case, compact, tmp_path):
+        script = "<script>alert(1)</script>"
+        cases = {
+            "key": lambda: TensorDict({script: torch.zeros(2)}),
+            "nested_key": lambda: TensorDict({"a": {script: torch.zeros(2)}}),
+            "string": lambda: TensorDict(s=script),
+            "lazy_key": lambda: LazyStackedTensorDict(
+                TensorDict({script: torch.zeros(2)}),
+                TensorDict({script: torch.zeros(2), "b": torch.zeros(())}),
+            ),
+            "lazy_tensor_and_string": lambda: _mixed_lazy(script),
+            "tensorclass_string": lambda: _PrintData(
+                x=torch.zeros(3), label=script, batch_size=[3]
+            ),
+            "non_tensor_data": lambda: NonTensorData(script),
+            "non_tensor_stack": lambda: NonTensorStack(script, script),
+            "h5_key": lambda: TensorDict({script: torch.zeros(2)}).to_h5(
+                tmp_path / "td.h5"
+            ),
+        }
+        if case == "h5_key" and not _has_h5py:
+            pytest.skip("h5py is not installed")
+        obj = cases[case]()
+        with set_printoptions(compact=compact):
+            out = obj._repr_html_()
+        assert isinstance(out, str), f"_repr_html_ returns {out!r}"
+        assert "<script" not in out, (
+            f"the HTML of {case} does not escape {script!r}: {out}"
+        )
 
 
 if __name__ == "__main__":
