@@ -600,6 +600,8 @@ class _ZarrBackend(_PersistentBackend):
         return "w-" if mode == "x" else mode
 
     def open_file(self, filename, mode):
+        # zarr 2 has no use_consolidated: name the version needed (#3298)
+        self.check_available()
         import zarr
 
         if isinstance(filename, Path):
@@ -615,6 +617,7 @@ class _ZarrBackend(_PersistentBackend):
             return zarr.open_group(filename, mode=mode, use_consolidated=False)
 
     def open_new_file(self, filename, metadata=None):
+        self.check_available()
         import zarr
 
         if isinstance(filename, Path):
