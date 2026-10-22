@@ -103,6 +103,22 @@ _REPR_OPTIONS = {
 
 _REPR_OPTIONS_KEYS = frozenset(_REPR_OPTIONS)
 
+# The options that the compact form ignores: passing one without ``compact``
+# turns the compact form off (#3240).
+_DETAILED_ONLY_OPTIONS = frozenset(
+    {
+        "show_is_shared",
+        "show_shape",
+        "show_field_device",
+        "show_field_is_shared",
+        "show_grad",
+        "show_is_contiguous",
+        "show_is_view",
+        "show_storage_size",
+        "plain",
+    }
+)
+
 _VERBOSE_FALSE_OVERRIDES = {
     "show_device": False,
     "show_is_shared": False,
@@ -134,8 +150,13 @@ class set_printoptions(_DecoratorContextManager):
             the default, prints each entry as its dtype and its feature
             dimensions (``f32[3]``); ``compact=False`` prints each entry as a
             ``Tensor(...)`` line with its full shape, device, dtype and
-            ``is_shared``. ``html=False`` turns off the HTML display of
-            notebooks.
+            ``is_shared``. The options that only the detailed form uses
+            (``show_is_shared``, ``show_shape``, ``show_field_device``,
+            ``show_field_is_shared``, ``show_grad``, ``show_is_contiguous``,
+            ``show_is_view``, ``show_storage_size`` and ``plain``) also set
+            ``compact=False`` when ``compact`` is not passed; with an
+            explicit ``compact=True``, the compact form ignores them.
+            ``html=False`` turns off the HTML display of notebooks.
 
     Raises:
         TypeError: if an option is unknown.
@@ -162,6 +183,8 @@ class set_printoptions(_DecoratorContextManager):
             raise TypeError(
                 f"Unknown printoptions: {unknown}. Valid options: {sorted(_REPR_OPTIONS_KEYS)}"
             )
+        if "compact" not in kwargs and not _DETAILED_ONLY_OPTIONS.isdisjoint(kwargs):
+            kwargs["compact"] = False
         if not verbose:
             merged = dict(_VERBOSE_FALSE_OVERRIDES)
             merged.update(kwargs)
@@ -169,7 +192,11 @@ class set_printoptions(_DecoratorContextManager):
         self._kwargs = kwargs
 
     def clone(self) -> set_printoptions:
-        return type(self)(**self._kwargs)
+        # Copy the resolved options instead of passing them to __init__ again:
+        # the verbose=False defaults in them would turn compact off.
+        new = type(self).__new__(type(self))
+        new._kwargs = dict(self._kwargs)
+        return new
 
     def __enter__(self) -> None:
         self.set()

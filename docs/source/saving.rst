@@ -258,6 +258,23 @@ append that is killed midway, or a ``load_memmap`` that runs during an
 append, can see nested levels with different numbers of rows. Don't read a
 directory while you append to it.
 
+A killed append can leave its new ``meta.json`` files behind, as
+``.meta.json.append.tmp`` files next to the old ones. If it was killed after
+the first ``meta.json`` was replaced, ``load_memmap`` raises an error, and so
+does the next ``append_memmap``. Every temporary file is then complete.
+Rename each one over the ``meta.json`` next to it, which completes the
+append:
+
+.. code-block:: python
+
+    import os
+
+    for tmp in (root / "particles").rglob(".meta.json.append.tmp"):
+        os.replace(tmp, tmp.with_name("meta.json"))
+
+If the directory still loads, delete the leftover ``.meta.json.append.tmp``
+files instead, as they may be incomplete.
+
 Save to one file
 ----------------
 
@@ -415,7 +432,7 @@ safetensors file maps names to tensors, and has no pickle.
 :func:`~tensordict.to_safetensors` saves each tensor under its nested key
 joined with ``"."``, the name that a model's ``state_dict`` gives it, and
 :func:`~tensordict.from_safetensors` loads the file. You need the
-``safetensors`` package:
+``safetensors`` package (``pip install "tensordict[safetensors]"``):
 
   >>> from tensordict import from_safetensors, to_safetensors
   >>> to_safetensors(params, root / "model.safetensors")

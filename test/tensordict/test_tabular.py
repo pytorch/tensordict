@@ -423,6 +423,37 @@ class TestParquet:
         assert td["t"].dtype == torch.float32
         assert (td["t"] == torch.from_numpy(values)).all()
 
+    def test_from_parquet_fixed_shape_tensor_nulls(self, tmp_path):
+        # #3234: columns with nulls are read as lists, as on 0.15.2.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        if not hasattr(pa, "FixedShapeTensorArray"):
+            pytest.skip("pyarrow has no fixed_shape_tensor type")
+        tensor_type = pa.fixed_shape_tensor(pa.float32(), [2, 3])
+
+        def write(values, mask=None):
+            storage = pa.FixedSizeListArray.from_arrays(values, 6, mask=mask)
+            column = pa.ExtensionArray.from_storage(tensor_type, storage)
+            path = tmp_path / "nulls.parquet"
+            pq.write_table(pa.table({"t": column}), str(path), row_group_size=2)
+            return path
+
+        # A null row. pyarrow 25 fails to read it back from Parquet, with
+        # "Expected all lists to be of size=6", so this part needs pyarrow 26.
+        if int(pa.__version__.split(".")[0]) >= 26:
+            values = np.arange(24, dtype=np.float32)
+            mask = pa.array([False, False, False, True])
+            td = TensorDict.from_parquet(write(pa.array(values), mask))
+            rows = values.reshape(4, 6).tolist()
+            assert list(td["t"]) == [*rows[:3], None]
+
+        # A null value inside a row, in the second row group, still raises
+        # rather than reading whatever the buffer holds.
+        values = pa.array([None if i == 13 else float(i) for i in range(24)])
+        with pytest.raises(RuntimeError):
+            TensorDict.from_parquet(write(values.cast(pa.float32())))
+
     def test_from_parquet_fixed_shape_tensor_bool(self, tmp_path):
         # to_numpy_ndarray() rejects bool, so these still come back flat.
         import pyarrow as pa

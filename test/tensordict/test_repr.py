@@ -950,6 +950,35 @@ class TestCompactRepr:
             expected = repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))
         assert (repr(NonTensorData("a")), repr(NonTensorStack("a", "b"))) == expected
 
+    @pytest.mark.parametrize("value,name", [("text", "str"), (None, "NoneType")])
+    @pytest.mark.parametrize("tensor_first", [True, False])
+    def test_compact_mixed_lazy_stack(self, value, name, tensor_first):
+        # #3233: a key that holds a tensor in one member and a non-tensor in
+        # another shows as the non-tensor entry, whatever the order
+        members = [TensorDict(a=torch.zeros(3)), TensorDict(a=value)]
+        if not tensor_first:
+            members = members[::-1]
+        lazy = LazyStackedTensorDict(*members)
+        assert repr(lazy) == (
+            f"LazyStackedTensorDict(batch_size=[2], stack_dim=0, fields={{a: {name}}})"
+        )
+        out = lazy._repr_html_()
+        assert out.startswith("<div")
+        assert "a: <span style=" in out and f">{name}</span>" in out
+
+    def test_compact_error_falls_back(self, monkeypatch):
+        # #3233: an error in the compact form falls back to the detailed one
+        import tensordict.base
+
+        def fail(obj):
+            raise TypeError("compact")
+
+        monkeypatch.setattr(tensordict.base, "_compact_repr", fail)
+        td = TensorDict(a=torch.zeros(3))
+        with set_printoptions(compact=False):
+            expected = repr(td)
+        assert repr(td) == expected
+
     def test_compact_default_reads_no_nested_store_leaf(self):
         # A nested TensorDictStore has its own _repr_parts and reads its
         # leaves from a server: the default repr must not fetch them.
@@ -1250,6 +1279,53 @@ class TestCompactRepr:
         ):
             r = repr(td)
         assert r == "TensorDict(batch_size=[10], fields={a: f32[2]})"
+
+    @pytest.mark.parametrize(
+        "option",
+        [
+            "show_is_shared",
+            "show_shape",
+            "show_field_device",
+            "show_field_is_shared",
+            "show_grad",
+            "show_is_contiguous",
+            "show_is_view",
+            "show_storage_size",
+            "plain",
+        ],
+    )
+    def test_compact_detailed_only_option_turns_compact_off(self, option):
+        # #3240: an option that only the detailed form uses turns the compact
+        # form off when compact is not passed; an explicit compact=True keeps it.
+        assert get_printoptions()["compact"] is True
+        value = not get_printoptions()[option]
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        with set_printoptions(**{option: value}):
+            assert get_printoptions()["compact"] is False
+            r = repr(td)
+        assert r.startswith("TensorDict(\n    fields={")
+        with set_printoptions(compact=False, **{option: value}):
+            assert r == repr(td)
+        with set_printoptions(compact=True, **{option: value}):
+            assert repr(td) == "TensorDict(batch_size=[3], fields={a: f32[]})"
+        assert get_printoptions()["compact"] is True
+
+    def test_compact_show_grad_shows_requires_grad(self):
+        # #3240: set_printoptions(show_grad=True) alone used to print the
+        # compact form, without requires_grad
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        with set_printoptions(show_grad=True):
+            assert "requires_grad=True" in repr(td)
+        # verbose=False hides options of the detailed form but keeps compact
+        with set_printoptions(verbose=False):
+            assert repr(td) == "TensorDict(batch_size=[3], fields={a: []})"
+
+        # as a decorator too, which clones the options on each call
+        @set_printoptions(verbose=False)
+        def decorated():
+            return repr(td)
+
+        assert decorated() == "TensorDict(batch_size=[3], fields={a: []})"
 
     def test_compact_sort_keys(self):
         td = TensorDict(c=torch.zeros(2), a=torch.zeros(2), b=torch.zeros(2))
