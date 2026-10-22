@@ -1259,6 +1259,10 @@ _SAVE_LOAD = {
         _save_to_file(lambda td, path: torch.save(td, path)),
         lambda path: torch.load(path, weights_only=False),
     ),
+    "torch_save_weights_only": (
+        _save_to_file(lambda td, path: torch.save(td, path)),
+        lambda path: torch.load(path, weights_only=True),
+    ),
     "to_dict": (lambda td, path: (td, td.to_dict()), _from_dict),
 }
 
@@ -1339,6 +1343,16 @@ _ROUND_TRIP_OUTCOMES = {
         for path in _MEMMAP_PATHS
     },
     ("jagged", "safetensors"): _Raises(TypeError, "only dense tensors"),
+    **{
+        (member, "torch_save_weights_only"): _Raises(
+            pickle.UnpicklingError,
+            "Unsupported global",
+            when="load",
+            reason="the allowlist of weights_only=True leaves out tensorclasses "
+            '(saving.rst, "torch.save and torch.load")',
+        )
+        for member in ("tensorclass", "tensorclass_nested", "tensorclass_in_td")
+    },
     ("dtypes", "h5"): _Raises(TypeError, "unsupported ScalarType BFloat16"),
     ("dtypes", "zarr"): _Raises(TypeError, "unsupported ScalarType BFloat16"),
 }
