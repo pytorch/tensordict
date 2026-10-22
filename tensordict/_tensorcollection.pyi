@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
-    dataclass_transform,
     Iterator,
     Literal,
     OrderedDict,
@@ -59,7 +58,7 @@ from tensordict.utils import (
     unravel_key_list as unravel_key_list,
 )
 from torch import nn, Tensor
-from typing_extensions import deprecated
+from typing_extensions import dataclass_transform, deprecated
 
 class _NoDefault(enum.IntEnum):
     ZERO = 0
@@ -75,7 +74,7 @@ CompatibleType: TypeAlias = Tensor
 T = TypeVar("T", bound="TensorCollection")
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
