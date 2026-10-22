@@ -9501,6 +9501,34 @@ class TestGeneric:
         assert default_collate([stack, data]).tolist() == [["a", "b"], ["c", "c"]]
         assert default_collate([data, stack]).tolist() == [["c", "c"], ["a", "b"]]
 
+    @pytest.mark.parametrize(
+        "first,other",
+        [
+            ("tensordict", "tensor"),
+            ("tensordict", "dict"),
+            ("tensordict", "None"),
+            ("tensorclass", "tensor"),
+        ],
+    )
+    def test_collate_default_mixed_with_other_types(self, first, other):
+        # #3302: a batch that mixes a tensordict or a tensorclass with
+        # something that is not a tensor collection raises a TypeError, as on
+        # 0.15.2, not an AttributeError.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        elem = {
+            "tensordict": TensorDict(a=torch.zeros(3)),
+            "tensorclass": Sample(x=torch.zeros(3)),
+        }[first]
+        item = {
+            "tensor": torch.zeros(3),
+            "dict": {"a": torch.zeros(3)},
+            "None": None,
+        }[other]
+        with pytest.raises(TypeError, match="mixes tensordicts or tensorclasses"):
+            torch.utils.data.default_collate([elem, item])
+
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
         # the collate function that another library registered first.

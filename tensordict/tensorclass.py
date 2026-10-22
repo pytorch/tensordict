@@ -1462,6 +1462,11 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
                 "Cannot collate a batch that mixes tensorclass instances with "
                 f"tensordicts: got {sorted(cls.__name__ for cls in types)}."
             ) from err
+        if not all(is_tensor_collection(cls) for cls in types):
+            raise TypeError(
+                "Cannot collate a batch that mixes tensordicts or tensorclasses "
+                f"with other types: got {sorted(cls.__name__ for cls in types)}."
+            ) from err
         raise
 
 
