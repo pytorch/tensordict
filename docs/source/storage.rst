@@ -451,7 +451,7 @@ With ``backend="zarr"``, :class:`~tensordict.PersistentTensorDict` stores each
 tensor as a zarr array and each nested tensordict as a zarr group. The store
 can be a local directory, a ``zarr.storage.ZipStore``, or any other
 ``zarr.abc.store.Store``. You can read and write separate chunks in parallel.
-The zarr backend needs ``zarr>=3.0`` (``pip install "tensordict[zarr]"``).
+The zarr backend needs ``zarr>=3.1.1`` (``pip install "tensordict[zarr]"``).
 
 :meth:`~tensordict.TensorDictBase.to_zarr` writes a tensordict, and
 :meth:`~tensordict.TensorDictBase.from_zarr` reads it back. ``to_zarr`` stores
