@@ -698,6 +698,31 @@ class TestArrow:
         assert torch.equal(td["_mask"], torch.tensor([1, 0]))
         assert torch.equal(td["masks", "_mask"], torch.tensor([True, False]))
 
+    # #3260
+    @pytest.mark.parametrize("nulls", ["fill", "mask"])
+    @pytest.mark.parametrize("dtype", ["uint8", "uint16", "uint32", "uint64"])
+    def test_from_arrow_nulls_unsigned(self, dtype, nulls):
+        import pyarrow as pa
+
+        typ = getattr(pa, dtype)()
+        td = from_arrow(
+            pa.table(
+                {
+                    "x": pa.array([1, None, 3], typ),
+                    "l": pa.array([[1, None], [2], []], pa.list_(typ)),
+                }
+            ),
+            nulls=nulls,
+        )
+        assert td["x"].dtype == getattr(torch, dtype)
+        assert td["x"].tolist() == [1, 0, 3]
+        assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2], []]
+        if nulls == "fill":
+            assert "masks" not in td.keys()
+        else:
+            assert set(td["masks"].keys()) == {"x"}
+            assert torch.equal(td["masks", "x"], torch.tensor([True, False, True]))
+
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the
         # process, so run it in a subprocess.

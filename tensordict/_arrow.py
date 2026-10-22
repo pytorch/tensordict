@@ -24,6 +24,12 @@ _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
 __all__ = ["from_arrow", "to_arrow"]
 
 _NULLS = ("raise", "fill", "mask")
+# The signed dtypes of the same size as the unsigned ones that masked_fill lacks.
+_SIGNED = {
+    torch.uint16: torch.int16,
+    torch.uint32: torch.int32,
+    torch.uint64: torch.int64,
+}
 
 
 def _import_pyarrow():
@@ -100,9 +106,16 @@ def _to_tensor(pa, arr, copy, nulls, key) -> torch.Tensor:
         return _primitive(pa, arr, copy)
     if arr.null_count:
         valid = torch.from_numpy(arr.is_valid().to_numpy(zero_copy_only=False))
-        tensor = tensor.masked_fill(
-            ~valid.view(n, *[1] * (tensor.ndim - 1)),
-            float("nan") if tensor.is_floating_point() else 0,
+        # torch has no masked_fill for uint16, uint32 and uint64: fill a
+        # signed view, in which 0 has the same bits.
+        dtype = tensor.dtype
+        tensor = (
+            tensor.view(_SIGNED.get(dtype, dtype))
+            .masked_fill(
+                ~valid.view(n, *[1] * (tensor.ndim - 1)),
+                float("nan") if tensor.is_floating_point() else 0,
+            )
+            .view(dtype)
         )
     return tensor
 
