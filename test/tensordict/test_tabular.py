@@ -1491,7 +1491,7 @@ class TestTabularTypeMatrix:
             f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} gives\n"
             f"  {actual}\nwhere its docstring gives\n  {expected}"
         )
-        masks = td.get("_mask", None)
+        masks = td.get("masks", None)
         if nulls != "mask":
             assert masks is None, (
                 f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} adds "
