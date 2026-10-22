@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import collections
 import contextlib
 import copy
 import dataclasses
@@ -17,10 +18,14 @@ import os
 import pathlib
 import pickle
 import re
+import runpy
+import shutil
+import subprocess
 import sys
 import textwrap
 import warnings
 import weakref
+import zipfile
 from collections import UserDict
 from dataclasses import field
 from multiprocessing import Pool
@@ -515,6 +520,135 @@ def test_tensorclass_stub_init_subclass():
     assert class_kwargs == {
         param.name for param in meta_params if param.default is not param.empty
     }
+
+
+# Short, correct user code over tensordict's common API (#3237). The
+# installed-wheel test below runs mypy on it as a user would run it.
+_REPO_ROOT = pathlib.Path(__file__).parents[2]
+_TYPING_CORPUS = _REPO_ROOT / "test" / "typing_corpus"
+_TYPING_CORPUS_FILES = sorted(path.name for path in _TYPING_CORPUS.glob("*.py"))
+
+
+@pytest.fixture(scope="module")
+def installed_wheel(tmp_path_factory):
+    # Build a wheel of the repository without build isolation and unpack it,
+    # which is how pip installs a pure-Python wheel.
+    setuptools = pytest.importorskip("setuptools")
+    if int(setuptools.__version__.split(".")[0]) < 77:
+        pytest.skip("pyproject.toml's build-system needs setuptools>=77")
+    root = tmp_path_factory.mktemp("wheel")
+    source = root / "source"
+    shutil.copytree(
+        _REPO_ROOT / "tensordict",
+        source / "tensordict",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    for name in ("setup.py", "pyproject.toml", "version.txt", "README.md", "LICENSE"):
+        shutil.copy2(_REPO_ROOT / name, source / name)
+    env = dict(
+        os.environ,
+        SETUPTOOLS_SCM_PRETEND_VERSION=(source / "version.txt").read_text().strip(),
+    )
+    build = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from setuptools import build_meta; "
+            "print(build_meta.build_wheel(sys.argv[1]))",
+            str(root / "dist"),
+        ],
+        cwd=source,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert build.returncode == 0, build.stdout + build.stderr
+    wheel = root / "dist" / build.stdout.splitlines()[-1]
+    site = root / "site"
+    with zipfile.ZipFile(wheel) as archive:
+        archive.extractall(site)
+    return site
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_wheel_ships_type_information(installed_wheel):
+    # Without py.typed, mypy ignores the annotations of the installed package;
+    # without the stubs, it reads the untyped sources instead.
+    source = {
+        path.relative_to(_REPO_ROOT)
+        for pattern in ("*.pyi", "py.typed")
+        for path in (_REPO_ROOT / "tensordict").rglob(pattern)
+    }
+    shipped = {
+        path.relative_to(installed_wheel)
+        for pattern in ("*.pyi", "py.typed")
+        for path in (installed_wheel / "tensordict").rglob(pattern)
+    }
+    assert pathlib.Path("tensordict", "py.typed") in source
+    assert source == shipped, f"missing from the wheel: {sorted(source - shipped)}"
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.parametrize("snippet", _TYPING_CORPUS_FILES)
+def test_typing_corpus_runs(snippet):
+    # The corpus must be correct code, so that a mypy error in it is a wrong
+    # annotation in tensordict.
+    runpy.run_path(str(_TYPING_CORPUS / snippet), run_name="__main__")
+
+
+@pytest.fixture(scope="module")
+def installed_wheel_mypy_errors(installed_wheel, tmp_path_factory):
+    # Mypy reads the unpacked wheel as an installed package (PYTHONPATH
+    # entries count as site-packages), with no configuration file: the
+    # repository's mypy.ini must not apply. One run checks the whole corpus
+    # and gives the errors of each file.
+    if not _has_mypy:
+        pytest.skip("mypy is not installed")
+    root = tmp_path_factory.mktemp("mypy")
+    corpus = root / "corpus"
+    shutil.copytree(_TYPING_CORPUS, corpus)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("MYPYPATH", "PYTHONPATH")
+    }
+    env["PYTHONPATH"] = str(installed_wheel)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--config-file=",
+            # Writes no cache, which would hold about 100 MB of torch.
+            f"--cache-dir={os.devnull}",
+            *_TYPING_CORPUS_FILES,
+        ],
+        cwd=corpus,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=1200,
+    )
+    assert result.returncode in (0, 1), result.stdout + result.stderr
+    errors = collections.defaultdict(list)
+    for line in result.stdout.splitlines():
+        if ": error: " in line:
+            errors[line.split(":", 1)[0]].append(line)
+    return errors
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("snippet", _TYPING_CORPUS_FILES)
+def test_typing_corpus_installed_wheel_mypy(installed_wheel_mypy_errors, snippet):
+    # #3237: with py.typed, mypy at default settings must accept correct user
+    # code.
+    errors = installed_wheel_mypy_errors[snippet]
+    assert not errors, (
+        f"mypy rejects correct code in test/typing_corpus/{snippet} against "
+        "the installed wheel:\n" + "\n".join(errors)
+    )
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
