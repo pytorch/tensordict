@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
+from tensordict._unbatched import UnbatchedTensor
 from tensordict.base import is_tensor_collection
 from tensordict.tensorclass import NonTensorStack
 from tensordict.utils import _is_tensorclass, DeviceType, is_non_tensor
@@ -94,6 +95,9 @@ def _encode_level(td, prefix: tuple, tensors: dict) -> dict:
         elif is_tensor_collection(value):
             entries[key] = {"td": _encode_level(value, nested_key, tensors)}
         else:
+            unbatched = isinstance(value, UnbatchedTensor)
+            if unbatched:
+                value = value._base_tensor()
             if value.is_nested or value.layout != torch.strided:
                 raise TypeError(
                     f"Cannot save the tensor at {nested_key} as safetensors: "
@@ -107,6 +111,8 @@ def _encode_level(td, prefix: tuple, tensors: dict) -> dict:
                 )
             tensors[name] = value.detach().contiguous()
             entries[key] = {"tensor": name}
+            if unbatched:
+                entries[key]["unbatched"] = True
     return level
 
 
@@ -136,7 +142,8 @@ def to_safetensors(data: TensorDictBase, path: str | Path) -> None:
     Each tensor is saved under its nested key joined with ``"."``, the names
     that a model's ``state_dict`` uses. The structure of the tensordict (the
     batch size and dim names of each level, the class of each tensorclass,
-    and the non-tensor values) is saved as one JSON string in the metadata of
+    the non-tensor values, and which tensors are
+    :class:`~tensordict.UnbatchedTensor`) is saved as one JSON string in the metadata of
     the file, so that :func:`~tensordict.from_safetensors` rebuilds it.
 
     Tensors that share memory are saved as separate copies, and a tensordict
@@ -205,7 +212,10 @@ def _decode_level(level: dict, file, device, path, names_used: set):
     for key, entry in level["keys"].items():
         if "tensor" in entry:
             names_used.add(entry["tensor"])
-            td.set(key, file.get_tensor(entry["tensor"]))
+            tensor = file.get_tensor(entry["tensor"])
+            if entry.get("unbatched"):
+                tensor = UnbatchedTensor(tensor)
+            td.set(key, tensor)
         elif "non_tensor" in entry:
             td.set_non_tensor(key, entry["non_tensor"])
         else:
