@@ -529,9 +529,7 @@ _TYPING_CORPUS = _REPO_ROOT / "test" / "typing_corpus"
 _TYPING_CORPUS_FILES = sorted(path.name for path in _TYPING_CORPUS.glob("*.py"))
 # Snippets that mypy still rejects because of filed annotation bugs.
 _TYPING_CORPUS_MYPY_XFAILS = {
-    "index_ops.py": "#3270, #3075: unbind pieces are TensorCollection, "
-    "apply is Self | None",
-    "memmap.py": "#3268, #3269: memmap/memmap_/save reject Path, td == td is bool",
+    "index_ops.py": "#3075: apply is typed Self | None",
     "torch_functions.py": "#3271: torch.stack and torch.cat of tensordicts are "
     "typed Tensor",
 }
