@@ -624,6 +624,65 @@ reveal_type(td == td)
     ]
 
 
+# The names that typing has only from Python 3.11 or later.
+_TYPING_NAMES_AFTER_PY310 = frozenset(
+    {
+        "assert_never",
+        "assert_type",
+        "clear_overloads",
+        "dataclass_transform",
+        "get_overloads",
+        "get_protocol_members",
+        "is_protocol",
+        "LiteralString",
+        "Never",
+        "NoDefault",
+        "NotRequired",
+        "override",
+        "ReadOnly",
+        "Required",
+        "reveal_type",
+        "Self",
+        "TypeAliasType",
+        "TypeIs",
+        "TypeVarTuple",
+        "Unpack",
+    }
+)
+
+
+def test_no_typing_import_newer_than_python310():
+    # #3304: on Python 3.10, typing lacks the names above, so type checkers
+    # can't resolve them there. Code that only type checkers read (the .pyi
+    # stubs and the TYPE_CHECKING blocks) must import them from
+    # typing_extensions. A runtime import with a fallback, inside try or under
+    # a sys.version_info check, is fine.
+    offenders = []
+    for path in sorted(_TENSORDICT_DIR.rglob("*.py*")):
+        if path.suffix not in (".py", ".pyi"):
+            continue
+        tree = ast.parse(path.read_text())
+        guarded = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Try) or (
+                isinstance(node, ast.If) and "version_info" in ast.unparse(node.test)
+            ):
+                guarded.update(id(child) for child in ast.walk(node))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "typing"
+                and id(node) not in guarded
+            ):
+                names = {alias.name for alias in node.names} & _TYPING_NAMES_AFTER_PY310
+                if names:
+                    offenders.append(
+                        f"{path.relative_to(_TENSORDICT_DIR.parent)}:{node.lineno}: "
+                        f"{sorted(names)}"
+                    )
+    assert not offenders, "\n".join(offenders)
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_init_subclass():
     # The class keywords (class X(TensorClass, autocast=True)) go to the
