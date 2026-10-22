@@ -42,6 +42,19 @@ def _import_pyarrow():
     return pa
 
 
+def _check_pyarrow_version(pa, name: str) -> None:
+    """Raises an ImportError naming the minimum version on pyarrow older than 15.
+
+    It runs before ``name`` uses any pyarrow type: pyarrow 10 to 14 lack some
+    of them, and give tensors that ``torch.from_dlpack`` rejects.
+    """
+    if int(pa.__version__.split(".")[0]) < 15:
+        raise ImportError(
+            f"{name} needs pyarrow 15 or later, got pyarrow=={pa.__version__}. "
+            "Upgrade with `pip install 'pyarrow>=15'`."
+        )
+
+
 def _is_tensor_type(pa, typ) -> bool:
     """Whether an Arrow type converts to a dense tensor."""
     if isinstance(typ, pa.FixedShapeTensorType):
@@ -270,6 +283,7 @@ def from_arrow(
         (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
     """
     pa = _import_pyarrow()
+    _check_pyarrow_version(pa, "from_arrow")
     if nulls not in _NULLS:
         raise ValueError(f"nulls must be one of {_NULLS}, got {nulls!r}.")
     if not isinstance(table, (pa.Table, pa.RecordBatch)):
@@ -372,6 +386,7 @@ def to_arrow(td: TensorDictBase) -> pyarrow.Table:
           child 0, y: int64
     """
     pa = _import_pyarrow()
+    _check_pyarrow_version(pa, "to_arrow")
     if td.batch_dims != 1:
         raise ValueError(
             "to_arrow needs a tensordict with one batch dimension, got the batch "
