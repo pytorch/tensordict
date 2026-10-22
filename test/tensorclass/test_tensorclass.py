@@ -527,6 +527,14 @@ def test_tensorclass_stub_init_subclass():
 _REPO_ROOT = pathlib.Path(__file__).parents[2]
 _TYPING_CORPUS = _REPO_ROOT / "test" / "typing_corpus"
 _TYPING_CORPUS_FILES = sorted(path.name for path in _TYPING_CORPUS.glob("*.py"))
+# Snippets that mypy still rejects because of filed annotation bugs.
+_TYPING_CORPUS_MYPY_XFAILS = {
+    "index_ops.py": "#3270, #3075: unbind pieces are TensorCollection, "
+    "apply is Self | None",
+    "memmap.py": "#3268, #3269: memmap/memmap_/save reject Path, td == td is bool",
+    "torch_functions.py": "#3271: torch.stack and torch.cat of tensordicts are "
+    "typed Tensor",
+}
 
 
 @pytest.fixture(scope="module")
@@ -640,7 +648,20 @@ def installed_wheel_mypy_errors(installed_wheel, tmp_path_factory):
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
-@pytest.mark.parametrize("snippet", _TYPING_CORPUS_FILES)
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        pytest.param(
+            snippet,
+            marks=pytest.mark.xfail(
+                strict=True, reason=_TYPING_CORPUS_MYPY_XFAILS[snippet]
+            ),
+        )
+        if snippet in _TYPING_CORPUS_MYPY_XFAILS
+        else snippet
+        for snippet in _TYPING_CORPUS_FILES
+    ],
+)
 def test_typing_corpus_installed_wheel_mypy(installed_wheel_mypy_errors, snippet):
     # #3237: with py.typed, mypy at default settings must accept correct user
     # code.
