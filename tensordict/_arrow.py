@@ -24,6 +24,12 @@ _has_pyarrow = importlib.util.find_spec("pyarrow") is not None
 __all__ = ["from_arrow", "to_arrow"]
 
 _NULLS = ("raise", "fill", "mask")
+# The signed dtypes of the same size as the unsigned ones that masked_fill lacks.
+_SIGNED = {
+    torch.uint16: torch.int16,
+    torch.uint32: torch.int32,
+    torch.uint64: torch.int64,
+}
 
 
 def _import_pyarrow():
@@ -55,6 +61,24 @@ def _check_nulls(arr, nulls: str, key: tuple) -> None:
             f"The Arrow column {key} has {arr.null_count} null value(s). Pass "
             "nulls='fill' to fill them, or nulls='mask' to also get a mask entry."
         )
+
+
+def _check_inner_nulls(pa, arr, key: tuple) -> None:
+    """Raises for a null inside the rows of a list or a struct, at any depth."""
+    typ = arr.type
+    if pa.types.is_struct(typ):
+        children = arr.flatten()
+    elif (
+        pa.types.is_list(typ)
+        or pa.types.is_large_list(typ)
+        or pa.types.is_fixed_size_list(typ)
+    ):
+        children = [arr.flatten()]
+    else:
+        return
+    for child in children:
+        _check_nulls(child, "raise", key)
+        _check_inner_nulls(pa, child, key)
 
 
 def _primitive(pa, arr, copy: bool | None) -> torch.Tensor:
@@ -100,9 +124,16 @@ def _to_tensor(pa, arr, copy, nulls, key) -> torch.Tensor:
         return _primitive(pa, arr, copy)
     if arr.null_count:
         valid = torch.from_numpy(arr.is_valid().to_numpy(zero_copy_only=False))
-        tensor = tensor.masked_fill(
-            ~valid.view(n, *[1] * (tensor.ndim - 1)),
-            float("nan") if tensor.is_floating_point() else 0,
+        # torch has no masked_fill for uint16, uint32 and uint64: fill a
+        # signed view, in which 0 has the same bits.
+        dtype = tensor.dtype
+        tensor = (
+            tensor.view(_SIGNED.get(dtype, dtype))
+            .masked_fill(
+                ~valid.view(n, *[1] * (tensor.ndim - 1)),
+                float("nan") if tensor.is_floating_point() else 0,
+            )
+            .view(dtype)
         )
     return tensor
 
@@ -145,6 +176,8 @@ def _from_array(pa, arr, copy, nulls, key, masks):
         pa, typ.value_type
     ):
         return _to_jagged(pa, arr, copy, nulls, key)
+    if nulls == "raise":
+        _check_inner_nulls(pa, arr, key)
     if not len(arr):
         # NonTensorStack(batch_size=[0]) has the batch size [0, 0].
         return NonTensorStack()
@@ -202,9 +235,10 @@ def from_arrow(
             empty list in jagged tensors, and ``None`` in a
             :class:`~tensordict.NonTensorStack`. A null struct makes each of
             its fields null. ``"mask"`` fills them as ``"fill"`` does, and adds
-            the boolean entry ``("_mask", *key)`` for each entry ``key`` that
-            has nulls, ``True`` where the row is not null. Filling copies the
-            column. Defaults to ``"raise"``.
+            the boolean entry ``("masks", *key)`` for each entry ``key`` that
+            has nulls, ``True`` where the row is not null, as
+            :func:`~tensordict.pad_sequence` does with ``return_mask=True``.
+            Filling copies the column. Defaults to ``"raise"``.
         device (torch.device, str or int, optional): the device of the
             result. Defaults to ``None``, which keeps the tensors on the CPU
             and gives a tensordict without a device.
@@ -232,7 +266,7 @@ def from_arrow(
         >>> td.get("text").tolist()
         ['a', 'b', 'c']
         >>> td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
-        >>> td["y"], td["_mask", "y"]
+        >>> td["y"], td["masks", "y"]
         (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
     """
     pa = _import_pyarrow()
@@ -240,9 +274,9 @@ def from_arrow(
         raise ValueError(f"nulls must be one of {_NULLS}, got {nulls!r}.")
     if not isinstance(table, (pa.Table, pa.RecordBatch)):
         table = pa.table(table)
-    if nulls == "mask" and "_mask" in table.column_names:
+    if nulls == "mask" and "masks" in table.column_names:
         raise ValueError(
-            "nulls='mask' writes the masks under the key '_mask', which is a column "
+            "nulls='mask' writes the masks under the key 'masks', which is a column "
             "of the table."
         )
     masks = {}
@@ -255,7 +289,7 @@ def from_arrow(
         data[name] = _from_array(pa, column, copy, nulls, (name,), masks)
     result = TensorDict(data, batch_size=[table.num_rows])
     for key, mask in masks.items():
-        result.set(("_mask", *key), mask)
+        result.set(("masks", *key), mask)
     if device is not None:
         result = result.to(device)
     return result
