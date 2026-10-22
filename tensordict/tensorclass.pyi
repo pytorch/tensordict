@@ -1839,7 +1839,10 @@ class NonTensorStack(LazyStackedTensorDict):
         strict_shape: bool = False,
     ) -> None: ...
     # Comparing two stacks gives a boolean tensor. Other operands can give a
-    # lazy stack of tensordicts, a TensorDict or a bool (#3305).
+    # lazy stack of tensordicts, a TensorDict or a bool (#3305). Checkers also
+    # pick the first overload for a TensorDict or lazy stack operand, because
+    # the star-unpacked bases of TensorDictBase give every tensordict class an
+    # Any base.
     @overload  # type: ignore[override]
     def __eq__(self, other: NonTensorStack) -> Tensor: ...
     @overload
