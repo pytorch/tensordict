@@ -16,6 +16,7 @@ import random
 import re
 import subprocess
 import sys
+import time
 import types
 import warnings
 from pathlib import Path
@@ -33,6 +34,7 @@ from tensordict import (
     assert_close,
     KEY_SEPARATOR,
     lazy_stack,
+    NonTensorData,
     set_printoptions,
     tensorclass,
     TensorDict,
@@ -1019,6 +1021,400 @@ def test_deprecation_deadlines():
         f"version.txt is {'.'.join(map(str, current))}; remove these "
         "deprecations, or make these default changes and update their docs:\n"
         + "\n".join(overdue)
+    )
+
+
+# Warning hygiene (#3232). Python builds a warning's message before it
+# looks at the filters, and shows a warning once per call site and message
+# text. A message that holds a runtime value, such as an index, a tensor or a
+# shape, pays for its repr on every call, even when the warning is filtered
+# out, and warns again for each new value.
+
+# The arguments that hold the message text, by position and keyword, of
+# warnings.warn and of the helpers in tensordict/_deprecation.py.
+_WARNING_MESSAGE_ARGS = {
+    "warn": ((0,), ("message",)),
+    "warn_deprecated": ((0,), ("what", "replacement")),
+    "deprecation_message": ((0,), ("what", "replacement")),
+    "warn_deprecated_env_var": ((0, 1), ("name", "value", "replacement")),
+    "deprecated": ((0,), ("what", "replacement")),
+}
+# The allow-list: what a warning message may interpolate. Names of types,
+# classes and functions (x.__name__, type(x)); variables and attributes that
+# hold keys, names, methods, ops, functions, attributes or options, by their
+# name; and constants: literals, UPPER_CASE names, and local variables that
+# hold only allowed values. str(), repr(), sorted(), list(), tuple(), map(),
+# "sep".join() and str.format() pass their arguments through.
+_WARNING_SAFE_ATTRS = frozenset({"__name__", "__qualname__", "__module__"})
+_WARNING_SAFE_NAMES = re.compile(
+    r"_*(\w+_)?(key|name|method|op|func|attr|option|what)s?_*|_*[A-Z][A-Z0-9_]*"
+)
+_WARNING_PASS_THROUGH = frozenset(
+    {"str", "repr", "sorted", "list", "tuple", "join", "format"}
+)
+# The exemptions: parts that the rules above flag but whose value is bounded
+# and cheap to print, by "path:function" of the call site and the part's text.
+_WARNING_EXEMPT = {
+    # constants, key and field names, and string templates
+    "tensordict/_contextlib.py:_warn_kept_in_place": {"result"},
+    "tensordict/tensorclass.py:_set": {"type(self)._set_dict_warn_msg"},
+    "tensordict/typedtensordict.py:_warn_missing_required": {
+        "call",
+        "cls.__required_keys__.difference(keys)",
+        "opt_out",
+    },
+    "tensordict/base.py:_warn_update_skipped": {"skipped"},
+    "tensordict/_base/convert.py:_warn_structseq_keys": {
+        "range(len(obj))",
+        "obj_type.__match_args__",
+    },
+    "tensordict/tensorclass.py:_warn_get_through_tensor": {
+        "_key_through_leaf_error(key, 1, entry)"
+    },
+    "tensordict/nn/cudagraphs.py:_warn_if_interaction_type_changed": {
+        "self._graph_interaction_types",
+        "self._interaction_types()",
+    },
+    # an environment variable's value, warned once at import
+    "tensordict/base.py:<module>": {"os.environ"},
+    "tensordict/nn/functional_modules.py:<module>": {"os.environ"},
+    # small ints, dims, dtypes, bools and file names
+    "tensordict/_base/reductions.py:_warn_negative_dim_with_reduce": {"dim"},
+    "tensordict/_base/reductions.py:_warn_tuple_dim": {"dim"},
+    "tensordict/_base/serialization.py:consolidate": {"filename"},
+    "tensordict/_td_memmap.py:_warn_if_existing_file_smaller": {
+        "filename",
+        "os.path.getsize(filename)",
+        "value.dtype.itemsize * numel",
+        "value.dtype",
+    },
+    "tensordict/base.py:_warn_names_length": {"batch_dims"},
+    "tensordict/utils.py:_warn_batch_dims_ignored": {"batch_dims"},
+    "tensordict/base.py:_warn_tuple_dtype": {
+        "torch.as_tensor(array).dtype",
+        "torch.get_default_dtype()",
+        "{torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)",
+    },
+    "tensordict/base.py:_warn_unsupported_operand": {"result"},
+    "tensordict/tensorclass.py:_warn_if_int_wraps": {"ctypes.c_longlong(val).value"},
+    "tensordict/tensorclass.py:_warn_exclusive_flags": {
+        "autocast",
+        "nocast",
+        "tensor_only",
+    },
+    "tensordict/tensorclass.py:_update_shared_nontensor": {
+        "len(nontensor)",
+        "len(val)",
+    },
+}
+
+
+def _call_name(node):
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _message_parts(call, assignments):
+    # Yields the parts of the message of the warning call that are not allowed.
+    positions, keywords = _WARNING_MESSAGE_ARGS[_call_name(call.func)]
+    args = [call.args[i] for i in positions if i < len(call.args)]
+    args += [k.value for k in call.keywords if k.arg in keywords]
+    for arg in args:
+        yield from _unsafe_parts(arg, assignments, frozenset())
+
+
+def _unsafe_parts(node, assignments, safe):
+    # Yields the parts of node that are not allowed. assignments maps each
+    # name in scope to the values assigned to it; safe holds the names bound
+    # by an enclosing comprehension over allowed values.
+    children = []
+    name = _call_name(node.func) if isinstance(node, ast.Call) else None
+    if isinstance(node, ast.Constant):
+        pass
+    elif isinstance(node, ast.JoinedStr):
+        children = node.values
+    elif isinstance(node, ast.FormattedValue):
+        children = [node.value]
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)):
+        children = [node.left, node.right]
+    elif isinstance(node, (ast.Tuple, ast.List)):
+        children = node.elts
+    elif isinstance(node, ast.IfExp):
+        children = [node.body, node.orelse]
+    elif isinstance(node, ast.BoolOp):
+        children = node.values
+    elif isinstance(node, ast.Subscript):
+        children = [node.value]
+    elif isinstance(node, (ast.GeneratorExp, ast.ListComp)):
+        children = [gen.iter for gen in node.generators]
+        targets = {
+            target.id
+            for gen in node.generators
+            for target in ast.walk(gen.target)
+            if isinstance(target, ast.Name)
+        }
+        yield from _unsafe_parts(node.elt, assignments, safe | targets)
+    elif isinstance(node, ast.Attribute) and node.attr in _WARNING_SAFE_ATTRS:
+        pass
+    elif name == "type":
+        pass
+    elif name in _WARNING_MESSAGE_ARGS:
+        yield from _message_parts(node, assignments)
+    elif name == "map":
+        children = node.args[1:]
+    elif name in _WARNING_PASS_THROUGH:
+        children = list(node.args)
+        if name in ("join", "format") and isinstance(node.func, ast.Attribute):
+            children.append(node.func.value)
+    elif isinstance(node, (ast.Name, ast.Attribute)) and (
+        _call_name(node) in safe or _WARNING_SAFE_NAMES.fullmatch(_call_name(node))
+    ):
+        pass
+    elif isinstance(node, ast.Name) and node.id in assignments:
+        # message = f"..." or op = "..." before the call: check what it holds
+        children = assignments[node.id]
+        assignments = {k: v for k, v in assignments.items() if k != node.id}
+    else:
+        yield node
+    for child in children:
+        yield from _unsafe_parts(child, assignments, safe)
+
+
+def _warning_message_violations(path, root):
+    # Lists the parts of the warning messages in path that are not allowed.
+    tree = ast.parse(path.read_text())
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+
+    def scopes(node):
+        # the enclosing functions, innermost first, then the module
+        while node is not tree:
+            node = parents[node]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+                yield node
+
+    assigned = collections.defaultdict(lambda: collections.defaultdict(list))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value:
+            targets = [node.target]
+        else:
+            continue
+        scope = next(scopes(node))
+        for target in targets:
+            for name in ast.walk(target):
+                if isinstance(name, ast.Name):
+                    assigned[scope][name.id].append(node.value)
+    violations, reported = [], set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and _call_name(node.func) in _WARNING_MESSAGE_ARGS
+        ):
+            assignments = {}
+            for scope in reversed(list(scopes(node))):
+                assignments.update(assigned[scope])
+            # warn(deprecation_message(...)): report each part once
+            parts = [
+                part
+                for part in _message_parts(node, assignments)
+                if part not in reported
+            ]
+            reported.update(parts)
+            site = getattr(next(scopes(node)), "name", "<module>")
+            exempt = _WARNING_EXEMPT.get(
+                f"{path.relative_to(root).as_posix()}:{site}", ()
+            )
+            parts = [ast.unparse(part) for part in parts]
+            parts = [part for part in parts if part not in exempt]
+            if parts:
+                location = f"{path.relative_to(root)}:{node.lineno}"
+                violations.append(f"{location}: {', '.join(parts)}")
+    return violations
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="#3256: warning messages still interpolate runtime values",
+)
+def test_warning_messages_hold_no_runtime_values():
+    # #3232: a warning's message interpolates only what the allow-list and
+    # the exemptions above name. tensordict/_deprecation.py itself is skipped: its helpers pass on
+    # the text that their callers give, which this test checks at each call.
+    package = Path(tensordict.__file__).parent
+    violations = []
+    for path in sorted(package.rglob("*.py")):
+        if path.name != "_deprecation.py":
+            violations.extend(_warning_message_violations(path, package.parent))
+    assert not violations, (
+        "These warning messages interpolate a runtime value, whose repr is "
+        "built on every call, even when the warning is filtered out, and which "
+        "makes Python warn again for each new value (#3232). Name the kind of "
+        "value in a fixed text instead:\n" + "\n".join(violations)
+    )
+
+
+def _distinct_masks(width, count=50):
+    # count random boolean masks of the given width, distinct for width >= 16
+    generator = torch.Generator().manual_seed(0)
+    return list(torch.rand(count, width, generator=generator) > 0.5)
+
+
+def _past_batch_dims_get():
+    td = TensorDict(a=torch.zeros(8, 16), b=torch.zeros(8, 16), batch_size=[8])
+    return (lambda mask: td[:, mask]), _distinct_masks(16)
+
+
+def _past_batch_dims_set():
+    td = TensorDict(a=torch.zeros(8, 16), b=torch.zeros(8, 16), batch_size=[8])
+
+    def write(mask):
+        td[:, mask] = 0.0
+
+    return write, _distinct_masks(16)
+
+
+def _no_batch_dims_set():
+    td = TensorDict(a=torch.zeros(16), b=torch.zeros(16))
+
+    def write(mask):
+        td[mask] = 0.0
+
+    return write, _distinct_masks(16)
+
+
+def _lazy_split_sizes():
+    td = lazy_stack([TensorDict(a=torch.zeros(3)) for _ in range(60)])
+    return (lambda size: td.split([size, 1], 0)), range(1, 51)
+
+
+def _non_tensor_expand():
+    data = NonTensorData("a", batch_size=[2])
+    return (lambda size: data.expand(size, 3)), range(1, 51)
+
+
+# Each case returns a call and 50 values that make it warn with the same
+# warning: an index past the batch dims (#3206), a write into a tensordict
+# without batch dims (#3225), split sizes that do not add up (#2437) and a
+# shape that torch.Tensor.expand rejects (#2421).
+_WARNING_ONCE_CASES = [
+    pytest.param(_past_batch_dims_get, id="td[:, mask]-past-batch-dims"),
+    pytest.param(_past_batch_dims_set, id="td[:, mask]=v-past-batch-dims"),
+    pytest.param(_no_batch_dims_set, id="td[mask]=v-no-batch-dims"),
+    pytest.param(
+        _lazy_split_sizes,
+        id="LazyStackedTensorDict.split-sizes",
+        marks=pytest.mark.xfail(
+            strict=True, reason="#3256: split warns once per split size"
+        ),
+    ),
+    pytest.param(
+        _non_tensor_expand,
+        id="NonTensorData.expand-shape",
+        marks=pytest.mark.xfail(
+            strict=True, reason="#3256: NonTensorData.expand warns once per shape"
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize("case", _WARNING_ONCE_CASES)
+def test_warning_once_per_call_site(case):
+    # #3232: the same warning, from one call site, with 50 values, warns once
+    # under the default filters, not once per value.
+    call, values = case()
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("default")
+        for value in values:
+            call(value)
+    messages = [str(w.message) for w in record]
+    assert len(messages) == 1, (
+        f"{len(messages)} warnings from one call site for {len(values)} "
+        "values, instead of one: the message holds the value (#3232). The "
+        "first two:\n" + "\n".join(messages[:2])
+    )
+
+
+def _min_time_interleaved(calls, values, rounds=7):
+    # The least time of each call over values, timed in turn in each round,
+    # so that a change in the machine's load affects them alike.
+    best = [float("inf")] * len(calls)
+    for _ in range(rounds):
+        for i, call in enumerate(calls):
+            start = time.perf_counter()
+            for value in values:
+                call(value)
+            best[i] = min(best[i], time.perf_counter() - start)
+    return best
+
+
+def _past_batch_dims_get_cost():
+    td = TensorDict(a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8])
+    plain = TensorDict(
+        a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8, 256]
+    )
+    return (lambda mask: td[:, mask]), (lambda mask: plain[:, mask])
+
+
+def _past_batch_dims_set_cost():
+    td = TensorDict(a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8])
+    plain = TensorDict(
+        a=torch.zeros(8, 256), b=torch.zeros(8, 256), batch_size=[8, 256]
+    )
+
+    def write(mask):
+        td[:, mask] = 0.0
+
+    def write_plain(mask):
+        plain[:, mask] = 0.0
+
+    return write, write_plain
+
+
+def _no_batch_dims_set_cost():
+    td = TensorDict(a=torch.zeros(256), b=torch.zeros(256))
+    plain = TensorDict(a=torch.zeros(256), b=torch.zeros(256), batch_size=[256])
+
+    def write(mask):
+        td[mask] = 0.0
+
+    def write_plain(mask):
+        plain[mask] = 0.0
+
+    return write, write_plain
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(_past_batch_dims_get_cost, id="td[:, mask]-past-batch-dims"),
+        pytest.param(_past_batch_dims_set_cost, id="td[:, mask]=v-past-batch-dims"),
+        pytest.param(_no_batch_dims_set_cost, id="td[mask]=v-no-batch-dims"),
+    ],
+)
+def test_ignored_warning_costs_little(case):
+    # #3232: with the warning filtered out, a call that warns costs about as
+    # much as the same index within the batch dims, which does not warn. The
+    # message held the index, whose repr made each call 25 to 75 times slower.
+    # A screen, with a generous bound: the call that warns also takes a
+    # longer path to the leaves, 2 to 3 times as long as the plain call, and
+    # more under load, so the bound is 10 times.
+    warn_call, plain_call = case()
+    masks = _distinct_masks(256)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        warn_time, plain_time = _min_time_interleaved([warn_call, plain_call], masks)
+    assert warn_time < 10 * plain_time, (
+        f"With the warning ignored, the call that warns takes "
+        f"{warn_time / len(masks) * 1e6:.0f} us, {warn_time / plain_time:.1f} "
+        f"times the {plain_time / len(masks) * 1e6:.0f} us of the plain call: "
+        "building the message costs too much (#3232)"
     )
 
 

@@ -2331,6 +2331,41 @@ def _stacked_repr(shape, tensors) -> str | None:
     return _get_repr_custom(Tensor, shape, device, dtype, device.type == "cuda")
 
 
+def _mixed_repr(td, key) -> str | None:
+    """The types of the members' values of entry ``key`` of lazy stack ``td``, as ``[NonTensorData, Tensor]``.
+
+    Returns ``None`` unless the members hold different kinds of values there
+    (tensors, non-tensor data, tensordicts), which cannot be stacked (#3258).
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.base import _is_tensor_collection
+
+    def values(lazy):
+        for member in lazy.tensordicts:
+            if isinstance(member, LazyStackedTensorDict):
+                yield from values(member)
+            else:
+                yield member._get_str(key, None)
+
+    if not isinstance(key, str):
+        return None
+    items = list(values(td))
+    if any(item is None for item in items):
+        return None
+    kinds = {
+        "non-tensor"
+        if is_non_tensor(item)
+        else "collection"
+        if _is_tensor_collection(type(item))
+        else "tensor"
+        for item in items
+    }
+    if len(kinds) < 2:
+        return None
+    names = dict.fromkeys(type(item).__name__ for item in items)
+    return f"[{', '.join(names)}]"
+
+
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
 
@@ -2352,7 +2387,16 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 strs.append(sep.join([key, substr]))
                 continue
         else:
-            shape = td.get_item_shape(key)
+            try:
+                shape = td.get_item_shape(key)
+            except Exception:
+                # The members of a lazy stack hold values that cannot be
+                # stacked, such as a string and a tensor (#3258).
+                substr = _mixed_repr(source, key) if is_lazy else None
+                if substr is None:
+                    raise
+                strs.append(sep.join([key, substr]))
+                continue
         if -1 not in shape:
             item = td.get(key)
             strs.append(_make_repr(key, item, td, sep=sep))
@@ -4789,7 +4833,7 @@ torch.utils._pytree.register_pytree_node(
     LinkedList,
     torch.utils._pytree._list_flatten,
     torch.utils._pytree._list_unflatten,
-    serialized_type_name="builtins.list",
+    serialized_type_name="tensordict.utils.LinkedList",
     flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
 )
 

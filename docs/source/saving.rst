@@ -258,6 +258,23 @@ append that is killed midway, or a ``load_memmap`` that runs during an
 append, can see nested levels with different numbers of rows. Don't read a
 directory while you append to it.
 
+A killed append can leave its new ``meta.json`` files behind, as
+``.meta.json.append.tmp`` files next to the old ones. If it was killed after
+the first ``meta.json`` was replaced, ``load_memmap`` raises an error, and so
+does the next ``append_memmap``. Every temporary file is then complete.
+Rename each one over the ``meta.json`` next to it, which completes the
+append:
+
+.. code-block:: python
+
+    import os
+
+    for tmp in (root / "particles").rglob(".meta.json.append.tmp"):
+        os.replace(tmp, tmp.with_name("meta.json"))
+
+If the directory still loads, delete the leftover ``.meta.json.append.tmp``
+files instead, as they may be incomplete.
+
 Save to one file
 ----------------
 
@@ -427,9 +444,9 @@ joined with ``"."``, the name that a model's ``state_dict`` gives it, and
 
 ``to_safetensors`` also writes the structure of the tensordict in the
 metadata of the file, as one JSON string: the batch size and dim names of
-each level, the class of each tensorclass, and the non-tensor values. So
-``from_safetensors`` gives back the tensordict that you saved, also for keys
-that contain ``"."``:
+each level, the class of each tensorclass, the stack dim of each lazy stack,
+and the non-tensor values. So ``from_safetensors`` gives back the tensordict
+that you saved, also for keys that contain ``"."``:
 
   >>> from tensordict import NonTensorData
   >>> trial = TensorDict(
@@ -440,6 +457,9 @@ that contain ``"."``:
   >>> loaded = from_safetensors(root / "trial.safetensors")
   >>> loaded["config"], loaded["a.b"].batch_size
   ({'lr': 0.1}, torch.Size([3]))
+
+A lazy stack loads as a lazy stack with the same stack dim, and its entries
+load as dense tensordicts.
 
 A file without this metadata, such as a checkpoint from the Hub, loads as a
 nested :class:`~tensordict.TensorDict` with an empty batch size: each name
