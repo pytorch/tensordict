@@ -1276,7 +1276,13 @@ _SAVE_LOAD = {
     "to_dict": (lambda td, path: (td, td.to_dict()), _from_dict),
 }
 
-_PATH_REQUIRES = {"safetensors": "safetensors", "h5": "h5py", "zarr": "zarr"}
+# The module each path needs, and its minimum version: tensordict's zarr
+# support needs zarr 3.
+_PATH_REQUIRES = {
+    "safetensors": ("safetensors", None),
+    "h5": ("h5py", None),
+    "zarr": ("zarr", "3"),
+}
 
 
 class _Raises:
@@ -1560,7 +1566,8 @@ class TestSaveLoadRoundTrip:
     @pytest.mark.parametrize(("member", "path"), list(_round_trip_params()))
     def test_round_trip(self, member, path, tmp_path):
         if path in _PATH_REQUIRES:
-            pytest.importorskip(_PATH_REQUIRES[path])
+            module, minversion = _PATH_REQUIRES[path]
+            pytest.importorskip(module, minversion=minversion)
         save, load = _SAVE_LOAD[path]
         expected = _ROUND_TRIP_OUTCOMES.get((member, path))
         td = _ZOO[member]()
