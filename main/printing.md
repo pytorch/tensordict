@@ -59,7 +59,10 @@ the file.
 the CPU shows its device: `f32[3]@cuda:0`.
 - `show_batch_size`, `show_device`, `show_dtype` and `sort_keys`
 apply; `show_dtype=False` (or `verbose=False`) prints the shapes only,
-as `[3]`. The other options, `plain` included, are ignored.
+as `[3]`. The other options (`html` aside) only apply to the detailed
+display: passing one of them without `compact`, such as
+`set_printoptions(show_grad=True)`, switches to the detailed display. With
+an explicit `compact=True`, the compact display ignores them.
 - The display reads no data and syncs no device: it uses only the shape,
 dtype and device of each leaf, and stacks no leaf of a lazy stack.
 - A [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) and a
