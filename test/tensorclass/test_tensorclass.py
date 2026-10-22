@@ -493,6 +493,78 @@ KwOnly(torch.Tensor())
     assert 'Too many positional arguments for "KwOnly"' in errors
 
 
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_python310_static(tmp_path, monkeypatch):
+    # #3290: on Python 3.10, typing has no dataclass_transform or Self, so the
+    # stub must take them from typing_extensions for tensorclasses to get
+    # their fields.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+        "from .tensorclass import tensorclass as tensorclass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.10
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+    user = tmp_path / "user.py"
+    user.write_text(
+        """import torch
+from tensordict import TensorClass, tensorclass
+
+class Observation(TensorClass):
+    pixels: torch.Tensor
+
+@tensorclass
+class Step:
+    obs: torch.Tensor
+
+t = torch.Tensor()
+Observation(pixels=t, batch_size=[4])
+Observation(t, batch_size=[4])
+Step(obs=t)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+    assert not stderr, stderr
+    assert [line for line in stdout.splitlines() if line.startswith("user.py:")] == []
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_init_subclass():
     # The class keywords (class X(TensorClass, autocast=True)) go to the
