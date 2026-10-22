@@ -71,7 +71,7 @@ _has_h5 = importlib.util.find_spec("h5py", None) is not None
 _has_zarr = importlib.util.find_spec("zarr", None) is not None
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

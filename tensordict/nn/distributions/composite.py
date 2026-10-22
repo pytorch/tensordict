@@ -17,7 +17,7 @@ from tensordict.utils import IndexType, NestedKey, unravel_key
 from torch import distributions as d
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

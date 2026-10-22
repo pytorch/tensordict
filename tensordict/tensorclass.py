@@ -115,7 +115,7 @@ from torch.utils._pytree import tree_is_leaf, tree_map
 from torch.utils.data._utils.collate import default_collate_fn_map
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

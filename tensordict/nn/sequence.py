@@ -27,7 +27,7 @@ from torch.compiler import is_compiling
 _has_py311_or_greater = sys.version_info >= (3, 11)
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

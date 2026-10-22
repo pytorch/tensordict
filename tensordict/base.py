@@ -186,7 +186,7 @@ T = TypeVar("T", bound="TensorCollection")
 
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

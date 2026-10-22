@@ -148,7 +148,7 @@ _add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
 
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

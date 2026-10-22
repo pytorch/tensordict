@@ -54,7 +54,7 @@ except ImportError:
     from .utils import _StrEnum as StrEnum
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
