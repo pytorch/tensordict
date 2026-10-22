@@ -8,6 +8,7 @@ import collections
 import functools
 import inspect
 import weakref
+from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from copy import copy
@@ -646,7 +647,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_lock_blocked
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase | None = None,
+        input_dict_or_td: Mapping[Any, Any] | TensorDictBase | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
