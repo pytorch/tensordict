@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
-    dataclass_transform,
     Iterator,
     Literal,
     OrderedDict,
@@ -59,7 +58,7 @@ from tensordict.utils import (
     unravel_key_list as unravel_key_list,
 )
 from torch import nn, Tensor
-from typing_extensions import deprecated
+from typing_extensions import dataclass_transform, deprecated
 
 class _NoDefault(enum.IntEnum):
     ZERO = 0
@@ -75,7 +74,7 @@ CompatibleType: TypeAlias = Tensor
 T = TypeVar("T", bound="TensorCollection")
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
@@ -677,7 +676,7 @@ class TensorCollection:
     ): ...
     def split(
         self, split_size: int | list[int], dim: int = 0
-    ) -> list[TensorCollection]: ...
+    ) -> tuple[TensorCollection, ...]: ...
     def gather(self, dim: int, index: Tensor, out: T | None = None) -> Self: ...
     @overload
     def view(self, *shape: int): ...
@@ -786,7 +785,7 @@ class TensorCollection:
     def is_consolidated(self): ...
     def memmap_(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -823,7 +822,7 @@ class TensorCollection:
     ) -> MemoryMappedTensor: ...
     def save(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -834,7 +833,7 @@ class TensorCollection:
     ) -> Self: ...
     def dumps(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -845,7 +844,7 @@ class TensorCollection:
     ) -> Self: ...
     def memmap(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         num_threads: int = 0,
@@ -857,7 +856,7 @@ class TensorCollection:
     ) -> Self: ...
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | Path | None = None,
         copy_existing: bool = False,
         *,
         existsok: bool = True,
@@ -931,7 +930,7 @@ class TensorCollection:
     def get_item_shape(self, key: NestedKey): ...
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T,
+        input_dict_or_td: Mapping[Any, Any] | T,
         clone: bool = False,
         inplace: bool = False,
         *,

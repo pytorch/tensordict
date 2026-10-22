@@ -1422,9 +1422,47 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
     # tensorclasses, as tensordict.collate: a batch that a dataset read in one
     # index operation (__getitems__) is returned as is; a list of samples is
     # stacked densely if their keys and shapes match, lazily otherwise.
-    if is_tensor_collection(batch):
+    is_batch = is_tensor_collection(batch)
+    if collate_fn_map is not None:
+        # torch takes the entry for the element's exact type, else the first
+        # key of the map that the element is an instance of. It reached this
+        # entry, so only a key after tensordict's own two can still match,
+        # such as one registered later for TensorDictBase or a tensorclass
+        # base: hand the batch to the first such entry. The element of a batch
+        # read in one index operation is not indexed again: a lazy stack gives
+        # its first member, any other batch stands for itself.
+        after_own_keys = False
+        for key, fn in collate_fn_map.items():
+            if fn is _collate_tensor_collection:
+                after_own_keys = True
+                continue
+            if not after_own_keys:
+                continue
+            if not is_batch:
+                elem = batch[0]
+            elif (
+                isinstance(batch, LazyStackedTensorDict)
+                and batch.stack_dim == 0
+                and batch.tensordicts
+            ):
+                elem = batch.tensordicts[0]
+            else:
+                elem = batch
+            if isinstance(elem, key):
+                return fn(batch, collate_fn_map=collate_fn_map)
+    if is_batch:
         return batch
-    return LazyStackedTensorDict.maybe_dense_stack(batch)
+    try:
+        return LazyStackedTensorDict.maybe_dense_stack(batch)
+    except AttributeError as err:
+        types = {type(item) for item in batch}
+        kinds = {_is_tensorclass(cls) for cls in types if is_tensor_collection(cls)}
+        if len(kinds) > 1:
+            raise TypeError(
+                "Cannot collate a batch that mixes tensorclass instances with "
+                f"tensordicts: got {sorted(cls.__name__ for cls in types)}."
+            ) from err
+        raise
 
 
 class _TensorClassCollateMeta(type):
@@ -2108,9 +2146,9 @@ def _warn_unknown_tensor_only_fields(cls, kwargs: dict) -> None:
     # The tensor_only path of __init__ stores the arguments that are not
     # fields. The other paths raise AttributeError for them, and this path
     # will too once the deprecation ends.
-    unknown = sorted(key for key in kwargs if key not in cls.__expected_keys__)
+    unknown_keys = sorted(key for key in kwargs if key not in cls.__expected_keys__)
     warn_deprecated(
-        f"Passing arguments that are not fields ({unknown}) to the tensor_only "
+        f"Passing arguments that are not fields ({unknown_keys}) to the tensor_only "
         f"tensorclass {cls.__name__}, which other tensorclasses reject with "
         "AttributeError,",
         removal="0.17",
@@ -5037,11 +5075,11 @@ def _from_dict_public(
         torch.Size([3])
     """
     keys = {key[0] if isinstance(key, tuple) else key for key in input_dict}
-    missing = [name for name in cls._from_dict_defaults if name not in keys]
+    missing_keys = [name for name in cls._from_dict_defaults if name not in keys]
     # Dynamo cannot trace warnings.warn: a compiled call stays silent.
-    if missing and not is_compiling():
+    if missing_keys and not is_compiling():
         warnings.warn(
-            f"{cls.__name__}.from_dict() sets the fields {missing} that the input "
+            f"{cls.__name__}.from_dict() sets the fields {missing_keys} that the input "
             "misses to None, not to their declared defaults. Starting with "
             "TensorDict 0.17, the default will change to filling these fields "
             "with their defaults and default factories, as the constructor does. "
@@ -6924,7 +6962,7 @@ class NonTensorDataBase(TensorClass):
 
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,
@@ -7679,9 +7717,8 @@ class NonTensorData(NonTensorDataBase):
             shape = _resolve_expand_shape(shape, self.batch_size)
         if not _expands_to(self.batch_size, shape):
             warnings.warn(
-                f"Expanding a NonTensorData of batch size {list(self.batch_size)} "
-                f"to {list(shape)} does not raise today, although "
-                "torch.Tensor.expand rejects this shape. Starting with "
+                "Expanding a NonTensorData to a shape that torch.Tensor.expand "
+                "rejects does not raise today. Starting with "
                 "TensorDict 0.17, the default will change to raising a "
                 "RuntimeError, as TensorDict.expand does.",
                 FutureWarning,
@@ -8575,7 +8612,7 @@ class NonTensorStack(LazyStackedTensorDict):
     # Override: the source is a NonTensorData or a NonTensorStack, not a mapping.
     def update(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
+        input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
         inplace: bool = False,
         *,

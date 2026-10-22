@@ -118,68 +118,6 @@ __all__ = [
 ]
 
 
-# Decorations deferred until torch._dynamo is imported, see _register_with_dynamo.
-_PENDING_DYNAMO_REGISTRATIONS = []
-
-
-class _DynamoImportHook:
-    """Finder that applies the pending registrations once torch._dynamo is imported.
-
-    It stays on ``sys.meta_path`` until ``torch._dynamo`` is executed, so a
-    lookup that does not import it, such as ``importlib.util.find_spec``, does
-    not lose the registrations.
-    """
-
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname != "torch._dynamo":
-            return None
-        for finder in sys.meta_path:
-            find_spec = getattr(finder, "find_spec", None)
-            if finder is self or find_spec is None:
-                continue
-            spec = find_spec(fullname, path, target)
-            if spec is not None:
-                break
-        else:
-            return None
-        loader = spec.loader
-        exec_module = getattr(loader, "exec_module", None)
-        if exec_module is None or not hasattr(loader, "__dict__"):
-            return None
-
-        def exec_and_register(module):
-            vars(loader).pop("exec_module", None)
-            exec_module(module)
-            if self in sys.meta_path:
-                sys.meta_path.remove(self)
-            while _PENDING_DYNAMO_REGISTRATIONS:
-                decorator, fn = _PENDING_DYNAMO_REGISTRATIONS.pop(0)
-                decorator(fn)
-
-        loader.exec_module = exec_and_register
-        return spec
-
-
-_DYNAMO_IMPORT_HOOK = _DynamoImportHook()
-
-
-def _register_with_dynamo(decorator, fn):
-    """Apply ``decorator`` (``allow_in_graph`` or ``assume_constant_result``) to ``fn``.
-
-    Both register ``fn`` with Dynamo and return it unchanged, but importing
-    ``torch._dynamo`` takes about a second, so this defers the call until
-    ``torch._dynamo`` is imported, which happens before anything is compiled.
-    ``import tensordict`` thus does not load Dynamo.
-    """
-    if "torch._dynamo" in sys.modules:
-        decorator(fn)
-    else:
-        if _DYNAMO_IMPORT_HOOK not in sys.meta_path:
-            sys.meta_path.insert(0, _DYNAMO_IMPORT_HOOK)
-        _PENDING_DYNAMO_REGISTRATIONS.append((decorator, fn))
-    return fn
-
-
 # Utility function to wrap C++ functorch functions for torch.compile support
 def _wrap_functorch_function(func):
     """Wrap a functorch C++ function to make it compatible with torch.compile.
@@ -194,7 +132,7 @@ def _wrap_functorch_function(func):
     Returns:
         The wrapped function
     """
-    return _register_with_dynamo(allow_in_graph, func)
+    return allow_in_graph(func)
 
 
 def _import_and_wrap_functorch(*names, wrap_names=None):
@@ -2331,6 +2269,41 @@ def _stacked_repr(shape, tensors) -> str | None:
     return _get_repr_custom(Tensor, shape, device, dtype, device.type == "cuda")
 
 
+def _mixed_repr(td, key) -> str | None:
+    """The types of the members' values of entry ``key`` of lazy stack ``td``, as ``[NonTensorData, Tensor]``.
+
+    Returns ``None`` unless the members hold different kinds of values there
+    (tensors, non-tensor data, tensordicts), which cannot be stacked (#3258).
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.base import _is_tensor_collection
+
+    def values(lazy):
+        for member in lazy.tensordicts:
+            if isinstance(member, LazyStackedTensorDict):
+                yield from values(member)
+            else:
+                yield member._get_str(key, None)
+
+    if not isinstance(key, str):
+        return None
+    items = list(values(td))
+    if any(item is None for item in items):
+        return None
+    kinds = {
+        "non-tensor"
+        if is_non_tensor(item)
+        else "collection"
+        if _is_tensor_collection(type(item))
+        else "tensor"
+        for item in items
+    }
+    if len(kinds) < 2:
+        return None
+    names = dict.fromkeys(type(item).__name__ for item in items)
+    return f"[{', '.join(names)}]"
+
+
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
 
@@ -2352,7 +2325,16 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 strs.append(sep.join([key, substr]))
                 continue
         else:
-            shape = td.get_item_shape(key)
+            try:
+                shape = td.get_item_shape(key)
+            except Exception:
+                # The members of a lazy stack hold values that cannot be
+                # stacked, such as a string and a tensor (#3258).
+                substr = _mixed_repr(source, key) if is_lazy else None
+                if substr is None:
+                    raise
+                strs.append(sep.join([key, substr]))
+                continue
         if -1 not in shape:
             item = td.get(key)
             strs.append(_make_repr(key, item, td, sep=sep))
@@ -2425,7 +2407,9 @@ def _compact_dtype(dtype: torch.dtype) -> str:
 def _compact_leaf(td, key):
     # Returns the shape after the batch dims, the dtype and the set of devices
     # of a tensor entry. In a lazy stack, a dim that differs between members
-    # is -1 and the dtype is the promoted one, as the stacked tensor has.
+    # is -1 and the dtype is the promoted one, as the stacked tensor has. If a
+    # member holds a non-tensor value, returns the entry of that member, as
+    # when it comes first.
     from tensordict import LazyStackedTensorDict, TensorDict
     from tensordict.persistent import PersistentTensorDict
     from tensordict.typedtensordict import TypedTensorDict
@@ -2442,13 +2426,18 @@ def _compact_leaf(td, key):
             sub = members.pop()
             if type(sub) is TensorDict:
                 tensor = sub._get_str(key, None)
+                if is_non_tensor(tensor):
+                    return _compact_entry(sub, key)
                 shapes.add(_compact_shape(sub, tensor))
                 dtypes.add(tensor.dtype)
                 devices.add(tensor.device)
             elif isinstance(sub, LazyStackedTensorDict):
                 members.extend(sub.tensordicts)
             else:
-                shape, dtype, sub_devices = _compact_leaf(sub, key)
+                leaf = _compact_leaf(sub, key)
+                if isinstance(leaf, str):
+                    return leaf
+                shape, dtype, sub_devices = leaf
                 shapes.add(tuple(shape))
                 dtypes.add(dtype)
                 devices |= sub_devices
@@ -2465,6 +2454,8 @@ def _compact_leaf(td, key):
         device = td.device if td.device is not None else torch.device("cpu")
         return list(meta["shape"][td.batch_dims :]), meta["dtype"], {device}
     tensor = td._get_str(key, None)
+    if is_non_tensor(tensor):
+        return _compact_entry(td, key)
     return _compact_shape(td, tensor), tensor.dtype, {tensor.device}
 
 
@@ -2511,7 +2502,8 @@ def _compact_entry(td, key):
     else:
         item = first._get_str(key, None)
     if item is None or not _is_tensor_collection(type(item)):
-        return _compact_token(td, *_compact_leaf(td, key))
+        leaf = _compact_leaf(td, key)
+        return leaf if isinstance(leaf, str) else _compact_token(td, *leaf)
     if isinstance(item, NonTensorData):
         return type(item.data).__name__
     if is_non_tensor(item) or (not is_tensorclass(item) and _keeps_own_repr(item)):
@@ -4038,7 +4030,7 @@ def _lock_warn():
     )
 
 
-_lock_warn = _register_with_dynamo(assume_constant_result, _lock_warn)
+_lock_warn = assume_constant_result(_lock_warn)
 
 
 _zip_strict = functools.partial(zip, strict=True)
@@ -4551,10 +4543,13 @@ def _warn_batch_dims_ignored(op: str, result, batch_dims, batch_size) -> None:
     )
 
 
-def _warn_lazy_shape_args(op: str, args: str) -> None:
-    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17."""
+def _warn_lazy_shape_args(op: str, what: str) -> None:
+    """Warns that a lazy stack accepted arguments of ``op`` that ``TensorDict`` rejects, which raises from 0.17.
+
+    ``what`` describes the arguments in a fixed text, without their values.
+    """
     warnings.warn(
-        f"LazyStackedTensorDict.{op} got {args}, which TensorDict.{op} "
+        f"LazyStackedTensorDict.{op} got {what}, which TensorDict.{op} "
         "rejects, and returns the result of its members. Starting with "
         "TensorDict 0.17, the default will change to raising a ValueError, "
         f"as TensorDict.{op} does.",
@@ -4779,7 +4774,7 @@ torch.utils._pytree.register_pytree_node(
     LinkedList,
     torch.utils._pytree._list_flatten,
     torch.utils._pytree._list_unflatten,
-    serialized_type_name="builtins.list",
+    serialized_type_name="tensordict.utils.LinkedList",
     flatten_with_keys_fn=torch.utils._pytree._list_flatten_with_keys,
 )
 
