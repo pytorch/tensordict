@@ -47,12 +47,12 @@ Some features need other packages. Install them with an extra, for example
      - Installs
      - For
    * - ``h5``
-     - ``h5py>=3.8``
+     - ``h5py>=3.9``
      - HDF5 files: :meth:`~tensordict.TensorDict.to_h5`,
        :meth:`~tensordict.TensorDict.from_h5`, and
        :class:`~tensordict.PersistentTensorDict`.
    * - ``zarr``
-     - ``zarr>=3.0``
+     - ``zarr>=3.0.8``
      - Zarr stores: :meth:`~tensordict.TensorDict.to_zarr` and
        :meth:`~tensordict.TensorDict.from_zarr`. zarr 3 needs Python 3.11+.
        On Python 3.10, this extra installs nothing.

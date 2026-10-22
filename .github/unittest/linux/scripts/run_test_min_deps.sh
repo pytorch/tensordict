@@ -12,16 +12,16 @@ set -v
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-# The minimum of each extra in pyproject.toml, in its oldest minor series:
-# update them together. pip skips the yanked zarr 3.0.0 to 3.0.7 (zarr.load()
-# deletes data), so zarr==3.0.* installs 3.0.10. numpy is the oldest series that
-# all of these accept: zarr 3.0.8 to 3.0.10 need numpy>=1.25. safetensors 0.4.5
-# is the oldest release that handles float8 tensors and empty tensordicts.
+# The minimum of each extra in pyproject.toml, in its oldest minor series
+# (zarr at its exact floor, as 3.0.0 to 3.0.7 are yanked): update them
+# together. numpy is the oldest series that all of these accept: zarr 3.0.8
+# needs numpy>=1.25. safetensors 0.4.5 is the oldest release that handles
+# float8 tensors and empty tensordicts.
 min_deps=(
     "pyarrow==10.0.*"
     "pandas==1.5.*"
-    "h5py==3.8.*"
-    "zarr==3.0.*"
+    "h5py==3.9.*"
+    "zarr==3.0.8"
     "safetensors==0.4.5"
     "numpy==1.25.*"
 )
@@ -49,9 +49,15 @@ mkdir -p "$JUNIT_DIR"
 # The tests of the tabular readers and writers, of the h5 and zarr backends and
 # of memory-mapping, and the tests elsewhere whose names mention h5, zarr or
 # safetensors, such as the h5 cases of the shared tensordict tests.
+# from_arrow and to_arrow need pyarrow 15 or later, and raise a clear
+# ImportError below that, which the old_pyarrow and MinimumVersion tests check.
+# The parquet and tabular extras admit pyarrow 10, which this job tests through
+# from_parquet, to_parquet and pandas, so the -k deselects the other tests of
+# from_arrow and to_arrow.
 test_status=0
 python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist worksteal \
     test/tensordict/test_tabular.py test/memmap \
+    -k "not (TestArrow or from_arrow or to_arrow) or old_pyarrow or MinimumVersion" \
     --instafail -v --durations 20 --timeout 120 \
     --junitxml="$JUNIT_DIR/junit-tests-min-deps.xml" || test_status=$?
 python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist worksteal \
