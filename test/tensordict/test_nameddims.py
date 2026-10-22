@@ -476,6 +476,20 @@ class TestNamedDims(TestTensorDictsBase):
         lazy_stack([td, td.clone()], 0, stack_dim_name="env").memmap(tmp_path)
         assert tensordict.load_memmap(tmp_path).names == ["env", "time"]
 
+    def test_memmap_load_keeps_tensorclass_names(self, tmp_path):
+        # #3262: a tensorclass saves its tensors through the same code
+        from tensordict import tensorclass
+
+        @tensorclass
+        class Frames:
+            a: torch.Tensor
+
+        tc = Frames(a=torch.zeros(3, 4), batch_size=[3, 4], names=["time", "env"])
+        tc.memmap(tmp_path)
+        loaded = tensordict.load_memmap(tmp_path)
+        assert type(loaded) is Frames
+        assert loaded.names == ["time", "env"]
+
     def test_memmap_load_names_subclass_without_names_arg(self, tmp_path):
         # #3262: loading must not pass names or stack_dim_name to the
         # __init__ of a subclass that does not take them.
