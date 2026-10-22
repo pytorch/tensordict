@@ -495,7 +495,9 @@ A dataset loaded from disk is memory-mapped, and its memory is read-only.
 `from_arrow` copies such columns, because an in-place write into a view of
 read-only memory crashes the process. `copy=False` views them anyway: then
 do not write into the tensors. A column with null values raises an error,
-unless you pass `nulls="fill"` or `nulls="mask"`. A tensordict with
+unless you pass `nulls="fill"` or `nulls="mask"`; the latter adds a
+`"masks"` entry, as [`pad_sequence()`](reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence) does with
+`return_mask=True`. A tensordict with
 jagged tensors can be indexed with an integer, a slice, an index tensor or a
 boolean mask, and split, chunked, unbound and concatenated along its batch
 dimension, but not stacked. `memmap` does not take jagged tensors: pad them
