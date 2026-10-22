@@ -746,7 +746,9 @@ def test_typing_corpus_installed_wheel_mypy(installed_wheel_mypy_errors, snippet
 # #3305: the comparisons of TensorDictParams and NonTensorStack, an
 # InteractionType argument, NonTensorStack built from plain values, and the
 # batch_size, device and names of a TypedTensorDict instance.
-_ISSUE_3305_SOURCE = """import torch
+_ISSUE_3305_SOURCE = """from typing import Any
+
+import torch
 from typing_extensions import assert_type
 from tensordict import NonTensorData, NonTensorStack, TensorDict, TypedTensorDict
 from tensordict.nn import (
@@ -763,8 +765,8 @@ assert_type(params != params, TensorDict)
 stack = NonTensorStack("a", "b")
 NonTensorStack(1, 2, stack_dim=0, batch_size=[2], device="cpu")
 NonTensorStack(NonTensorData("a"), NonTensorData("b"))
-assert_type(stack == stack, torch.Tensor)
-assert_type(stack != stack, torch.Tensor)
+assert_type(stack == stack, Any)
+assert_type(stack != stack, Any)
 by_number = stack == 1
 by_tensor = stack != torch.zeros(2)
 by_str = stack == "a"
