@@ -21,7 +21,7 @@ What you will learn:
 - How to pre-allocate a zarr buffer with
   :meth:`~tensordict.TensorDictBase.from_schema`.
 
-The zarr backend needs ``zarr>=3.0``. To install it, run
+The zarr backend needs ``zarr>=3.0.8``. To install it, run
 ``pip install "tensordict[zarr]"``.
 """
 

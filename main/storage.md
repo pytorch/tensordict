@@ -389,7 +389,7 @@ With `backend="zarr"`, [`PersistentTensorDict`](reference/generated/tensordict.P
 tensor as a zarr array and each nested tensordict as a zarr group. The store
 can be a local directory, a `zarr.storage.ZipStore`, or any other
 `zarr.abc.store.Store`. You can read and write separate chunks in parallel.
-The zarr backend needs `zarr>=3.0` (`pip install "tensordict[zarr]"`).
+The zarr backend needs `zarr>=3.0.8` (`pip install "tensordict[zarr]"`).
 
 [`to_zarr()`](reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) writes a tensordict, and
 [`from_zarr()`](reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) reads it back. `to_zarr` stores
