@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:29.009** total execution time for 15 files **from all galleries**:
+**01:40.188** total execution time for 15 files **from all galleries**:
 
 .. container::
 
@@ -33,46 +33,46 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_serialization_speed.py` (``reference/generated/tutorials/serialization_speed.py``)
-     - 00:44.642
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``reference/generated/tutorials/tensordict_module.py``)
-     - 00:16.676
+     - 00:54.587
      - 0.0
    * - :ref:`sphx_glr_tutorials_data_fashion.py` (``reference/generated/tutorials/data_fashion.py``)
-     - 00:14.846
+     - 00:16.587
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``reference/generated/tutorials/tensordict_module.py``)
+     - 00:16.231
      - 0.0
    * - :ref:`sphx_glr_tutorials_streamed_tensordict.py` (``reference/generated/tutorials/streamed_tensordict.py``)
-     - 00:06.019
+     - 00:06.018
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``reference/generated/tutorials/tensorclass_fashion.py``)
-     - 00:04.281
+     - 00:04.319
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``reference/generated/tutorials/tensorclass_imagenet.py``)
-     - 00:01.419
+     - 00:01.332
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_particles.py` (``reference/generated/tutorials/tensorclass_particles.py``)
-     - 00:00.846
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_export.py` (``reference/generated/tutorials/export.py``)
-     - 00:00.128
+     - 00:00.824
      - 0.0
    * - :ref:`sphx_glr_tutorials_zarr_storage.py` (``reference/generated/tutorials/zarr_storage.py``)
-     - 00:00.111
+     - 00:00.130
      - 0.0
-   * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``reference/generated/tutorials/tensordict_keys.py``)
-     - 00:00.010
+   * - :ref:`sphx_glr_tutorials_export.py` (``reference/generated/tutorials/export.py``)
+     - 00:00.125
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_shapes.py` (``reference/generated/tutorials/tensordict_shapes.py``)
      - 00:00.009
      - 0.0
    * - :ref:`sphx_glr_tutorials_functional.py` (``reference/generated/tutorials/functional.py``)
-     - 00:00.009
+     - 00:00.008
      - 0.0
-   * - :ref:`sphx_glr_tutorials_tensordict_slicing.py` (``reference/generated/tutorials/tensordict_slicing.py``)
-     - 00:00.005
+   * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``reference/generated/tutorials/tensordict_keys.py``)
+     - 00:00.008
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_memory.py` (``reference/generated/tutorials/tensordict_memory.py``)
      - 00:00.005
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_tensordict_slicing.py` (``reference/generated/tutorials/tensordict_slicing.py``)
+     - 00:00.004
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_preallocation.py` (``reference/generated/tutorials/tensordict_preallocation.py``)
      - 00:00.003

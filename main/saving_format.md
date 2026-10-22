@@ -15,7 +15,7 @@ format in `"_format_version"`. This page describes version 1. A
 `meta.json` without `"_format_version"` was written before the format had
 a version (by tensordict 0.15.2 or older), and is version 0. Version 1 has the
 same layout as version 0, and adds the `"_format_version"` and `"_class"`
-entries.
+entries, and the `"_names"` entry of a tensordict with dim names.
 
 `load_memmap` reads the versions up to the one it writes, and raises an
 error for a newer version. Readers of version 0 ignore the entries that
@@ -68,6 +68,8 @@ another class, it is the `__module__` of the class. `load_memmap` looks
 the class up by `"_class"` first, and by `"_type"` if `"_class"` is
 missing or names no registered class.
 - `"_format_version"`: the format version, an int.
+- `"_names"`: the dim names, a list with one string or `null` for each
+batch dim. A tensordict without dim names has no `"_names"` entry.
 
 The entry of a leaf is an object with `"dtype"`, `"shape"`,
 `"device"` (the device of the leaf when it was saved) and
@@ -80,10 +82,11 @@ The keys of `meta.json` are the keys of the tensordict. The names of the
 files and directories are the keys encoded as described in
 Keys and file names. A key that is also the name of an entry of the
 tensordict, such as `"shape"`, is lost: the entry of the tensordict
-replaces the entry of the key. The exceptions are `"_format_version"` and
-`"_class"`: a key of either name keeps its entry, and the `meta.json`
-then lacks that format entry, so it reads as version 0 or its class is
-looked up by `"_type"`.
+replaces the entry of the key. The exceptions are `"_format_version"`,
+`"_class"` and `"_names"`: a key of one of these names keeps its entry,
+and the `meta.json` then lacks that entry of the tensordict, so it reads as
+version 0, its class is looked up by `"_type"`, or its dim names are not
+read from it (a named nested tensordict can still give it names).
 
 ## Leaves
 
@@ -154,7 +157,8 @@ the values in `"data"`, as nested lists. If JSON cannot encode them,
 ## Lazy stacks and views
 
 A [`LazyStackedTensorDict`](reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) is saved as a directory whose
-`meta.json` has `"stack_dim"` and no batch size. Its tensordicts are
+`meta.json` has `"stack_dim"`, the name of the stack dim in
+`"stack_dim_name"` (or `null`), and no batch size. Its tensordicts are
 saved in the subdirectories `0`, `1`, and so on, in order.
 
 A tensordict indexed lazily (`_SubTensorDict`) is saved with its source,
