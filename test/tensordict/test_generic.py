@@ -3760,6 +3760,90 @@ class TestGeneric:
             assert out[0].get("u").shape == (3, 4)
 
     @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_safetensors_lazy_stack(self, tmp_path, stack_dim):
+        # #3267
+        stack = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.full((3,), float(i)),
+                    sub=TensorDict(b=torch.zeros(3, 2), batch_size=[3]),
+                    batch_size=[3],
+                    names=["time"],
+                )
+                for i in range(2)
+            ],
+            stack_dim,
+        )
+        tensordict.to_safetensors(stack, tmp_path / "td.safetensors")
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+        assert type(out) is LazyStackedTensorDict
+        assert out.stack_dim == stack_dim
+        assert out.batch_size == stack.batch_size
+        assert out.names == stack.names
+        assert len(out.tensordicts) == 2
+        assert all(type(entry) is TensorDict for entry in out.tensordicts)
+        assert type(out["sub"]) is LazyStackedTensorDict
+        assert out["sub"].stack_dim == stack_dim
+        assert (out == stack).all()
+        # A write into an entry shows in the stack.
+        out.tensordicts[1]["a"][0] = 5.0
+        assert out["a"].unbind(stack_dim)[1][0] == 5.0
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_nested_lazy_stack(self, tmp_path):
+        # #3267
+        @tensorclass
+        class Point:
+            x: torch.Tensor
+
+        entries = [
+            TensorDict(a=torch.full((3,), float(i)), batch_size=[3]) for i in range(2)
+        ]
+        points = [Point(x=torch.full((3,), float(i)), batch_size=[3]) for i in range(2)]
+        td = TensorDict(
+            obs=lazy_stack(entries, 1),
+            points=lazy_stack(points, 1),
+            batch_size=[3],
+        )
+        tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+        assert type(out) is TensorDict
+        assert type(out["obs"]) is LazyStackedTensorDict
+        assert out["obs"].stack_dim == 1
+        assert type(out["points"]) is Point
+        assert type(out["points"]._tensordict) is LazyStackedTensorDict
+        assert out["points"]._tensordict.stack_dim == 1
+        assert (out == td).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_lazy_stack_without_stack_dim(self, tmp_path):
+        # #3267: a file written without the stack dim loads as a dense TensorDict.
+        from safetensors import safe_open
+        from safetensors.torch import save_file
+
+        stack = lazy_stack(
+            [
+                TensorDict(a=torch.full((3,), float(i)), batch_size=[3])
+                for i in range(2)
+            ],
+            1,
+        )
+        tensordict.to_safetensors(stack, tmp_path / "td.safetensors")
+        with safe_open(tmp_path / "td.safetensors", framework="pt") as file:
+            metadata = json.loads(file.metadata()["tensordict"])
+        assert metadata["root"].pop("stack_dim") == 1
+        save_file(
+            {"a": stack["a"].contiguous()},
+            tmp_path / "td.safetensors",
+            metadata={"tensordict": json.dumps(metadata)},
+        )
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+        assert type(out) is TensorDict
+        assert out.batch_size == (3, 2)
+        assert (out == stack).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
     @pytest.mark.parametrize(
         "case",
         [
