@@ -259,21 +259,28 @@ append, can see nested levels with different numbers of rows. Don't read a
 directory while you append to it.
 
 A killed append can leave its new ``meta.json`` files behind, as
-``.meta.json.append.tmp`` files next to the old ones. If it was killed after
-the first ``meta.json`` was replaced, ``load_memmap`` raises an error, and so
-does the next ``append_memmap``. Every temporary file is then complete.
-Rename each one over the ``meta.json`` next to it, which completes the
-append:
+``.meta.json.append.tmp`` files next to the old ones. ``append_memmap``
+writes every temporary file before it replaces any ``meta.json``, and it
+replaces the top one first: the one in the directory itself, or in its
+``_tensordict`` subdirectory for a saved tensorclass. If
+``.meta.json.append.tmp`` is still there, no ``meta.json`` was replaced and
+the temporary files may be incomplete: delete every one of them, and the
+directory holds the old rows. Otherwise every temporary file is complete:
+rename each one over the ``meta.json`` next to it, which completes the
+append. Decide by this file, not by whether ``load_memmap`` raises, which
+it doesn't for every tree:
 
 .. code-block:: python
 
     import os
 
-    for tmp in (root / "particles").rglob(".meta.json.append.tmp"):
-        os.replace(tmp, tmp.with_name("meta.json"))
-
-If the directory still loads, delete the leftover ``.meta.json.append.tmp``
-files instead, as they may be incomplete.
+    saved = root / "particles"  # or its "_tensordict" for a tensorclass
+    replaced = not (saved / ".meta.json.append.tmp").exists()
+    for tmp in saved.rglob(".meta.json.append.tmp"):
+        if replaced:
+            os.replace(tmp, tmp.with_name("meta.json"))
+        else:
+            os.remove(tmp)
 
 Save to one file
 ----------------
