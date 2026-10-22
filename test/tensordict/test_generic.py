@@ -3735,6 +3735,31 @@ class TestGeneric:
             ).all()
 
     @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    def test_safetensors_unbatched(self, tmp_path):
+        # #3235
+        from tensordict import UnbatchedTensor
+
+        u = UnbatchedTensor(torch.arange(12.0).view(3, 4))
+        td = TensorDict(
+            x=torch.zeros(3),
+            u=u,
+            sub=TensorDict(v=UnbatchedTensor(torch.ones(5)), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        stack = LazyStackedTensorDict(
+            *[TensorDict(x=torch.zeros(2), u=u, batch_size=[2]) for _ in range(3)]
+        )
+        for data in (td, stack):
+            tensordict.to_safetensors(data, tmp_path / "td.safetensors")
+            out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+            assert out.batch_size == data.batch_size
+            for key in data.keys(True, True):
+                assert (type(out.get(key)) is UnbatchedTensor) == (key != "x")
+                assert (out.get(key) == data.get(key)).all()
+            assert out.get("u").batch_size == data.batch_size
+            assert out[0].get("u").shape == (3, 4)
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
     @pytest.mark.parametrize(
         "case",
         [
