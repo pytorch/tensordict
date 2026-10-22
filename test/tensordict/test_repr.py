@@ -1907,14 +1907,6 @@ _PRINT_XFAILS = {
         )
         for mode in (*_DETAILED_MODES, "plain")
     },
-    **{
-        (case, "plain"): "#3259: plain=True raises on a jagged leaf"
-        for case in ("jagged", "jagged_unbatched")
-    },
-    **{
-        (case, "plain"): "#3259: plain=True warns on a one-element leaf"
-        for case in ("zero_d", "non_tensor_leaves")
-    },
 }
 
 
