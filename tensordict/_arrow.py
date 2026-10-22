@@ -63,6 +63,24 @@ def _check_nulls(arr, nulls: str, key: tuple) -> None:
         )
 
 
+def _check_inner_nulls(pa, arr, key: tuple) -> None:
+    """Raises for a null inside the rows of a list or a struct, at any depth."""
+    typ = arr.type
+    if pa.types.is_struct(typ):
+        children = arr.flatten()
+    elif (
+        pa.types.is_list(typ)
+        or pa.types.is_large_list(typ)
+        or pa.types.is_fixed_size_list(typ)
+    ):
+        children = [arr.flatten()]
+    else:
+        return
+    for child in children:
+        _check_nulls(child, "raise", key)
+        _check_inner_nulls(pa, child, key)
+
+
 def _primitive(pa, arr, copy: bool | None) -> torch.Tensor:
     """Views (or copies) a primitive Arrow array without nulls as a 1-D tensor."""
     if pa.types.is_boolean(arr.type):
@@ -159,15 +177,7 @@ def _from_array(pa, arr, copy, nulls, key, masks):
     ):
         return _to_jagged(pa, arr, copy, nulls, key)
     if nulls == "raise":
-        # The nulls inside the rows of a list of non-tensor values.
-        values = arr
-        while (
-            pa.types.is_list(values.type)
-            or pa.types.is_large_list(values.type)
-            or pa.types.is_fixed_size_list(values.type)
-        ):
-            values = values.flatten()
-            _check_nulls(values, nulls, key)
+        _check_inner_nulls(pa, arr, key)
     if not len(arr):
         # NonTensorStack(batch_size=[0]) has the batch size [0, 0].
         return NonTensorStack()

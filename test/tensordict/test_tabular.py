@@ -703,11 +703,13 @@ class TestArrow:
         import pyarrow as pa
 
         strings = pa.list_(pa.string())
+        records = pa.struct([("s", pa.string())])
         for arr in (
             pa.array([["a"], None], strings),
             pa.array([[1, None], [3]], pa.list_(pa.int64())),
             pa.array([[None], ["b"]], strings),
             pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+            pa.array([[{"s": "a"}], [{"s": None}]], pa.list_(records)),
         ):
             with pytest.raises(ValueError, match=r"\('x',\) has 1 null"):
                 from_arrow(pa.table({"x": arr}))
@@ -720,12 +722,14 @@ class TestArrow:
                     {
                         "x": pa.array([[None], ["b"]], strings),
                         "y": pa.array([[["a"]], [["b", None]]], pa.list_(strings)),
+                        "z": pa.array([[{"s": "a"}], [{"s": None}]], pa.list_(records)),
                     }
                 ),
                 nulls=nulls,
             )
             assert td.get("x").tolist() == [[None], ["b"]]
             assert td.get("y").tolist() == [[["a"]], [["b", None]]]
+            assert td.get("z").tolist() == [[{"s": "a"}], [{"s": None}]]
             assert "masks" not in td.keys()
 
     # #3260
