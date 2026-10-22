@@ -483,6 +483,35 @@ class TestParquet:
         assert td["f"].dtype == torch.int64
         assert (td["f"] == torch.tensor([[1, 2, 3], [4, 5, 6]])).all()
 
+    def test_from_parquet_primitive_columns(self, tmp_path):
+        # #3272: on pyarrow 10 to 12, ChunkedArray.to_numpy() takes no keyword,
+        # and from_parquet raised a TypeError on every file
+        import datetime
+
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        path = tmp_path / "primitive.parquet"
+        days = [datetime.datetime(2020, 1, day) for day in (1, 2, 3)]
+        table = pa.table(
+            {
+                "i": [1, 2, 3],
+                "f": [1.0, 2.0, 3.0],
+                "b": [True, False, True],
+                "ts": pa.array(days, pa.timestamp("s")),
+            }
+        )
+        pq.write_table(table, str(path), row_group_size=2)
+
+        td = TensorDict.from_parquet(path)
+        assert td["i"].tolist() == [1, 2, 3]
+        assert td["f"].tolist() == [1.0, 2.0, 3.0]
+        assert td["b"].tolist() == [True, False, True]
+        seconds = [
+            int(day.replace(tzinfo=datetime.timezone.utc).timestamp()) for day in days
+        ]
+        assert td["ts"].tolist() == [second * 10**9 for second in seconds]
+
     def test_module_level_function(self, tmp_path):
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -873,6 +902,33 @@ class TestArrow:
         with pytest.raises(ValueError, match="one batch dimension"):
             to_arrow(td)
         assert to_arrow(td.reshape(-1)).num_rows == 6
+
+    def test_from_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: pyarrow 10 to 14 failed with "from_dlpack received an invalid capsule"
+        import pyarrow as pa
+
+        version = pa.__version__
+        table = pa.table({"x": pa.array([1, 2])})
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"from_arrow needs pyarrow 15.*14\.0\.2"):
+            from_arrow(table)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert from_arrow(table)["x"].tolist() == [1, 2]
+
+    def test_to_arrow_old_pyarrow(self, monkeypatch):
+        # #3238: on pyarrow 10 to 14, to_arrow raised an AttributeError for a
+        # leaf with more than one dim
+        import pyarrow as pa
+
+        version = pa.__version__
+        td = TensorDict(x=torch.zeros(2, 3), batch_size=[2])
+        monkeypatch.setattr(pa, "__version__", "14.0.2")
+        with pytest.raises(ImportError, match=r"to_arrow needs pyarrow 15.*14\.0\.2"):
+            to_arrow(td)
+        monkeypatch.setattr(pa, "__version__", version)
+        if int(version.split(".")[0]) >= 15:
+            assert to_arrow(td).num_rows == 2
 
 
 @pytest.mark.skipif(not _has_pandas, reason="pandas not found")

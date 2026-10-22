@@ -215,11 +215,11 @@ def _pyarrow_table_to_columns(table) -> tuple[dict[str, np.ndarray | list], int]
     for col_name in table.column_names:
         column = table.column(col_name)
         if pa.types.is_integer(column.type) or pa.types.is_floating(column.type):
-            columns[col_name] = column.to_numpy(zero_copy_only=False)
+            columns[col_name] = column.to_numpy()
         elif pa.types.is_boolean(column.type):
-            columns[col_name] = column.to_numpy(zero_copy_only=False)
+            columns[col_name] = column.to_numpy()
         elif pa.types.is_timestamp(column.type):
-            columns[col_name] = column.to_numpy(zero_copy_only=False)
+            columns[col_name] = column.to_numpy()
         elif (
             getattr(column.type, "extension_name", None) == "arrow.fixed_shape_tensor"
             and (
