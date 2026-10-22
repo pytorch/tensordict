@@ -192,7 +192,11 @@ class set_printoptions(_DecoratorContextManager):
         self._kwargs = kwargs
 
     def clone(self) -> set_printoptions:
-        return type(self)(**self._kwargs)
+        # Copy the resolved options instead of passing them to __init__ again:
+        # the verbose=False defaults in them would turn compact off.
+        new = type(self).__new__(type(self))
+        new._kwargs = dict(self._kwargs)
+        return new
 
     def __enter__(self) -> None:
         self.set()

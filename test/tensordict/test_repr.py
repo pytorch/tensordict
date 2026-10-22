@@ -1291,6 +1291,13 @@ class TestCompactRepr:
         with set_printoptions(verbose=False):
             assert repr(td) == "TensorDict(batch_size=[3], fields={a: []})"
 
+        # as a decorator too, which clones the options on each call
+        @set_printoptions(verbose=False)
+        def decorated():
+            return repr(td)
+
+        assert decorated() == "TensorDict(batch_size=[3], fields={a: []})"
+
     def test_compact_sort_keys(self):
         td = TensorDict(c=torch.zeros(2), a=torch.zeros(2), b=torch.zeros(2))
         with set_printoptions(compact=True, sort_keys="insertion"):
