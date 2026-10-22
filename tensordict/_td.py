@@ -1230,6 +1230,16 @@ class TensorDict(TensorDictBase):
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
         input_dict = dict(input_dict)
         for key, value in list(input_dict.items()):
+            if batch_size and isinstance(value, (float, int, bool)):
+                # A 0-dim tensor cannot have the batch size: read the scalar
+                # as non-tensor data, which is what to_dict writes it from
+                # (#3266).
+                from tensordict.tensorclass import NonTensorData
+
+                input_dict[key] = NonTensorData(
+                    value, batch_size=batch_size, device=device
+                )
+                continue
             # we don't know if another tensor of smaller size is coming
             # so we can't be sure that the batch-size will still be valid later
             input_dict[key] = TensorDict.from_any(

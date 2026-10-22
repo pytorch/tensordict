@@ -4068,6 +4068,24 @@ class TestGeneric:
             assert data["d"].batch_size == torch.Size(batch_size)
             assert data["d", "g"].batch_size == torch.Size(batch_size)
 
+    @pytest.mark.parametrize("value", [7, 1.5, True])
+    def test_from_dict_to_dict_non_tensor_scalar(self, value):
+        # https://github.com/pytorch/tensordict/issues/3266: to_dict writes
+        # non-tensor data as its Python value, and from_dict read a scalar as a
+        # 0-dim tensor that does not fit the batch size.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("n", value)
+        td.set_non_tensor(("nested", "n"), value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out.get(key).batch_size == (3,)
+            assert type(out[key]) is type(value)
+            assert out[key] == value
+        assert out["nested"].batch_size == (3,)
+        # Without a batch size, a scalar is still read as a 0-dim tensor.
+        assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
+
     @pytest.mark.parametrize(
         "kwargs",
         [

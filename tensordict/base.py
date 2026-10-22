@@ -4036,7 +4036,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         Args:
             input_dict (dict): the entries. A key can be a string or a tuple
                 of strings, and a value a tensor, a dictionary, or any object
-                that :class:`~tensordict.TensorDict` accepts.
+                that :class:`~tensordict.TensorDict` accepts. With a non-empty
+                ``batch_size``, :class:`~tensordict.TensorDict` stores a
+                Python ``int``, ``float`` or ``bool`` as
+                :class:`~tensordict.NonTensorData`, so that the output of
+                :meth:`~.to_dict` converts back. Otherwise, it stores it as a
+                0-dim tensor.
 
         Keyword Args:
             auto_batch_size (bool, optional): if ``True``, sets the batch size
